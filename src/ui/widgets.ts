@@ -5,6 +5,27 @@ export const WIDTH = 960;
 export const HEIGHT = 640;
 export const FONT = '"Trebuchet MS", "Segoe UI", sans-serif';
 
+/**
+ * The game is laid out in a fixed 960x640 coordinate space but rendered at the
+ * real pixel size of the player's screen (up to 4x = 4K) so it stays sharp.
+ * Every scene zooms its camera by this factor (see setupCamera) and text is
+ * rasterized at the same resolution.
+ */
+function computeUiScale(): number {
+  if (typeof window === 'undefined') return 1;
+  const dpr = window.devicePixelRatio || 1;
+  const w = Math.max(window.screen?.width ?? 0, window.innerWidth) * dpr;
+  const h = Math.max(window.screen?.height ?? 0, window.innerHeight) * dpr;
+  const scale = Math.min(w / WIDTH, h / HEIGHT);
+  return Math.max(1, Math.min(4, Math.round(scale * 4) / 4));
+}
+export const UI_SCALE = computeUiScale();
+
+/** Zoom the scene camera so the 960x640 layout fills the high-resolution canvas. */
+export function setupCamera(scene: Phaser.Scene, background: number = 0x0e1018): void {
+  scene.cameras.main.setZoom(UI_SCALE).centerOn(WIDTH / 2, HEIGHT / 2).setBackgroundColor(background);
+}
+
 export const COLORS = {
   bg: 0x0e1018,
   panel: 0x181c2b,
@@ -24,7 +45,7 @@ export function text(
   scene: Phaser.Scene, x: number, y: number, value: string,
   style: Partial<Phaser.Types.GameObjects.Text.TextStyle> = {},
 ): Phaser.GameObjects.Text {
-  return scene.add.text(x, y, value, { fontFamily: FONT, fontSize: '16px', color: COLORS.text, ...style });
+  return scene.add.text(x, y, value, { fontFamily: FONT, fontSize: '16px', color: COLORS.text, resolution: UI_SCALE, ...style });
 }
 
 export function panel(scene: Phaser.Scene, x: number, y: number, w: number, h: number, fill = COLORS.panel) {
@@ -38,6 +59,8 @@ export interface ButtonOptions {
   fill?: number;
   /** Called when the pointer hovers (for tooltips). */
   onHover?: () => void;
+  /** Called when the pointer leaves the button. */
+  onOut?: () => void;
 }
 
 /** A simple rectangular button. (x, y) is the top-left corner. */
@@ -49,8 +72,7 @@ export function button(
   const baseFill = opts.selected ? 0x4a3d1c : (opts.fill ?? COLORS.panelLight);
   const bg = scene.add.rectangle(0, 0, w, h, baseFill).setOrigin(0)
     .setStrokeStyle(2, opts.selected ? COLORS.accent : COLORS.border);
-  const t = scene.add.text(w / 2, h / 2, label, {
-    fontFamily: FONT,
+  const t = text(scene, w / 2, h / 2, label, {
     fontSize: `${opts.fontSize ?? 16}px`,
     color: enabled ? COLORS.text : '#5d6480',
     align: 'center',
@@ -61,7 +83,10 @@ export function button(
     if (enabled) bg.setFillStyle(opts.selected ? 0x5c4b22 : 0x2f3956);
     opts.onHover?.();
   });
-  bg.on('pointerout', () => bg.setFillStyle(baseFill));
+  bg.on('pointerout', () => {
+    bg.setFillStyle(baseFill);
+    opts.onOut?.();
+  });
   bg.on('pointerup', () => {
     if (enabled) onClick();
   });
@@ -115,4 +140,39 @@ export function toast(scene: Phaser.Scene, message: string, color = COLORS.text)
     color, backgroundColor: '#000000c0', padding: { x: 12, y: 6 }, align: 'center', wordWrap: { width: 800 },
   }).setOrigin(0.5).setDepth(2000);
   scene.tweens.add({ targets: t, alpha: 0, delay: 2600, duration: 600, onComplete: () => t.destroy() });
+}
+
+/**
+ * A real HTML <input> laid over the canvas at layout coordinates (x, y, w, h).
+ * Kept in place when the window resizes and removed when the scene shuts down.
+ */
+export function overlayInput(scene: Phaser.Scene, x: number, y: number, w: number, h: number): HTMLInputElement {
+  const input = document.createElement('input');
+  input.className = 'name-input';
+  input.style.position = 'fixed';
+  input.style.boxSizing = 'border-box';
+  document.body.appendChild(input);
+  const place = () => {
+    const rect = scene.game.canvas.getBoundingClientRect();
+    const k = rect.width / WIDTH;
+    input.style.left = `${rect.left + x * k}px`;
+    input.style.top = `${rect.top + y * k}px`;
+    input.style.width = `${w * k}px`;
+    input.style.height = `${h * k}px`;
+    input.style.fontSize = `${18 * k}px`;
+    input.style.padding = `0 ${10 * k}px`;
+    input.style.borderWidth = `${Math.max(1, 2 * k)}px`;
+    input.style.borderRadius = `${4 * k}px`;
+  };
+  place();
+  // The canvas may still be settling on the first frame; re-place once it has.
+  requestAnimationFrame(place);
+  window.addEventListener('resize', place);
+  scene.scale.on('resize', place);
+  scene.events.once('shutdown', () => {
+    window.removeEventListener('resize', place);
+    scene.scale.off('resize', place);
+    input.remove();
+  });
+  return input;
 }

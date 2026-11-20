@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { newGameState } from '../game/save';
 import { session } from '../game/session';
-import { COLORS, HEIGHT, WIDTH, button, confirmDialog, drawToken, text } from '../ui/widgets';
+import { COLORS, HEIGHT, WIDTH, button, confirmDialog, drawToken, text, setupCamera } from '../ui/widgets';
 
 export class MainMenuScene extends Phaser.Scene {
   constructor() {
@@ -9,7 +9,7 @@ export class MainMenuScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.cameras.main.setBackgroundColor(COLORS.bg);
+    setupCamera(this);
     this.drawBackdrop();
 
     text(this, WIDTH / 2, 120, 'LAZYRPG', { fontSize: '64px', color: COLORS.gold, fontStyle: 'bold' }).setOrigin(0.5);

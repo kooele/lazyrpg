@@ -3,7 +3,7 @@ import {
   SLOT_COUNT, exportToFile, importFromFile, readSlot, slotSummary, writeSlot, type ParseResult,
 } from '../game/save';
 import { requireState, session } from '../game/session';
-import { COLORS, WIDTH, button, confirmDialog, panel, text, toast } from '../ui/widgets';
+import { COLORS, WIDTH, button, confirmDialog, panel, text, toast, setupCamera } from '../ui/widgets';
 
 type Mode = 'save' | 'load';
 
@@ -22,7 +22,7 @@ export class SaveLoadScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.cameras.main.setBackgroundColor(COLORS.bg);
+    setupCamera(this);
     this.render();
     this.input.keyboard?.on('keydown-ESC', () => this.scene.start(this.returnTo));
   }

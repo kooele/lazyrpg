@@ -10,7 +10,7 @@ export const ATTRIBUTE_INFO: Record<AttributeKey, { name: string; description: s
   dex: { name: 'Dexterity', description: 'Hit chance and critical chance.' },
   int: { name: 'Intellect', description: 'Magic damage, healing and magic resistance.' },
   vit: { name: 'Vitality', description: 'Max HP and defense.' },
-  spd: { name: 'Speed', description: 'Turn order and evasion. 9+ grants +1 move.' },
+  spd: { name: 'Speed', description: 'Evasion (harder to hit). 9+ grants +1 move.' },
 };
 
 export type ClassId = 'knight' | 'ranger' | 'mage' | 'cleric';

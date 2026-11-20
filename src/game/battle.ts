@@ -19,6 +19,12 @@ export interface Unit {
   alive: boolean;
   cooldowns: Record<string, number>;
   statuses: Status[];
+  /** Has this unit moved during its team's current phase? */
+  moved: boolean;
+  /** Has this unit used its action (or waited) this phase? Acting ends the unit's turn. */
+  acted: boolean;
+  /** Where the unit stood when the phase began (for undoing a move). */
+  startPos: Point;
 }
 
 /** A usable action: the basic weapon attack or one of the unit's skills. */
@@ -67,6 +73,9 @@ export function makeUnit(character: Character, team: Team, pos: Point): Unit {
     alive: true,
     cooldowns: {},
     statuses: [],
+    moved: false,
+    acted: false,
+    startPos: { x: pos.x, y: pos.y },
   };
 }
 
@@ -92,25 +101,22 @@ export function getAction(unit: Unit, id: string): ActionSpec {
   return { ...s };
 }
 
+/**
+ * Battle rules with XCOM-style alternating phases: every player unit may move
+ * once and act once, in any order, then every enemy unit does the same.
+ */
 export class Battle {
   readonly units: Unit[];
-  turnQueue: string[] = [];
-  round = 0;
-  activeUid = '';
-  hasMoved = false;
-  /** Where the active unit started this turn (for undoing a move). */
-  turnStart: Point = { x: 0, y: 0 };
+  /** Whose phase it is. */
+  phase: Team = 'player';
+  round = 1;
 
   constructor(readonly map: BattleMap, units: Unit[], readonly rng: Rng) {
     this.units = units;
-    this.startRound();
+    this.beginPhase('player');
   }
 
   // ---- queries --------------------------------------------------------------
-
-  get active(): Unit {
-    return this.unit(this.activeUid);
-  }
 
   unit(uid: string): Unit {
     const u = this.units.find((x) => x.uid === uid);
@@ -194,21 +200,47 @@ export class Battle {
     return path;
   }
 
+  canMove(u: Unit): boolean {
+    return u.alive && u.team === this.phase && !u.moved && !u.acted;
+  }
+
+  canAct(u: Unit): boolean {
+    return u.alive && u.team === this.phase && !u.acted;
+  }
+
+  /** Units of the current team that still have an action this phase. */
+  readyUnits(): Unit[] {
+    return this.living(this.phase).filter((u) => !u.acted);
+  }
+
   move(u: Unit, dest: Point): Point[] {
-    if (this.hasMoved) throw new Error('Already moved this turn');
+    if (!this.canMove(u)) throw new Error(`${u.character.name} can't move now`);
     const reach = this.reachable(u);
     if (!reach.has(key(dest.x, dest.y))) throw new Error('Destination not reachable');
     const path = this.pathTo(reach, dest);
     u.x = dest.x;
     u.y = dest.y;
-    this.hasMoved = true;
+    u.moved = true;
     return path;
   }
 
+  /** A move can be undone until the unit acts, if nobody has taken its old tile. */
+  canUndoMove(u: Unit): boolean {
+    const occupant = this.unitAt(u.startPos.x, u.startPos.y);
+    return u.moved && !u.acted && (!occupant || occupant === u);
+  }
+
   undoMove(u: Unit): void {
-    u.x = this.turnStart.x;
-    u.y = this.turnStart.y;
-    this.hasMoved = false;
+    if (!this.canUndoMove(u)) throw new Error("Can't undo that move");
+    u.x = u.startPos.x;
+    u.y = u.startPos.y;
+    u.moved = false;
+  }
+
+  /** End this unit's turn without acting. */
+  wait(u: Unit): void {
+    if (!this.canAct(u)) throw new Error(`${u.character.name} has already acted`);
+    u.acted = true;
   }
 
   // ---- actions --------------------------------------------------------------
@@ -248,6 +280,12 @@ export class Battle {
     return u === caster ? undefined : u;
   }
 
+  inRange(action: ActionSpec, from: Point, target: Point): boolean {
+    const d = manhattan(from, target);
+    return d >= action.minRange && d <= action.maxRange;
+  }
+
+  /** Tiles where the action would affect at least one unit (used by the AI). */
   validTargets(caster: Unit, action: ActionSpec, from: Point = caster): Point[] {
     return this.rangeTiles(action, from).filter((t) => this.affected(caster, action, t, from).length > 0);
   }
@@ -270,11 +308,14 @@ export class Battle {
   }
 
   perform(u: Unit, actionId: string, target: Point): BattleEvent[] {
+    if (!this.canAct(u)) throw new Error(`${u.character.name} has already acted`);
     if (!this.actionIds(u).includes(actionId)) throw new Error(`${u.character.name} can't use ${actionId}`);
     if (!this.isReady(u, actionId)) throw new Error(`${actionId} is on cooldown`);
     const action = getAction(u, actionId);
+    if (!this.inRange(action, u, target)) throw new Error('Target out of range');
+    // Any tile in range may be targeted, even an empty one (the action is still spent).
     const targets = this.affected(u, action, target);
-    if (targets.length === 0) throw new Error('No valid target');
+    u.acted = true;
     const events: BattleEvent[] = [];
     for (const t of targets) {
       if (action.kind === 'damage') {
@@ -311,43 +352,29 @@ export class Battle {
 
   // ---- turn flow --------------------------------------------------------------
 
-  private startRound(): void {
-    this.round += 1;
-    const order = this.living().sort(
-      (a, b) => this.stat(b, 'speed') - this.stat(a, 'speed') || (a.team === b.team ? 0 : a.team === 'player' ? -1 : 1),
-    );
-    this.turnQueue = order.map((u) => u.uid);
-    this.beginTurn(this.turnQueue.shift()!);
-  }
-
-  private beginTurn(uid: string): void {
-    this.activeUid = uid;
-    this.hasMoved = false;
-    const u = this.unit(uid);
-    this.turnStart = { x: u.x, y: u.y };
-    for (const k of Object.keys(u.cooldowns)) u.cooldowns[k] = Math.max(0, u.cooldowns[k] - 1);
-  }
-
-  /** Finish the active unit's turn and advance to the next living unit. */
-  endTurn(): Unit {
-    const u = this.active;
-    for (const s of u.statuses) s.turns -= 1;
-    u.statuses = u.statuses.filter((s) => s.turns > 0);
-    if (this.outcome()) return u;
-    while (this.turnQueue.length) {
-      const next = this.turnQueue.shift()!;
-      if (this.unit(next).alive) {
-        this.beginTurn(next);
-        return this.active;
-      }
+  private beginPhase(team: Team): void {
+    this.phase = team;
+    for (const u of this.living(team)) {
+      u.moved = false;
+      u.acted = false;
+      u.startPos = { x: u.x, y: u.y };
+      for (const k of Object.keys(u.cooldowns)) u.cooldowns[k] = Math.max(0, u.cooldowns[k] - 1);
     }
-    this.startRound();
-    return this.active;
   }
 
-  /** Upcoming turn order, starting with the active unit. */
-  upcoming(): Unit[] {
-    return [this.activeUid, ...this.turnQueue].map((id) => this.unit(id)).filter((u) => u.alive);
+  /**
+   * End the current team's phase and start the other team's. Status effects on
+   * the ending team tick down, so "2 turns" means two of that unit's own phases.
+   */
+  endPhase(): Team {
+    for (const u of this.living(this.phase)) {
+      for (const s of u.statuses) s.turns -= 1;
+      u.statuses = u.statuses.filter((s) => s.turns > 0);
+    }
+    const next: Team = this.phase === 'player' ? 'enemy' : 'player';
+    if (next === 'player') this.round += 1;
+    this.beginPhase(next);
+    return next;
   }
 }
 

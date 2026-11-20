@@ -2,13 +2,13 @@ import Phaser from 'phaser';
 import { CLASSES } from '../data/content';
 import { planTurn } from '../game/ai';
 import {
-  ATTACK_ID, Battle, deploymentTiles, generateEnemies, getAction, makeUnit, victoryXp,
+  Battle, deploymentTiles, generateEnemies, getAction, makeUnit, victoryXp,
   type ActionSpec, type BattleEvent, type Unit,
 } from '../game/battle';
 import { grantXp, makeRng } from '../game/character';
-import { TERRAIN, generateMap, key, type Point } from '../game/grid';
+import { TERRAIN, generateMap, key, manhattan, type Point } from '../game/grid';
 import { markDirty, requireState } from '../game/session';
-import { COLORS, HEIGHT, WIDTH, button, confirmDialog, drawToken, panel, text, toast } from '../ui/widgets';
+import { COLORS, HEIGHT, WIDTH, button, confirmDialog, drawToken, panel, setupCamera, text } from '../ui/widgets';
 
 const TILE = 56;
 const MAP_X = 16;
@@ -16,7 +16,13 @@ const MAP_Y = 72;
 const SIDE_X = 704;
 const SIDE_W = 240;
 
-type Phase = 'busy' | 'move' | 'target' | 'over';
+/**
+ * busy   – animating or enemy phase, no input
+ * select – player phase: pick a unit, move it, or pick an action
+ * target – player picked an action and is choosing a tile
+ * over   – battle finished
+ */
+type Mode = 'busy' | 'select' | 'target' | 'over';
 
 interface UnitView {
   container: Phaser.GameObjects.Container;
@@ -27,16 +33,22 @@ export class BattleScene extends Phaser.Scene {
   private battle!: Battle;
   private views = new Map<string, UnitView>();
   private overlay!: Phaser.GameObjects.Graphics;
-  private activeRing!: Phaser.GameObjects.Graphics;
+  private rings!: Phaser.GameObjects.Graphics;
   private sidebar!: Phaser.GameObjects.Container;
-  private turnBar!: Phaser.GameObjects.Container;
+  private topBar!: Phaser.GameObjects.Container;
   private hoverText!: Phaser.GameObjects.Text;
   private logText!: Phaser.GameObjects.Text;
   private log: string[] = [];
-  private phase: Phase = 'busy';
+  private mode: Mode = 'busy';
+  /** The player unit currently being commanded. */
+  private selectedUid: string | null = null;
+  /** The unit whose action is being shown (player or enemy). */
+  private casterUid: string | null = null;
   private reach = new Map<string, { cost: number; prev: string | null }>();
-  private selected: ActionSpec | null = null;
-  private targets = new Set<string>();
+  /** Action chosen for targeting. */
+  private action: ActionSpec | null = null;
+  /** Action whose range is previewed while hovering its button. */
+  private previewAction: ActionSpec | null = null;
   private hoverTile: Point | null = null;
 
   constructor() {
@@ -46,9 +58,13 @@ export class BattleScene extends Phaser.Scene {
   create(): void {
     this.views.clear();
     this.log = [];
-    this.phase = 'busy';
-    this.selected = null;
-    this.cameras.main.setBackgroundColor(COLORS.bg);
+    this.mode = 'busy';
+    this.selectedUid = null;
+    this.casterUid = null;
+    this.action = null;
+    this.previewAction = null;
+    this.hoverTile = null;
+    setupCamera(this);
 
     const state = requireState();
     const rng = makeRng(Date.now() & 0xffffffff);
@@ -65,40 +81,54 @@ export class BattleScene extends Phaser.Scene {
 
     this.drawMap();
     this.overlay = this.add.graphics();
-    this.activeRing = this.add.graphics();
+    this.rings = this.add.graphics();
     for (const u of units) this.createUnitView(u);
 
-    this.turnBar = this.add.container(0, 0);
+    this.topBar = this.add.container(0, 0);
     this.sidebar = this.add.container(0, 0);
-    panel(this, SIDE_X, 488, SIDE_W, 88);
+    panel(this, SIDE_X, 488, SIDE_W, 92);
     this.hoverText = text(this, SIDE_X + 10, 496, '', { fontSize: '13px', wordWrap: { width: SIDE_W - 20 } });
     panel(this, MAP_X, 584, TILE * map.width, 48);
     this.logText = text(this, MAP_X + 10, 588, '', { fontSize: '13px', color: COLORS.dim, lineSpacing: 2 });
-    button(this, SIDE_X, 590, SIDE_W, 40, 'Retreat to camp', () => this.retreat(), { fontSize: 14 });
 
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => this.onHover(this.tileAt(p)));
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
       if (p.rightButtonDown()) this.cancel();
-      else this.onClick(this.tileAt(p));
+      else void this.onClick(this.tileAt(p));
     });
     this.input.mouse?.disableContextMenu();
     this.input.keyboard?.on('keydown-ESC', () => this.cancel());
+    this.input.keyboard?.on('keydown-TAB', (e: KeyboardEvent) => {
+      e.preventDefault();
+      this.cycleUnit();
+    });
 
-    this.addLog(`Stage ${state.progress.stage}: ${foes.length} foes approach!`);
-    this.startTurn();
+    this.addLog(`Stage ${state.progress.stage}: ${foes.length} foe${foes.length > 1 ? 's' : ''} approach!`);
+    void this.startPlayerPhase();
   }
 
-  // ---- drawing --------------------------------------------------------------------
+  // ---- helpers ----------------------------------------------------------------------
+
+  private get selected(): Unit | null {
+    return this.selectedUid ? this.battle.unit(this.selectedUid) : null;
+  }
 
   private tileCenter(p: Point): Point {
     return { x: MAP_X + p.x * TILE + TILE / 2, y: MAP_Y + p.y * TILE + TILE / 2 };
   }
 
   private tileAt(p: Phaser.Input.Pointer): Point | null {
-    const x = Math.floor((p.x - MAP_X) / TILE);
-    const y = Math.floor((p.y - MAP_Y) / TILE);
+    // worldX/Y account for the camera zoom used for high-resolution rendering.
+    const x = Math.floor((p.worldX - MAP_X) / TILE);
+    const y = Math.floor((p.worldY - MAP_Y) / TILE);
     return x >= 0 && y >= 0 && x < this.battle.map.width && y < this.battle.map.height ? { x, y } : null;
   }
+
+  private wait(ms: number): Promise<void> {
+    return new Promise((resolve) => this.time.delayedCall(ms, resolve));
+  }
+
+  // ---- drawing ------------------------------------------------------------------------
 
   private drawMap(): void {
     const { map } = this.battle;
@@ -151,93 +181,160 @@ export class BattleScene extends Phaser.Scene {
     view.hpBar.fillStyle(pct > 0.5 ? 0x6fdc8c : pct > 0.25 ? 0xe0b44c : 0xff6b6b).fillRect(-20, 19, 40 * pct, 4);
   }
 
+  /** Dim units that have already acted this phase. */
+  private refreshUnitTint(): void {
+    for (const u of this.battle.units) {
+      if (!u.alive) continue;
+      const done = u.team === this.battle.phase && u.acted;
+      this.views.get(u.uid)?.container.setAlpha(done ? 0.5 : 1);
+    }
+  }
+
   private drawOverlay(): void {
     const g = this.overlay;
     g.clear();
     const fill = (p: Point, color: number, alpha: number) => {
       g.fillStyle(color, alpha).fillRect(MAP_X + p.x * TILE + 1, MAP_Y + p.y * TILE + 1, TILE - 2, TILE - 2);
     };
-    const u = this.battle.active;
-    if (this.phase === 'move' && !this.battle.hasMoved && u.team === 'player') {
+    const outline = (p: Point, color: number, alpha: number) => {
+      g.lineStyle(2, color, alpha).strokeRect(MAP_X + p.x * TILE + 3, MAP_Y + p.y * TILE + 3, TILE - 6, TILE - 6);
+    };
+    const sel = this.selected;
+
+    // Movement range for the selected unit.
+    if (this.mode === 'select' && sel && this.battle.canMove(sel) && !this.previewAction) {
       for (const k of this.reach.keys()) {
         const [x, y] = k.split(',').map(Number);
         fill({ x, y }, 0x4aa3ff, 0.32);
       }
     }
-    if (this.phase === 'target' && this.selected) {
-      const isHelp = this.selected.target === 'ally';
-      for (const p of this.battle.rangeTiles(this.selected, u)) fill(p, isHelp ? 0x6fdc8c : 0xff6b6b, 0.18);
-      for (const k of this.targets) {
-        const [x, y] = k.split(',').map(Number);
-        fill({ x, y }, isHelp ? 0x6fdc8c : 0xff6b6b, 0.42);
+
+    // Action range ("attack box"): while targeting, or while hovering an action button.
+    const shown = this.mode === 'target' ? this.action : this.mode === 'select' ? this.previewAction : null;
+    const caster = this.casterUid ? this.battle.unit(this.casterUid) : sel;
+    if (shown && caster) {
+      const color = shown.target === 'ally' ? 0x6fdc8c : 0xff6b6b;
+      for (const p of this.battle.rangeTiles(shown, caster)) {
+        fill(p, color, 0.22);
+        outline(p, color, 0.55);
       }
-      if (this.hoverTile && this.targets.has(key(this.hoverTile.x, this.hoverTile.y))) {
-        const r = this.selected.radius;
+      // Area of effect under the cursor.
+      const h = this.hoverTile;
+      if (this.mode === 'target' && h && this.battle.inRange(shown, caster, h)) {
         for (let y = 0; y < this.battle.map.height; y++) {
           for (let x = 0; x < this.battle.map.width; x++) {
-            if (Math.abs(x - this.hoverTile.x) + Math.abs(y - this.hoverTile.y) <= r) fill({ x, y }, 0xffd166, 0.45);
+            if (manhattan({ x, y }, h) <= shown.radius) fill({ x, y }, 0xffd166, 0.5);
           }
         }
       }
     }
+
     if (this.hoverTile) {
-      g.lineStyle(2, 0xffffff, 0.7).strokeRect(MAP_X + this.hoverTile.x * TILE + 1, MAP_Y + this.hoverTile.y * TILE + 1, TILE - 2, TILE - 2);
+      g.lineStyle(2, 0xffffff, 0.8).strokeRect(MAP_X + this.hoverTile.x * TILE + 1, MAP_Y + this.hoverTile.y * TILE + 1, TILE - 2, TILE - 2);
     }
-    // Active unit ring
-    this.activeRing.clear();
-    if (u.alive) {
-      const c = this.tileCenter(u);
-      this.activeRing.lineStyle(3, 0xffd166, 1).strokeCircle(c.x, c.y - 4, 25);
+
+    // Selection rings: gold for the commanded unit, faint for other ready units.
+    this.rings.clear();
+    if (this.battle.phase === 'player' && this.mode !== 'over') {
+      for (const u of this.battle.readyUnits()) {
+        const c = this.tileCenter(u);
+        const isSel = u === sel;
+        this.rings.lineStyle(isSel ? 3 : 2, 0xffd166, isSel ? 1 : 0.35).strokeCircle(c.x, c.y - 4, 25);
+      }
+    } else if (this.casterUid && this.mode !== 'over') {
+      const c = this.tileCenter(this.battle.unit(this.casterUid));
+      this.rings.lineStyle(3, 0xff6b6b, 1).strokeCircle(c.x, c.y - 4, 25);
     }
   }
 
-  private renderTurnBar(): void {
-    this.turnBar.removeAll(true);
-    this.turnBar.add(text(this, MAP_X, 10, `Round ${this.battle.round}`, { color: COLORS.dim, fontSize: '13px' }));
+  private renderTopBar(): void {
+    this.topBar.removeAll(true);
+    const b = this.battle;
+    const mine = b.phase === 'player';
+    this.topBar.add(text(this, MAP_X, 8, `Round ${b.round}`, { color: COLORS.dim, fontSize: '13px' }));
+    this.topBar.add(text(this, MAP_X, 26, mine ? 'YOUR TURN' : 'ENEMY TURN', {
+      fontSize: '22px', fontStyle: 'bold', color: mine ? '#8ecbff' : COLORS.bad,
+    }));
+    // Party roster: click to select; dimmed once a hero has acted.
     const g = this.add.graphics();
-    this.turnBar.add(g);
-    this.battle.upcoming().slice(0, 12).forEach((u, i) => {
-      const x = MAP_X + 100 + i * 48;
-      drawToken(g, x, 40, i === 0 ? 18 : 14, u.character.appearance.color, u.character.appearance.emblem,
-        i === 0 ? 0xffd166 : u.team === 'player' ? 0xffffff : 0x2a0a0a);
+    this.topBar.add(g);
+    const heroes = b.living('player');
+    heroes.forEach((u, i) => {
+      const x = MAP_X + 190 + i * 52;
+      const ready = mine && !u.acted;
+      drawToken(g, x, 38, 17, u.character.appearance.color, u.character.appearance.emblem, u.uid === this.selectedUid ? 0xffd166 : 0xffffff);
+      if (!ready) g.fillStyle(0x0e1018, 0.6).fillCircle(x, 38, 19);
+      const hit = this.add.zone(x, 38, 40, 40).setInteractive({ useHandCursor: true });
+      hit.on('pointerup', () => this.selectUnit(u));
+      this.topBar.add(hit);
     });
-    this.turnBar.add(text(this, MAP_X, 30, 'Turn order →', { fontSize: '13px' }));
+    if (mine) {
+      this.topBar.add(text(this, MAP_X + 176 + heroes.length * 52, 30, 'Tab: next hero', { color: COLORS.dim, fontSize: '12px' }));
+    }
+    this.topBar.add(button(this, MAP_X + TILE * b.map.width - 96, 16, 96, 40, 'Retreat', () => this.retreat(), {
+      fontSize: 13, enabled: this.mode === 'select' || this.mode === 'target',
+    }));
   }
 
   private renderSidebar(): void {
     this.sidebar.removeAll(true);
     const S = this.sidebar;
-    const u = this.battle.active;
+    const b = this.battle;
+    const u = this.selected ?? (this.casterUid ? b.unit(this.casterUid) : null);
     S.add(panel(this, SIDE_X, 16, SIDE_W, 200));
-    const g = this.add.graphics();
-    drawToken(g, SIDE_X + 30, 46, 18, u.character.appearance.color, u.character.appearance.emblem);
-    S.add(g);
-    S.add(text(this, SIDE_X + 58, 26, u.character.name, { fontSize: '18px' }));
-    S.add(text(this, SIDE_X + 58, 50, `Lv ${u.character.level} ${CLASSES[u.character.classId].name}${u.team === 'enemy' ? ' (enemy)' : ''}`, {
-      color: u.team === 'enemy' ? COLORS.bad : COLORS.dim, fontSize: '13px',
-    }));
-    S.add(text(this, SIDE_X + 12, 78, this.unitSummary(u), { fontSize: '13px', lineSpacing: 4 }));
+    if (u) {
+      const g = this.add.graphics();
+      drawToken(g, SIDE_X + 30, 46, 18, u.character.appearance.color, u.character.appearance.emblem);
+      S.add(g);
+      S.add(text(this, SIDE_X + 58, 26, u.character.name, { fontSize: '18px' }));
+      S.add(text(this, SIDE_X + 58, 50, `Lv ${u.character.level} ${CLASSES[u.character.classId].name}${u.team === 'enemy' ? ' (enemy)' : ''}`, {
+        color: u.team === 'enemy' ? COLORS.bad : COLORS.dim, fontSize: '13px',
+      }));
+      S.add(text(this, SIDE_X + 12, 78, this.unitSummary(u), { fontSize: '13px', lineSpacing: 4 }));
+      if (u.team === 'player' && b.phase === 'player') {
+        const status = u.acted ? 'Done this turn' : u.moved ? 'Moved — can still act' : 'Ready to move and act';
+        S.add(text(this, SIDE_X + 12, 192, status, { fontSize: '12px', color: u.acted ? COLORS.dim : COLORS.good }));
+      }
+    }
 
-    if (u.team !== 'player' || this.phase === 'over') {
-      S.add(text(this, SIDE_X + SIDE_W / 2, 250, u.team === 'enemy' ? 'Enemy turn…' : '', { color: COLORS.dim }).setOrigin(0.5));
+    if (b.phase !== 'player' || this.mode === 'over') {
+      S.add(text(this, SIDE_X + SIDE_W / 2, 260, this.mode === 'over' ? '' : 'Enemy turn…', { color: COLORS.dim }).setOrigin(0.5));
       return;
     }
-    const busy = this.phase === 'busy';
-    this.battle.actionIds(u).forEach((id, i) => {
-      const a = getAction(u, id);
-      const cd = u.cooldowns[id] ?? 0;
-      const label = cd > 0 ? `${a.name} (${cd})` : a.name;
-      S.add(button(this, SIDE_X, 226 + i * 42, SIDE_W, 36, label, () => this.selectAction(id), {
-        enabled: !busy && cd <= 0,
-        selected: this.selected?.id === id,
-        fontSize: 15,
-        onHover: () => this.hoverText.setText(`${a.name}: ${a.description}${a.cooldown ? ` Cooldown ${a.cooldown}.` : ''}`),
+    const interactive = this.mode === 'select' || this.mode === 'target';
+    if (u && u.team === 'player') {
+      const canAct = interactive && b.canAct(u);
+      b.actionIds(u).forEach((id, i) => {
+        const a = getAction(u, id);
+        const cd = u.cooldowns[id] ?? 0;
+        const label = cd > 0 ? `${a.name} (${cd})` : a.name;
+        S.add(button(this, SIDE_X, 226 + i * 42, SIDE_W, 36, label, () => this.selectAction(id), {
+          enabled: canAct && cd <= 0,
+          selected: this.mode === 'target' && this.action?.id === id,
+          fontSize: 15,
+          onHover: () => {
+            this.hoverText.setText(`${a.name}: ${a.description}${a.cooldown ? ` Cooldown ${a.cooldown}.` : ''}`);
+            if (this.mode === 'select') {
+              this.previewAction = a;
+              this.drawOverlay();
+            }
+          },
+          onOut: () => {
+            if (this.previewAction) {
+              this.previewAction = null;
+              this.drawOverlay();
+            }
+          },
+        }));
+      });
+      const y = 226 + b.actionIds(u).length * 42;
+      S.add(button(this, SIDE_X, y, 116, 36, 'Wait', () => this.waitUnit(), { enabled: canAct, fontSize: 15 }));
+      S.add(button(this, SIDE_X + 124, y, 116, 36, 'Undo move', () => this.undoMove(), {
+        enabled: interactive && b.canUndoMove(u), fontSize: 15,
       }));
-    });
-    const y = 226 + this.battle.actionIds(u).length * 42;
-    S.add(button(this, SIDE_X, y, 116, 36, 'Wait', () => this.finishTurn(), { enabled: !busy, fontSize: 15 }));
-    S.add(button(this, SIDE_X + 124, y, 116, 36, 'Undo move', () => this.undoMove(), {
-      enabled: !busy && this.battle.hasMoved, fontSize: 15,
+    }
+    S.add(button(this, SIDE_X, 590, SIDE_W, 40, 'End Turn', () => this.endPlayerPhase(), {
+      enabled: interactive, fill: 0x4a2a22, fontSize: 16, selected: interactive && b.readyUnits().length === 0,
     }));
   }
 
@@ -252,121 +349,136 @@ export class BattleScene extends Phaser.Scene {
     ].filter(Boolean).join('\n');
   }
 
+  private refresh(): void {
+    this.refreshUnitTint();
+    this.renderTopBar();
+    this.renderSidebar();
+    this.drawOverlay();
+  }
+
   private addLog(line: string): void {
     this.log.push(line);
     this.logText.setText(this.log.slice(-2).join('\n'));
   }
 
-  // ---- turn flow -----------------------------------------------------------------
-
-  private startTurn(): void {
-    const u = this.battle.active;
-    this.selected = null;
-    this.targets.clear();
-    this.renderTurnBar();
-    if (u.team === 'player') {
-      this.phase = 'move';
-      this.reach = this.battle.reachable(u);
-      this.renderSidebar();
-      this.drawOverlay();
-    } else {
-      this.phase = 'busy';
-      this.renderSidebar();
-      this.drawOverlay();
-      void this.runEnemyTurn(u);
-    }
+  private async banner(label: string, color: string): Promise<void> {
+    const t = text(this, MAP_X + (TILE * this.battle.map.width) / 2, MAP_Y + (TILE * this.battle.map.height) / 2, label, {
+      fontSize: '44px', fontStyle: 'bold', color, stroke: '#000000', strokeThickness: 6,
+    }).setOrigin(0.5).setDepth(900).setAlpha(0);
+    this.tweens.add({ targets: t, alpha: 1, duration: 200, yoyo: true, hold: 600, onComplete: () => t.destroy() });
+    await this.wait(700);
   }
 
-  private async runEnemyTurn(u: Unit): Promise<void> {
-    await this.wait(350);
-    const plan = planTurn(this.battle, u);
-    if (plan.moveTo.x !== u.x || plan.moveTo.y !== u.y) {
-      const path = this.battle.move(u, plan.moveTo);
-      await this.animatePath(u, path);
-    }
-    if (plan.action) {
-      const action = getAction(u, plan.action.id);
-      this.selected = action;
-      this.phase = 'target';
-      this.targets = new Set([key(plan.action.target.x, plan.action.target.y)]);
-      this.hoverTile = plan.action.target;
-      this.drawOverlay();
-      await this.wait(400);
-      this.hoverTile = null;
-      this.phase = 'busy';
-      await this.resolve(u, action, plan.action.target);
-    }
-    this.finishTurn();
+  // ---- player phase ---------------------------------------------------------------------
+
+  private async startPlayerPhase(): Promise<void> {
+    this.mode = 'busy';
+    this.casterUid = null;
+    this.selectedUid = null;
+    this.refresh();
+    await this.banner('YOUR TURN', '#8ecbff');
+    this.mode = 'select';
+    this.selectUnit(this.battle.readyUnits()[0]);
   }
 
-  private finishTurn(): void {
-    if (this.phase === 'over') return;
-    const outcome = this.battle.outcome();
-    if (outcome) return this.endBattle(outcome);
-    this.battle.endTurn();
-    this.startTurn();
+  private selectUnit(u: Unit | undefined): void {
+    if (!u || u.team !== 'player' || !u.alive) return;
+    if (this.mode !== 'select' && this.mode !== 'target') return;
+    this.mode = 'select';
+    this.action = null;
+    this.previewAction = null;
+    this.selectedUid = u.uid;
+    this.reach = this.battle.canMove(u) ? this.battle.reachable(u) : new Map();
+    this.refresh();
+  }
+
+  private cycleUnit(): void {
+    if (this.mode !== 'select' && this.mode !== 'target') return;
+    const ready = this.battle.readyUnits();
+    if (ready.length === 0) return;
+    const i = ready.findIndex((u) => u.uid === this.selectedUid);
+    this.selectUnit(ready[(i + 1) % ready.length]);
   }
 
   private selectAction(id: string): void {
-    if (this.phase === 'busy' || this.phase === 'over') return;
-    const u = this.battle.active;
-    const action = getAction(u, id);
-    const targets = this.battle.validTargets(u, action);
-    if (targets.length === 0) {
-      toast(this, `${action.name}: no valid targets in range${this.battle.hasMoved ? '' : ' — move first?'}`, COLORS.bad);
-      return;
-    }
-    this.selected = action;
-    this.targets = new Set(targets.map((t) => key(t.x, t.y)));
-    this.phase = 'target';
+    const u = this.selected;
+    if (!u || (this.mode !== 'select' && this.mode !== 'target') || !this.battle.canAct(u)) return;
+    this.action = getAction(u, id);
+    this.previewAction = null;
+    this.mode = 'target';
     this.renderSidebar();
     this.drawOverlay();
+    this.hoverText.setText(`${this.action.name}: click any tile in range (right-click / Esc to cancel).`);
   }
 
   private cancel(): void {
-    if (this.phase !== 'target' || this.battle.active.team !== 'player') return;
-    this.selected = null;
-    this.targets.clear();
-    this.phase = 'move';
+    if (this.mode !== 'target') return;
+    this.action = null;
+    this.mode = 'select';
     this.renderSidebar();
     this.drawOverlay();
   }
 
   private undoMove(): void {
-    const u = this.battle.active;
+    const u = this.selected;
+    if (!u || !this.battle.canUndoMove(u)) return;
     this.battle.undoMove(u);
     const c = this.tileCenter(u);
     this.views.get(u.uid)!.container.setPosition(c.x, c.y);
-    this.reach = this.battle.reachable(u);
-    this.cancel();
-    this.phase = 'move';
-    this.renderSidebar();
-    this.drawOverlay();
+    this.selectUnit(u);
+  }
+
+  private waitUnit(): void {
+    const u = this.selected;
+    if (!u || !this.battle.canAct(u)) return;
+    this.battle.wait(u);
+    this.addLog(`${u.character.name} holds position.`);
+    this.afterUnitDone();
+  }
+
+  /** After a hero acts, jump to the next hero who still can; end the phase when nobody can. */
+  private afterUnitDone(): void {
+    const outcome = this.battle.outcome();
+    if (outcome) return this.endBattle(outcome);
+    this.mode = 'select';
+    this.action = null;
+    const next = this.battle.readyUnits()[0];
+    if (next) this.selectUnit(next);
+    else this.endPlayerPhase();
   }
 
   private async onClick(tile: Point | null): Promise<void> {
-    if (!tile || this.battle.active.team !== 'player') return;
-    const u = this.battle.active;
-    const k = key(tile.x, tile.y);
-    if (this.phase === 'move' && !this.battle.hasMoved && this.reach.has(k) && (tile.x !== u.x || tile.y !== u.y)) {
-      this.phase = 'busy';
-      this.renderSidebar();
-      const path = this.battle.move(u, tile);
-      this.drawOverlay();
-      await this.animatePath(u, path);
-      this.phase = 'move';
-      this.renderSidebar();
-      this.drawOverlay();
-    } else if (this.phase === 'target' && this.selected) {
-      if (!this.targets.has(k)) return this.cancel();
-      const action = this.selected;
-      this.phase = 'busy';
-      this.selected = null;
-      this.targets.clear();
-      this.renderSidebar();
-      this.drawOverlay();
+    if (!tile || this.battle.phase !== 'player') return;
+    const b = this.battle;
+    const u = this.selected;
+    const clicked = b.unitAt(tile.x, tile.y);
+
+    if (this.mode === 'target' && u && this.action) {
+      if (!b.inRange(this.action, u, tile)) return this.cancel();
+      const action = this.action;
+      this.mode = 'busy';
+      this.action = null;
+      this.casterUid = u.uid;
+      this.refresh();
       await this.resolve(u, action, tile);
-      this.finishTurn();
+      this.casterUid = null;
+      this.afterUnitDone();
+      return;
+    }
+    if (this.mode !== 'select') return;
+
+    // Clicking another of your heroes switches to them.
+    if (clicked && clicked.team === 'player' && clicked !== u) return this.selectUnit(clicked);
+
+    const k = key(tile.x, tile.y);
+    if (u && b.canMove(u) && this.reach.has(k) && (tile.x !== u.x || tile.y !== u.y)) {
+      this.mode = 'busy';
+      const path = b.move(u, tile);
+      this.refresh();
+      await this.animatePath(u, path);
+      this.mode = 'select';
+      this.reach = new Map();
+      this.refresh();
     }
   }
 
@@ -374,7 +486,7 @@ export class BattleScene extends Phaser.Scene {
     const changed = tile?.x !== this.hoverTile?.x || tile?.y !== this.hoverTile?.y;
     if (!changed) return;
     this.hoverTile = tile;
-    if (this.phase !== 'busy') this.drawOverlay();
+    if (this.mode !== 'busy') this.drawOverlay();
     if (!tile) return;
     const b = this.battle;
     const target = b.unitAt(tile.x, tile.y);
@@ -382,15 +494,19 @@ export class BattleScene extends Phaser.Scene {
     let info = `${terrain.name}${terrain.moveCost === null ? ' (impassable)' : terrain.moveCost > 1 ? ` (move cost ${terrain.moveCost}, +${terrain.defense} def/res)` : ''}`;
     if (target) {
       info = `${target.character.name} — Lv ${target.character.level} ${CLASSES[target.character.classId].name}\n${this.unitSummary(target)}`;
-      if (this.phase === 'target' && this.selected && this.targets.has(key(tile.x, tile.y))) {
-        info = `${this.preview(b.active, this.selected, tile)}\n${info}`;
-      }
+    }
+    const u = this.selected;
+    if (this.mode === 'target' && this.action && u) {
+      info = b.inRange(this.action, u, tile)
+        ? `${this.preview(u, this.action, tile)}\n${info}`
+        : `Out of range — click to cancel.\n${info}`;
     }
     this.hoverText.setText(info);
   }
 
   private preview(u: Unit, action: ActionSpec, tile: Point): string {
     const hits = this.battle.affected(u, action, tile);
+    if (hits.length === 0) return '→ Nobody in the area (action will be spent)';
     return hits.map((t) => {
       if (action.kind === 'damage') return `→ ${t.character.name}: ${this.battle.damage(u, t, action)} dmg, ${this.battle.hitChance(u, t, action)}% hit`;
       if (action.kind === 'heal') return `→ ${t.character.name}: +${Math.min(this.battle.healAmount(u, action), t.base.maxHp - t.hp)} HP`;
@@ -398,11 +514,58 @@ export class BattleScene extends Phaser.Scene {
     }).join('\n');
   }
 
-  // ---- animation -----------------------------------------------------------------
-
-  private wait(ms: number): Promise<void> {
-    return new Promise((resolve) => this.time.delayedCall(ms, resolve));
+  private endPlayerPhase(): void {
+    if (this.mode !== 'select' && this.mode !== 'target') return;
+    this.mode = 'busy';
+    this.action = null;
+    this.selectedUid = null;
+    this.battle.endPhase();
+    void this.runEnemyPhase();
   }
+
+  // ---- enemy phase ----------------------------------------------------------------------
+
+  private async runEnemyPhase(): Promise<void> {
+    const b = this.battle;
+    this.refresh();
+    await this.banner('ENEMY TURN', COLORS.bad);
+    // Fastest enemies act first.
+    const order = b.readyUnits().sort((x, y) => b.stat(y, 'speed') - b.stat(x, 'speed'));
+    for (const u of order) {
+      if (!u.alive || b.outcome()) continue;
+      this.casterUid = u.uid;
+      this.refresh();
+      await this.wait(250);
+      const plan = planTurn(b, u);
+      if (plan.moveTo.x !== u.x || plan.moveTo.y !== u.y) {
+        const path = b.move(u, plan.moveTo);
+        await this.animatePath(u, path);
+      }
+      if (plan.action) {
+        const action = getAction(u, plan.action.id);
+        this.action = action;
+        this.mode = 'target';
+        this.hoverTile = plan.action.target;
+        this.drawOverlay();
+        await this.wait(450);
+        this.mode = 'busy';
+        this.action = null;
+        this.hoverTile = null;
+        await this.resolve(u, action, plan.action.target);
+      } else {
+        b.wait(u);
+        this.addLog(`${u.character.name} advances.`);
+      }
+      this.refreshUnitTint();
+    }
+    this.casterUid = null;
+    const outcome = b.outcome();
+    if (outcome) return this.endBattle(outcome);
+    b.endPhase();
+    void this.startPlayerPhase();
+  }
+
+  // ---- animation --------------------------------------------------------------------------
 
   private async animatePath(u: Unit, path: Point[]): Promise<void> {
     const view = this.views.get(u.uid)!;
@@ -426,20 +589,35 @@ export class BattleScene extends Phaser.Scene {
     const events = this.battle.perform(u, action.id, target);
     const name = (uid: string) => this.battle.unit(uid).character.name;
     const view = this.views.get(u.uid)!;
-    // little lunge toward the target
     const from = this.tileCenter(u);
     const to = this.tileCenter(target);
-    if (action.id === ATTACK_ID || action.kind === 'damage') {
+    if (action.kind === 'damage' && (target.x !== u.x || target.y !== u.y)) {
       await new Promise<void>((resolve) => this.tweens.add({
         targets: view.container, x: from.x + (to.x - from.x) * 0.2, y: from.y + (to.y - from.y) * 0.2,
         duration: 90, yoyo: true, onComplete: () => resolve(),
       }));
     }
+    this.flashArea(action, target);
     const summary: string[] = [];
     for (const e of events) this.showEvent(e, summary, name);
-    this.addLog(`${u.character.name} uses ${action.name}${summary.length ? ': ' + summary.join(', ') : ''}`);
-    this.renderTurnBar();
-    await this.wait(750);
+    this.addLog(`${u.character.name} uses ${action.name}${summary.length ? ': ' + summary.join(', ') : ' — it hits nothing.'}`);
+    this.refreshUnitTint();
+    this.renderTopBar();
+    await this.wait(events.length ? 750 : 400);
+  }
+
+  /** Brief flash on the tiles the action struck (also shows when it hits empty ground). */
+  private flashArea(action: ActionSpec, target: Point): void {
+    const g = this.add.graphics().setDepth(400);
+    const color = action.target === 'ally' ? 0x6fdc8c : 0xffd166;
+    for (let y = 0; y < this.battle.map.height; y++) {
+      for (let x = 0; x < this.battle.map.width; x++) {
+        if (manhattan({ x, y }, target) <= action.radius) {
+          g.fillStyle(color, 0.55).fillRect(MAP_X + x * TILE + 1, MAP_Y + y * TILE + 1, TILE - 2, TILE - 2);
+        }
+      }
+    }
+    this.tweens.add({ targets: g, alpha: 0, duration: 500, onComplete: () => g.destroy() });
   }
 
   private showEvent(e: BattleEvent, summary: string[], name: (uid: string) => string): void {
@@ -474,15 +652,19 @@ export class BattleScene extends Phaser.Scene {
   // ---- end of battle -------------------------------------------------------------
 
   private retreat(): void {
-    if (this.phase === 'over' || this.battle.active.team !== 'player' || this.phase === 'busy') return;
+    if (this.mode !== 'select' && this.mode !== 'target') return;
     confirmDialog(this, 'Retreat to camp?\nThis counts as a defeat (no XP).', () => this.endBattle('defeat'), 'Retreat');
   }
 
   private endBattle(outcome: 'victory' | 'defeat'): void {
-    this.phase = 'over';
+    if (this.mode === 'over') return;
+    this.mode = 'over';
+    this.selectedUid = null;
+    this.casterUid = null;
     this.overlay.clear();
-    this.activeRing.clear();
+    this.rings.clear();
     this.renderSidebar();
+    this.renderTopBar();
     const state = requireState();
     const lines: string[] = [];
     if (outcome === 'victory') {
