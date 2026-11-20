@@ -7,7 +7,7 @@ A small turn-based tactical RPG that runs in the browser, built with [Phaser 4](
 1. **Main menu**: New Game, Continue, Save Game and Load Game.
 2. **Character creation**: name, class (Knight, Ranger, Mage, Cleric), color and emblem. You also spend attribute points, pick a weapon and equip skills. Up to 4 heroes per party.
 3. **Camp**: the hub between battles. Recruit, customize (spend level-up points, swap weapons and skills) or dismiss heroes, then start the next battle.
-4. **Tactical battle**: grid combat with terrain (forest gives +2 defense and costs 2 move; rock and water block movement). Turn order follows Speed. On your turn, move (blue tiles), then Attack, use a skill, or Wait. Right-click or Esc cancels targeting. Winning gives XP and moves you up a stage; enemies get stronger each stage.
+4. **Tactical battle**: XCOM-style alternating turns. In **your turn**, every hero can move once and act once, in any order. Click a hero or press Tab to switch between them, so you can set up combos (e.g. Rally first, then strike). Press **End Turn** when you're done; then every enemy acts. Hover over an ability to see its range box. Any tile in range can be targeted, even an empty one. Terrain matters: forest gives +2 defense and costs 2 move; rock and water block movement. Right-click or Esc cancels targeting. Winning gives XP and moves you up a stage; enemies get stronger each stage.
 
 ### Build system
 | Attribute | Effect |
@@ -16,7 +16,7 @@ A small turn-based tactical RPG that runs in the browser, built with [Phaser 4](
 | Dexterity | Hit chance and critical chance |
 | Intellect | Magic damage, healing, resistance |
 | Vitality | Max HP, defense, resistance |
-| Speed | Turn order and evasion. 9+ gives +1 move |
+| Speed | Evasion. 9+ gives +1 move |
 
 - New heroes get 8 points to spend. Each level gives 3 more (100 XP per level).
 - Weapons change range and damage type, and some change attributes (e.g. the Greataxe hits hard but gives -2 Speed).

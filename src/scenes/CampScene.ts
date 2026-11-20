@@ -3,7 +3,7 @@ import { CLASSES, MAX_PARTY_SIZE, SKILLS, WEAPONS, XP_PER_LEVEL } from '../data/
 import type { Character } from '../data/types';
 import { deriveStats, skillSlots } from '../game/character';
 import { markDirty, requireState, session } from '../game/session';
-import { COLORS, HEIGHT, WIDTH, button, confirmDialog, drawToken, panel, text } from '../ui/widgets';
+import { COLORS, HEIGHT, WIDTH, button, confirmDialog, drawToken, panel, text, setupCamera } from '../ui/widgets';
 
 /** Party hub between battles: view, recruit, edit and dismiss party members. */
 export class CampScene extends Phaser.Scene {
@@ -16,7 +16,7 @@ export class CampScene extends Phaser.Scene {
       this.scene.start('MainMenu');
       return;
     }
-    this.cameras.main.setBackgroundColor(COLORS.bg);
+    setupCamera(this);
     this.input.keyboard?.on('keydown-ESC', () => this.scene.start('MainMenu'));
     this.render();
   }

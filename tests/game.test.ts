@@ -78,14 +78,17 @@ describe('battle rules', () => {
     const h = makeUnit(healer, 'player', { x: 0, y: 0 });
     const e = makeUnit(createCharacter('E', 'knight'), 'enemy', { x: 7, y: 5 });
     const battle = new Battle(map, [h, e], makeRng(2));
-    while (battle.active !== h) battle.endTurn();
     h.hp -= 3;
     const events = battle.perform(h, 'heal', { x: 0, y: 0 });
     expect(events[0]).toMatchObject({ type: 'heal', amount: 3 });
     expect(h.hp).toBe(h.base.maxHp);
     expect(battle.isReady(h, 'heal')).toBe(false);
-    battle.endTurn();
-    while (battle.active !== h) battle.endTurn();
+    // Heal has cooldown 2: unavailable next player phase, ready the one after.
+    battle.endPhase();
+    battle.endPhase();
+    expect(battle.isReady(h, 'heal')).toBe(false);
+    battle.endPhase();
+    battle.endPhase();
     expect(battle.isReady(h, 'heal')).toBe(true);
   });
 
@@ -101,6 +104,43 @@ describe('battle rules', () => {
     const hit = battle.affected(m, getAction(m, 'fireball'), { x: 3, y: 0 });
     expect(hit.map((u) => u.character.name).sort()).toEqual(['E1', 'E2']);
     expect(battle.affected(m, getAction(m, ATTACK_ID), { x: 6, y: 5 })).toEqual([]);
+  });
+
+  it('teams alternate phases; every unit moves and acts once per phase', () => {
+    const map = openMap();
+    const a = makeUnit(createCharacter('A', 'knight'), 'player', { x: 0, y: 0 });
+    const b = makeUnit(createCharacter('B', 'ranger'), 'player', { x: 0, y: 2 });
+    const e = makeUnit(createCharacter('E', 'knight'), 'enemy', { x: 7, y: 5 });
+    const battle = new Battle(map, [a, b, e], makeRng(4));
+    expect(battle.phase).toBe('player');
+    expect(battle.canAct(e)).toBe(false);
+    battle.move(b, { x: 2, y: 2 });
+    expect(() => battle.move(b, { x: 3, y: 2 })).toThrow();
+    battle.move(a, { x: 1, y: 0 }); // switch units mid-phase
+    expect(battle.canUndoMove(b)).toBe(true);
+    battle.undoMove(b);
+    expect(b).toMatchObject({ x: 0, y: 2, moved: false });
+    battle.wait(a);
+    battle.wait(b);
+    expect(battle.readyUnits()).toEqual([]);
+    expect(battle.endPhase()).toBe('enemy');
+    expect(battle.canAct(e)).toBe(true);
+    expect(battle.endPhase()).toBe('player');
+    expect(battle.round).toBe(2);
+    expect(battle.canAct(a) && battle.canMove(a)).toBe(true);
+  });
+
+  it('actions can target empty tiles in range, but not tiles out of range', () => {
+    const map = openMap();
+    const mage = createCharacter('M', 'mage');
+    mage.skillIds = ['fireball'];
+    const m = makeUnit(mage, 'player', { x: 0, y: 0 });
+    const e = makeUnit(createCharacter('E', 'knight'), 'enemy', { x: 7, y: 5 });
+    const battle = new Battle(map, [m, e], makeRng(5));
+    expect(() => battle.perform(m, 'fireball', { x: 6, y: 0 })).toThrow(/out of range/);
+    expect(battle.perform(m, 'fireball', { x: 3, y: 0 })).toEqual([]);
+    expect(m.acted).toBe(true);
+    expect(battle.isReady(m, 'fireball')).toBe(false);
   });
 
   it('generated maps keep deployment zones open', () => {
@@ -128,14 +168,15 @@ describe('battle rules', () => {
         ...foes.map((c, i) => makeUnit(c, 'enemy', deploymentTiles(map, 'enemy', foes.length)[i])),
       ];
       const battle = new Battle(map, units, rng);
-      let turns = 0;
-      while (!battle.outcome() && turns < 500) {
-        const u = battle.active;
-        const plan = planTurn(battle, u);
-        if (plan.moveTo.x !== u.x || plan.moveTo.y !== u.y) battle.move(u, plan.moveTo);
-        if (plan.action) battle.perform(u, plan.action.id, plan.action.target);
-        battle.endTurn();
-        turns++;
+      while (!battle.outcome() && battle.round < 200) {
+        for (const u of battle.readyUnits()) {
+          if (!u.alive || battle.outcome()) continue;
+          const plan = planTurn(battle, u);
+          if (plan.moveTo.x !== u.x || plan.moveTo.y !== u.y) battle.move(u, plan.moveTo);
+          if (plan.action) battle.perform(u, plan.action.id, plan.action.target);
+          else battle.wait(u);
+        }
+        battle.endPhase();
       }
       expect(battle.outcome()).not.toBeNull();
     }

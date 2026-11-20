@@ -3,7 +3,7 @@ import { CLASSES, CREATION_POINTS, EMBLEMS, MAX_ATTRIBUTE, NAME_MAX_LENGTH, PALE
 import { ATTRIBUTE_INFO, ATTRIBUTE_KEYS, type Attributes, type Character, type ClassId } from '../data/types';
 import { cloneCharacter, createCharacter, deriveStats, skillSlots } from '../game/character';
 import { markDirty, requireState } from '../game/session';
-import { COLORS, button, drawToken, hex, panel, text, toast } from '../ui/widgets';
+import { COLORS, button, drawToken, hex, panel, text, toast, overlayInput, setupCamera } from '../ui/widgets';
 
 interface CreatorData {
   mode: 'create' | 'edit';
@@ -43,14 +43,13 @@ export class CharacterCreatorScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.cameras.main.setBackgroundColor(0x111522);
+    setupCamera(this, 0x111522);
     const title = this.mode === 'create' ? 'Create Character' : `Edit ${this.draft.name}`;
     text(this, 480, 30, title, { fontSize: '30px', color: COLORS.gold }).setOrigin(0.5);
 
     // Name field is a real HTML input so typing works everywhere (incl. mobile keyboards).
     text(this, 24, 66, 'Name', { color: COLORS.dim });
-    const input = document.createElement('input');
-    input.className = 'name-input';
+    const input = overlayInput(this, 24, 90, 290, 36);
     input.maxLength = NAME_MAX_LENGTH;
     input.value = this.draft.name;
     input.addEventListener('input', () => {
@@ -58,7 +57,6 @@ export class CharacterCreatorScene extends Phaser.Scene {
       this.render();
     });
     this.nameInput = input;
-    this.add.dom(24, 90, input).setOrigin(0, 0);
 
     // Details box (persistent, updated on hover).
     panel(this, 636, 428, 300, 92);
