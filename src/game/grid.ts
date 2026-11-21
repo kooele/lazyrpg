@@ -1,14 +1,21 @@
 import { STAT_CONFIG } from '../data/stats';
 import type { Rng } from './character';
 
-export type Terrain = 'grass' | 'forest' | 'rock' | 'water';
+export type Terrain = 'grass' | 'forest' | 'river' | 'rock' | 'water';
 
+const COSTS = STAT_CONFIG.movementCosts;
+
+/** moveCost = Movement points to enter the tile (null = impassable). Costs come from stats.json. */
 export const TERRAIN: Record<Terrain, { name: string; moveCost: number | null; defense: number; blocksSight: boolean; color: number }> = {
-  grass: { name: 'Grass', moveCost: 1, defense: 0, blocksSight: false, color: 0x4f7a3a },
-  forest: { name: 'Forest', moveCost: 2, defense: STAT_CONFIG.forestDefense, blocksSight: false, color: 0x2f5a2c },
+  grass: { name: 'Grass', moveCost: COSTS.grass, defense: 0, blocksSight: false, color: 0x4f7a3a },
+  forest: { name: 'Forest', moveCost: COSTS.forest, defense: STAT_CONFIG.forestDefense, blocksSight: false, color: 0x2f5a2c },
+  river: { name: 'River', moveCost: COSTS.river, defense: 0, blocksSight: false, color: 0x3f7fb8 },
   rock: { name: 'Rock', moveCost: null, defense: 0, blocksSight: true, color: 0x6b6b72 },
-  water: { name: 'Water', moveCost: null, defense: 0, blocksSight: false, color: 0x2d5f9a },
+  water: { name: 'Deep Water', moveCost: null, defense: 0, blocksSight: false, color: 0x24508a },
 };
+
+/** Movement points that make one "tile" of reach (the grass cost). */
+export const MOVEMENT_PER_TILE = COSTS.grass;
 
 export interface Point {
   x: number;
@@ -144,8 +151,21 @@ export function generateMap(rng: Rng, width = STAT_CONFIG.map.width, height = ST
       }
     };
     place('forest', n(4), 5, true);
+    // A river winding from top to bottom through the middle of the map (most of the time).
+    if (rng() < 0.75) {
+      let x = Math.floor(width * 0.35 + rng() * width * 0.3);
+      for (let y = 0; y < height; y++) {
+        tiles[y][x] = 'river';
+        const r = rng();
+        const nx = r < 0.25 ? x - 1 : r > 0.75 ? x + 1 : x;
+        if (nx !== x && nx >= 4 && nx < width - 4) {
+          x = nx;
+          tiles[y][x] = 'river'; // keep the river connected when it bends
+        }
+      }
+    }
     place('rock', n(3), 3, false);
-    if (rng() < 0.6) place('water', n(1), 6, false);
+    if (rng() < 0.4) place('water', n(1), 5, false);
 
     const map: BattleMap = { width, height, tiles };
     let total = 0;

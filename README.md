@@ -7,7 +7,7 @@ A small turn-based tactical RPG that runs in the browser, built with [Phaser 4](
 1. **Main menu**: New Game, Continue, Save Game, Load Game.
 2. **Adventurers**: There are no fixed classes. Every party member is an Adventurer, and you build them by mixing a weapon with picks from the skill trees (up to 4 in the party).
 3. **Camp**: the hub between battles. Recruit, customize or dismiss Adventurers, then start the next battle.
-4. **Tactical battle**: XCOM-style alternating turns. On your turn, every Adventurer can move once and act once, in any order (click a unit or press Tab). Hover a skill to see its range box; any tile in range can be targeted. The map is 18×13 tiles (set in `stats.json`). Forest gives +20 Defense and costs 2 movement; rock and water block movement, and rock blocks line of sight.
+4. **Tactical battle**: XCOM-style alternating turns. On your turn, every Adventurer can move once and act once, in any order (click a unit or press Tab). Hover a skill to see its range box; any tile in range can be targeted. The map is 18×13 tiles (set in `stats.json`). Terrain: grass costs 4 Movement, forest 6 (and gives +20 Defense), river 8. Rock and deep water block movement, and rock blocks line of sight.
 
 ### Editing the game data
 
@@ -15,7 +15,7 @@ Everything gameplay-related lives in plain JSON files in `src/data/`. Each file 
 
 | File | What's in it |
 |---|---|
-| `stats.json` | Base stats and per-level growth, Defense scaling, forest bonus, map size, hit-chance and vision switches |
+| `stats.json` | Base stats and per-level growth, Defense scaling, terrain movement costs, forest bonus, map size, hit-chance and vision switches |
 | `skills.json` | Every skill (numbers and descriptions), tags, status effects (Burn, Slow), skill trees |
 | `weapons.json` | Weapons: stat multipliers and granted skills |
 
@@ -29,7 +29,7 @@ Tooltips show a formula line generated from the numbers (e.g. "80% P.Atk, then 4
 | P.Atk | 100 (+10) | Physical power; skills deal a % of it |
 | M.Atk | 100 (+10) | Magic power and healing |
 | Defense | 50 (+5) | Damage taken × 100 / (100 + Defense) |
-| Movement | 4 | Movement points per turn |
+| Movement | 16 | Movement points per turn: grass costs 4, forest 6, river 8 (so 16 = 4 grass tiles) |
 
 Weapons **multiply** these stats:
 
@@ -49,7 +49,7 @@ Weapons **multiply** these stats:
 
 Every skill has tags that explain how it behaves. These four change the rules:
 
-- **Movement**: range = rangeScale × Movement, rounded down. Charge uses 100%, and Slow shortens it. (Arcane Shift has a fixed range of 2.)
+- **Movement**: range in tiles = rangeScale × Movement ÷ 4 (the grass cost), rounded down. Charge uses 100% (4 tiles at Movement 16), and Slow (−4 Movement) shortens it. Arcane Shift has a fixed range of 2.
 - **Weapon**: uses your weapon's basic-attack range and line rules (Execute with a Bow reaches 5 tiles). Unusable while the weapon is disabled (nothing disables weapons yet).
 - **Engage**: see below. Sword Slash, Slash and Smash, Empowered Strike, Kick, Charge.
 - **Free Action**: doesn't use your action (Kick).
@@ -61,9 +61,9 @@ Descriptive tags: Melee, Projectile, Indirect, Area, Knockback, Reaction, Telepo
 Hitting a unit with an **Engage** skill locks you both together, unless the target is already engaged with someone else. While engaged:
 - You can't move, and you can only attack your opponent. Healing and buffs are fine.
 - **Disengage** (button in the battle sidebar) breaks free, but your opponent gets a free basic attack on you (an opportunity attack). You can then move and act normally.
-- Engagement also ends if either unit falls, or if either one is successfully pushed by a knockback (Circle Swing, Arcane Pulse), even if they still end up next to each other. A push that's blocked doesn't break it.
+- Engagement also ends if either unit falls, or if either one is successfully pushed by a knockback (Circle Swing, Arcane Pulse), even if they still end up next to each other. The pushed unit takes a free basic attack from its old opponent, just like disengaging. A push that's blocked doesn't break it.
 
-In battle, the game asks for confirmation before you attack an empty tile or an ally, or heal or cleanse an enemy.
+Heal and Cleanse work on any unit, enemies included. In battle, the game asks for confirmation before you attack an empty tile or an ally, or heal or cleanse an enemy. The battle log keeps the whole fight: scroll it with the mouse wheel or the bar on its right.
 
 ### Lines, cooldowns, and prepared systems
 

@@ -4,7 +4,7 @@
 import { SKILLS, STATUSES, isFree } from '../data/content';
 import type { SkillDef } from '../data/types';
 import type { Battle, Unit } from './battle';
-import { DIRS, TERRAIN, dist, key, passable, type Point } from './grid';
+import { DIRS, MOVEMENT_PER_TILE, TERRAIN, dist, key, passable, type Point } from './grid';
 
 export interface AiAction {
   id: string;
@@ -50,15 +50,20 @@ function scoreSkill(battle: Battle, u: Unit, skill: SkillDef, from: Point, aim: 
       }
     }
     if (skill.heal) {
-      const missing = t.stats.health - t.hp;
-      if (missing / t.stats.health >= 0.25) score += Math.min(missing, battle.healAmount(u, skill));
+      const amount = Math.min(t.stats.health - t.hp, battle.healAmount(u, skill));
+      if (!friendly) score -= amount * 2; // never heal the enemy on purpose
+      else if ((t.stats.health - t.hp) / t.stats.health >= 0.25) score += amount;
     }
     if (skill.shield) {
       // Only worth it if an enemy could walk up and hit us next turn.
-      const threatened = battle.living().some((f) => f.team !== u.team && dist(f, from) <= f.stats.movement + 1.5);
+      const threatened = battle.living().some((f) => f.team !== u.team && dist(f, from) <= f.stats.movement / MOVEMENT_PER_TILE + 1.5);
       if (threatened && battle.shieldOf(t) === 0) score += t.stats.health * skill.shield.maxHpPct * 0.5;
     }
     if (skill.cleanse) {
+      if (!friendly) {
+        if (t.statuses.some((s) => s.debuff)) score -= 50;
+        continue;
+      }
       for (const s of t.statuses) {
         if (!s.debuff) continue;
         score += t.stats.health * (STATUSES[s.id]?.damagePctMaxHpPerStack ?? 0) * s.stacks * s.turns + 15 * s.turns;

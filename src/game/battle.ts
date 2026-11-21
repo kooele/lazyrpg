@@ -249,6 +249,20 @@ export class Battle {
     return onlyOpponent ? null : `Engaged with ${opp.character.name}: you can only attack them until you disengage.`;
   }
 
+  /** The opponent's free basic attack when someone breaks away from an engagement (ignores range). */
+  private opportunityAttack(attacker: Unit, victim: Unit): BattleEvent[] {
+    if (!attacker.alive || !victim.alive) return [];
+    const basic = this.basicAttack(attacker);
+    const chance = this.hitChance(attacker, victim, basic, true);
+    if (!this.rollHit(chance)) return [{ type: 'miss', source: attacker.uid, target: victim.uid, chance, cause: 'opportunity' }];
+    const events: BattleEvent[] = [];
+    for (const part of basic.hits ?? []) {
+      if (!victim.alive) break;
+      events.push(this.dealDamage(victim, this.hitDamage(attacker, victim, part), attacker.uid, 'opportunity'));
+    }
+    return events;
+  }
+
   /**
    * Break off an engagement. The opponent gets a free basic attack (opportunity attack).
    * Doesn't use the unit's action; it can then move and act normally.
@@ -260,16 +274,7 @@ export class Battle {
     const events: BattleEvent[] = [];
     this.breakEngagement(u);
     events.push({ type: 'disengage', source: u.uid, target: opp.uid, reason: 'disengage' });
-    const basic = this.basicAttack(opp);
-    const chance = this.hitChance(opp, u, basic, true);
-    if (!this.rollHit(chance)) {
-      events.push({ type: 'miss', source: opp.uid, target: u.uid, chance, cause: 'opportunity' });
-    } else {
-      for (const part of basic.hits ?? []) {
-        if (!u.alive) break;
-        events.push(this.dealDamage(u, this.hitDamage(opp, u, part), opp.uid, 'opportunity'));
-      }
-    }
+    events.push(...this.opportunityAttack(opp, u));
     u.locked = true;
     u.startPos = { x: u.x, y: u.y };
     if (!u.alive) u.acted = true;
@@ -539,7 +544,8 @@ export class Battle {
   }
 
   private matches(caster: Unit, skill: SkillDef, t: Unit): boolean {
-    if (skill.affects === 'any') return t !== caster;
+    // 'any' = friend or foe. Single-target skills may also be used on yourself; area skills never hit you.
+    if (skill.affects === 'any') return t !== caster || skill.target === 'unit';
     return skill.affects === 'enemy' ? t.team !== caster.team : t.team === caster.team;
   }
 
@@ -793,10 +799,12 @@ export class Battle {
           t.y = to.y;
           moved = true;
         }
+        // Being pushed out of an engagement counts as breaking away: the old opponent gets a free hit.
         const partner = moved ? this.opponentOf(t) : null;
         if (partner) {
           this.breakEngagement(t);
           events.push({ type: 'disengage', source: t.uid, target: partner.uid, reason: 'displaced' });
+          events.push(...this.opportunityAttack(partner, t));
         }
       }
     }

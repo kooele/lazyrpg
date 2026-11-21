@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { SKILLS, WEAPONS, isFree, skillDetails, skillFormula, tagNames } from '../data/content';
+import { SKILLS, WEAPONS, isFree, isSupport, skillDetails, skillFormula, tagNames } from '../data/content';
 import type { SkillDef } from '../data/types';
 import { bestAction, bestFreeAction, planTurn, shouldDisengage } from '../game/ai';
 import {
@@ -9,14 +9,17 @@ import {
 import { grantXp, makeRng } from '../game/character';
 import { TERRAIN, generateMap, key, type Point } from '../game/grid';
 import { markDirty, requireState } from '../game/session';
-import { COLORS, HEIGHT, WIDTH, button, confirmDialog, figure, panel, setupCamera, text } from '../ui/widgets';
+import { COLORS, HEIGHT, ScrollList, WIDTH, button, confirmDialog, figure, panel, setupCamera, text } from '../ui/widgets';
 
 /** Tile size in layout pixels; set per battle so the map fits the 672x500 board area. */
 let TILE = 56;
 /** Scale factor relative to the original 56px tiles (for sizes drawn inside a tile). */
 let K = 1;
 const BOARD_W = 672;
-const BOARD_H = 500;
+const BOARD_H = 488;
+/** Battle log panel (below the board). */
+const LOG_Y = 566;
+const LOG_H = 66;
 const MAP_X = 16;
 const MAP_Y = 72;
 const SIDE_X = 704;
@@ -47,7 +50,7 @@ export class BattleScene extends Phaser.Scene {
   private sidebar!: Phaser.GameObjects.Container;
   private topBar!: Phaser.GameObjects.Container;
   private hoverText!: Phaser.GameObjects.Text;
-  private logText!: Phaser.GameObjects.Text;
+  private logList!: ScrollList;
   private log: string[] = [];
   private mode: Mode = 'busy';
   /** The player unit currently being commanded. */
@@ -105,8 +108,8 @@ export class BattleScene extends Phaser.Scene {
     this.sidebar = this.add.container(0, 0);
     panel(this, SIDE_X, 482, SIDE_W, 100);
     this.hoverText = text(this, SIDE_X + 10, 489, '', { fontSize: '12px', wordWrap: { width: SIDE_W - 20 }, lineSpacing: 1 });
-    panel(this, MAP_X, 584, TILE * map.width, 48);
-    this.logText = text(this, MAP_X + 10, 588, '', { fontSize: '13px', color: COLORS.dim, lineSpacing: 2 });
+    panel(this, MAP_X, LOG_Y, BOARD_W, LOG_H);
+    this.logList = new ScrollList(this, MAP_X + 10, LOG_Y + 6, BOARD_W - 16, LOG_H - 12, 1);
 
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => this.onHover(this.tileAt(p)));
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
@@ -172,6 +175,18 @@ export class BattleScene extends Phaser.Scene {
           g.lineStyle(2, 0x5b8fcf, 0.8);
           g.lineBetween(px + 10 * K, py + 22 * K, px + 26 * K, py + 22 * K);
           g.lineBetween(px + 28 * K, py + 36 * K, px + 46 * K, py + 36 * K);
+        } else if (t === 'river') {
+          // Shallow, fordable water: lighter, with ripples and sandy edges.
+          g.lineStyle(2, 0xa9d4f5, 0.7);
+          for (const ry of [16, 30, 44]) {
+            g.beginPath();
+            g.moveTo(px + 8 * K, py + ry * K);
+            g.lineTo(px + 18 * K, py + (ry - 4) * K);
+            g.lineTo(px + 28 * K, py + ry * K);
+            g.lineTo(px + 38 * K, py + (ry - 4) * K);
+            g.lineTo(px + 48 * K, py + ry * K);
+            g.strokePath();
+          }
         }
       }
     }
@@ -280,7 +295,7 @@ export class BattleScene extends Phaser.Scene {
     const shown = this.mode === 'target' ? this.action : this.mode === 'select' ? this.previewAction : null;
     const caster = this.casterUid ? b.unit(this.casterUid) : sel;
     if (shown && caster) {
-      const color = shown.affects === 'ally' ? 0x6fdc8c : 0xff6b6b;
+      const color = isSupport(shown) ? 0x6fdc8c : 0xff6b6b;
       for (const p of b.rangeTiles(caster, shown)) {
         fill(p, color, 0.2);
         outline(p, color, 0.55);
@@ -441,9 +456,17 @@ export class BattleScene extends Phaser.Scene {
     this.drawOverlay();
   }
 
+  /** Add a line to the battle log. The log keeps the whole battle; scroll it with the wheel or the bar. */
   private addLog(line: string): void {
     this.log.push(line);
-    this.logText.setText(this.log.slice(-2).join('\n'));
+    const atEnd = this.logList.atEnd();
+    const items = this.log.map((l, i) => {
+      const t = text(this, 0, 0, l, {
+        fontSize: '13px', color: i === this.log.length - 1 ? COLORS.text : COLORS.dim, wordWrap: { width: BOARD_W - 34 },
+      });
+      return { obj: this.add.container(0, 0, [t]), height: t.height };
+    });
+    this.logList.setItems(items, atEnd ? 'end' : 'keep');
   }
 
   private async banner(label: string, color: string): Promise<void> {
@@ -628,7 +651,8 @@ export class BattleScene extends Phaser.Scene {
       }
     }
     if ((s.heal || s.cleanse) && occupant && occupant.team !== u.team) {
-      return `${occupant.character.name} is an enemy: ${s.name} won't affect them and will be wasted.\nUse it anyway?`;
+      const effect = s.heal ? 'restore their Health' : 'remove their debuffs';
+      return `${occupant.character.name} is an enemy: ${s.name} will ${effect}.\nUse it anyway?`;
     }
     return null;
   }
@@ -674,7 +698,7 @@ export class BattleScene extends Phaser.Scene {
     const b = this.battle;
     const target = b.unitAt(tile.x, tile.y);
     const terrain = TERRAIN[b.map.tiles[tile.y][tile.x]];
-    let info = `${terrain.name}${terrain.moveCost === null ? ' (impassable)' : ''}${terrain.defense ? ` (+${terrain.defense} Def, move cost ${terrain.moveCost})` : ''}${terrain.blocksSight ? ', blocks sight' : ''}`;
+    let info = `${terrain.name}${terrain.moveCost === null ? ' (impassable)' : ` (move cost ${terrain.moveCost}${terrain.defense ? `, +${terrain.defense} Def` : ''})`}${terrain.blocksSight ? ', blocks sight' : ''}`;
     if (target && b.canSee('player', target)) info = `${target.character.name} — Lv ${target.character.level}\n${this.unitSummary(target)}`;
     const u = this.selected;
     if (this.mode === 'target' && this.action && u) {
@@ -849,7 +873,7 @@ export class BattleScene extends Phaser.Scene {
   private flashArea(s: SkillDef, caster: Unit, target: Point): void {
     if (s.cone) return;
     const g = this.add.graphics().setDepth(400);
-    const color = s.affects === 'ally' ? 0x6fdc8c : 0xffd166;
+    const color = isSupport(s) ? 0x6fdc8c : 0xffd166;
     const tiles = s.target === 'self' && !s.aoeRadius ? [{ x: caster.x, y: caster.y }] : this.battle.areaTiles(caster, s, target);
     for (const p of tiles) g.fillStyle(color, 0.5).fillRect(MAP_X + p.x * TILE + 1, MAP_Y + p.y * TILE + 1, TILE - 2, TILE - 2);
     this.tweens.add({ targets: g, alpha: 0, duration: 500, onComplete: () => g.destroy() });

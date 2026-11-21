@@ -32,7 +32,7 @@ const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v));
 
 describe('stats and content files', () => {
   it('loads the base stats from stats.json', () => {
-    expect(STAT_CONFIG.base).toMatchObject({ health: 500, pAtk: 100, mAtk: 100, defense: 50, movement: 4 });
+    expect(STAT_CONFIG.base).toMatchObject({ health: 500, pAtk: 100, mAtk: 100, defense: 50, movement: 16 });
     expect(STAT_CONFIG.growthPerLevel).toMatchObject({ health: 50, defense: 5 });
   });
 
@@ -42,7 +42,7 @@ describe('stats and content files', () => {
 
   it('weapons multiply base stats; level growth is automatic', () => {
     const c = hero('sword_shield');
-    expect(deriveStats(c)).toMatchObject({ health: 500, pAtk: 100, mAtk: 80, defense: 75, movement: 4 });
+    expect(deriveStats(c)).toMatchObject({ health: 500, pAtk: 100, mAtk: 80, defense: 75, movement: 16 });
     c.weaponId = 'staff';
     expect(deriveStats(c)).toMatchObject({ pAtk: 50, mAtk: 120, defense: 50 });
     c.weaponId = 'bow';
@@ -169,8 +169,8 @@ describe('ranges, lines and tags', () => {
     battle.endPhase();
     battle.perform(e, 'freeze', { x: 1, y: 1 });
     battle.endPhase();
-    expect(battle.stat(m, 'movement')).toBe(3);
-    expect(battle.skillRange(m, SKILLS.charge)).toBe(3);
+    expect(battle.stat(m, 'movement')).toBe(12);
+    expect(battle.skillRange(m, SKILLS.charge)).toBe(3); // 12 / 4 per tile
     expect(battle.skillRange(m, SKILLS.arcane_shift)).toBe(2);
   });
 
@@ -270,9 +270,10 @@ describe('skills', () => {
 
   it('arcane pulse knocks back 2 tiles', () => {
     const { battle, units: [m, e] } = setup(openMap(), [
-      { c: hero('staff', ['arcane_pulse']), team: 'player', at: { x: 1, y: 3 } },
+      { c: hero('staff', ['arcane_pulse']), team: 'player', at: { x: 2, y: 3 } },
       { c: hero('bow'), team: 'enemy', at: { x: 3, y: 3 } },
     ]);
+    expect(battle.canTarget(m, SKILLS.arcane_pulse, { x: 4, y: 3 })).toBe(false); // range 1.5
     battle.perform(m, 'arcane_pulse', { x: 3, y: 3 });
     expect(e).toMatchObject({ x: 5, y: 3 });
     expect(e.hp).toBe(500 - 80); // 120 x 2/3
@@ -313,6 +314,21 @@ describe('skills', () => {
     expect(r2.triggers).toHaveLength(1);
   });
 
+  it('heal and cleanse work on enemies (and on yourself)', () => {
+    const { battle, units: [h, e] } = setup(openMap(), [
+      { c: hero('staff', ['heal', 'cleanse']), team: 'player', at: { x: 1, y: 1 } },
+      { c: hero('bow'), team: 'enemy', at: { x: 4, y: 1 } },
+    ]);
+    e.hp = 300;
+    battle.perform(h, 'heal', { x: 4, y: 1 });
+    expect(e.hp).toBe(300 + 96); // 80% of 120 M.Atk
+    battle.endPhase();
+    battle.endPhase();
+    h.statuses.push({ id: 'burn', name: 'Burn', debuff: true, stacks: 1, amount: 0, turns: 2, tick: 'start' });
+    battle.perform(h, 'cleanse', { x: 1, y: 1 });
+    expect(h.statuses).toEqual([]);
+  });
+
   it('fireball burns 1% max health per stack per turn; cleanse removes it', () => {
     const { battle, units: [m, e, cleric] } = setup(openMap(), [
       { c: hero('staff', ['fireball']), team: 'player', at: { x: 1, y: 1 } },
@@ -340,7 +356,7 @@ describe('skills', () => {
       moveOnEnemyTurns.push(battle.stat(e, 'movement'));
       battle.endPhase(); // player turn
     }
-    expect(moveOnEnemyTurns).toEqual([3, 3, 4]);
+    expect(moveOnEnemyTurns).toEqual([12, 12, 16]);
   });
 
   it('charge dashes next to an enemy within Movement and strikes', () => {
@@ -364,14 +380,14 @@ describe('skills', () => {
     expect(k.acted).toBe(true);
   });
 
-  it("execute adds 10% of the target's missing health", () => {
+  it("execute: 100% P.Atk + 15% of the target's missing health", () => {
     const { battle, units: [a, e] } = setup(openMap(), [
       { c: hero('sword_shield', ['execute']), team: 'player', at: { x: 1, y: 1 } },
       { c: hero('bow'), team: 'enemy', at: { x: 2, y: 1 } },
     ]);
     e.hp = 200;
     battle.perform(a, 'execute', { x: 2, y: 1 });
-    expect(e.hp).toBe(200 - 53); // (50 + 30) x 2/3
+    expect(e.hp).toBe(200 - 97); // (100 + 45) x 2/3
   });
 });
 
@@ -443,13 +459,15 @@ describe('engagement', () => {
     expect(e).toMatchObject({ x: 3, y: 2 });
     expect(Math.hypot(e.x - a.x, e.y - a.y)).toBeLessThanOrEqual(1.5); // still next to each other
     expect(events).toContainEqual(expect.objectContaining({ type: 'disengage', reason: 'displaced' }));
+    // Being pushed out counts as breaking away: the old opponent gets a free basic attack.
+    expect(events).toContainEqual(expect.objectContaining({ type: 'damage', cause: 'opportunity', source: a.uid, target: e.uid }));
     expect(a.engagedWith).toBeNull();
     expect(e.engagedWith).toBeNull();
   });
 
   it('a blocked push keeps the engagement', () => {
     const { units: [a, e] } = duel();
-    const mage = makeUnit(hero('staff', ['arcane_pulse'], 'M'), 'player', { x: 6, y: 3 });
+    const mage = makeUnit(hero('staff', ['arcane_pulse'], 'M'), 'player', { x: 5, y: 3 });
     const b2 = new Battle(openMap(), [a, e, mage], makeRng(2));
     b2.perform(a, 'sword_slash', { x: 4, y: 3 });
     b2.perform(mage, 'arcane_pulse', { x: 4, y: 3 }); // pushed toward (3,3), where `a` stands
@@ -549,6 +567,21 @@ describe('battles', () => {
       }
       expect(battle.outcome()).not.toBeNull();
     }
+  });
+
+  it('movement costs: grass 4, forest 6, river 8 points (Movement 16)', () => {
+    const map = openMap(12, 3);
+    map.tiles[1][2] = 'forest';
+    map.tiles[1][3] = 'river';
+    const { battle, units: [u] } = setup(map, [
+      { c: hero(), team: 'player', at: { x: 0, y: 1 } },
+      { c: hero(), team: 'enemy', at: { x: 11, y: 0 } },
+    ]);
+    const reach = battle.reachable(u);
+    expect(reach.get('1,1')?.cost).toBe(4);
+    expect(reach.get('2,1')?.cost).toBe(10); // + forest 6
+    expect(reach.get('3,0')?.cost).toBe(16); // four grass tiles
+    expect(reach.has('3,1')).toBe(false); // river: 4 + 6 + 8 = 18 > 16
   });
 
   it('generated maps use the configured size and keep deployment zones open', () => {

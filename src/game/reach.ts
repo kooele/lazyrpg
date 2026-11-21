@@ -2,7 +2,7 @@
 // battle rules and by the UI's tile diagrams.
 import { hasTag } from '../data/content';
 import type { LosRule, SkillDef } from '../data/types';
-import { EPS, dist, withinRange, type Point } from './grid';
+import { EPS, MOVEMENT_PER_TILE, dist, withinRange, type Point } from './grid';
 
 export interface ReachContext {
   /** The user's current Movement (for 'movement' skills). */
@@ -12,7 +12,8 @@ export interface ReachContext {
 }
 
 export function rangeFor(s: SkillDef, ctx: ReachContext): number {
-  if (hasTag(s, 'movement')) return Math.floor((s.rangeScale ?? 1) * ctx.movement);
+  // Movement is in points (grass = 4 per tile); convert to tiles.
+  if (hasTag(s, 'movement')) return Math.floor(((s.rangeScale ?? 1) * ctx.movement) / MOVEMENT_PER_TILE);
   if (hasTag(s, 'weapon')) return ctx.basic.range;
   return s.range;
 }
