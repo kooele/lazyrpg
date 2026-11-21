@@ -32,6 +32,8 @@ Tooltips show a formula line generated from the numbers (e.g. "80% P.Atk, then 4
 | Defense | 50 (+5) | Damage taken × 100 / (100 + Defense) |
 | Movement | 16 | Movement points per turn: grass costs 4, forest 6, river 8 (so 16 = 4 grass tiles) |
 
+Stats grow automatically on level up (100 XP per level). Each won battle gives every Adventurer 100 XP (`xpPerVictory` in `stats.json`), so a party that keeps winning is level N at stage N.
+
 Weapons **multiply** these stats:
 
 | Weapon | Multipliers | Skills (the first is the basic attack) |
