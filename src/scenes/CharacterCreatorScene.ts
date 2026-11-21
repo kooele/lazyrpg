@@ -1,9 +1,12 @@
 import Phaser from 'phaser';
-import { CLASSES, CREATION_POINTS, EMBLEMS, MAX_ATTRIBUTE, NAME_MAX_LENGTH, PALETTE, SKILLS, WEAPONS } from '../data/content';
-import { ATTRIBUTE_INFO, ATTRIBUTE_KEYS, type Attributes, type Character, type ClassId } from '../data/types';
-import { cloneCharacter, createCharacter, deriveStats, skillSlots } from '../game/character';
+import {
+  EMBLEMS, NAME_MAX_LENGTH, PALETTE, SKILLS, SKILL_TABS, SKILL_TREES, WEAPONS, XP_PER_LEVEL, skillDetails,
+} from '../data/content';
+import { STAT_CONFIG, visibleStatKeys } from '../data/stats';
+import { STAT_INFO, STAT_KEYS, type Character, type SkillDef, type SkillTab, type StatKey } from '../data/types';
+import { cloneCharacter, createCharacter, deriveStats, levelStats, skillSlots } from '../game/character';
 import { markDirty, requireState } from '../game/session';
-import { COLORS, button, drawToken, hex, panel, text, toast, overlayInput, setupCamera } from '../ui/widgets';
+import { COLORS, button, drawToken, hex, overlayInput, panel, setupCamera, text, toast } from '../ui/widgets';
 
 interface CreatorData {
   mode: 'create' | 'edit';
@@ -12,11 +15,11 @@ interface CreatorData {
 
 const DEFAULT_NAMES = ['Aldric', 'Brienne', 'Corvin', 'Dahlia', 'Edda', 'Fenwick', 'Gwyn', 'Halvard', 'Isolde', 'Jory'];
 
+/** Create or customize an Adventurer: name, look, weapon, and skill-tree picks. */
 export class CharacterCreatorScene extends Phaser.Scene {
   private mode: 'create' | 'edit' = 'create';
   private draft!: Character;
-  /** Attributes can't be lowered below this (class base when creating, current values when editing). */
-  private floor!: Attributes;
+  private tab: SkillTab = 'mage';
   private layer!: Phaser.GameObjects.Container;
   private nameInput!: HTMLInputElement;
   private infoText!: Phaser.GameObjects.Text;
@@ -30,21 +33,21 @@ export class CharacterCreatorScene extends Phaser.Scene {
     const party = requireState().party;
     if (this.mode === 'edit') {
       const existing = party.find((c) => c.id === data.characterId);
-      if (!existing) throw new Error('Character not found');
+      if (!existing) throw new Error('Adventurer not found');
       this.draft = cloneCharacter(existing);
     } else {
       const usedColors = new Set(party.map((c) => c.appearance.color));
       const color = PALETTE.find((p) => !usedColors.has(p)) ?? PALETTE[0];
       const usedNames = new Set(party.map((c) => c.name));
       const name = DEFAULT_NAMES.filter((n) => !usedNames.has(n))[Math.floor(Math.random() * 6)] ?? 'Hero';
-      this.draft = createCharacter(name, (['knight', 'ranger', 'mage', 'cleric'] as const)[party.length % 4], color);
+      const weapons = Object.keys(WEAPONS);
+      this.draft = createCharacter(name, color, weapons[party.length % weapons.length]);
     }
-    this.floor = { ...this.draft.attributes };
   }
 
   create(): void {
     setupCamera(this, 0x111522);
-    const title = this.mode === 'create' ? 'Create Character' : `Edit ${this.draft.name}`;
+    const title = this.mode === 'create' ? 'New Adventurer' : `Customize ${this.draft.name}`;
     text(this, 480, 30, title, { fontSize: '30px', color: COLORS.gold }).setOrigin(0.5);
 
     // Name field is a real HTML input so typing works everywhere (incl. mobile keyboards).
@@ -59,12 +62,20 @@ export class CharacterCreatorScene extends Phaser.Scene {
     this.nameInput = input;
 
     // Details box (persistent, updated on hover).
-    panel(this, 636, 428, 300, 92);
-    this.infoText = text(this, 648, 438, 'Hover over anything for details.', {
-      fontSize: '14px', color: COLORS.dim, wordWrap: { width: 276 },
+    panel(this, 636, 384, 300, 164);
+    this.infoText = text(this, 648, 394, 'Hover over a weapon, skill or stat for details.', {
+      fontSize: '14px', color: COLORS.dim, wordWrap: { width: 276 }, lineSpacing: 3,
     });
 
     this.render();
+  }
+
+  private setInfo(info: string): void {
+    this.infoText.setText(info).setColor(COLORS.text);
+  }
+
+  private skillInfo(s: SkillDef): string {
+    return `${s.name}\n${s.description}\n\n${skillDetails(s)}`;
   }
 
   private render(): void {
@@ -72,22 +83,11 @@ export class CharacterCreatorScene extends Phaser.Scene {
     this.layer = this.add.container(0, 0);
     const L = this.layer;
     const d = this.draft;
-    const cls = CLASSES[d.classId];
-    const creating = this.mode === 'create';
 
-    // ---- Left: class + appearance -----------------------------------------
-    L.add(text(this, 24, 138, creating ? 'Class' : 'Class (fixed after creation)', { color: COLORS.dim }));
-    (Object.keys(CLASSES) as ClassId[]).forEach((id, i) => {
-      L.add(button(this, 24 + (i % 2) * 148, 162 + Math.floor(i / 2) * 46, 140, 40, CLASSES[id].name, () => this.setClass(id), {
-        selected: d.classId === id, enabled: creating || d.classId === id,
-        onHover: () => this.setInfo(`${CLASSES[id].name}: ${CLASSES[id].description} Move ${CLASSES[id].move}, armor ${CLASSES[id].armor}.`),
-      }));
-    });
-    L.add(text(this, 24, 260, cls.description, { fontSize: '14px', color: COLORS.dim, wordWrap: { width: 290 } }));
-
-    L.add(text(this, 24, 312, 'Color', { color: COLORS.dim }));
+    // ---- Left: appearance, preview, stats -----------------------------------------
+    L.add(text(this, 24, 138, 'Appearance', { color: COLORS.dim }));
     PALETTE.forEach((color, i) => {
-      const sw = this.add.rectangle(24 + i * 36, 338, 30, 30, hex(color)).setOrigin(0)
+      const sw = this.add.rectangle(24 + i * 36, 160, 30, 30, hex(color)).setOrigin(0)
         .setStrokeStyle(3, d.appearance.color === color ? 0xffffff : 0x222222)
         .setInteractive({ useHandCursor: true })
         .on('pointerup', () => {
@@ -96,120 +96,102 @@ export class CharacterCreatorScene extends Phaser.Scene {
         });
       L.add(sw);
     });
-
-    L.add(text(this, 24, 384, 'Emblem', { color: COLORS.dim }));
     EMBLEMS.forEach((emblem, i) => {
-      L.add(button(this, 24 + i * 72, 408, 66, 36, emblem, () => {
+      L.add(button(this, 24 + i * 72, 198, 66, 30, emblem, () => {
         d.appearance.emblem = emblem;
         this.render();
       }, { selected: d.appearance.emblem === emblem, fontSize: 13 }));
     });
 
-    L.add(panel(this, 24, 462, 290, 150));
+    L.add(panel(this, 24, 240, 290, 86));
     const g = this.add.graphics();
-    drawToken(g, 94, 537, 44, d.appearance.color, d.appearance.emblem);
+    drawToken(g, 66, 283, 28, d.appearance.color, d.appearance.emblem);
     L.add(g);
-    L.add(text(this, 156, 492, d.name.trim() || '(no name)', { fontSize: '20px', wordWrap: { width: 150 } }));
-    L.add(text(this, 156, 522, `Level ${d.level} ${cls.name}`, { color: COLORS.dim, fontSize: '14px' }));
-    L.add(text(this, 156, 544, WEAPONS[d.weaponId].name, { color: COLORS.dim, fontSize: '14px' }));
+    L.add(text(this, 108, 252, d.name.trim() || '(no name)', { fontSize: '18px', wordWrap: { width: 196 } }));
+    L.add(text(this, 108, 278, `Level ${d.level} Adventurer`, { color: COLORS.dim, fontSize: '13px' }));
+    L.add(text(this, 108, 298, `${d.xp}/${XP_PER_LEVEL} XP · ${WEAPONS[d.weaponId].name}`, { color: COLORS.dim, fontSize: '13px' }));
 
-    // ---- Middle: attributes + derived stats -----------------------------------
-    L.add(text(this, 340, 66, 'Attributes', { color: COLORS.dim }));
-    const pts = d.unspentPoints;
-    L.add(text(this, 610, 66, `Points: ${pts}`, { color: pts > 0 ? COLORS.gold : COLORS.dim }).setOrigin(1, 0));
-    const weapon = WEAPONS[d.weaponId];
-    ATTRIBUTE_KEYS.forEach((k, i) => {
-      const y = 96 + i * 44;
-      const info = ATTRIBUTE_INFO[k];
-      const label = text(this, 340, y + 6, info.name).setInteractive();
-      label.on('pointerover', () => this.setInfo(`${info.name}: ${info.description}`));
-      L.add(label);
-      const bonus = weapon.bonus[k] ?? 0;
-      L.add(text(this, 478, y + 6, String(d.attributes[k]), { fontSize: '18px' }).setOrigin(0.5, 0));
-      if (bonus) {
-        L.add(text(this, 500, y + 9, `${bonus > 0 ? '+' : ''}${bonus}`, { fontSize: '13px', color: bonus > 0 ? COLORS.good : COLORS.bad }));
-      }
-      L.add(button(this, 534, y, 34, 32, '−', () => this.adjust(k, -1), { enabled: d.attributes[k] > this.floor[k], fontSize: 20 }));
-      L.add(button(this, 574, y, 34, 32, '+', () => this.adjust(k, 1), { enabled: pts > 0 && d.attributes[k] < MAX_ATTRIBUTE, fontSize: 20 }));
+    L.add(panel(this, 24, 336, 290, 212));
+    L.add(text(this, 36, 344, 'Stats', { color: COLORS.dim, fontSize: '14px' }));
+    L.add(text(this, 302, 346, 'grows automatically each level', { color: COLORS.dim, fontSize: '11px' }).setOrigin(1, 0));
+    const total = deriveStats(d);
+    const fromLevel = levelStats(d.level);
+    const shown = visibleStatKeys();
+    const rowH = Math.min(34, Math.floor(170 / shown.length));
+    shown.forEach((k: StatKey, i) => {
+      const y = 372 + i * rowH;
+      const info = STAT_INFO[k];
+      const row = this.add.rectangle(30, y - 4, 278, rowH - 4, 0xffffff, 0).setOrigin(0).setInteractive();
+      row.on('pointerover', () => this.setInfo(`${info.name} (${info.short})\n${info.description}\n\nLevel ${d.level}: ${fromLevel[k]} · +${STAT_CONFIG.growthPerLevel[k]} per level`));
+      L.add(row);
+      L.add(text(this, 40, y, info.name, { fontSize: '15px' }));
+      L.add(text(this, 220, y, String(total[k]), { fontSize: '16px' }).setOrigin(1, 0));
+      const bonus = WEAPONS[d.weaponId].bonus[k] ?? 0;
+      if (bonus) L.add(text(this, 230, y + 2, `(+${bonus} weapon)`, { fontSize: '12px', color: COLORS.good }));
     });
 
-    L.add(text(this, 340, 324, 'Battle stats', { color: COLORS.dim }));
-    const s = deriveStats(d);
-    const rows: [string, number | string][] = [
-      ['Max HP', s.maxHp], ['Move', s.move],
-      ['Phys. power', s.physPower], ['Magic power', s.magPower],
-      ['Defense', s.defense], ['Resistance', s.resistance],
-      ['Speed', s.speed], ['Crit %', s.crit],
-      ['Hit bonus', `+${s.accuracy}`], ['Range', `${weapon.minRange}-${weapon.maxRange}`],
-    ];
-    L.add(panel(this, 340, 348, 270, 172));
-    rows.forEach(([name, value], i) => {
-      const x = 352 + (i % 2) * 132;
-      const y = 358 + Math.floor(i / 2) * 32;
-      L.add(text(this, x, y, name, { fontSize: '13px', color: COLORS.dim }));
-      L.add(text(this, x + 120, y, String(value), { fontSize: '15px' }).setOrigin(1, 0));
-    });
-
-    // ---- Right: weapon + skills -----------------------------------------------
-    L.add(text(this, 636, 66, 'Weapon', { color: COLORS.dim }));
-    cls.weapons.forEach((wid, i) => {
-      const w = WEAPONS[wid];
-      L.add(button(this, 636, 90 + i * 42, 300, 36, `${w.name}  (${w.damageType === 'magical' ? 'mag' : 'phys'} ${w.power}, rng ${w.minRange}-${w.maxRange})`, () => {
-        d.weaponId = wid;
+    // ---- Middle: weapon -------------------------------------------------------------
+    L.add(text(this, 330, 66, 'Weapon', { color: COLORS.dim }));
+    Object.values(WEAPONS).forEach((w, i) => {
+      L.add(button(this, 330 + (i % 2) * 149, 90 + Math.floor(i / 2) * 40, 141, 34, w.name, () => {
+        d.weaponId = w.id;
         this.render();
-      }, { selected: d.weaponId === wid, fontSize: 14, onHover: () => this.setInfo(`${w.name}: ${w.description}${this.bonusText(w.bonus)}`) }));
+      }, { selected: d.weaponId === w.id, fontSize: 14, onHover: () => this.setInfo(`${w.name}\n${w.description}`) }));
+    });
+    const w = WEAPONS[d.weaponId];
+    L.add(panel(this, 330, 172, 290, 376));
+    L.add(text(this, 342, 180, w.name, { fontSize: '18px', color: COLORS.gold }));
+    L.add(text(this, 342, 204, w.description, { fontSize: '13px', color: COLORS.dim, wordWrap: { width: 266 } }));
+    const bonusText = STAT_KEYS.filter((k) => w.bonus[k]).map((k) => `+${w.bonus[k]} ${STAT_INFO[k].short}`).join('   ');
+    L.add(text(this, 342, 244, bonusText || 'No stat bonus', { fontSize: '15px', color: COLORS.good }));
+    L.add(text(this, 342, 272, 'Weapon skills (always equipped)', { fontSize: '12px', color: COLORS.dim }));
+    let sy = 292;
+    w.skills.forEach((sid, i) => {
+      const s = SKILLS[sid];
+      const name = text(this, 342, sy, `${s.name}${i === 0 ? '  (basic attack)' : ''}`, { fontSize: '15px' }).setInteractive();
+      name.on('pointerover', () => this.setInfo(this.skillInfo(s)));
+      L.add(name);
+      L.add(text(this, 342, sy + 20, skillDetails(s), { fontSize: '11px', color: COLORS.gold }));
+      const desc = text(this, 342, sy + 36, s.description, { fontSize: '12px', color: COLORS.dim, wordWrap: { width: 266 } });
+      L.add(desc);
+      sy += 48 + desc.height;
     });
 
+    // ---- Right: skill trees -----------------------------------------------------------
     const slots = skillSlots(d);
-    L.add(text(this, 636, 228, `Skills  ${d.skillIds.length}/${slots}`, { color: COLORS.dim }));
-    L.add(text(this, 936, 228, 'more slots at Lv 3 and 6', { color: COLORS.dim, fontSize: '12px' }).setOrigin(1, 0));
-    cls.skills.forEach((sid, i) => {
-      const sk = SKILLS[sid];
-      const on = d.skillIds.includes(sid);
-      L.add(button(this, 636, 252 + i * 42, 300, 36, `${on ? '✔ ' : ''}${sk.name}  (cd ${sk.cooldown})`, () => this.toggleSkill(sid), {
-        selected: on, fontSize: 14,
-        onHover: () => this.setInfo(`${sk.name}: ${sk.description} Cooldown: ${sk.cooldown} turn${sk.cooldown > 1 ? 's' : ''}.`),
-      }));
+    L.add(text(this, 636, 66, `Skills  ${d.skillIds.length}/${slots}`, { color: d.skillIds.length < slots ? COLORS.gold : COLORS.dim }));
+    L.add(text(this, 936, 68, 'mix and match · more slots at Lv 3 & 6', { color: COLORS.dim, fontSize: '11px' }).setOrigin(1, 0));
+    SKILL_TABS.forEach((t, i) => {
+      L.add(button(this, 636 + i * 154, 90, 146, 30, t.name, () => {
+        this.tab = t.id;
+        this.render();
+      }, { selected: this.tab === t.id, fontSize: 14 }));
     });
-
-
-    // ---- Bottom buttons ---------------------------------------------------------
-    L.add(button(this, 340, 560, 270, 50, 'Cancel', () => this.scene.start('Camp')));
-    L.add(button(this, 636, 560, 300, 50, creating ? 'Recruit' : 'Save changes', () => this.confirm(), { fill: 0x2c4a2f, fontSize: 18 }));
-    if (creating && pts === CREATION_POINTS) {
-      L.add(text(this, 340, 528, `Tip: spend your ${CREATION_POINTS} points with + to shape your build.`, { fontSize: '13px', color: COLORS.gold }));
+    let ty = 130;
+    for (const tree of SKILL_TREES.filter((t) => t.tab === this.tab)) {
+      L.add(text(this, 636, ty, tree.name, { fontSize: '13px', color: COLORS.gold }));
+      ty += 20;
+      for (const sid of tree.skills) {
+        const s = SKILLS[sid];
+        const on = d.skillIds.includes(sid);
+        L.add(button(this, 636, ty, 300, 30, `${on ? '✔ ' : ''}${s.name}`, () => this.toggleSkill(sid), {
+          selected: on, fontSize: 14, onHover: () => this.setInfo(this.skillInfo(s)),
+        }));
+        ty += 34;
+      }
     }
-  }
-
-  private bonusText(bonus: Partial<Attributes>): string {
-    const parts = Object.entries(bonus).map(([k, v]) => `${v! > 0 ? '+' : ''}${v} ${k.toUpperCase()}`);
-    return parts.length ? ` (${parts.join(', ')})` : '';
-  }
-
-  private setInfo(info: string): void {
-    this.infoText.setText(info).setColor(COLORS.text);
-  }
-
-  private setClass(id: ClassId): void {
-    if (this.mode !== 'create' || id === this.draft.classId) return;
-    const fresh = createCharacter(this.draft.name, id, this.draft.appearance.color);
-    fresh.id = this.draft.id;
-    fresh.appearance = this.draft.appearance;
-    this.draft = fresh;
-    this.floor = { ...fresh.attributes };
-    this.render();
-  }
-
-  private adjust(k: keyof Attributes, delta: number): void {
-    const d = this.draft;
-    if (delta > 0 && d.unspentPoints > 0 && d.attributes[k] < MAX_ATTRIBUTE) {
-      d.attributes[k] += 1;
-      d.unspentPoints -= 1;
-    } else if (delta < 0 && d.attributes[k] > this.floor[k]) {
-      d.attributes[k] -= 1;
-      d.unspentPoints += 1;
+    // Picks from the other tab, so mixing is visible.
+    const otherPicks = d.skillIds.filter((sid) => SKILL_TREES.find((t) => t.skills.includes(sid))?.tab !== this.tab);
+    if (otherPicks.length) {
+      const other = SKILL_TABS.find((t) => t.id !== this.tab)!.name;
+      L.add(text(this, 636, ty + 4, `Also equipped (${other}): ${otherPicks.map((s) => SKILLS[s].name).join(', ')}`, {
+        fontSize: '12px', color: COLORS.dim, wordWrap: { width: 300 },
+      }));
     }
-    this.render();
+
+    // ---- Bottom buttons -------------------------------------------------------------
+    L.add(button(this, 330, 560, 290, 50, 'Cancel', () => this.scene.start('Camp')));
+    L.add(button(this, 636, 560, 300, 50, this.mode === 'create' ? 'Recruit' : 'Save changes', () => this.confirm(), { fill: 0x2c4a2f, fontSize: 18 }));
   }
 
   private toggleSkill(id: string): void {
@@ -228,8 +210,7 @@ export class CharacterCreatorScene extends Phaser.Scene {
   private confirm(): void {
     const d = this.draft;
     d.name = this.nameInput.value.trim();
-    if (!d.name) return toast(this, 'Give your character a name.', COLORS.bad);
-    if (d.skillIds.length === 0) return toast(this, 'Equip at least one skill.', COLORS.bad);
+    if (!d.name) return toast(this, 'Give your adventurer a name.', COLORS.bad);
     const party = requireState().party;
     if (this.mode === 'create') party.push(d);
     else party[party.findIndex((c) => c.id === d.id)] = d;

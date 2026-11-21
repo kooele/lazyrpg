@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { CLASSES, MAX_PARTY_SIZE, SKILLS, WEAPONS, XP_PER_LEVEL } from '../data/content';
+import { MAX_PARTY_SIZE, SKILLS, WEAPONS, XP_PER_LEVEL } from '../data/content';
 import type { Character } from '../data/types';
 import { deriveStats, skillSlots } from '../game/character';
 import { markDirty, requireState, session } from '../game/session';
@@ -52,13 +52,13 @@ export class CampScene extends Phaser.Scene {
   }
 
   private card(c: Character, x: number, y: number): void {
-    const cls = CLASSES[c.classId];
     const stats = deriveStats(c);
+    const freeSlots = skillSlots(c) - c.skillIds.length;
     panel(this, x, y, 216, 440);
     const g = this.add.graphics();
     drawToken(g, x + 40, y + 42, 26, c.appearance.color, c.appearance.emblem);
     text(this, x + 76, y + 18, c.name, { fontSize: '18px', wordWrap: { width: 134 } });
-    text(this, x + 76, y + 44, `Lv ${c.level} ${cls.name}`, { color: COLORS.dim, fontSize: '14px' });
+    text(this, x + 76, y + 44, `Lv ${c.level} Adventurer`, { color: COLORS.dim, fontSize: '14px' });
 
     // XP bar
     g.fillStyle(0x0b0d14).fillRect(x + 14, y + 80, 188, 8);
@@ -66,25 +66,23 @@ export class CampScene extends Phaser.Scene {
     text(this, x + 202, y + 90, `${c.xp}/${XP_PER_LEVEL} XP`, { color: COLORS.dim, fontSize: '11px' }).setOrigin(1, 0);
 
     const lines = [
-      `HP ${stats.maxHp}   Move ${stats.move}   Spd ${stats.speed}`,
-      `Phys ${stats.physPower}   Mag ${stats.magPower}`,
-      `Def ${stats.defense}   Res ${stats.resistance}`,
-      `STR ${c.attributes.str} DEX ${c.attributes.dex} INT ${c.attributes.int}`,
-      `VIT ${c.attributes.vit} SPD ${c.attributes.spd}`,
+      `HP ${stats.health}   Move ${stats.movement}`,
+      `P.Atk ${stats.pAtk}   M.Atk ${stats.mAtk}`,
+      `Def ${stats.defense}`,
     ];
-    text(this, x + 14, y + 112, lines.join('\n'), { fontSize: '13px', lineSpacing: 6 });
-    text(this, x + 14, y + 222, 'Weapon', { color: COLORS.dim, fontSize: '12px' });
-    text(this, x + 14, y + 238, WEAPONS[c.weaponId].name, { fontSize: '14px' });
-    text(this, x + 14, y + 264, `Skills ${c.skillIds.length}/${skillSlots(c)}`, { color: COLORS.dim, fontSize: '12px' });
-    text(this, x + 14, y + 280, c.skillIds.map((s) => `• ${SKILLS[s].name}`).join('\n') || '—', { fontSize: '14px', lineSpacing: 2 });
+    text(this, x + 14, y + 112, lines.join('\n'), { fontSize: '14px', lineSpacing: 6 });
+    const weapon = WEAPONS[c.weaponId];
+    text(this, x + 14, y + 184, 'Weapon', { color: COLORS.dim, fontSize: '12px' });
+    text(this, x + 14, y + 200, weapon.name, { fontSize: '15px' });
+    text(this, x + 14, y + 220, weapon.skills.map((s) => SKILLS[s].name).join(', '), { fontSize: '12px', color: COLORS.dim, wordWrap: { width: 188 } });
+    text(this, x + 14, y + 262, `Skills ${c.skillIds.length}/${skillSlots(c)}`, { color: COLORS.dim, fontSize: '12px' });
+    text(this, x + 14, y + 278, c.skillIds.map((s) => `• ${SKILLS[s].name}`).join('\n') || '—', { fontSize: '14px', lineSpacing: 2 });
 
-    if (c.unspentPoints > 0) {
-      text(this, x + 108, y + 352, `${c.unspentPoints} attribute point${c.unspentPoints > 1 ? 's' : ''} to spend!`, {
-        color: COLORS.gold, fontSize: '13px',
-      }).setOrigin(0.5);
+    if (freeSlots > 0) {
+      text(this, x + 108, y + 356, `${freeSlots} empty skill slot${freeSlots > 1 ? 's' : ''}`, { color: COLORS.gold, fontSize: '13px' }).setOrigin(0.5);
     }
     button(this, x + 14, y + 380, 110, 44, 'Customize', () => this.scene.start('CharacterCreator', { mode: 'edit', characterId: c.id }), {
-      selected: c.unspentPoints > 0, fontSize: 14,
+      selected: freeSlots > 0, fontSize: 14,
     });
     button(this, x + 132, y + 380, 70, 44, 'Dismiss', () => {
       confirmDialog(this, `Dismiss ${c.name} from the party?\nThis cannot be undone.`, () => {

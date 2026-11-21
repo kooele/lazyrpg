@@ -1,12 +1,13 @@
+import { STAT_CONFIG } from '../data/stats';
 import type { Rng } from './character';
 
 export type Terrain = 'grass' | 'forest' | 'rock' | 'water';
 
-export const TERRAIN: Record<Terrain, { name: string; moveCost: number | null; defense: number; color: number }> = {
-  grass: { name: 'Grass', moveCost: 1, defense: 0, color: 0x4f7a3a },
-  forest: { name: 'Forest', moveCost: 2, defense: 2, color: 0x2f5a2c },
-  rock: { name: 'Rock', moveCost: null, defense: 0, color: 0x6b6b72 },
-  water: { name: 'Water', moveCost: null, defense: 0, color: 0x2d5f9a },
+export const TERRAIN: Record<Terrain, { name: string; moveCost: number | null; defense: number; blocksSight: boolean; color: number }> = {
+  grass: { name: 'Grass', moveCost: 1, defense: 0, blocksSight: false, color: 0x4f7a3a },
+  forest: { name: 'Forest', moveCost: 2, defense: STAT_CONFIG.forestDefense, blocksSight: false, color: 0x2f5a2c },
+  rock: { name: 'Rock', moveCost: null, defense: 0, blocksSight: true, color: 0x6b6b72 },
+  water: { name: 'Water', moveCost: null, defense: 0, blocksSight: false, color: 0x2d5f9a },
 };
 
 export interface Point {
@@ -23,7 +24,64 @@ export interface BattleMap {
 
 export const key = (x: number, y: number) => `${x},${y}`;
 export const manhattan = (a: Point, b: Point) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+/** Euclidean distance; all skill ranges use this (1.5 reaches diagonal neighbours). */
+export const dist = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
+export const EPS = 1e-6;
 export const DIRS: Point[] = [{ x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 }];
+export const DIRS8: Point[] = [...DIRS, { x: 1, y: 1 }, { x: 1, y: -1 }, { x: -1, y: 1 }, { x: -1, y: -1 }];
+
+/** Snap the direction from `from` toward `to` to one of the 8 grid directions. */
+export function snapDirection(from: Point, to: Point): Point {
+  const angle = Math.atan2(to.y - from.y, to.x - from.x);
+  const step = Math.round(angle / (Math.PI / 4));
+  const a = step * (Math.PI / 4);
+  return { x: Math.round(Math.cos(a)), y: Math.round(Math.sin(a)) };
+}
+
+/** Tiles strictly between two tiles along the straight line joining their centers. */
+export function tilesBetween(a: Point, b: Point): Point[] {
+  const out: Point[] = [];
+  const seen = new Set<string>();
+  const n = Math.ceil(dist(a, b) * 8);
+  for (let i = 1; i < n; i++) {
+    const t = i / n;
+    const x = Math.round(a.x + (b.x - a.x) * t);
+    const y = Math.round(a.y + (b.y - a.y) * t);
+    if ((x === a.x && y === a.y) || (x === b.x && y === b.y) || seen.has(key(x, y))) continue;
+    seen.add(key(x, y));
+    out.push({ x, y });
+  }
+  return out;
+}
+
+/**
+ * Line of sight: nothing that blocks sight (rock) lies strictly between the two tiles.
+ * Pass `blocker` to also treat other tiles as blocking (used for line of fire).
+ */
+export function hasLineOfSight(map: BattleMap, a: Point, b: Point, blocker?: (p: Point) => boolean): boolean {
+  for (const p of tilesBetween(a, b)) {
+    if (!inBounds(map, p.x, p.y)) continue;
+    if (TERRAIN[map.tiles[p.y][p.x]].blocksSight || blocker?.(p)) return false;
+  }
+  return true;
+}
+
+/** Tiles inside a cone of `angleDeg` width pointing from `from` toward `toward`. */
+export function coneTiles(map: BattleMap, from: Point, toward: Point, angleDeg: number, radius: number): Point[] {
+  const dir = Math.atan2(toward.y - from.y, toward.x - from.x);
+  const half = (angleDeg / 2) * (Math.PI / 180) + EPS;
+  const out: Point[] = [];
+  for (let y = 0; y < map.height; y++) {
+    for (let x = 0; x < map.width; x++) {
+      if (x === from.x && y === from.y) continue;
+      if (dist(from, { x, y }) > radius + EPS) continue;
+      let diff = Math.atan2(y - from.y, x - from.x) - dir;
+      diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+      if (Math.abs(diff) <= half) out.push({ x, y });
+    }
+  }
+  return out;
+}
 
 export function inBounds(map: BattleMap, x: number, y: number): boolean {
   return x >= 0 && y >= 0 && x < map.width && y < map.height;

@@ -1,0 +1,47 @@
+{
+  "_readme": "Unit stat tuning. Edit numbers here; the game picks them up on the next build (npm run dev hot-reloads). Keys starting with _ are comments and are ignored.",
+
+  "base": {
+    "_comment": "Stats every Adventurer (and enemy) has at level 1, before weapon bonuses.",
+    "health": 600,
+    "pAtk": 100,
+    "mAtk": 100,
+    "defense": 0,
+    "movement": 4,
+    "accuracy": 0,
+    "evasion": 0,
+    "vision": 8
+  },
+
+  "growthPerLevel": {
+    "_comment": "Added automatically for every level above 1.",
+    "health": 60,
+    "pAtk": 10,
+    "mAtk": 10,
+    "defense": 2,
+    "movement": 0,
+    "accuracy": 0,
+    "evasion": 0,
+    "vision": 0
+  },
+
+  "defenseScale": 100,
+  "_defenseScale": "Damage taken is multiplied by defenseScale / (defenseScale + Defense). With 100: 100 Defense = 2x effective health, 200 = 3x. Negative Defense increases damage taken.",
+
+  "forestDefense": 20,
+  "_forestDefense": "Extra Defense for a unit standing in forest.",
+
+  "hitChance": {
+    "_comment": "Disabled for now: every attack hits. When enabled: hit% = base + attacker Accuracy + skill accuracy - target Evasion (+ reaction modifier for overwatch), clamped to [min, max]. Heals, shields and cleanses never miss.",
+    "enabled": false,
+    "base": 85,
+    "min": 5,
+    "max": 100,
+    "reactionModifier": -10
+  },
+
+  "vision": {
+    "_comment": "Disabled for now: the whole map is visible. When enabled: a team sees tiles within each unit's Vision range that it has line of sight to; enemies outside that are hidden (fog of war).",
+    "enabled": false
+  }
+}

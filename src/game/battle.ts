@@ -1,73 +1,94 @@
 // Pure battle rules (no rendering). BattleScene drives this and animates the events it returns.
-import { CLASSES, SKILLS, WEAPONS } from '../data/content';
-import type { Character, ClassId, DamageType, StatusEffectDef, StatusStat } from '../data/types';
-import { deriveStats, newId, skillSlots, type DerivedStats, type Rng } from './character';
-import { DIRS, TERRAIN, key, manhattan, passable, type BattleMap, type Point } from './grid';
+import { ENEMY_COLOR, SKILLS, TREE_SKILLS, WEAPONS } from '../data/content';
+import { STAT_CONFIG, type StatConfig } from '../data/stats';
+import type { Character, DamagePart, LosRule, SkillDef, StatKey, Stats } from '../data/types';
+import { allSkills, deriveStats, newId, skillSlots, type Rng } from './character';
+import {
+  DIRS, DIRS8, EPS, TERRAIN, coneTiles, dist, hasLineOfSight, inBounds, key, passable, snapDirection,
+  type BattleMap, type Point,
+} from './grid';
 
 export type Team = 'player' | 'enemy';
 
-export interface Status extends StatusEffectDef {}
+export interface Status {
+  id: 'burn' | 'shield';
+  name: string;
+  /** Debuffs can be removed by Cleanse. */
+  debuff: boolean;
+  /** Burn stacks. */
+  stacks: number;
+  /** Remaining shield points. */
+  amount: number;
+  /** Ticks down at the start of the unit's own turn; removed at 0. */
+  turns: number;
+}
+
+export interface Overwatch {
+  skillId: string;
+  tiles: Set<string>;
+  interrupt: boolean;
+  los?: LosRule;
+}
 
 export interface Unit {
   uid: string;
   team: Team;
   character: Character;
-  base: DerivedStats;
+  /** Maximum stats (level + weapon). */
+  stats: Stats;
   hp: number;
   x: number;
   y: number;
   alive: boolean;
   cooldowns: Record<string, number>;
   statuses: Status[];
-  /** Has this unit moved during its team's current phase? */
+  /** Has this unit moved during its team's current turn? */
   moved: boolean;
-  /** Has this unit used its action (or waited) this phase? Acting ends the unit's turn. */
+  /** Has this unit used its action (or waited)? That ends its turn. */
   acted: boolean;
-  /** Where the unit stood when the phase began (for undoing a move). */
+  /** Something happened that can't be undone (free action, triggered overwatch): no undo move. */
+  locked: boolean;
+  /** Where the unit stood when its turn began (for undoing a move). */
   startPos: Point;
-}
-
-/** A usable action: the basic weapon attack or one of the unit's skills. */
-export interface ActionSpec {
-  id: string;
-  name: string;
-  description: string;
-  kind: 'damage' | 'heal' | 'status';
-  target: 'enemy' | 'ally';
-  damageType: DamageType;
-  power: number;
-  minRange: number;
-  maxRange: number;
-  radius: number;
-  cooldown: number;
-  status?: StatusEffectDef;
+  /** Active overwatch / intercept, cleared at the start of the unit's next turn. */
+  overwatch: Overwatch | null;
 }
 
 export type BattleEvent =
-  | { type: 'damage'; source: string; target: string; amount: number; crit: boolean; killed: boolean }
-  | { type: 'miss'; source: string; target: string }
+  | { type: 'damage'; source?: string; target: string; amount: number; absorbed: number; killed: boolean; cause: 'skill' | 'burn' | 'overwatch' }
+  | { type: 'miss'; source: string; target: string; chance: number; cause: 'skill' | 'overwatch' }
   | { type: 'heal'; source: string; target: string; amount: number }
-  | { type: 'status'; source: string; target: string; status: Status };
+  | { type: 'shield'; source: string; target: string; amount: number }
+  | { type: 'status'; source: string; target: string; name: string }
+  | { type: 'cleanse'; source: string; target: string; removed: string[] }
+  | { type: 'move'; target: string; from: Point; to: Point; kind: 'knockback' | 'teleport' | 'charge' }
+  | { type: 'overwatch'; source: string; skillId: string };
+
+export interface MoveResult {
+  /** Tiles actually walked (may stop early if intercepted or killed). */
+  path: Point[];
+  /** Overwatch shots, keyed by the index in `path` where they happened. */
+  triggers: { index: number; events: BattleEvent[] }[];
+  interrupted: boolean;
+}
 
 export interface ReachInfo {
   cost: number;
   prev: string | null;
 }
 
-export const ATTACK_ID = 'attack';
-
 export function victoryXp(stage: number): number {
   return 60 + stage * 20;
 }
 
 export function makeUnit(character: Character, team: Team, pos: Point): Unit {
-  const base = deriveStats(character);
+  const stats = deriveStats(character);
   return {
     uid: newId('u'),
     team,
     character,
-    base,
-    hp: base.maxHp,
+    stats,
+    hp: stats.health,
     x: pos.x,
     y: pos.y,
     alive: true,
@@ -75,48 +96,33 @@ export function makeUnit(character: Character, team: Team, pos: Point): Unit {
     statuses: [],
     moved: false,
     acted: false,
+    locked: false,
     startPos: { x: pos.x, y: pos.y },
+    overwatch: null,
   };
 }
 
-export function getAction(unit: Unit, id: string): ActionSpec {
-  if (id === ATTACK_ID) {
-    const w = WEAPONS[unit.character.weaponId];
-    return {
-      id: ATTACK_ID,
-      name: 'Attack',
-      description: `${w.name}: ${w.damageType} damage, range ${w.minRange}-${w.maxRange}.`,
-      kind: 'damage',
-      target: 'enemy',
-      damageType: w.damageType,
-      power: 1,
-      minRange: w.minRange,
-      maxRange: w.maxRange,
-      radius: 0,
-      cooldown: 0,
-    };
-  }
-  const s = SKILLS[id];
-  if (!s) throw new Error(`Unknown skill ${id}`);
-  return { ...s };
+/** Damage multiplier from Defense: each `defenseScale` points = +100% effective health. */
+export function defenseMultiplier(defense: number): number {
+  const k = STAT_CONFIG.defenseScale;
+  return defense >= 0 ? k / (k + defense) : 2 - k / (k - defense);
 }
 
 /**
- * Battle rules with XCOM-style alternating phases: every player unit may move
+ * Battle rules with XCOM-style alternating turns: every player unit may move
  * once and act once, in any order, then every enemy unit does the same.
  */
 export class Battle {
   readonly units: Unit[];
-  /** Whose phase it is. */
   phase: Team = 'player';
   round = 1;
 
-  constructor(readonly map: BattleMap, units: Unit[], readonly rng: Rng) {
+  constructor(readonly map: BattleMap, units: Unit[], readonly rng: Rng, readonly rules: StatConfig = STAT_CONFIG) {
     this.units = units;
     this.beginPhase('player');
   }
 
-  // ---- queries --------------------------------------------------------------
+  // ---- queries ----------------------------------------------------------------
 
   unit(uid: string): Unit {
     const u = this.units.find((x) => x.uid === uid);
@@ -132,12 +138,15 @@ export class Battle {
     return this.units.find((u) => u.alive && u.x === x && u.y === y);
   }
 
-  stat(u: Unit, stat: StatusStat | 'accuracy' | 'crit' | 'maxHp'): number {
-    let value = u.base[stat];
-    for (const s of u.statuses) if (s.stat === stat) value += s.amount;
-    if (stat === 'defense' || stat === 'resistance') value += TERRAIN[this.map.tiles[u.y][u.x]].defense;
-    if (stat === 'move') value = Math.max(1, value);
-    return Math.max(0, value);
+  /** Current stat including terrain (forest adds Defense). */
+  stat(u: Unit, stat: StatKey): number {
+    let value = u.stats[stat];
+    if (stat === 'defense') value += TERRAIN[this.map.tiles[u.y][u.x]].defense;
+    return value;
+  }
+
+  shieldOf(u: Unit): number {
+    return u.statuses.filter((s) => s.id === 'shield').reduce((sum, s) => sum + s.amount, 0);
   }
 
   outcome(): 'victory' | 'defeat' | null {
@@ -146,19 +155,33 @@ export class Battle {
     return null;
   }
 
-  actionIds(u: Unit): string[] {
-    return [ATTACK_ID, ...u.character.skillIds.slice(0, skillSlots(u.character))];
+  /** Weapon skills followed by skill-tree skills. */
+  skillIds(u: Unit): string[] {
+    return allSkills(u.character);
   }
 
-  isReady(u: Unit, actionId: string): boolean {
-    return (u.cooldowns[actionId] ?? 0) <= 0;
+  isReady(u: Unit, skillId: string): boolean {
+    return (u.cooldowns[skillId] ?? 0) <= 0;
   }
 
-  // ---- movement -------------------------------------------------------------
+  canMove(u: Unit): boolean {
+    return u.alive && u.team === this.phase && !u.moved && !u.acted;
+  }
 
-  /** Tiles the unit can end its move on (including where it stands). */
+  canAct(u: Unit): boolean {
+    return u.alive && u.team === this.phase && !u.acted;
+  }
+
+  /** Units of the current team that still have an action this turn. */
+  readyUnits(): Unit[] {
+    return this.living(this.phase).filter((u) => !u.acted);
+  }
+
+  // ---- movement -----------------------------------------------------------------
+
+  /** Tiles the unit can end its move on (including where it stands). Orthogonal steps only. */
   reachable(u: Unit): Map<string, ReachInfo> {
-    const budget = this.stat(u, 'move');
+    const budget = this.stat(u, 'movement');
     const result = new Map<string, ReachInfo>([[key(u.x, u.y), { cost: 0, prev: null }]]);
     const frontier: { x: number; y: number; cost: number }[] = [{ x: u.x, y: u.y, cost: 0 }];
     while (frontier.length) {
@@ -188,7 +211,6 @@ export class Battle {
     return result;
   }
 
-  /** Path of tiles from the unit to the destination (excluding the start). */
   pathTo(reach: Map<string, ReachInfo>, dest: Point): Point[] {
     const path: Point[] = [];
     let k: string | null = key(dest.x, dest.y);
@@ -200,34 +222,64 @@ export class Battle {
     return path;
   }
 
-  canMove(u: Unit): boolean {
-    return u.alive && u.team === this.phase && !u.moved && !u.acted;
-  }
-
-  canAct(u: Unit): boolean {
-    return u.alive && u.team === this.phase && !u.acted;
-  }
-
-  /** Units of the current team that still have an action this phase. */
-  readyUnits(): Unit[] {
-    return this.living(this.phase).filter((u) => !u.acted);
-  }
-
-  move(u: Unit, dest: Point): Point[] {
+  /** Walk to `dest`. Enemy overwatch can shoot (and Intercept can stop) the unit on the way. */
+  move(u: Unit, dest: Point): MoveResult {
     if (!this.canMove(u)) throw new Error(`${u.character.name} can't move now`);
     const reach = this.reachable(u);
     if (!reach.has(key(dest.x, dest.y))) throw new Error('Destination not reachable');
-    const path = this.pathTo(reach, dest);
-    u.x = dest.x;
-    u.y = dest.y;
+    const full = this.pathTo(reach, dest);
+    const result: MoveResult = { path: [], triggers: [], interrupted: false };
     u.moved = true;
-    return path;
+    for (const step of full) {
+      u.x = step.x;
+      u.y = step.y;
+      result.path.push(step);
+      // Overwatch only fires on tiles the unit could stop on (not while passing through allies).
+      if (this.units.some((o) => o !== u && o.alive && o.x === step.x && o.y === step.y)) continue;
+      const { events, interrupted } = this.triggerOverwatch(u);
+      if (events.length) {
+        result.triggers.push({ index: result.path.length - 1, events });
+        u.locked = true;
+      }
+      if (!u.alive) {
+        u.acted = true;
+        break;
+      }
+      if (interrupted) {
+        result.interrupted = true;
+        break;
+      }
+    }
+    return result;
   }
 
-  /** A move can be undone until the unit acts, if nobody has taken its old tile. */
+  private triggerOverwatch(mover: Unit): { events: BattleEvent[]; interrupted: boolean } {
+    const events: BattleEvent[] = [];
+    let interrupted = false;
+    for (const w of this.living()) {
+      if (w.team === mover.team || !w.overwatch || !mover.alive) continue;
+      if (!w.overwatch.tiles.has(key(mover.x, mover.y))) continue;
+      if (w.overwatch.los && !this.clearLine(w, mover, w.overwatch.los, w)) continue;
+      const skill = SKILLS[w.overwatch.skillId];
+      const ow = w.overwatch;
+      w.overwatch = null;
+      const chance = this.hitChance(w, mover, skill, true);
+      if (!this.rollHit(chance)) {
+        events.push({ type: 'miss', source: w.uid, target: mover.uid, chance, cause: 'overwatch' });
+        continue;
+      }
+      for (const part of skill.hits ?? []) {
+        if (!mover.alive) break;
+        events.push(this.dealDamage(mover, this.hitDamage(w, mover, part), w.uid, 'overwatch'));
+      }
+      if (ow.interrupt) interrupted = true;
+    }
+    return { events, interrupted };
+  }
+
   canUndoMove(u: Unit): boolean {
     const occupant = this.unitAt(u.startPos.x, u.startPos.y);
-    return u.moved && !u.acted && (!occupant || occupant === u);
+    return u.alive && u.moved && !u.acted && !u.locked && (!occupant || occupant === u);
   }
 
   undoMove(u: Unit): void {
@@ -243,34 +295,108 @@ export class Battle {
     u.acted = true;
   }
 
-  // ---- actions --------------------------------------------------------------
+  // ---- targeting ------------------------------------------------------------------
 
-  /** Tiles within the action's range from `from`. */
-  rangeTiles(action: ActionSpec, from: Point): Point[] {
+  private inMap(p: Point): boolean {
+    return inBounds(this.map, p.x, p.y);
+  }
+
+  /** Can `caster`, standing on `from`, aim `skill` at `tile`? */
+  canTarget(caster: Unit, skill: SkillDef, tile: Point, from: Point = caster): boolean {
+    if (!this.inMap(tile)) return false;
+    const d = dist(from, tile);
+    switch (skill.target) {
+      case 'self':
+        return d <= (skill.aoeRadius ?? 0) + EPS;
+      case 'line': {
+        const dx = tile.x - from.x;
+        const dy = tile.y - from.y;
+        const steps = Math.max(Math.abs(dx), Math.abs(dy));
+        const straight = dx === 0 || dy === 0 || Math.abs(dx) === Math.abs(dy);
+        return straight && steps >= 1 && steps <= (skill.lineLength ?? 1);
+      }
+      case 'cone':
+        return d >= 1 - EPS && d <= (skill.cone?.radius ?? skill.range) + EPS;
+      case 'emptyTile': {
+        if (d < skill.minRange - EPS || d > skill.range + EPS) return false;
+        const occupant = this.occupantFrom(caster, from, tile);
+        return passable(this.map, tile.x, tile.y) && !occupant;
+      }
+      case 'unit': {
+        if (d < skill.minRange - EPS || d > skill.range + EPS) return false;
+        if (skill.los && !this.clearLine(from, tile, skill.los, caster)) return false;
+        if (skill.charge) return this.chargeDestination(caster, tile, from) !== null;
+        return true;
+      }
+    }
+  }
+
+  /**
+   * Is the line from `a` to `b` clear under `rule`? Line of sight: no rock in between.
+   * Line of fire: additionally no unit in between (`ignore` = the shooter itself).
+   */
+  clearLine(a: Point, b: Point, rule: LosRule, ignore?: Unit): boolean {
+    if (rule === 'sight') return hasLineOfSight(this.map, a, b);
+    return hasLineOfSight(this.map, a, b, (p) => {
+      const u = this.unitAt(p.x, p.y);
+      return !!u && u !== ignore;
+    });
+  }
+
+  /** Tiles within the skill's distance that are ruled out only by a blocked line (shown greyed out). */
+  blockedTiles(caster: Unit, skill: SkillDef, from: Point = caster): Point[] {
+    if (!skill.los || skill.target !== 'unit') return [];
     const out: Point[] = [];
     for (let y = 0; y < this.map.height; y++) {
       for (let x = 0; x < this.map.width; x++) {
-        const d = manhattan(from, { x, y });
-        if (d >= action.minRange && d <= action.maxRange) out.push({ x, y });
+        const d = dist(from, { x, y });
+        if (d < skill.minRange - EPS || d > skill.range + EPS) continue;
+        if (!this.clearLine(from, { x, y }, skill.los, caster)) out.push({ x, y });
       }
     }
     return out;
   }
 
-  /** Units that would be affected if `caster` (standing at `from`) used `action` on `target`. */
-  affected(caster: Unit, action: ActionSpec, target: Point, from: Point = caster): Unit[] {
-    const d = manhattan(from, target);
-    if (d < action.minRange || d > action.maxRange) return [];
-    const wantTeam: Team = action.target === 'ally' ? caster.team : caster.team === 'player' ? 'enemy' : 'player';
-    const isValid = (u: Unit) => u.team === wantTeam;
-    if (action.radius === 0) {
-      const u = this.occupantFrom(caster, from, target);
-      return u && isValid(u) ? [u] : [];
+  /** Every tile the skill could be aimed at — the "attack box" shown in the UI. */
+  rangeTiles(caster: Unit, skill: SkillDef, from: Point = caster): Point[] {
+    const out: Point[] = [];
+    for (let y = 0; y < this.map.height; y++) {
+      for (let x = 0; x < this.map.width; x++) {
+        if (this.canTarget(caster, skill, { x, y }, from)) out.push({ x, y });
+      }
     }
-    return this.living().filter((u) => {
-      const pos = u === caster ? from : u;
-      return isValid(u) && manhattan(pos, target) <= action.radius;
-    });
+    return out;
+  }
+
+  /** Tiles the skill would cover if aimed at `tile` (for previews). */
+  areaTiles(caster: Unit, skill: SkillDef, tile: Point, from: Point = caster): Point[] {
+    switch (skill.target) {
+      case 'self': {
+        const r = skill.aoeRadius ?? 0;
+        if (r <= 0) return [{ x: from.x, y: from.y }];
+        const out: Point[] = [];
+        for (let y = 0; y < this.map.height; y++) {
+          for (let x = 0; x < this.map.width; x++) {
+            const d = dist(from, { x, y });
+            if (d > 0 && d <= r + EPS) out.push({ x, y });
+          }
+        }
+        return out;
+      }
+      case 'line': {
+        const dir = snapDirection(from, tile);
+        const out: Point[] = [];
+        for (let i = 1; i <= (skill.lineLength ?? 1); i++) {
+          const p = { x: from.x + dir.x * i, y: from.y + dir.y * i };
+          if (this.inMap(p)) out.push(p);
+        }
+        return out;
+      }
+      case 'cone':
+        return coneTiles(this.map, from, tile, skill.cone!.angle, skill.cone!.radius);
+      default:
+        return [tile];
+    }
   }
 
   /** Who stands on `p` if `caster` were standing on `from` instead of its real tile. */
@@ -280,146 +406,334 @@ export class Battle {
     return u === caster ? undefined : u;
   }
 
-  inRange(action: ActionSpec, from: Point, target: Point): boolean {
-    const d = manhattan(from, target);
-    return d >= action.minRange && d <= action.maxRange;
+  private matches(caster: Unit, skill: SkillDef, t: Unit): boolean {
+    if (skill.affects === 'any') return t !== caster;
+    return skill.affects === 'enemy' ? t.team !== caster.team : t.team === caster.team;
   }
 
-  /** Tiles where the action would affect at least one unit (used by the AI). */
-  validTargets(caster: Unit, action: ActionSpec, from: Point = caster): Point[] {
-    return this.rangeTiles(action, from).filter((t) => this.affected(caster, action, t, from).length > 0);
-  }
-
-  hitChance(attacker: Unit, defender: Unit, action: ActionSpec): number {
-    const chance = 70 + this.stat(attacker, 'accuracy') - this.stat(defender, 'speed') * 2 + (action.damageType === 'magical' ? 10 : 0);
-    return Math.max(30, Math.min(99, chance));
-  }
-
-  /** Damage before the hit/crit roll. */
-  damage(attacker: Unit, defender: Unit, action: ActionSpec): number {
-    const power = this.stat(attacker, action.damageType === 'physical' ? 'physPower' : 'magPower');
-    const mitigation = this.stat(defender, action.damageType === 'physical' ? 'defense' : 'resistance');
-    return Math.max(1, Math.round(power * action.power - mitigation));
-  }
-
-  healAmount(caster: Unit, action: ActionSpec): number {
-    const power = this.stat(caster, action.damageType === 'physical' ? 'physPower' : 'magPower');
-    return Math.max(1, Math.round(power * action.power));
-  }
-
-  perform(u: Unit, actionId: string, target: Point): BattleEvent[] {
-    if (!this.canAct(u)) throw new Error(`${u.character.name} has already acted`);
-    if (!this.actionIds(u).includes(actionId)) throw new Error(`${u.character.name} can't use ${actionId}`);
-    if (!this.isReady(u, actionId)) throw new Error(`${actionId} is on cooldown`);
-    const action = getAction(u, actionId);
-    if (!this.inRange(action, u, target)) throw new Error('Target out of range');
-    // Any tile in range may be targeted, even an empty one (the action is still spent).
-    const targets = this.affected(u, action, target);
-    u.acted = true;
-    const events: BattleEvent[] = [];
-    for (const t of targets) {
-      if (action.kind === 'damage') {
-        if (this.rng() * 100 >= this.hitChance(u, t, action)) {
-          events.push({ type: 'miss', source: u.uid, target: t.uid });
-          continue;
-        }
-        let amount = this.damage(u, t, action);
-        const crit = this.rng() * 100 < this.stat(u, 'crit');
-        if (crit) amount = Math.round(amount * 1.5);
-        t.hp = Math.max(0, t.hp - amount);
-        const killed = t.hp === 0;
-        if (killed) t.alive = false;
-        events.push({ type: 'damage', source: u.uid, target: t.uid, amount, crit, killed });
-        if (!killed && action.status) events.push(this.applyStatus(u, t, action.status));
-      } else if (action.kind === 'heal') {
-        const amount = Math.min(this.healAmount(u, action), t.base.maxHp - t.hp);
-        t.hp += amount;
-        events.push({ type: 'heal', source: u.uid, target: t.uid, amount });
-      } else if (action.status) {
-        events.push(this.applyStatus(u, t, action.status));
+  /** Units the skill would affect if aimed at `tile`. */
+  targetsOf(caster: Unit, skill: SkillDef, tile: Point, from: Point = caster): Unit[] {
+    switch (skill.target) {
+      case 'cone':
+      case 'emptyTile':
+        return [];
+      case 'self': {
+        if (!skill.aoeRadius) return [caster];
+        return this.living().filter((t) => {
+          const pos = t === caster ? from : t;
+          return this.matches(caster, skill, t) && dist(from, pos) <= skill.aoeRadius! + EPS;
+        });
       }
-    }
-    if (action.cooldown > 0) u.cooldowns[actionId] = action.cooldown;
-    return events;
-  }
-
-  private applyStatus(source: Unit, target: Unit, def: StatusEffectDef): BattleEvent {
-    const status: Status = { ...def };
-    target.statuses = target.statuses.filter((s) => s.name !== def.name);
-    target.statuses.push(status);
-    return { type: 'status', source: source.uid, target: target.uid, status };
-  }
-
-  // ---- turn flow --------------------------------------------------------------
-
-  private beginPhase(team: Team): void {
-    this.phase = team;
-    for (const u of this.living(team)) {
-      u.moved = false;
-      u.acted = false;
-      u.startPos = { x: u.x, y: u.y };
-      for (const k of Object.keys(u.cooldowns)) u.cooldowns[k] = Math.max(0, u.cooldowns[k] - 1);
+      case 'line': {
+        for (const p of this.areaTiles(caster, skill, tile, from)) {
+          if (TERRAIN[this.map.tiles[p.y][p.x]].blocksSight) break;
+          const t = this.occupantFrom(caster, from, p);
+          if (t && this.matches(caster, skill, t)) return [t];
+        }
+        return [];
+      }
+      case 'unit': {
+        const t = this.occupantFrom(caster, from, tile);
+        return t && this.matches(caster, skill, t) ? [t] : [];
+      }
     }
   }
 
   /**
-   * End the current team's phase and start the other team's. Status effects on
-   * the ending team tick down, so "2 turns" means two of that unit's own phases.
+   * Where a Charge aimed at `tile` ends: next to the target (or on the tile itself
+   * if it is empty), reachable in at most `range` steps (diagonals allowed). Null if impossible.
    */
-  endPhase(): Team {
-    for (const u of this.living(this.phase)) {
-      for (const s of u.statuses) s.turns -= 1;
-      u.statuses = u.statuses.filter((s) => s.turns > 0);
+  chargeDestination(caster: Unit, tile: Point, from: Point = caster): Point | null {
+    const target = this.occupantFrom(caster, from, tile);
+    if (target === caster) return null;
+    const free = (p: Point) => passable(this.map, p.x, p.y) && (!this.occupantFrom(caster, from, p) || (p.x === from.x && p.y === from.y));
+    let goals: Point[];
+    if (target) {
+      if (dist(from, tile) <= 1.5 + EPS) return { x: from.x, y: from.y };
+      goals = DIRS8.map((d) => ({ x: tile.x + d.x, y: tile.y + d.y })).filter((p) => this.inMap(p) && free(p));
+    } else {
+      goals = free(tile) ? [tile] : [];
     }
+    if (goals.length === 0) return null;
+    const goalKeys = new Set(goals.map((p) => key(p.x, p.y)));
+    const maxSteps = Math.floor(SKILLS.charge.range);
+    const seen = new Map<string, number>([[key(from.x, from.y), 0]]);
+    const queue: Point[] = [{ x: from.x, y: from.y }];
+    let best: Point | null = null;
+    while (queue.length) {
+      const p = queue.shift()!;
+      const steps = seen.get(key(p.x, p.y))!;
+      if (goalKeys.has(key(p.x, p.y)) && (p.x !== from.x || p.y !== from.y || target)) {
+        best = p;
+        break;
+      }
+      if (steps >= maxSteps) continue;
+      for (const d of DIRS8) {
+        const n = { x: p.x + d.x, y: p.y + d.y };
+        if (!passable(this.map, n.x, n.y) || seen.has(key(n.x, n.y))) continue;
+        const occ = this.occupantFrom(caster, from, n);
+        if (occ && occ.team !== caster.team) continue;
+        seen.set(key(n.x, n.y), steps + 1);
+        queue.push(n);
+      }
+    }
+    return best;
+  }
+
+  // ---- hit chance (framework: disabled in stats.json until hit/evasion are designed) ----
+
+  /** Chance (0-100) that `skill` hits `target`. Always 100 while hit chance is disabled. */
+  hitChance(attacker: Unit, target: Unit, skill: SkillDef, reaction = false): number {
+    const r = this.rules.hitChance;
+    if (!r.enabled || !skill.hits?.length || attacker.team === target.team) return 100;
+    const chance = r.base + this.stat(attacker, 'accuracy') + (skill.accuracy ?? 0) - this.stat(target, 'evasion') + (reaction ? r.reactionModifier : 0);
+    return Math.max(r.min, Math.min(r.max, Math.round(chance)));
+  }
+
+  private rollHit(chance: number): boolean {
+    return chance >= 100 || this.rng() * 100 < chance;
+  }
+
+  // ---- vision (framework: disabled in stats.json until fog of war is designed) ----
+
+  /** Tiles `team` can currently see. Everything while vision is disabled. */
+  visibleTiles(team: Team): Set<string> {
+    const seen = new Set<string>();
+    const all = !this.rules.vision.enabled;
+    const viewers = this.living(team);
+    for (let y = 0; y < this.map.height; y++) {
+      for (let x = 0; x < this.map.width; x++) {
+        const p = { x, y };
+        if (all || viewers.some((v) => dist(v, p) <= this.stat(v, 'vision') + EPS && hasLineOfSight(this.map, v, p))) seen.add(key(x, y));
+      }
+    }
+    return seen;
+  }
+
+  /** Can `team` see `u`? Own units are always visible. */
+  canSee(team: Team, u: Unit): boolean {
+    return u.team === team || !this.rules.vision.enabled || this.visibleTiles(team).has(key(u.x, u.y));
+  }
+
+  // ---- damage -----------------------------------------------------------------------
+
+  /** Damage of one hit after the target's Defense (before shields). */
+  hitDamage(attacker: Unit, target: Unit, part: DamagePart): number {
+    const raw =
+      (part.pAtk ?? 0) * this.stat(attacker, 'pAtk') +
+      (part.mAtk ?? 0) * this.stat(attacker, 'mAtk') +
+      (part.def ?? 0) * this.stat(attacker, 'defense') +
+      (part.missingHp ?? 0) * (target.stats.health - target.hp);
+    return Math.max(1, Math.round(raw * defenseMultiplier(this.stat(target, 'defense'))));
+  }
+
+  /** Predicted damage of each hit of `skill` on `target` (accounts for missing health growing). */
+  previewHits(attacker: Unit, skill: SkillDef, target: Unit): number[] {
+    let hp = target.hp;
+    let shield = this.shieldOf(target);
+    const out: number[] = [];
+    for (const part of skill.hits ?? []) {
+      const saved = target.hp;
+      target.hp = hp;
+      const amount = this.hitDamage(attacker, target, part);
+      target.hp = saved;
+      out.push(amount);
+      const absorbed = Math.min(shield, amount);
+      shield -= absorbed;
+      hp = Math.max(0, hp - (amount - absorbed));
+    }
+    return out;
+  }
+
+  healAmount(caster: Unit, skill: SkillDef): number {
+    return Math.round((skill.heal?.mAtk ?? 0) * this.stat(caster, 'mAtk'));
+  }
+
+  private dealDamage(target: Unit, amount: number, source: string | undefined, cause: 'skill' | 'burn' | 'overwatch', bypassShield = false): BattleEvent {
+    let absorbed = 0;
+    if (!bypassShield) {
+      for (const s of target.statuses) {
+        if (s.id !== 'shield' || absorbed >= amount) continue;
+        const take = Math.min(s.amount, amount - absorbed);
+        s.amount -= take;
+        absorbed += take;
+      }
+      target.statuses = target.statuses.filter((s) => s.id !== 'shield' || s.amount > 0);
+    }
+    target.hp = Math.max(0, target.hp - (amount - absorbed));
+    const killed = target.hp === 0;
+    if (killed) {
+      target.alive = false;
+      target.overwatch = null;
+    }
+    return { type: 'damage', source, target: target.uid, amount: amount - absorbed, absorbed, killed, cause };
+  }
+
+  // ---- actions -------------------------------------------------------------------------
+
+  perform(u: Unit, skillId: string, tile: Point): BattleEvent[] {
+    const skill = SKILLS[skillId];
+    if (!skill) throw new Error(`Unknown skill ${skillId}`);
+    if (!this.canAct(u)) throw new Error(`${u.character.name} has already acted`);
+    if (!this.skillIds(u).includes(skillId)) throw new Error(`${u.character.name} doesn't have ${skill.name}`);
+    if (!this.isReady(u, skillId)) throw new Error(`${skill.name} is on cooldown`);
+    if (!this.canTarget(u, skill, tile)) throw new Error('Target out of range');
+
+    const events: BattleEvent[] = [];
+    const origin = { x: u.x, y: u.y };
+    if (skill.charge) {
+      const dest = this.chargeDestination(u, tile)!;
+      if (dest.x !== u.x || dest.y !== u.y) {
+        u.x = dest.x;
+        u.y = dest.y;
+        events.push({ type: 'move', target: u.uid, from: origin, to: dest, kind: 'charge' });
+      }
+    }
+    if (skill.teleport) {
+      u.x = tile.x;
+      u.y = tile.y;
+      events.push({ type: 'move', target: u.uid, from: origin, to: { ...tile }, kind: 'teleport' });
+    }
+    if (skill.cone) {
+      u.overwatch = {
+        skillId,
+        tiles: new Set(coneTiles(this.map, u, tile, skill.cone.angle, skill.cone.radius).map((p) => key(p.x, p.y))),
+        interrupt: skill.cone.interrupt,
+        los: skill.cone.los,
+      };
+      events.push({ type: 'overwatch', source: u.uid, skillId });
+    }
+
+    const targets = this.targetsOf(u, skill, tile).filter((t) => {
+      const chance = this.hitChance(u, t, skill);
+      if (this.rollHit(chance)) return true;
+      events.push({ type: 'miss', source: u.uid, target: t.uid, chance, cause: 'skill' });
+      return false;
+    });
+    for (const t of targets) {
+      for (const part of skill.hits ?? []) {
+        if (!t.alive) break;
+        events.push(this.dealDamage(t, this.hitDamage(u, t, part), u.uid, 'skill'));
+      }
+      if (!t.alive) continue;
+      if (skill.burn) {
+        const existing = t.statuses.find((s) => s.id === 'burn');
+        if (existing) {
+          existing.stacks += skill.burn.stacks;
+          existing.turns = Math.max(existing.turns, skill.burn.turns);
+        } else {
+          t.statuses.push({ id: 'burn', name: 'Burn', debuff: true, stacks: skill.burn.stacks, amount: 0, turns: skill.burn.turns });
+        }
+        const stacks = t.statuses.find((s) => s.id === 'burn')!.stacks;
+        events.push({ type: 'status', source: u.uid, target: t.uid, name: `Burn x${stacks}` });
+      }
+      if (skill.heal) {
+        const amount = Math.min(this.healAmount(u, skill), t.stats.health - t.hp);
+        t.hp += amount;
+        events.push({ type: 'heal', source: u.uid, target: t.uid, amount });
+      }
+      if (skill.shield) {
+        const amount = Math.round(t.stats.health * skill.shield.maxHpPct);
+        t.statuses = t.statuses.filter((s) => s.id !== 'shield');
+        t.statuses.push({ id: 'shield', name: 'Shield', debuff: false, stacks: 0, amount, turns: skill.shield.turns });
+        events.push({ type: 'shield', source: u.uid, target: t.uid, amount });
+      }
+      if (skill.cleanse) {
+        const removed = t.statuses.filter((s) => s.debuff).map((s) => s.name);
+        t.statuses = t.statuses.filter((s) => !s.debuff);
+        events.push({ type: 'cleanse', source: u.uid, target: t.uid, removed });
+      }
+    }
+
+    // Knockback: push each surviving target one tile away from the attacker, if there is room.
+    if (skill.knockback) {
+      for (const t of targets) {
+        if (!t.alive) continue;
+        const dir = { x: Math.sign(t.x - u.x), y: Math.sign(t.y - u.y) };
+        for (let i = 0; i < skill.knockback; i++) {
+          const to = { x: t.x + dir.x, y: t.y + dir.y };
+          if (!passable(this.map, to.x, to.y) || this.unitAt(to.x, to.y)) break;
+          events.push({ type: 'move', target: t.uid, from: { x: t.x, y: t.y }, to, kind: 'knockback' });
+          t.x = to.x;
+          t.y = to.y;
+        }
+      }
+    }
+
+    // Cooldown N = can't be used during the next N turns. The counter ticks at the
+    // start of each of the unit's turns, so store N + 1 (it hits 0 on the turn it's usable).
+    if (skill.cooldown > 0) u.cooldowns[skillId] = skill.cooldown + 1;
+    if (skill.free) u.locked = true;
+    else u.acted = true;
+    return events;
+  }
+
+  // ---- turn flow --------------------------------------------------------------------
+
+  /**
+   * Start a team's turn: reset actions, tick cooldowns, drop old overwatch, and
+   * tick status effects (Burn damages now; durations count the unit's own turns).
+   */
+  private beginPhase(team: Team): BattleEvent[] {
+    this.phase = team;
+    const events: BattleEvent[] = [];
+    for (const u of this.living(team)) {
+      u.moved = false;
+      u.acted = false;
+      u.locked = false;
+      u.startPos = { x: u.x, y: u.y };
+      u.overwatch = null;
+      for (const k of Object.keys(u.cooldowns)) u.cooldowns[k] = Math.max(0, u.cooldowns[k] - 1);
+      for (const s of u.statuses) {
+        if (s.id === 'burn' && u.alive) {
+          const amount = Math.max(1, Math.round(u.stats.health * 0.01 * s.stacks));
+          events.push(this.dealDamage(u, amount, undefined, 'burn', true));
+        }
+        s.turns -= 1;
+      }
+      u.statuses = u.statuses.filter((s) => s.turns > 0);
+      if (!u.alive) u.acted = true;
+    }
+    return events;
+  }
+
+  /** End the current team's turn; returns events from the start of the next turn (e.g. Burn). */
+  endPhase(): BattleEvent[] {
     const next: Team = this.phase === 'player' ? 'enemy' : 'player';
     if (next === 'player') this.round += 1;
-    this.beginPhase(next);
-    return next;
+    return this.beginPhase(next);
   }
 }
 
-// ---- encounter setup ----------------------------------------------------------
+// ---- encounter setup ------------------------------------------------------------------
 
-const ENEMY_NAMES: Record<ClassId, string[]> = {
-  knight: ['Brigand', 'Marauder', 'Thug'],
-  ranger: ['Poacher', 'Sniper', 'Scout'],
-  mage: ['Hexer', 'Warlock', 'Pyromancer'],
-  cleric: ['Zealot', 'Cultist', 'Acolyte'],
-};
-
-/** Enemy priorities for spending level-up points. */
-const ENEMY_FOCUS: Record<ClassId, ('str' | 'dex' | 'int' | 'vit' | 'spd')[]> = {
-  knight: ['str', 'vit', 'str', 'dex'],
-  ranger: ['dex', 'str', 'spd', 'vit'],
-  mage: ['int', 'int', 'vit', 'spd'],
-  cleric: ['int', 'vit', 'int', 'spd'],
+const ENEMY_NAMES: Record<string, string[]> = {
+  sword_shield: ['Brigand', 'Sellsword', 'Marauder'],
+  spear: ['Pikeman', 'Lancer', 'Halberdier'],
+  bow: ['Poacher', 'Sniper', 'Scout'],
+  staff: ['Hexer', 'Warlock', 'Acolyte'],
 };
 
 export function generateEnemies(stage: number, partySize: number, rng: Rng): Character[] {
   const count = Math.min(6, Math.max(1, partySize + Math.floor((stage - 1) / 3)));
-  const classes: ClassId[] = ['knight', 'ranger', 'mage', 'cleric'];
+  const weapons = Object.keys(WEAPONS);
   const enemies: Character[] = [];
   for (let i = 0; i < count; i++) {
-    const classId = i === 0 ? 'knight' : classes[Math.floor(rng() * classes.length)];
-    const cls = CLASSES[classId];
-    const names = ENEMY_NAMES[classId];
-    const level = stage;
-    const attributes = { ...cls.baseAttributes };
-    const points = (stage - 1) * 3 + 2;
-    for (let p = 0; p < points; p++) attributes[ENEMY_FOCUS[classId][p % 4]] += 1;
+    const weaponId = i === 0 ? 'sword_shield' : weapons[Math.floor(rng() * weapons.length)];
+    const names = ENEMY_NAMES[weaponId] ?? ['Bandit'];
     const c: Character = {
       id: newId('e'),
       name: names[Math.floor(rng() * names.length)],
-      classId,
-      level,
+      level: stage,
       xp: 0,
-      attributes,
-      unspentPoints: 0,
-      weaponId: cls.weapons[Math.floor(rng() * cls.weapons.length)],
+      weaponId,
       skillIds: [],
-      appearance: { color: '#c0392b', emblem: 'triangle' },
+      appearance: { color: ENEMY_COLOR, emblem: 'triangle' },
     };
-    c.skillIds = cls.skills.slice(0, skillSlots(c));
+    const pool = [...TREE_SKILLS];
+    while (c.skillIds.length < skillSlots(c) && pool.length) {
+      c.skillIds.push(pool.splice(Math.floor(rng() * pool.length), 1)[0]);
+    }
     enemies.push(c);
   }
   return enemies;

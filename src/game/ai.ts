@@ -1,58 +1,134 @@
-// Simple utility-scoring enemy AI: try every reachable tile x every ready action
-// x every target, pick the highest score. If nothing is in reach, advance.
-import { getAction, type Battle, type Unit } from './battle';
-import { DIRS, TERRAIN, key, passable, type Point } from './grid';
+// Utility-scoring AI. For every reachable tile x every ready skill x every
+// sensible aim point, score the outcome and pick the best. If nothing scores,
+// advance toward the enemy and set up overwatch if the weapon has it.
+import { SKILLS } from '../data/content';
+import type { SkillDef } from '../data/types';
+import type { Battle, Unit } from './battle';
+import { DIRS, DIRS8, TERRAIN, dist, key, passable, type Point } from './grid';
+
+export interface AiAction {
+  id: string;
+  target: Point;
+}
 
 export interface AiPlan {
   moveTo: Point;
-  action?: { id: string; target: Point };
+  /** Best main action from the destination (re-check with bestAction after moving). */
+  action?: AiAction;
 }
 
-function scoreAction(battle: Battle, u: Unit, actionId: string, from: Point, target: Point): number {
-  const action = getAction(u, actionId);
-  const hit = battle.affected(u, action, target, from);
+/** Aim points worth trying for a skill used from `from`. */
+function aimPoints(battle: Battle, skill: SkillDef, from: Point): Point[] {
+  switch (skill.target) {
+    case 'self':
+      return [from];
+    case 'line':
+      return DIRS8.map((d) => ({ x: from.x + d.x, y: from.y + d.y }));
+    case 'unit':
+      return battle.living().map((t) => ({ x: t.x, y: t.y }));
+    default:
+      return [];
+  }
+}
+
+function scoreSkill(battle: Battle, u: Unit, skill: SkillDef, from: Point, aim: Point): number {
   let score = 0;
-  for (const t of hit) {
-    if (action.kind === 'damage') {
-      const dmg = battle.damage(u, t, action);
-      const expected = (dmg * battle.hitChance(u, t, action)) / 100;
-      score += Math.min(expected, t.hp) + (dmg >= t.hp ? 12 : 0);
-      if (action.status) score += 2;
-    } else if (action.kind === 'heal') {
-      const missing = t.base.maxHp - t.hp;
-      if (missing / t.base.maxHp >= 0.3) score += Math.min(missing, battle.healAmount(u, action)) * 1.2;
-    } else if (action.status && !t.statuses.some((s) => s.name === action.status!.name)) {
-      score += 3;
+  for (const t of battle.targetsOf(u, skill, aim, from)) {
+    const friendly = t.team === u.team;
+    if (skill.hits?.length) {
+      const total = battle.previewHits(u, skill, t).reduce((a, b) => a + b, 0);
+      const pool = t.hp + battle.shieldOf(t);
+      const dealt = Math.min(total, pool);
+      const hit = battle.hitChance(u, t, skill) / 100;
+      if (friendly) score -= dealt * 1.5;
+      else score += hit * (dealt + (total >= pool ? 400 : 0));
+    }
+    if (skill.burn && !friendly) score += t.stats.health * 0.01 * skill.burn.stacks * skill.burn.turns;
+    if (skill.heal) {
+      const missing = t.stats.health - t.hp;
+      if (missing / t.stats.health >= 0.25) score += Math.min(missing, battle.healAmount(u, skill));
+    }
+    if (skill.shield) {
+      // Only worth it if an enemy could walk up and hit us next turn.
+      const threatened = battle.living().some((f) => f.team !== u.team && dist(f, from) <= f.stats.movement + 1.5);
+      if (threatened && battle.shieldOf(t) === 0) score += t.stats.health * skill.shield.maxHpPct * 0.5;
+    }
+    if (skill.cleanse) {
+      for (const s of t.statuses) if (s.debuff) score += t.stats.health * 0.01 * s.stacks * s.turns;
     }
   }
   return score;
 }
 
+function bestFrom(
+  battle: Battle, u: Unit, from: Point, wantFree: boolean, includeDefensive = true,
+): { action: AiAction; score: number } | null {
+  let best: { action: AiAction; score: number } | null = null;
+  for (const id of battle.skillIds(u)) {
+    const skill = SKILLS[id];
+    if (!battle.isReady(u, id) || !!skill.free !== wantFree || skill.cone || skill.teleport) continue;
+    if (!includeDefensive && skill.shield) continue;
+    for (const aim of aimPoints(battle, skill, from)) {
+      if (!battle.canTarget(u, skill, aim, from)) continue;
+      const score = scoreSkill(battle, u, skill, from, aim);
+      if (score > 0 && (!best || score > best.score)) best = { action: { id, target: aim }, score };
+    }
+  }
+  return best;
+}
+
+/** Best free action (e.g. Kick) from where the unit stands now. */
+export function bestFreeAction(battle: Battle, u: Unit): AiAction | null {
+  return bestFrom(battle, u, u, true)?.action ?? null;
+}
+
+/**
+ * Best main action from where the unit stands now. Falls back to overwatch
+ * (aimed at the nearest enemy) or null to wait.
+ */
+export function bestAction(battle: Battle, u: Unit): AiAction | null {
+  const best = bestFrom(battle, u, u, false);
+  if (best) return best.action;
+  const foes = battle.living().filter((f) => f.team !== u.team);
+  if (foes.length === 0) return null;
+  const nearest = foes.reduce((a, b) => (dist(a, u) <= dist(b, u) ? a : b));
+  for (const id of battle.skillIds(u)) {
+    const skill = SKILLS[id];
+    if (!skill.cone || !battle.isReady(u, id)) continue;
+    const tiles = battle.rangeTiles(u, skill);
+    if (tiles.length === 0) continue;
+    const aim = tiles.reduce((a, b) => (dist(a, nearest) <= dist(b, nearest) ? a : b));
+    return { id, target: aim };
+  }
+  return null;
+}
+
 /** Walking distance (ignoring units) from every tile to the nearest living foe. */
 function distanceField(battle: Battle, u: Unit): Map<string, number> {
-  const dist = new Map<string, number>();
+  const d = new Map<string, number>();
   const queue: Point[] = [];
   for (const foe of battle.living().filter((f) => f.team !== u.team)) {
-    dist.set(key(foe.x, foe.y), 0);
+    d.set(key(foe.x, foe.y), 0);
     queue.push({ x: foe.x, y: foe.y });
   }
   while (queue.length) {
     const p = queue.shift()!;
-    const d = dist.get(key(p.x, p.y))!;
+    const cur = d.get(key(p.x, p.y))!;
     for (const dir of DIRS) {
       const nx = p.x + dir.x;
       const ny = p.y + dir.y;
-      if (passable(battle.map, nx, ny) && !dist.has(key(nx, ny))) {
-        dist.set(key(nx, ny), d + 1);
+      if (passable(battle.map, nx, ny) && !d.has(key(nx, ny))) {
+        d.set(key(nx, ny), cur + 1);
         queue.push({ x: nx, y: ny });
       }
     }
   }
-  return dist;
+  return d;
 }
 
+/** Decide where to move: the tile with the best available action, else closer to the enemy. */
 export function planTurn(battle: Battle, u: Unit): AiPlan {
-  const reach = battle.reachable(u);
+  const reach = battle.canMove(u) ? battle.reachable(u) : new Map([[key(u.x, u.y), { cost: 0, prev: null }]]);
   const tiles = [...reach.keys()].map((k) => {
     const [x, y] = k.split(',').map(Number);
     return { x, y };
@@ -60,34 +136,46 @@ export function planTurn(battle: Battle, u: Unit): AiPlan {
 
   let best: AiPlan | null = null;
   let bestScore = 0;
+  // Choose where to go based on attacks and support only: defensive self-buffs
+  // shouldn't make a unit stand still instead of advancing.
   for (const tile of tiles) {
-    const terrainBonus = TERRAIN[battle.map.tiles[tile.y][tile.x]].defense * 0.25;
-    for (const id of battle.actionIds(u)) {
-      if (!battle.isReady(u, id)) continue;
-      const action = getAction(u, id);
-      for (const target of battle.validTargets(u, action, tile)) {
-        const raw = scoreAction(battle, u, id, tile, target);
-        if (raw <= 0) continue; // pointless action (e.g. healing a healthy ally)
-        const score = raw + terrainBonus - reach.get(key(tile.x, tile.y))!.cost * 0.01;
-        if (score > bestScore) {
-          bestScore = score;
-          best = { moveTo: tile, action: { id, target } };
-        }
-      }
+    const found = bestFrom(battle, u, tile, false, false);
+    if (!found) continue;
+    const free = bestFrom(battle, u, tile, true)?.score ?? 0;
+    const terrain = TERRAIN[battle.map.tiles[tile.y][tile.x]].defense * 2;
+    const score = found.score + free * 0.5 + terrain - reach.get(key(tile.x, tile.y))!.cost * 0.1;
+    if (score > bestScore) {
+      bestScore = score;
+      best = { moveTo: tile, action: found.action };
     }
   }
   if (best) return best;
 
-  // Nothing to do this turn: move as close to the enemy as possible.
-  const dist = distanceField(battle, u);
+  const field = distanceField(battle, u);
   let moveTo: Point = { x: u.x, y: u.y };
-  let bestDist = dist.get(key(u.x, u.y)) ?? Infinity;
+  let bestDist = field.get(key(u.x, u.y)) ?? Infinity;
   for (const tile of tiles) {
-    const d = dist.get(key(tile.x, tile.y)) ?? Infinity;
+    const d = field.get(key(tile.x, tile.y)) ?? Infinity;
     if (d < bestDist) {
       bestDist = d;
       moveTo = tile;
     }
   }
   return { moveTo };
+}
+
+/**
+ * Play one unit's whole turn (used by the tests and the simulator; the battle
+ * scene runs the same steps with animations).
+ */
+export function runAiTurn(battle: Battle, u: Unit): void {
+  const plan = planTurn(battle, u);
+  if (battle.canMove(u) && (plan.moveTo.x !== u.x || plan.moveTo.y !== u.y)) battle.move(u, plan.moveTo);
+  if (!battle.canAct(u)) return;
+  const free = bestFreeAction(battle, u);
+  if (free) battle.perform(u, free.id, free.target);
+  if (!battle.canAct(u) || battle.outcome()) return;
+  const action = bestAction(battle, u);
+  if (action) battle.perform(u, action.id, action.target);
+  else battle.wait(u);
 }
