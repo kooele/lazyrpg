@@ -95,7 +95,7 @@ export function button(
 }
 
 /** Modal yes/no dialog drawn on top of the scene. */
-export function confirmDialog(scene: Phaser.Scene, message: string, onYes: () => void, yesLabel = 'Yes'): void {
+export function confirmDialog(scene: Phaser.Scene, message: string, onYes: () => void, yesLabel = 'Yes', onNo?: () => void): void {
   const layer = scene.add.container(0, 0).setDepth(1000);
   const shade = scene.add.rectangle(0, 0, WIDTH, HEIGHT, 0x000000, 0.6).setOrigin(0).setInteractive();
   const box = panel(scene, WIDTH / 2 - 220, HEIGHT / 2 - 90, 440, 180);
@@ -104,7 +104,10 @@ export function confirmDialog(scene: Phaser.Scene, message: string, onYes: () =>
     layer.destroy();
     onYes();
   });
-  const no = button(scene, WIDTH / 2 + 20, HEIGHT / 2 + 20, 150, 44, 'Cancel', () => layer.destroy());
+  const no = button(scene, WIDTH / 2 + 20, HEIGHT / 2 + 20, 150, 44, 'Cancel', () => {
+    layer.destroy();
+    onNo?.();
+  });
   layer.add([shade, box, msg, yes, no]);
 }
 

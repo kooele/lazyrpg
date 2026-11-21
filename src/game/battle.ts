@@ -67,7 +67,7 @@ export type BattleEvent =
   | { type: 'damage'; source?: string; target: string; amount: number; absorbed: number; killed: boolean; cause: DamageCause }
   | { type: 'miss'; source: string; target: string; chance: number; cause: DamageCause }
   | { type: 'engage'; source: string; target: string }
-  | { type: 'disengage'; source: string; target: string; reason: 'disengage' | 'separated' }
+  | { type: 'disengage'; source: string; target: string; reason: 'disengage' | 'separated' | 'displaced' }
   | { type: 'heal'; source: string; target: string; amount: number }
   | { type: 'shield'; source: string; target: string; amount: number }
   | { type: 'status'; source: string; target: string; name: string }
@@ -151,7 +151,7 @@ export class Battle {
     return this.units.find((u) => u.alive && u.x === x && u.y === y);
   }
 
-  /** Current stat including status effects, terrain (forest adds Defense) and engagement (halves Defense). */
+  /** Current stat including status effects and terrain (forest adds Defense). */
   stat(u: Unit, stat: StatKey): number {
     let value = u.stats[stat];
     for (const s of u.statuses) {
@@ -160,7 +160,6 @@ export class Battle {
     }
     if (stat === 'defense') {
       value += TERRAIN[this.map.tiles[u.y][u.x]].defense;
-      if (u.engagedWith) value *= this.rules.engagement.defenseMultiplier;
     }
     if (stat === 'movement') value = Math.max(0, value);
     return Math.round(value);
@@ -779,17 +778,25 @@ export class Battle {
       }
     }
 
-    // Knockback: push each surviving target one tile away from the attacker, if there is room.
+    // Knockback: push each surviving target away from the attacker, if there is room.
+    // A unit that actually gets pushed breaks free of its engagement.
     if (skill.knockback) {
       for (const t of targets) {
         if (!t.alive) continue;
         const dir = { x: Math.sign(t.x - u.x), y: Math.sign(t.y - u.y) };
+        let moved = false;
         for (let i = 0; i < skill.knockback; i++) {
           const to = { x: t.x + dir.x, y: t.y + dir.y };
           if (!passable(this.map, to.x, to.y) || this.unitAt(to.x, to.y)) break;
           events.push({ type: 'move', target: t.uid, from: { x: t.x, y: t.y }, to, kind: 'knockback' });
           t.x = to.x;
           t.y = to.y;
+          moved = true;
+        }
+        const partner = moved ? this.opponentOf(t) : null;
+        if (partner) {
+          this.breakEngagement(t);
+          events.push({ type: 'disengage', source: t.uid, target: partner.uid, reason: 'displaced' });
         }
       }
     }

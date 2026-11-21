@@ -156,13 +156,13 @@ describe('ranges, lines and tags', () => {
     expect(hasLineOfSight(map, { x: 1, y: 3 }, { x: 5, y: 3 })).toBe(false);
   });
 
-  it('Movement tag: Arcane Shift = 50% Movement, Charge = 100%, rounded down; Slow shrinks them', () => {
+  it('Movement tag: Charge range = Movement (Slow shrinks it); Arcane Shift is a fixed range 2', () => {
     const { battle, units: [m, e] } = setup(openMap(), [
       { c: hero('staff', ['arcane_shift', 'charge']), team: 'player', at: { x: 1, y: 1 } },
       { c: hero('staff', ['freeze']), team: 'enemy', at: { x: 6, y: 1 } },
     ]);
-    expect(battle.skillRange(m, SKILLS.arcane_shift)).toBe(2);
     expect(battle.skillRange(m, SKILLS.charge)).toBe(4);
+    expect(battle.skillRange(m, SKILLS.arcane_shift)).toBe(2);
     expect(battle.canTarget(m, SKILLS.arcane_shift, { x: 3, y: 2 })).toBe(true); // 2.24 rounds to 2
     expect(battle.canTarget(m, SKILLS.arcane_shift, { x: 3, y: 3 })).toBe(false); // 2.83 rounds to 3
     battle.wait(m);
@@ -170,8 +170,8 @@ describe('ranges, lines and tags', () => {
     battle.perform(e, 'freeze', { x: 1, y: 1 });
     battle.endPhase();
     expect(battle.stat(m, 'movement')).toBe(3);
-    expect(battle.skillRange(m, SKILLS.arcane_shift)).toBe(1); // floor(1.5)
     expect(battle.skillRange(m, SKILLS.charge)).toBe(3);
+    expect(battle.skillRange(m, SKILLS.arcane_shift)).toBe(2);
   });
 
   it('Weapon tag: Execute uses the weapon range and needs a usable weapon', () => {
@@ -258,14 +258,14 @@ describe('skills', () => {
     expect(far.hp).toBe(500);
   });
 
-  it('spear thrust knocks the target back along the thrust', () => {
+  it('spear thrust does not push the target', () => {
     const { battle, units: [s, e] } = setup(openMap(), [
       { c: hero('spear'), team: 'player', at: { x: 1, y: 3 } },
       { c: hero('bow'), team: 'enemy', at: { x: 3, y: 3 } },
     ]);
     battle.perform(s, 'spear_thrust', { x: 3, y: 3 });
     expect(e.hp).toBe(500 - 67);
-    expect(e).toMatchObject({ x: 4, y: 3 });
+    expect(e).toMatchObject({ x: 3, y: 3 });
   });
 
   it('arcane pulse knocks back 2 tiles', () => {
@@ -393,16 +393,14 @@ describe('engagement', () => {
     expect(e.engagedWith).toBe(a.uid);
   });
 
-  it('engaged units have half Defense (no damage reduction from their opponent)', () => {
-    const { battle, units: [a, e, archer] } = duel();
+  it('engagement does not change Defense or damage', () => {
+    const { battle, units: [a, e] } = duel();
     battle.perform(a, 'sword_slash', { x: 4, y: 3 });
-    expect(battle.stat(a, 'defense')).toBe(38); // 75 / 2
+    expect(battle.stat(a, 'defense')).toBe(75);
     battle.endPhase();
     const before = a.hp;
     battle.perform(e, 'sword_slash', { x: 3, y: 3 });
-    expect(before - a.hp).toBe(72); // 100 x 100/138
-    battle.perform(archer, 'direct_shot', { x: 3, y: 3 });
-    expect(before - 72 - a.hp).toBe(58); // 80 x 100/138
+    expect(before - a.hp).toBe(57); // 100 x 100/175, same as unengaged
   });
 
   it("engaged units can't move or attack anyone else; others can't steal the engagement", () => {
@@ -436,17 +434,27 @@ describe('engagement', () => {
     expect(battle.canMove(a)).toBe(true);
   });
 
-  it('knocking an engaged unit away breaks the engagement', () => {
-    const { battle, units: [a, e] } = duel();
-    const mage = makeUnit(hero('staff', ['arcane_pulse'], 'M'), 'player', { x: 4, y: 1 });
-    const b2 = new Battle(openMap(), [a, e, mage], makeRng(2));
+  it('a successful push breaks the engagement, even if the units stay adjacent', () => {
+    const { units: [a, e] } = duel();
+    const spear = makeUnit(hero('spear', [], 'S'), 'player', { x: 5, y: 4 });
+    const b2 = new Battle(openMap(), [a, e, spear], makeRng(2));
     b2.perform(a, 'sword_slash', { x: 4, y: 3 });
-    const events = b2.perform(mage, 'arcane_pulse', { x: 4, y: 3 }); // pushes the enemy 2 tiles down
-    expect(e).toMatchObject({ x: 4, y: 5 });
-    expect(events).toContainEqual(expect.objectContaining({ type: 'disengage', reason: 'separated' }));
+    const events = b2.perform(spear, 'circle_swing', { x: 5, y: 4 }); // pushes the enemy to (3,2)
+    expect(e).toMatchObject({ x: 3, y: 2 });
+    expect(Math.hypot(e.x - a.x, e.y - a.y)).toBeLessThanOrEqual(1.5); // still next to each other
+    expect(events).toContainEqual(expect.objectContaining({ type: 'disengage', reason: 'displaced' }));
     expect(a.engagedWith).toBeNull();
     expect(e.engagedWith).toBeNull();
-    void battle;
+  });
+
+  it('a blocked push keeps the engagement', () => {
+    const { units: [a, e] } = duel();
+    const mage = makeUnit(hero('staff', ['arcane_pulse'], 'M'), 'player', { x: 6, y: 3 });
+    const b2 = new Battle(openMap(), [a, e, mage], makeRng(2));
+    b2.perform(a, 'sword_slash', { x: 4, y: 3 });
+    b2.perform(mage, 'arcane_pulse', { x: 4, y: 3 }); // pushed toward (3,3), where `a` stands
+    expect(e).toMatchObject({ x: 4, y: 3 });
+    expect(e.engagedWith).toBe(a.uid);
   });
 
   it('the AI breaks away with ranged units but holds the line with melee', () => {
