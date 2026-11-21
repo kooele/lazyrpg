@@ -66,7 +66,9 @@ Each enemy type has a fixed level range and its own stats and skills (`src/data/
 | Giant Rat | 1–2 | Gnaw. Fast and weak; comes in packs. |
 | Green Slime | 2–3 | Slam; Sticky Spit at level 3 (ranged, applies Slow). Slow-moving and tough. |
 | Grey Wolf | 3–4 | Bite (Engage) and Pounce (leaps in, Engage); Howl at level 4 (Frenzy: +20 P.Atk to nearby allies). Very fast. |
-| Bandit | 4–5 | Carries a random weapon and uses its skills. Hexers also have Fireball, Archers Execute; all learn Kick at level 5. |
+| Bandit | 4–5 | Carries a random weapon but only uses its basic attack (no Slash and Smash, Circle Swing...). Thugs also have Shield Up, Hexers Fireball, Archers Execute; all learn Kick at level 5. |
+
+**Enemy AI** weighs how dangerous a tile is (how much the party could hit it for next turn) against what it can do from there. Healthy enemies take small risks freely. Below 35% health, an enemy with healthy allies falls back to regroup with them, and may disengage to do it. One that's on its own makes a last stand rather than running forever.
 
 Encounter size is a threat budget: 1 per Adventurer. Rats cost 0.5 (two per Adventurer), slimes 0.75, wolves and bandits 1. Past stage 5, bandits keep coming at level 5, and the budget grows 25% per stage. Rats, slimes and wolves use simple placeholder figures until monster art is made. Hover an enemy in battle to see its skills.
 

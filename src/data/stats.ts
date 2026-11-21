@@ -39,6 +39,8 @@ export interface StatConfig {
   growthPerLevel: Stats;
   defenseScale: number;
   forestDefense: number;
+  /** XP per Adventurer for winning a battle. */
+  xpPerVictory: number;
   map: MapRules;
   movementCosts: MovementCosts;
   rangeRounding: RangeRoundingRules;
@@ -74,6 +76,7 @@ export function parseStatConfig(data: unknown): StatConfig {
     base: readStats(rec.base, 'base'),
     growthPerLevel: readStats(rec.growthPerLevel, 'growthPerLevel'),
     defenseScale: num(rec.defenseScale, 'defenseScale'),
+    xpPerVictory: num(rec.xpPerVictory ?? 100, 'xpPerVictory'),
     forestDefense: num(rec.forestDefense ?? 0, 'forestDefense'),
     map: { width: Math.round(num(map.width, 'map.width')), height: Math.round(num(map.height, 'map.height')) },
     movementCosts: {

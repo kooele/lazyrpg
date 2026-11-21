@@ -89,8 +89,9 @@ export interface ReachInfo {
   prev: string | null;
 }
 
-export function victoryXp(stage: number): number {
-  return 60 + stage * 20;
+/** XP for winning a battle (stats.json xpPerVictory; the same at every stage). */
+export function victoryXp(_stage: number): number {
+  return STAT_CONFIG.xpPerVictory;
 }
 
 export function makeUnit(character: Character, team: Team, pos: Point): Unit {

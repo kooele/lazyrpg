@@ -73,6 +73,9 @@ export function parseEnemies(data: unknown): { enemies: Record<string, EnemyDef>
       weapons,
       weaponNames,
       weaponSkills,
+      weaponSkillUse: d.weaponSkillUse === undefined ? 'all'
+        : d.weaponSkillUse === 'basic' || d.weaponSkillUse === 'all' ? d.weaponSkillUse
+          : fail(`${p}.weaponSkillUse`, 'must be "basic" or "all"'),
     };
   }
   if (Object.keys(enemies).length === 0) fail('enemies', 'must define at least one enemy type');

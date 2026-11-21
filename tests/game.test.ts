@@ -6,8 +6,8 @@ import enemiesJson from '../src/data/enemies.json';
 import { parseEnemies } from '../src/data/enemies';
 import { STAT_CONFIG, parseStatConfig } from '../src/data/stats';
 import type { Character } from '../src/data/types';
-import { runAiTurn, shouldDisengage } from '../src/game/ai';
-import { Battle, defenseMultiplier, deploymentTiles, enemyTypesForStage, generateEnemies, makeEnemy, makeUnit, type Team } from '../src/game/battle';
+import { planTurn, runAiTurn, shouldDisengage, threatAt } from '../src/game/ai';
+import { Battle, defenseMultiplier, deploymentTiles, enemyTypesForStage, generateEnemies, makeEnemy, makeUnit, victoryXp, type Team } from '../src/game/battle';
 import { allSkills, createCharacter, deriveStats, grantXp, makeRng } from '../src/game/character';
 import { generateMap, hasLineOfSight, passable, withinRange, type BattleMap, type Point, type Terrain } from '../src/game/grid';
 import { newGameState, parseSave, serializeSave } from '../src/game/save';
@@ -598,6 +598,9 @@ describe('enemies', () => {
       expect(allSkills(b)[0]).toBe(WEAPONS[b.weaponId].skills[0]);
       expect(allSkills(b)).toContain('kick'); // unlocked at level 5
       expect(b.name).toMatch(/^Bandit /);
+      // Only the weapon's basic attack: no Slash and Smash, Circle Swing, Intercept, Overwatch...
+      const others = WEAPONS[b.weaponId].skills.slice(1);
+      for (const s of others) if (s !== 'shield_up') expect(allSkills(b)).not.toContain(s);
     }
   });
 
@@ -625,6 +628,61 @@ describe('enemies', () => {
     battle.perform(wolf, 'pounce', { x: 1, y: 3 }); // leaps 4 tiles (Movement 24 / 4 = 6 max)
     expect(a.hp).toBeLessThan(500);
     expect(a.engagedWith).toBe(wolf.uid);
+  });
+});
+
+describe('progression and enemy behaviour', () => {
+  it('each victory is worth a level, so a winning party is level 3 at stage 3', () => {
+    const c = hero();
+    for (let stage = 1; stage <= 2; stage++) grantXp(c, victoryXp(stage));
+    expect(c.level).toBe(3);
+  });
+
+  it('badly hurt enemies retreat instead of trading blows; healthy ones attack', () => {
+    const map = openMap(16, 7);
+    const make = () => {
+      const archer = makeUnit(makeEnemy('bandit', 4, makeRng(5)), 'enemy', { x: 9, y: 3 });
+      archer.character.weaponId = 'bow';
+      const friend = makeUnit(makeEnemy('bandit', 4, makeRng(6)), 'enemy', { x: 15, y: 3 }); // a healthy ally to fall back on
+      const knights = [2, 3, 4].map((y) => makeUnit(hero('sword_shield', ['charge'], `K${y}`), 'player', { x: 2, y }));
+      const battle = new Battle(map, [archer, friend, ...knights], makeRng(1));
+      battle.endPhase(); // enemy turn
+      return { battle, archer };
+    };
+    const healthy = make();
+    const plan = planTurn(healthy.battle, healthy.archer);
+    expect(plan.action).toBeDefined(); // shoots
+    const hurt = make();
+    hurt.archer.hp = Math.round(hurt.archer.stats.health * 0.2);
+    const before = threatAt(hurt.battle, hurt.archer, hurt.archer);
+    const flee = planTurn(hurt.battle, hurt.archer);
+    expect(threatAt(hurt.battle, hurt.archer, flee.moveTo)).toBeLessThan(before);
+    expect(flee.moveTo.x).toBeGreaterThan(9); // backs away toward its friend
+  });
+
+  it('a hurt unit with no healthy allies makes a last stand instead of running', () => {
+    const map = openMap(16, 7);
+    const archer = makeUnit(makeEnemy('bandit', 4, makeRng(5)), 'enemy', { x: 9, y: 3 });
+    archer.character.weaponId = 'bow';
+    const knights = [2, 3, 4].map((y) => makeUnit(hero('sword_shield', ['charge'], `K${y}`), 'player', { x: 6, y }));
+    const battle = new Battle(map, [archer, ...knights], makeRng(1));
+    battle.endPhase();
+    archer.hp = Math.round(archer.stats.health * 0.2);
+    expect(planTurn(battle, archer).action).toBeDefined();
+    runAiTurn(battle, archer);
+    expect(knights.some((k) => k.hp < k.stats.health)).toBe(true); // it fought
+  });
+
+  it('a badly hurt melee unit breaks out of an engagement to flee', () => {
+    const wolf = makeUnit(makeEnemy('wolf', 3, makeRng(2)), 'enemy', { x: 5, y: 3 });
+    const packMate = makeUnit(makeEnemy('wolf', 3, makeRng(3)), 'enemy', { x: 9, y: 6 });
+    const a = makeUnit(hero(), 'player', { x: 4, y: 3 });
+    const battle = new Battle(openMap(), [a, wolf, packMate], makeRng(1));
+    battle.perform(a, 'sword_slash', { x: 5, y: 3 });
+    battle.endPhase();
+    expect(shouldDisengage(battle, wolf)).toBe(false); // healthy: holds on
+    wolf.hp = Math.round(wolf.stats.health * 0.3);
+    expect(shouldDisengage(battle, wolf)).toBe(true);
   });
 });
 

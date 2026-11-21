@@ -1,5 +1,5 @@
 {
-  "_readme": "Enemy types. Each type always fights within its level range: an encounter at stage N uses the types whose range contains N, at level N (clamped into their range). Past the highest range, the toughest types keep appearing at their top level. stats are at the type's lowest level; growthPerLevel is added per level above that. skills: the first one is the basic attack (also used for opportunity attacks). skillsByLevel adds skills from that level up. Human types can use weapons: they get the weapon's skills and stat multipliers, plus weaponSkills for that weapon. threat is how much of the encounter budget one unit uses (the budget is threatPerAdventurer x party size).",
+  "_readme": "Enemy types. Each type always fights within its level range: an encounter at stage N uses the types whose range contains N, at level N (clamped into their range). Past the highest range, the toughest types keep appearing at their top level. stats are at the type's lowest level; growthPerLevel is added per level above that. skills: the first one is the basic attack (also used for opportunity attacks). skillsByLevel adds skills from that level up. Human types can use weapons: they get the weapon's stat multipliers and skills (all of them, or only the basic attack with weaponSkillUse = basic), plus weaponSkills for that weapon. threat is how much of the encounter budget one unit uses (the budget is threatPerAdventurer x party size).",
 
   "encounter": {
     "threatPerAdventurer": 1,
@@ -45,8 +45,9 @@
       "weaponNames": { "sword_shield": "Bandit Thug", "spear": "Bandit Lancer", "bow": "Bandit Archer", "staff": "Bandit Hexer" },
       "stats": { "health": 560, "pAtk": 130, "mAtk": 110, "defense": 60, "movement": 16, "accuracy": 0, "evasion": 0, "vision": 8 },
       "growthPerLevel": { "health": 50, "pAtk": 10, "mAtk": 10, "defense": 5 },
+      "weaponSkillUse": "basic",
       "skills": [],
-      "weaponSkills": { "staff": ["fireball"], "bow": ["execute"] },
+      "weaponSkills": { "sword_shield": ["shield_up"], "staff": ["fireball"], "bow": ["execute"] },
       "skillsByLevel": { "5": ["kick"] }
     }
   }

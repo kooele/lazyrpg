@@ -55,7 +55,8 @@ export function allSkills(c: Character): string[] {
   if (c.enemyType) {
     const def = ENEMIES[c.enemyType];
     const byLevel = Object.entries(def.skillsByLevel).filter(([lvl]) => c.level >= Number(lvl)).flatMap(([, s]) => s);
-    return [...new Set([...weaponSkills, ...def.skills, ...(def.weaponSkills[c.weaponId] ?? []), ...byLevel])];
+    const fromWeapon = def.weaponSkillUse === 'basic' ? weaponSkills.slice(0, 1) : weaponSkills;
+    return [...new Set([...fromWeapon, ...def.skills, ...(def.weaponSkills[c.weaponId] ?? []), ...byLevel])];
   }
   return [...weaponSkills, ...c.skillIds.slice(0, skillSlots(c))];
 }

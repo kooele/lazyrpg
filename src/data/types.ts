@@ -165,6 +165,8 @@ export interface EnemyDef {
   weapons: string[];
   weaponNames: Record<string, string>;
   weaponSkills: Record<string, string[]>;
+  /** 'basic' = only the weapon's basic attack; 'all' = every weapon skill. */
+  weaponSkillUse: 'basic' | 'all';
 }
 
 /** A party member (Adventurer) or an enemy. Adventurers' stats come from level + weapon. */
