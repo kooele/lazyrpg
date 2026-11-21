@@ -39,8 +39,9 @@ function scoreSkill(battle: Battle, u: Unit, skill: SkillDef, from: Point, aim: 
       const total = battle.previewHits(u, skill, t).reduce((a, b) => a + b, 0);
       const pool = t.hp + battle.shieldOf(t);
       const dealt = Math.min(total, pool);
+      const hit = battle.hitChance(u, t, skill) / 100;
       if (friendly) score -= dealt * 1.5;
-      else score += dealt + (total >= pool ? 400 : 0);
+      else score += hit * (dealt + (total >= pool ? 400 : 0));
     }
     if (skill.burn && !friendly) score += t.stats.health * 0.01 * skill.burn.stacks * skill.burn.turns;
     if (skill.heal) {

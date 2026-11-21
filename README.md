@@ -15,13 +15,25 @@ Base stats and per-level growth are in **`src/data/stats.json`**. Edit that file
 
 | Stat | Default | Meaning |
 |---|---|---|
-| Health | 1000 | Max health |
+| Health | 600 (+60/level) | Max health |
 | P.Atk | 100 | Physical power; skills deal a % of it |
 | M.Atk | 100 | Magic power and healing |
 | Defense | 0 | Damage taken × 100 / (100 + Defense): 100 Defense = 2× effective health |
 | Movement | 4 | Movement points per turn |
 
 Stats grow automatically on level up (100 XP per level). Range is Euclidean: 1 = the 4 neighbours, 1.5 includes diagonals.
+
+**Line of sight vs line of fire.** Projectile skills need a clear line to the target:
+- *Line of sight*: no rock in between. Used by Magic Bolt, Arcane Bolt, Fireball and Overwatch.
+- *Line of fire*: no rock **and no unit** in between. Used by Direct Shot.
+
+Melee skills, Indirect Shot (lobbed), Heal, Cleanse and Arcane Shift need neither. When targeting, tiles in range but blocked are greyed out with an ✕.
+
+**Prepared but switched off** (in `stats.json`):
+- `hitChance`: hit% = base + Accuracy + skill accuracy − Evasion (overwatch gets a reaction modifier), clamped to a min/max. Misses show as MISS.
+- `vision`: fog of war based on each unit's Vision range plus line of sight.
+
+Set `"enabled": true` to try either one. Accuracy, Evasion and Vision then appear in the stat panels.
 
 ### Weapons (each grants its skills; the first is the basic attack)
 

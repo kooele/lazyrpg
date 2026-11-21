@@ -38,19 +38,30 @@ export function snapDirection(from: Point, to: Point): Point {
   return { x: Math.round(Math.cos(a)), y: Math.round(Math.sin(a)) };
 }
 
-/**
- * True if nothing that blocks sight (rock) lies strictly between the two tiles.
- * Samples the straight line between tile centers.
- */
-export function hasLineOfSight(map: BattleMap, a: Point, b: Point): boolean {
-  const d = dist(a, b);
-  const n = Math.ceil(d * 8);
+/** Tiles strictly between two tiles along the straight line joining their centers. */
+export function tilesBetween(a: Point, b: Point): Point[] {
+  const out: Point[] = [];
+  const seen = new Set<string>();
+  const n = Math.ceil(dist(a, b) * 8);
   for (let i = 1; i < n; i++) {
     const t = i / n;
     const x = Math.round(a.x + (b.x - a.x) * t);
     const y = Math.round(a.y + (b.y - a.y) * t);
-    if ((x === a.x && y === a.y) || (x === b.x && y === b.y)) continue;
-    if (inBounds(map, x, y) && TERRAIN[map.tiles[y][x]].blocksSight) return false;
+    if ((x === a.x && y === a.y) || (x === b.x && y === b.y) || seen.has(key(x, y))) continue;
+    seen.add(key(x, y));
+    out.push({ x, y });
+  }
+  return out;
+}
+
+/**
+ * Line of sight: nothing that blocks sight (rock) lies strictly between the two tiles.
+ * Pass `blocker` to also treat other tiles as blocking (used for line of fire).
+ */
+export function hasLineOfSight(map: BattleMap, a: Point, b: Point, blocker?: (p: Point) => boolean): boolean {
+  for (const p of tilesBetween(a, b)) {
+    if (!inBounds(map, p.x, p.y)) continue;
+    if (TERRAIN[map.tiles[p.y][p.x]].blocksSight || blocker?.(p)) return false;
   }
   return true;
 }

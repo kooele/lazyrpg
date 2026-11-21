@@ -59,12 +59,12 @@ export const SKILLS: Record<string, SkillDef> = {
     id: 'intercept', name: 'Intercept',
     description: 'Overwatch a 60° cone (2 tiles). Strikes the first enemy that moves into it for 100% P.Atk and stops its movement.',
     target: 'cone', affects: 'enemy', range: 2, minRange: 1, cooldown: 0, hits: [{ pAtk: 1 }],
-    cone: { angle: 60, radius: 2, interrupt: true, requiresLos: false },
+    cone: { angle: 60, radius: 2, interrupt: true },
   },
   // ---- Bow ----
   direct_shot: {
-    id: 'direct_shot', name: 'Direct Shot', description: 'Shoot a unit for 100% P.Atk. Needs line of sight.',
-    target: 'unit', affects: 'enemy', range: 5, minRange: 1, requiresLos: true, cooldown: 0, hits: [{ pAtk: 1 }],
+    id: 'direct_shot', name: 'Direct Shot', description: 'Shoot a unit for 100% P.Atk. Needs line of fire: rocks AND units in between block the shot.',
+    target: 'unit', affects: 'enemy', range: 5, minRange: 1, los: 'fire', cooldown: 0, hits: [{ pAtk: 1 }],
   },
   indirect_shot: {
     id: 'indirect_shot', name: 'Indirect Shot', description: 'Lob an arrow over obstacles for 70% P.Atk.',
@@ -74,7 +74,7 @@ export const SKILLS: Record<string, SkillDef> = {
     id: 'overwatch', name: 'Overwatch',
     description: 'Watch a 90° cone (5 tiles, needs line of sight). Shoots the first enemy that moves into it for 100% P.Atk without stopping it.',
     target: 'cone', affects: 'enemy', range: 5, minRange: 1, cooldown: 0, hits: [{ pAtk: 1 }],
-    cone: { angle: 90, radius: 5, interrupt: false, requiresLos: true },
+    cone: { angle: 90, radius: 5, interrupt: false, los: 'sight' },
   },
   // ---- Staff ----
   empowered_strike: {
@@ -83,13 +83,13 @@ export const SKILLS: Record<string, SkillDef> = {
   },
   magic_bolt: {
     id: 'magic_bolt', name: 'Magic Bolt', description: 'Bolt a unit for 50% P.Atk + 50% M.Atk.',
-    target: 'unit', affects: 'enemy', range: 5, minRange: 1, cooldown: 0, hits: [{ pAtk: 0.5, mAtk: 0.5 }],
+    target: 'unit', affects: 'enemy', range: 5, minRange: 1, los: 'sight', cooldown: 0, hits: [{ pAtk: 0.5, mAtk: 0.5 }],
   },
 
   // ---- Mage tab: Arcanist ----
   arcane_bolt: {
     id: 'arcane_bolt', name: 'Arcane Bolt', description: 'Blast a unit for 100% M.Atk.',
-    target: 'unit', affects: 'enemy', range: 5, minRange: 1, cooldown: 0, hits: [{ mAtk: 1 }],
+    target: 'unit', affects: 'enemy', range: 5, minRange: 1, los: 'sight', cooldown: 0, hits: [{ mAtk: 1 }],
   },
   arcane_shift: {
     id: 'arcane_shift', name: 'Arcane Shift', description: 'Teleport yourself to an empty tile.',
@@ -99,7 +99,7 @@ export const SKILLS: Record<string, SkillDef> = {
   fireball: {
     id: 'fireball', name: 'Fireball',
     description: '100% M.Atk and 1 stack of Burn for 2 turns (each stack burns 1% max health per turn).',
-    target: 'unit', affects: 'enemy', range: 5, minRange: 1, cooldown: 2, hits: [{ mAtk: 1 }], burn: { stacks: 1, turns: 2 },
+    target: 'unit', affects: 'enemy', range: 5, minRange: 1, los: 'sight', cooldown: 2, hits: [{ mAtk: 1 }], burn: { stacks: 1, turns: 2 },
   },
   // ---- Mage tab: Cleric ----
   heal: {
@@ -153,7 +153,9 @@ export function skillDetails(s: SkillDef): string {
   else parts.push(`Range ${s.range}`);
   parts.push(s.cooldown > 0 ? `Cooldown ${s.cooldown} (skips ${s.cooldown === 1 ? 'next turn' : `next ${s.cooldown} turns`})` : 'No cooldown');
   if (s.free) parts.push('Free action');
-  if (s.requiresLos || s.cone?.requiresLos) parts.push('Needs line of sight');
+  const los = s.los ?? s.cone?.los;
+  if (los === 'fire') parts.push('Needs line of fire');
+  else if (los === 'sight') parts.push('Needs line of sight');
   return parts.join(' · ');
 }
 

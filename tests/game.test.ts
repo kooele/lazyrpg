@@ -25,7 +25,8 @@ function setup(map: BattleMap, specs: { c: Character; team: Team; at: Point }[])
 
 describe('stats config', () => {
   it('loads the base stats from stats.json', () => {
-    expect(STAT_CONFIG.base).toEqual({ health: 1000, pAtk: 100, mAtk: 100, defense: 0, movement: 4 });
+    expect(STAT_CONFIG.base).toMatchObject({ health: 600, pAtk: 100, mAtk: 100, defense: 0, movement: 4 });
+    expect(STAT_CONFIG.growthPerLevel.health).toBe(60);
   });
 
   it('rejects a broken config with a clear message', () => {
@@ -34,13 +35,13 @@ describe('stats config', () => {
 
   it('adds weapon bonuses and automatic level growth', () => {
     const c = hero('sword_shield');
-    expect(deriveStats(c)).toMatchObject({ health: 1000, pAtk: 140, mAtk: 100, defense: 20, movement: 4 });
+    expect(deriveStats(c)).toMatchObject({ health: 600, pAtk: 140, mAtk: 100, defense: 20, movement: 4 });
     c.weaponId = 'staff';
     expect(deriveStats(c)).toMatchObject({ pAtk: 110, mAtk: 150, defense: 0 });
     grantXp(c, 250);
     const g = STAT_CONFIG.growthPerLevel;
     expect(c.level).toBe(3);
-    expect(deriveStats(c).health).toBe(1000 + 2 * g.health);
+    expect(deriveStats(c).health).toBe(600 + 2 * g.health);
   });
 
   it('defense: 100 points = double effective health', () => {
@@ -108,6 +109,35 @@ describe('ranges and targeting', () => {
     expect(battle.canTarget(archer, SKILLS.direct_shot, { x: 6, y: 1 })).toBe(true);
   });
 
+  it('direct shot needs line of FIRE: units in between block it', () => {
+    const { battle, units: [archer] } = setup(openMap(), [
+      { c: hero('bow'), team: 'player', at: { x: 1, y: 3 } },
+      { c: hero(), team: 'player', at: { x: 3, y: 3 } },
+      { c: hero(), team: 'enemy', at: { x: 5, y: 3 } },
+    ]);
+    expect(battle.canTarget(archer, SKILLS.direct_shot, { x: 5, y: 3 })).toBe(false);
+    expect(battle.blockedTiles(archer, SKILLS.direct_shot)).toContainEqual({ x: 5, y: 3 });
+    expect(battle.canTarget(archer, SKILLS.indirect_shot, { x: 5, y: 3 })).toBe(true);
+    // Spells only need line of sight: units don't block them.
+    const { battle: b2, units: [mage] } = setup(openMap(), [
+      { c: hero('staff', ['arcane_bolt']), team: 'player', at: { x: 1, y: 3 } },
+      { c: hero(), team: 'player', at: { x: 3, y: 3 } },
+      { c: hero(), team: 'enemy', at: { x: 5, y: 3 } },
+    ]);
+    expect(b2.canTarget(mage, SKILLS.arcane_bolt, { x: 5, y: 3 })).toBe(true);
+  });
+
+  it('projectile spells need line of sight; heal, cleanse and arcane shift do not', () => {
+    const map = openMap();
+    map.tiles[3][3] = 'rock';
+    const { battle, units: [m] } = setup(map, [
+      { c: hero('staff', ['fireball', 'heal']), team: 'player', at: { x: 1, y: 3 } },
+      { c: hero(), team: 'player', at: { x: 5, y: 3 } },
+    ]);
+    for (const id of ['magic_bolt', 'arcane_bolt', 'fireball']) expect(battle.canTarget(m, SKILLS[id], { x: 5, y: 3 })).toBe(false);
+    for (const id of ['heal', 'cleanse']) expect(battle.canTarget(m, SKILLS[id], { x: 5, y: 3 })).toBe(true);
+  });
+
   it('empty tiles can be targeted; the action is still spent', () => {
     const { battle, units: [m] } = setup(openMap(), [
       { c: hero('staff'), team: 'player', at: { x: 0, y: 0 } },
@@ -126,7 +156,7 @@ describe('skills', () => {
     ]);
     battle.perform(a, 'sword_slash', { x: 2, y: 2 });
     // 140 P.Atk vs 20 Defense: 140 * 100/120 = 117
-    expect(e.hp).toBe(1000 - 117);
+    expect(e.hp).toBe(600 - 117);
   });
 
   it('slash and smash hits twice, the second hit scaling with Defense', () => {
@@ -145,11 +175,11 @@ describe('skills', () => {
       { c: hero('bow'), team: 'enemy', at: { x: 5, y: 1 } },
     ]);
     battle.perform(a, 'shield_up', { x: 1, y: 1 });
-    expect(battle.shieldOf(a)).toBe(100);
+    expect(battle.shieldOf(a)).toBe(60); // 10% of 600
     battle.endPhase();
     battle.perform(e, 'direct_shot', { x: 1, y: 1 }); // 140 * 100/120 = 117
     expect(battle.shieldOf(a)).toBe(0);
-    expect(a.hp).toBe(1000 - 17);
+    expect(a.hp).toBe(600 - 57);
   });
 
   it('cooldown 1 means the skill cannot be used on the next turn', () => {
@@ -187,7 +217,7 @@ describe('skills', () => {
       { c: hero('bow'), team: 'enemy', at: { x: 3, y: 3 } },
     ]);
     battle.perform(s, 'spear_thrust', { x: 2, y: 3 });
-    expect(e.hp).toBe(1000 - 150);
+    expect(e.hp).toBe(600 - 150);
     expect(e).toMatchObject({ x: 4, y: 3 });
   });
 
@@ -198,8 +228,8 @@ describe('skills', () => {
       { c: hero('bow'), team: 'enemy', at: { x: 3, y: 3 } },
     ]);
     battle.perform(s, 'circle_swing', { x: 4, y: 3 });
-    expect(ally.hp).toBeLessThan(1000);
-    expect(foe.hp).toBeLessThan(1000);
+    expect(ally.hp).toBeLessThan(600);
+    expect(foe.hp).toBeLessThan(600);
     expect(ally).toMatchObject({ x: 6, y: 5 });
     expect(foe).toMatchObject({ x: 2, y: 3 });
   });
@@ -216,7 +246,7 @@ describe('skills', () => {
     const res = battle.move(mover, { x: 6, y: 3 });
     expect(res.interrupted).toBe(true);
     expect(mover).toMatchObject({ x: 7, y: 3 });
-    expect(mover.hp).toBeLessThan(1000);
+    expect(mover.hp).toBeLessThan(600);
     expect(spear.overwatch).toBeNull();
 
     const { battle: b2, units: [archer, runner] } = setup(openMap(), [
@@ -240,8 +270,8 @@ describe('skills', () => {
     battle.perform(m, 'fireball', { x: 4, y: 1 });
     const afterHit = e.hp;
     const events = battle.endPhase();
-    expect(events[0]).toMatchObject({ type: 'damage', cause: 'burn', amount: 10 });
-    expect(e.hp).toBe(afterHit - 10);
+    expect(events[0]).toMatchObject({ type: 'damage', cause: 'burn', amount: 6 }); // 1% of 600
+    expect(e.hp).toBe(afterHit - 6);
     battle.perform(cleric, 'cleanse', { x: 4, y: 1 });
     expect(e.statuses).toEqual([]);
   });
@@ -253,7 +283,7 @@ describe('skills', () => {
     ]);
     battle.perform(v, 'charge', { x: 5, y: 3 });
     expect(Math.hypot(v.x - 5, v.y - 3)).toBeLessThanOrEqual(1.5);
-    expect(e.hp).toBe(1000 - 112);
+    expect(e.hp).toBe(600 - 112);
   });
 
   it('kick is free: the unit can still act afterwards', () => {
@@ -273,10 +303,10 @@ describe('skills', () => {
       { c: hero('bow', ['execute']), team: 'player', at: { x: 1, y: 1 } },
       { c: hero('bow'), team: 'enemy', at: { x: 2, y: 1 } },
     ]);
-    e.hp = 400;
+    e.hp = 200;
     battle.perform(a, 'execute', { x: 2, y: 1 });
-    // 50% of 140 + 10% of 600 = 130
-    expect(e.hp).toBe(270);
+    // 50% of 140 + 10% of 400 missing = 110
+    expect(e.hp).toBe(90);
   });
 
   it('arcane shift teleports to an empty tile within 2.8', () => {
@@ -287,6 +317,51 @@ describe('skills', () => {
     expect(battle.canTarget(m, SKILLS.arcane_shift, { x: 3, y: 3 })).toBe(false); // 2.83 > 2.8
     battle.perform(m, 'arcane_shift', { x: 3, y: 2 });
     expect(m).toMatchObject({ x: 3, y: 2 });
+  });
+});
+
+describe('frameworks (switched off in stats.json)', () => {
+  const withRules = (patch: Partial<typeof STAT_CONFIG>) => ({ ...STAT_CONFIG, ...patch });
+
+  it('hit chance: disabled = always 100%; enabled = base + accuracy - evasion, clamped', () => {
+    const { battle, units: [a, e] } = setup(openMap(), [
+      { c: hero('bow'), team: 'player', at: { x: 1, y: 1 } },
+      { c: hero(), team: 'enemy', at: { x: 4, y: 1 } },
+    ]);
+    expect(battle.hitChance(a, e, SKILLS.direct_shot)).toBe(100);
+    const rules = withRules({ hitChance: { enabled: true, base: 70, min: 5, max: 95, reactionModifier: -10 } });
+    const b2 = new Battle(openMap(), [a, e], makeRng(3), rules);
+    a.stats.accuracy = 10;
+    e.stats.evasion = 30;
+    expect(b2.hitChance(a, e, SKILLS.direct_shot)).toBe(50);
+    expect(b2.hitChance(a, e, SKILLS.direct_shot, true)).toBe(40);
+    expect(b2.hitChance(a, e, SKILLS.heal)).toBe(100);
+    e.stats.evasion = 500;
+    expect(b2.hitChance(a, e, SKILLS.direct_shot)).toBe(5);
+  });
+
+  it('misses produce a miss event and deal no damage', () => {
+    const rules = withRules({ hitChance: { enabled: true, base: 0, min: 0, max: 0, reactionModifier: 0 } });
+    const a = makeUnit(hero('bow'), 'player', { x: 1, y: 1 });
+    const e = makeUnit(hero(), 'enemy', { x: 4, y: 1 });
+    const battle = new Battle(openMap(), [a, e], makeRng(3), rules);
+    expect(battle.perform(a, 'direct_shot', { x: 4, y: 1 })).toEqual([expect.objectContaining({ type: 'miss' })]);
+    expect(e.hp).toBe(600);
+  });
+
+  it('vision: disabled = see everything; enabled = vision range + line of sight', () => {
+    const map = openMap(12, 3);
+    map.tiles[1][6] = 'rock';
+    const a = makeUnit(hero(), 'player', { x: 0, y: 1 });
+    const near = makeUnit(hero(), 'enemy', { x: 4, y: 1 });
+    const behindRock = makeUnit(hero(), 'enemy', { x: 7, y: 1 });
+    const far = makeUnit(hero(), 'enemy', { x: 11, y: 0 });
+    const off = new Battle(map, [a, near, behindRock, far], makeRng(1));
+    expect([near, behindRock, far].every((u) => off.canSee('player', u))).toBe(true);
+    const on = new Battle(map, [a, near, behindRock, far], makeRng(1), withRules({ vision: { enabled: true } }));
+    expect(on.canSee('player', near)).toBe(true);
+    expect(on.canSee('player', behindRock)).toBe(false);
+    expect(on.canSee('player', far)).toBe(false);
   });
 });
 

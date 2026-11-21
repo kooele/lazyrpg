@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import {
   EMBLEMS, NAME_MAX_LENGTH, PALETTE, SKILLS, SKILL_TABS, SKILL_TREES, WEAPONS, XP_PER_LEVEL, skillDetails,
 } from '../data/content';
-import { STAT_CONFIG } from '../data/stats';
+import { STAT_CONFIG, visibleStatKeys } from '../data/stats';
 import { STAT_INFO, STAT_KEYS, type Character, type SkillDef, type SkillTab, type StatKey } from '../data/types';
 import { cloneCharacter, createCharacter, deriveStats, levelStats, skillSlots } from '../game/character';
 import { markDirty, requireState } from '../game/session';
@@ -116,10 +116,12 @@ export class CharacterCreatorScene extends Phaser.Scene {
     L.add(text(this, 302, 346, 'grows automatically each level', { color: COLORS.dim, fontSize: '11px' }).setOrigin(1, 0));
     const total = deriveStats(d);
     const fromLevel = levelStats(d.level);
-    STAT_KEYS.forEach((k: StatKey, i) => {
-      const y = 372 + i * 34;
+    const shown = visibleStatKeys();
+    const rowH = Math.min(34, Math.floor(170 / shown.length));
+    shown.forEach((k: StatKey, i) => {
+      const y = 372 + i * rowH;
       const info = STAT_INFO[k];
-      const row = this.add.rectangle(30, y - 4, 278, 30, 0xffffff, 0).setOrigin(0).setInteractive();
+      const row = this.add.rectangle(30, y - 4, 278, rowH - 4, 0xffffff, 0).setOrigin(0).setInteractive();
       row.on('pointerover', () => this.setInfo(`${info.name} (${info.short})\n${info.description}\n\nLevel ${d.level}: ${fromLevel[k]} · +${STAT_CONFIG.growthPerLevel[k]} per level`));
       L.add(row);
       L.add(text(this, 40, y, info.name, { fontSize: '15px' }));

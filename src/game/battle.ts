@@ -1,7 +1,7 @@
 // Pure battle rules (no rendering). BattleScene drives this and animates the events it returns.
 import { ENEMY_COLOR, SKILLS, TREE_SKILLS, WEAPONS } from '../data/content';
-import { STAT_CONFIG } from '../data/stats';
-import type { Character, DamagePart, SkillDef, StatKey, Stats } from '../data/types';
+import { STAT_CONFIG, type StatConfig } from '../data/stats';
+import type { Character, DamagePart, LosRule, SkillDef, StatKey, Stats } from '../data/types';
 import { allSkills, deriveStats, newId, skillSlots, type Rng } from './character';
 import {
   DIRS, DIRS8, EPS, TERRAIN, coneTiles, dist, hasLineOfSight, inBounds, key, passable, snapDirection,
@@ -27,7 +27,7 @@ export interface Overwatch {
   skillId: string;
   tiles: Set<string>;
   interrupt: boolean;
-  requiresLos: boolean;
+  los?: LosRule;
 }
 
 export interface Unit {
@@ -56,6 +56,7 @@ export interface Unit {
 
 export type BattleEvent =
   | { type: 'damage'; source?: string; target: string; amount: number; absorbed: number; killed: boolean; cause: 'skill' | 'burn' | 'overwatch' }
+  | { type: 'miss'; source: string; target: string; chance: number; cause: 'skill' | 'overwatch' }
   | { type: 'heal'; source: string; target: string; amount: number }
   | { type: 'shield'; source: string; target: string; amount: number }
   | { type: 'status'; source: string; target: string; name: string }
@@ -116,7 +117,7 @@ export class Battle {
   phase: Team = 'player';
   round = 1;
 
-  constructor(readonly map: BattleMap, units: Unit[], readonly rng: Rng) {
+  constructor(readonly map: BattleMap, units: Unit[], readonly rng: Rng, readonly rules: StatConfig = STAT_CONFIG) {
     this.units = units;
     this.beginPhase('player');
   }
@@ -258,14 +259,20 @@ export class Battle {
     for (const w of this.living()) {
       if (w.team === mover.team || !w.overwatch || !mover.alive) continue;
       if (!w.overwatch.tiles.has(key(mover.x, mover.y))) continue;
-      if (w.overwatch.requiresLos && !hasLineOfSight(this.map, w, mover)) continue;
+      if (w.overwatch.los && !this.clearLine(w, mover, w.overwatch.los, w)) continue;
       const skill = SKILLS[w.overwatch.skillId];
+      const ow = w.overwatch;
+      w.overwatch = null;
+      const chance = this.hitChance(w, mover, skill, true);
+      if (!this.rollHit(chance)) {
+        events.push({ type: 'miss', source: w.uid, target: mover.uid, chance, cause: 'overwatch' });
+        continue;
+      }
       for (const part of skill.hits ?? []) {
         if (!mover.alive) break;
         events.push(this.dealDamage(mover, this.hitDamage(w, mover, part), w.uid, 'overwatch'));
       }
-      if (w.overwatch.interrupt) interrupted = true;
-      w.overwatch = null;
+      if (ow.interrupt) interrupted = true;
     }
     return { events, interrupted };
   }
@@ -317,11 +324,37 @@ export class Battle {
       }
       case 'unit': {
         if (d < skill.minRange - EPS || d > skill.range + EPS) return false;
-        if (skill.requiresLos && !hasLineOfSight(this.map, from, tile)) return false;
+        if (skill.los && !this.clearLine(from, tile, skill.los, caster)) return false;
         if (skill.charge) return this.chargeDestination(caster, tile, from) !== null;
         return true;
       }
     }
+  }
+
+  /**
+   * Is the line from `a` to `b` clear under `rule`? Line of sight: no rock in between.
+   * Line of fire: additionally no unit in between (`ignore` = the shooter itself).
+   */
+  clearLine(a: Point, b: Point, rule: LosRule, ignore?: Unit): boolean {
+    if (rule === 'sight') return hasLineOfSight(this.map, a, b);
+    return hasLineOfSight(this.map, a, b, (p) => {
+      const u = this.unitAt(p.x, p.y);
+      return !!u && u !== ignore;
+    });
+  }
+
+  /** Tiles within the skill's distance that are ruled out only by a blocked line (shown greyed out). */
+  blockedTiles(caster: Unit, skill: SkillDef, from: Point = caster): Point[] {
+    if (!skill.los || skill.target !== 'unit') return [];
+    const out: Point[] = [];
+    for (let y = 0; y < this.map.height; y++) {
+      for (let x = 0; x < this.map.width; x++) {
+        const d = dist(from, { x, y });
+        if (d < skill.minRange - EPS || d > skill.range + EPS) continue;
+        if (!this.clearLine(from, { x, y }, skill.los, caster)) out.push({ x, y });
+      }
+    }
+    return out;
   }
 
   /** Every tile the skill could be aimed at — the "attack box" shown in the UI. */
@@ -447,6 +480,41 @@ export class Battle {
     return best;
   }
 
+  // ---- hit chance (framework: disabled in stats.json until hit/evasion are designed) ----
+
+  /** Chance (0-100) that `skill` hits `target`. Always 100 while hit chance is disabled. */
+  hitChance(attacker: Unit, target: Unit, skill: SkillDef, reaction = false): number {
+    const r = this.rules.hitChance;
+    if (!r.enabled || !skill.hits?.length || attacker.team === target.team) return 100;
+    const chance = r.base + this.stat(attacker, 'accuracy') + (skill.accuracy ?? 0) - this.stat(target, 'evasion') + (reaction ? r.reactionModifier : 0);
+    return Math.max(r.min, Math.min(r.max, Math.round(chance)));
+  }
+
+  private rollHit(chance: number): boolean {
+    return chance >= 100 || this.rng() * 100 < chance;
+  }
+
+  // ---- vision (framework: disabled in stats.json until fog of war is designed) ----
+
+  /** Tiles `team` can currently see. Everything while vision is disabled. */
+  visibleTiles(team: Team): Set<string> {
+    const seen = new Set<string>();
+    const all = !this.rules.vision.enabled;
+    const viewers = this.living(team);
+    for (let y = 0; y < this.map.height; y++) {
+      for (let x = 0; x < this.map.width; x++) {
+        const p = { x, y };
+        if (all || viewers.some((v) => dist(v, p) <= this.stat(v, 'vision') + EPS && hasLineOfSight(this.map, v, p))) seen.add(key(x, y));
+      }
+    }
+    return seen;
+  }
+
+  /** Can `team` see `u`? Own units are always visible. */
+  canSee(team: Team, u: Unit): boolean {
+    return u.team === team || !this.rules.vision.enabled || this.visibleTiles(team).has(key(u.x, u.y));
+  }
+
   // ---- damage -----------------------------------------------------------------------
 
   /** Damage of one hit after the target's Defense (before shields). */
@@ -531,12 +599,17 @@ export class Battle {
         skillId,
         tiles: new Set(coneTiles(this.map, u, tile, skill.cone.angle, skill.cone.radius).map((p) => key(p.x, p.y))),
         interrupt: skill.cone.interrupt,
-        requiresLos: skill.cone.requiresLos,
+        los: skill.cone.los,
       };
       events.push({ type: 'overwatch', source: u.uid, skillId });
     }
 
-    const targets = this.targetsOf(u, skill, tile);
+    const targets = this.targetsOf(u, skill, tile).filter((t) => {
+      const chance = this.hitChance(u, t, skill);
+      if (this.rollHit(chance)) return true;
+      events.push({ type: 'miss', source: u.uid, target: t.uid, chance, cause: 'skill' });
+      return false;
+    });
     for (const t of targets) {
       for (const part of skill.hits ?? []) {
         if (!t.alive) break;

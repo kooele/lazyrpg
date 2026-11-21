@@ -1,7 +1,7 @@
 // Shared type definitions for game data. Everything here is plain data so it
 // can be written to and read from human-readable JSON save files.
 
-export const STAT_KEYS = ['health', 'pAtk', 'mAtk', 'defense', 'movement'] as const;
+export const STAT_KEYS = ['health', 'pAtk', 'mAtk', 'defense', 'movement', 'accuracy', 'evasion', 'vision'] as const;
 export type StatKey = (typeof STAT_KEYS)[number];
 export type Stats = Record<StatKey, number>;
 
@@ -11,7 +11,17 @@ export const STAT_INFO: Record<StatKey, { name: string; short: string; descripti
   mAtk: { name: 'Magic Attack', short: 'M.Atk', description: 'Power of magic skills and healing.' },
   defense: { name: 'Defense', short: 'Def', description: 'Reduces damage taken: every 100 Defense = +100% effective health.' },
   movement: { name: 'Movement', short: 'Move', description: 'Movement points per turn (forest costs 2).' },
+  accuracy: { name: 'Accuracy', short: 'Acc', description: 'Adds to hit chance (when hit chance is enabled).' },
+  evasion: { name: 'Evasion', short: 'Eva', description: "Subtracts from enemies' hit chance (when hit chance is enabled)." },
+  vision: { name: 'Vision', short: 'Vis', description: 'How far the unit can see (when fog of war is enabled).' },
 };
+
+/**
+ * What must be clear between attacker and target:
+ *  sight – no sight-blocking terrain (rock). Used by spells and arcing projectiles.
+ *  fire  – line of FIRE: no blocking terrain AND no unit (friend or foe) in the way.
+ */
+export type LosRule = 'sight' | 'fire';
 
 export type Emblem = 'circle' | 'square' | 'diamond' | 'triangle';
 
@@ -53,7 +63,7 @@ export interface ConeDef {
   radius: number;
   /** Stop the enemy's movement on the tile where it is hit. */
   interrupt: boolean;
-  requiresLos: boolean;
+  los?: LosRule;
 }
 
 export interface SkillDef {
@@ -66,7 +76,10 @@ export interface SkillDef {
   /** Euclidean range in tiles (1 = orthogonal neighbours, 1.5 = includes diagonals). */
   range: number;
   minRange: number;
-  requiresLos?: boolean;
+  /** Line requirement for the target tile (omit for melee / no requirement). */
+  los?: LosRule;
+  /** Added to hit chance (when hit chance is enabled). */
+  accuracy?: number;
   /** Turns the skill is unavailable after use (1 = can't be used next turn; 0 = every turn). */
   cooldown: number;
   /** Costs no action: the unit can still act afterwards. */

@@ -204,6 +204,7 @@ export class BattleScene extends Phaser.Scene {
   private refreshUnits(): void {
     for (const u of this.battle.units) {
       if (!u.alive) continue;
+      this.views.get(u.uid)?.container.setVisible(this.battle.canSee('player', u));
       const done = u.team === this.battle.phase && u.acted;
       this.views.get(u.uid)?.container.setAlpha(done ? 0.5 : 1);
       this.drawHp(u);
@@ -221,6 +222,14 @@ export class BattleScene extends Phaser.Scene {
       g.lineStyle(2, color, alpha).strokeRect(MAP_X + p.x * TILE + inset, MAP_Y + p.y * TILE + inset, TILE - inset * 2, TILE - inset * 2);
     };
     const sel = this.selected;
+
+    // Fog of war (only when vision is enabled in stats.json).
+    if (b.rules.vision.enabled) {
+      const seen = b.visibleTiles('player');
+      for (let y = 0; y < b.map.height; y++) {
+        for (let x = 0; x < b.map.width; x++) if (!seen.has(key(x, y))) fill({ x, y }, 0x05060a, 0.55);
+      }
+    }
 
     // Standing overwatch / intercept cones.
     for (const u of b.living()) {
@@ -249,6 +258,13 @@ export class BattleScene extends Phaser.Scene {
       for (const p of b.rangeTiles(caster, shown)) {
         fill(p, color, 0.2);
         outline(p, color, 0.55);
+      }
+      // In range but the line is blocked: greyed out with a cross.
+      for (const p of b.blockedTiles(caster, shown)) {
+        fill(p, 0x000000, 0.3);
+        const px = MAP_X + p.x * TILE;
+        const py = MAP_Y + p.y * TILE;
+        g.lineStyle(2, 0x9aa3bd, 0.6).lineBetween(px + 18, py + 18, px + TILE - 18, py + TILE - 18).lineBetween(px + TILE - 18, py + 18, px + 18, py + TILE - 18);
       }
       const h = this.hoverTile;
       if (this.mode === 'target' && h && b.canTarget(caster, shown, h)) {
@@ -378,6 +394,7 @@ export class BattleScene extends Phaser.Scene {
     return [
       `HP ${u.hp}/${u.stats.health}${shield ? ` +${shield} shield` : ''}   Move ${b.stat(u, 'movement')}`,
       `P.Atk ${b.stat(u, 'pAtk')}  M.Atk ${b.stat(u, 'mAtk')}  Def ${b.stat(u, 'defense')}${terrainDef ? ' (forest)' : ''}`,
+      b.rules.hitChance.enabled ? `Acc ${b.stat(u, 'accuracy')}  Eva ${b.stat(u, 'evasion')}` : '',
       effects.join(', '),
     ].filter(Boolean).join('\n');
   }
@@ -551,12 +568,14 @@ export class BattleScene extends Phaser.Scene {
     const target = b.unitAt(tile.x, tile.y);
     const terrain = TERRAIN[b.map.tiles[tile.y][tile.x]];
     let info = `${terrain.name}${terrain.moveCost === null ? ' (impassable)' : ''}${terrain.defense ? ` (+${terrain.defense} Def, move cost ${terrain.moveCost})` : ''}${terrain.blocksSight ? ', blocks sight' : ''}`;
-    if (target) info = `${target.character.name} — Lv ${target.character.level}\n${this.unitSummary(target)}`;
+    if (target && b.canSee('player', target)) info = `${target.character.name} — Lv ${target.character.level}\n${this.unitSummary(target)}`;
     const u = this.selected;
     if (this.mode === 'target' && this.action && u) {
-      info = b.canTarget(u, this.action, tile)
-        ? `${this.preview(u, this.action, tile)}\n${info}`
-        : `Can't aim there — click to cancel.\n${info}`;
+      const blocked = b.blockedTiles(u, this.action).some((p) => p.x === tile.x && p.y === tile.y);
+      const why = blocked
+        ? this.action.los === 'fire' ? 'No line of fire: a rock or unit is in the way.' : 'No line of sight: a rock is in the way.'
+        : "Can't aim there — click to cancel.";
+      info = b.canTarget(u, this.action, tile) ? `${this.preview(u, this.action, tile)}\n${info}` : `${why}\n${info}`;
     }
     this.hoverText.setText(info);
   }
@@ -578,7 +597,8 @@ export class BattleScene extends Phaser.Scene {
         const hits = b.previewHits(u, s, t);
         const total = hits.reduce((a, c) => a + c, 0);
         const kills = total >= t.hp + b.shieldOf(t);
-        lines.push(`→ ${who}: ${hits.join(' + ')} dmg${kills ? ' (defeats!)' : ''}`);
+        const hitText = b.rules.hitChance.enabled ? `, ${b.hitChance(u, t, s)}% hit` : '';
+        lines.push(`→ ${who}: ${hits.join(' + ')} dmg${hitText}${kills ? ' (defeats!)' : ''}`);
       }
       if (s.heal) lines.push(`→ ${who}: +${Math.min(b.healAmount(u, s), t.stats.health - t.hp)} HP`);
       if (s.shield) lines.push(`→ ${who}: +${Math.round(t.stats.health * s.shield.maxHpPct)} shield`);
@@ -655,7 +675,8 @@ export class BattleScene extends Phaser.Scene {
       if (trigger) {
         const summary: string[] = [];
         trigger.events.forEach((e, n) => this.showEvent(e, summary, n));
-        const shooter = trigger.events[0]?.type === 'damage' && trigger.events[0].source ? this.battle.unit(trigger.events[0].source).character.name : 'Overwatch';
+        const first = trigger.events[0];
+        const shooter = first && (first.type === 'damage' || first.type === 'miss') && first.source ? this.battle.unit(first.source).character.name : 'Overwatch';
         this.addLog(`${shooter} reacts! ${summary.join(', ')}${result.interrupted && i === result.path.length - 1 ? ' — movement stopped' : ''}`);
         this.refresh();
         await this.wait(700);
@@ -739,6 +760,10 @@ export class BattleScene extends Phaser.Scene {
         }
         break;
       }
+      case 'miss':
+        this.floatText(t, 'MISS', '#c9ced8', delay);
+        summary.push(`${name} dodged (${e.chance}%)`);
+        break;
       case 'heal':
         this.floatText(t, `+${e.amount}`, '#6fdc8c', delay);
         summary.push(`${name} +${e.amount} HP`);
