@@ -187,6 +187,16 @@ export function caution(battle: Battle, u: Unit): number {
   return ratio >= 0.6 ? 0.15 : 0.5;
 }
 
+/** Badly hurt enemies flee the battle when they can reach the map edge. */
+function wantsToFlee(u: Unit): boolean {
+  return u.team === 'enemy' && isLow(u);
+}
+
+/** Has this unit made it to the edge while fleeing? Then it escapes (see Battle.escape). */
+export function shouldEscape(battle: Battle, u: Unit): boolean {
+  return u.alive && wantsToFlee(u) && battle.onEdge(u);
+}
+
 /**
  * Should an engaged unit break away? Ranged fighters do, and so does anyone badly
  * hurt, as long as the opponent's free opportunity attack won't finish them off.
@@ -216,6 +226,15 @@ export function planTurn(battle: Battle, u: Unit): AiPlan {
   const care = caution(battle, u);
   const danger = new Map(tiles.map((t) => [key(t.x, t.y), threatAt(battle, u, t, threats)]));
 
+  // Badly hurt enemies run for the map edge if they can reach it this turn (the safest edge tile).
+  if (wantsToFlee(u)) {
+    const exits = tiles.filter((t) => battle.onEdge(t));
+    if (exits.length) {
+      return { moveTo: exits.reduce((a, b) => (danger.get(key(b.x, b.y))! < danger.get(key(a.x, a.y))! ? b : a)) };
+    }
+  }
+
+  const leastDanger = Math.min(...danger.values());
   let best: AiPlan | null = null;
   let bestScore = 0;
   // Choose where to go based on attacks and support only: defensive self-buffs
@@ -225,7 +244,9 @@ export function planTurn(battle: Battle, u: Unit): AiPlan {
     if (!found) continue;
     const free = bestFrom(battle, u, tile, true)?.score ?? 0;
     const terrain = TERRAIN[battle.map.tiles[tile.y][tile.x]].defense * 2;
-    const risk = care * danger.get(key(tile.x, tile.y))!;
+    // Danger that can't be avoided anyway (even the safest reachable tile has it) costs nothing,
+    // so a unit that's already in the thick of it still fights instead of freezing.
+    const risk = care * (danger.get(key(tile.x, tile.y))! - leastDanger);
     const score = found.score + free * 0.5 + terrain - risk - reach.get(key(tile.x, tile.y))!.cost * 0.1;
     if (score > bestScore) {
       bestScore = score;
@@ -255,18 +276,28 @@ export function planTurn(battle: Battle, u: Unit): AiPlan {
     return { moveTo };
   }
 
-  // Otherwise advance on the enemy, but don't walk into a spot that could get us killed.
+  // Otherwise advance on the enemy. Wounded units won't walk into a spot that could get
+  // them killed, but only hold back for a couple of turns; healthy ones always press on
+  // (otherwise weak units like rats never come).
+  const held = holdTurns.get(u) ?? 0;
+  const wary = u.hp / u.stats.health < 0.6 && held < MAX_HOLD_TURNS;
   let moveTo: Point = { x: u.x, y: u.y };
   let bestDist = field.get(key(u.x, u.y)) ?? Infinity;
   for (const tile of tiles) {
     const d = field.get(key(tile.x, tile.y)) ?? Infinity;
-    if (d < bestDist && danger.get(key(tile.x, tile.y))! < u.hp) {
+    const r = danger.get(key(tile.x, tile.y))!;
+    if (d < bestDist && (!wary || r < u.hp || r <= danger.get(key(u.x, u.y))!)) {
       bestDist = d;
       moveTo = tile;
     }
   }
+  holdTurns.set(u, moveTo.x === u.x && moveTo.y === u.y ? held + 1 : 0);
   return { moveTo };
 }
+
+/** Turns in a row a unit has held back instead of advancing (so it never waits forever). */
+const holdTurns = new WeakMap<Unit, number>();
+const MAX_HOLD_TURNS = 2;
 
 /**
  * Play one unit's whole turn (used by the tests and the simulator; the battle
@@ -277,6 +308,10 @@ export function runAiTurn(battle: Battle, u: Unit): void {
   if (!u.alive) return;
   const plan = planTurn(battle, u);
   if (battle.canMove(u) && (plan.moveTo.x !== u.x || plan.moveTo.y !== u.y)) battle.move(u, plan.moveTo);
+  if (shouldEscape(battle, u)) {
+    battle.escape(u);
+    return;
+  }
   if (!battle.canAct(u)) return;
   const free = bestFreeAction(battle, u);
   if (free) battle.perform(u, free.id, free.target);

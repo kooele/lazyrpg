@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { SKILLS, WEAPONS, isFree, isSupport, skillDetails, skillFormula, tagNames } from '../data/content';
 import type { SkillDef } from '../data/types';
-import { bestAction, bestFreeAction, planTurn, shouldDisengage } from '../game/ai';
+import { bestAction, bestFreeAction, planTurn, shouldDisengage, shouldEscape } from '../game/ai';
 import {
   Battle, deploymentTiles, generateEnemies, makeUnit, victoryXp,
   type BattleEvent, type MoveResult, type Unit,
@@ -657,7 +657,8 @@ export class BattleScene extends Phaser.Scene {
     const offensive = s.affects !== 'ally' && !s.cone && (!!s.hits?.length || !!s.applyStatus?.length);
     if (offensive) {
       const allies = targets.filter((t) => t.team === u.team);
-      if (allies.length) return `${s.name} will also hit your own ${allies.length > 1 ? 'allies' : 'ally'} ${allies.map((a) => a.character.name).join(', ')}.\nUse it anyway?`;
+      const also = allies.length < targets.length ? 'also ' : '';
+      if (allies.length) return `${s.name} will ${also}hit your own ${allies.length > 1 ? 'allies' : 'ally'} ${allies.map((a) => a.character.name).join(', ')}.\nUse it anyway?`;
       if (targets.length === 0) {
         if (occupant && occupant.team === u.team && occupant !== u) return `${occupant.character.name} is your ally: ${s.name} won't affect them and will be wasted.\nUse it anyway?`;
         return `No enemy there: ${s.name} will hit nothing${s.charge ? ' (you will only dash)' : ''}.\nUse it anyway?`;
@@ -784,6 +785,15 @@ export class BattleScene extends Phaser.Scene {
         const result = b.move(u, plan.moveTo);
         await this.animateMove(u, result);
       }
+      if (shouldEscape(b, u)) {
+        b.escape(u);
+        const v = this.views.get(u.uid)!;
+        await this.tween({ targets: v.container, alpha: 0, scale: 0.6, duration: 400 });
+        v.container.setVisible(false);
+        this.addLog(`${u.character.name} flees the battlefield!`);
+        this.refreshUnits();
+        continue;
+      }
       if (!u.alive || b.outcome()) continue;
       const free = bestFreeAction(b, u);
       if (free) await this.enemyUse(u, free.id, free.target);
@@ -898,7 +908,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private showEvent(e: BattleEvent, summary: string[], index: number): void {
-    if (e.type === 'move' || e.type === 'overwatch') return;
+    if (e.type === 'move' || e.type === 'overwatch' || e.type === 'escape') return;
     if (e.type === 'disengage') {
       const other = this.battle.unit(e.target).character.name;
       summary.push(e.reason === 'escaped' ? `slips away from ${other}` : e.reason === 'separated' ? 'engagement broken' : `breaks away from ${other}`);

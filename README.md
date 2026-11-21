@@ -70,7 +70,7 @@ Each enemy type has a fixed level range and its own stats and skills (`src/data/
 | Grey Wolf | 3–4 | Bite (Engage) and Pounce (leaps in, Engage); Howl at level 4 (Frenzy: +20 P.Atk to nearby allies). Very fast. |
 | Bandit | 4–5 | Carries a random weapon but only uses its basic attack (no Slash and Smash, Circle Swing...). Thugs also have Shield Up, Hexers Fireball, Archers Execute; all learn Kick at level 5. |
 
-**Enemy AI** weighs how dangerous a tile is (how much the party could hit it for next turn) against what it can do from there. Healthy enemies take small risks freely. Below 35% health, an enemy with healthy allies falls back to regroup with them, and may disengage to do it. One that's on its own makes a last stand rather than running forever.
+**Enemy AI** weighs how dangerous a tile is (how much the party could hit it for next turn) against what it can do from there. Healthy enemies take small risks freely. Danger it can't avoid anyway doesn't hold it back, so a unit that's already in the thick of the fight keeps fighting. Below 35% health, an enemy that can reach the edge of the map this turn **flees the battle** and is removed. Otherwise it falls back to regroup with healthy allies (and may disengage to do it), or, if it's on its own, makes a last stand. Wounded enemies may hold back from walking into a deadly spot, but never for more than two turns in a row.
 
 Encounter size is a threat budget: 1 per Adventurer. Rats cost 0.5 (two per Adventurer), slimes 0.75, wolves and bandits 1. Past stage 5, bandits keep coming at level 5, and the budget grows 25% per stage. Rats, slimes and wolves use simple placeholder figures until monster art is made. Hover an enemy in battle to see its skills.
 
@@ -78,11 +78,12 @@ Encounter size is a threat budget: 1 per Adventurer. Rats cost 0.5 (two per Adve
 
 Hitting a unit with an **Engage** skill locks you both together, unless the target is already engaged with someone else. While engaged:
 - You can't move, you can only attack your opponent, and you can only heal or cleanse yourself.
+  - Attacks are fine as long as they hit your opponent: Spear Thrust aimed through them (diagonals included), Circle Swing (even if it also catches others), and Charge on the opponent itself (no dash, just the strike).
 - **Disengage** (button in the battle sidebar) breaks free, but your opponent gets a free basic attack on you (an opportunity attack). You can then move and act normally.
 - **Arcane Shift** (Teleport) slips out of an engagement with no opportunity attack.
 - Engagement also ends if either unit falls, or if either one is successfully pushed by a knockback (Circle Swing, Arcane Pulse), even if they still end up next to each other. The pushed unit takes a free basic attack from its old opponent, just like disengaging. A push that's blocked doesn't break it.
 
-Heal and Cleanse work on any unit, enemies included. In battle, the game asks for confirmation before you attack an empty tile or an ally, or heal or cleanse an enemy. The battle log keeps the whole fight: scroll it with the mouse wheel or the bar on its right.
+Heal and Cleanse work on any unit, enemies included. An attack aimed straight at an ally hits them normally (lines like Spear Thrust pass by allies they aren't aimed at). In battle, the game asks for confirmation before you attack an empty tile or an ally, or heal or cleanse an enemy. The battle log keeps the whole fight: scroll it with the mouse wheel or the bar on its right.
 
 ### Lines, cooldowns, and prepared systems
 

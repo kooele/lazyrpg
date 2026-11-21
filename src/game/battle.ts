@@ -59,6 +59,8 @@ export interface Unit {
   engagedWith: string | null;
   /** 'weapon'-tagged skills are unusable while true (nothing sets it yet). */
   weaponDisabled: boolean;
+  /** Fled off the edge of the map (counts as gone, not dead). */
+  escaped?: boolean;
 }
 
 /** Why damage happened: a skill, a status tick (e.g. Burn), overwatch, or an opportunity attack on disengage. */
@@ -74,7 +76,8 @@ export type BattleEvent =
   | { type: 'status'; source: string; target: string; name: string }
   | { type: 'cleanse'; source: string; target: string; removed: string[] }
   | { type: 'move'; target: string; from: Point; to: Point; kind: 'knockback' | 'teleport' | 'charge' }
-  | { type: 'overwatch'; source: string; skillId: string };
+  | { type: 'overwatch'; source: string; skillId: string }
+  | { type: 'escape'; target: string };
 
 export interface MoveResult {
   /** Tiles actually walked (may stop early if intercepted or killed). */
@@ -244,15 +247,22 @@ export class Battle {
     const opp = this.opponentOf(caster);
     if (!opp) return null;
     // Teleports (Arcane Shift) are the exception: they slip out of the engagement for free.
-    if (hasTag(skill, 'movement') || skill.charge) return `Engaged with ${opp.character.name}: disengage before moving.`;
     const busy = `Engaged with ${opp.character.name}: you can't target anyone else until you disengage.`;
+    const targets = this.targetsOf(caster, skill, tile, from);
+    // Charge still works on the opponent itself (you're already next to them, so there's no dash).
+    if (skill.charge) {
+      if (targets.length === 1 && targets[0] === opp) return null;
+      return targets.length ? busy : `Engaged with ${opp.character.name}: disengage before moving.`;
+    }
+    if (hasTag(skill, 'movement')) return `Engaged with ${opp.character.name}: disengage before moving.`;
     // Heal and Cleanse only on yourself while engaged.
-    if ((skill.heal || skill.cleanse) && this.targetsOf(caster, skill, tile, from).some((t) => t !== caster)) return busy;
+    if ((skill.heal || skill.cleanse) && targets.some((t) => t !== caster)) return busy;
     if (!this.isAttack(skill)) return null;
     if (skill.cone) return `Engaged with ${opp.character.name}: can't watch other enemies.`;
-    const foes = this.targetsOf(caster, skill, tile, from).filter((t) => t.team !== caster.team);
-    const onlyOpponent = skill.target === 'self' ? foes.every((t) => t === opp) : foes.length === 1 && foes[0] === opp;
-    return onlyOpponent ? null : busy;
+    // Area attacks around you (Circle Swing) are fine as long as they hit the opponent;
+    // aimed attacks (incl. Spear Thrust's line) must hit exactly the opponent.
+    const ok = skill.target === 'self' ? targets.includes(opp) : targets.length === 1 && targets[0] === opp;
+    return ok ? null : busy;
   }
 
   /** The opponent's free basic attack when someone breaks away from an engagement (ignores range). */
@@ -284,6 +294,25 @@ export class Battle {
     u.locked = true;
     u.startPos = { x: u.x, y: u.y };
     if (!u.alive) u.acted = true;
+    return events;
+  }
+
+  /** Is the tile on the outer edge of the map? */
+  onEdge(p: Point): boolean {
+    return p.x === 0 || p.y === 0 || p.x === this.map.width - 1 || p.y === this.map.height - 1;
+  }
+
+  /** An enemy standing on the map edge flees the battle and is removed. Ends its turn. */
+  escape(u: Unit): BattleEvent[] {
+    if (u.team !== 'enemy' || !u.alive || !this.onEdge(u)) throw new Error(`${u.character.name} can't escape from here`);
+    const events: BattleEvent[] = [];
+    const opp = this.breakEngagement(u);
+    if (opp) events.push({ type: 'disengage', source: u.uid, target: opp.uid, reason: 'separated' });
+    u.alive = false;
+    u.escaped = true;
+    u.overwatch = null;
+    u.acted = true;
+    events.push({ type: 'escape', target: u.uid });
     return events;
   }
 
@@ -576,6 +605,11 @@ export class Battle {
     return skill.affects === 'enemy' ? t.team !== caster.team : t.team === caster.team;
   }
 
+  /** An attack aimed straight at a unit hits it, even an ally (the player confirms first). */
+  private aimedHit(caster: Unit, skill: SkillDef, t: Unit): boolean {
+    return t !== caster && skill.affects === 'enemy' && this.isAttack(skill);
+  }
+
   /** Units the skill would affect if aimed at `tile`. */
   targetsOf(caster: Unit, skill: SkillDef, tile: Point, from: Point = caster): Unit[] {
     switch (skill.target) {
@@ -593,13 +627,15 @@ export class Battle {
         for (const p of this.areaTiles(caster, skill, tile, from)) {
           if (TERRAIN[this.map.tiles[p.y][p.x]].blocksSight) break;
           const t = this.occupantFrom(caster, from, p);
-          if (t && this.matches(caster, skill, t)) return [t];
+          // Passes allies in the way; hits one only if it's the unit aimed at.
+          const aimed = p.x === tile.x && p.y === tile.y;
+          if (t && (this.matches(caster, skill, t) || (aimed && this.aimedHit(caster, skill, t)))) return [t];
         }
         return [];
       }
       case 'unit': {
         const t = this.occupantFrom(caster, from, tile);
-        return t && this.matches(caster, skill, t) ? [t] : [];
+        return t && (this.matches(caster, skill, t) || this.aimedHit(caster, skill, t)) ? [t] : [];
       }
     }
   }
