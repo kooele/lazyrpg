@@ -140,13 +140,11 @@ export function parseContent(skillsData: unknown, weaponsData: unknown): GameCon
       knockback: S.optNum(r.knockback, `${p}.knockback`),
       cleanse: S.bool(r.cleanse, `${p}.cleanse`) || undefined,
       aoeRadius: S.optNum(r.aoeRadius, `${p}.aoeRadius`),
-      lineLength: S.optNum(r.lineLength, `${p}.lineLength`),
       cone,
       teleport: S.bool(r.teleport, `${p}.teleport`) || undefined,
       charge: S.bool(r.charge, `${p}.charge`) || undefined,
     };
     if (skill.target === 'cone' && !skill.cone) fail('skills.json', `${p}.cone`, 'is required when target is "cone"');
-    if (skill.target === 'line' && !skill.lineLength) fail('skills.json', `${p}.lineLength`, 'is required when target is "line"');
     if (skillTags.includes('movement') && skill.rangeScale === undefined) fail('skills.json', `${p}.rangeScale`, 'is required for "movement" skills');
     skills[id] = skill;
   }
@@ -233,16 +231,9 @@ export function skillFormula(s: SkillDef): string {
   return parts.join(' · ');
 }
 
-/** One-line summary of a skill's rules (range, cooldown, line...). */
+/** One-line summary of a skill's rules: cooldown and line requirement. (Reach is shown as a tile diagram.) */
 export function skillDetails(s: SkillDef): string {
-  const parts: string[] = [];
-  if (s.target === 'self') parts.push(s.aoeRadius ? `Around you (${s.aoeRadius})` : 'Self');
-  else if (s.target === 'cone' && s.cone) parts.push(`${s.cone.angle}° cone, ${s.cone.radius} tiles`);
-  else if (s.target === 'line') parts.push(`Line, ${s.lineLength} tiles`);
-  else if (hasTag(s, 'weapon')) parts.push('Weapon range');
-  else if (hasTag(s, 'movement')) parts.push(`Range ${pct(s.rangeScale ?? 1)} of Movement`);
-  else parts.push(`Range ${s.range}`);
-  parts.push(s.cooldown > 0 ? `Cooldown ${s.cooldown} (skips ${s.cooldown === 1 ? 'next turn' : `next ${s.cooldown} turns`})` : 'No cooldown');
+  const parts = [s.cooldown > 0 ? `Cooldown ${s.cooldown}` : 'No cooldown'];
   const los = s.los ?? s.cone?.los;
   if (los === 'fire') parts.push('Needs line of fire');
   else if (los === 'sight') parts.push('Needs line of sight');
@@ -256,7 +247,6 @@ export function tagNames(s: SkillDef): string[] {
 
 export const PALETTE = ['#3d7be0', '#36b37e', '#e0b44c', '#9b59d0', '#e07b3d', '#2bb5c4', '#e05a9b', '#c9ced8'];
 export const ENEMY_COLOR = '#c0392b';
-export const EMBLEMS = ['circle', 'square', 'diamond', 'triangle'] as const;
 
 export const MAX_PARTY_SIZE = 4;
 export const XP_PER_LEVEL = 100;

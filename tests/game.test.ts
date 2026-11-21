@@ -7,7 +7,7 @@ import type { Character } from '../src/data/types';
 import { runAiTurn, shouldDisengage } from '../src/game/ai';
 import { Battle, defenseMultiplier, deploymentTiles, generateEnemies, makeUnit, type Team } from '../src/game/battle';
 import { createCharacter, deriveStats, grantXp, makeRng } from '../src/game/character';
-import { generateMap, hasLineOfSight, passable, type BattleMap, type Point, type Terrain } from '../src/game/grid';
+import { generateMap, hasLineOfSight, passable, withinRange, type BattleMap, type Point, type Terrain } from '../src/game/grid';
 import { newGameState, parseSave, serializeSave } from '../src/game/save';
 
 function openMap(w = 10, h = 7): BattleMap {
@@ -118,15 +118,30 @@ describe('ranges, lines and tags', () => {
     expect(battle.canTarget(a, SKILLS.slash_and_smash, { x: 4, y: 4 })).toBe(false);
   });
 
-  it('direct shot needs line of FIRE: units in between block it', () => {
-    const { battle, units: [archer] } = setup(openMap(), [
+  it('ranges of 2+ use rounded distance; 1 and 1.5 stay exact', () => {
+    const count = (r: number) => {
+      let n = 0;
+      for (let x = -8; x <= 8; x++) for (let y = -8; y <= 8; y++) if ((x || y) && withinRange(Math.hypot(x, y), r)) n++;
+      return n;
+    };
+    expect([count(1), count(1.5), count(2), count(5)]).toEqual([4, 8, 20, 96]);
+  });
+
+  it('direct shot needs line of sight; the line-of-fire rule (units block) is still available', () => {
+    const map = openMap();
+    const { battle, units: [archer] } = setup(map, [
       { c: hero('bow'), team: 'player', at: { x: 1, y: 3 } },
       { c: hero(), team: 'player', at: { x: 3, y: 3 } },
       { c: hero(), team: 'enemy', at: { x: 5, y: 3 } },
     ]);
-    expect(battle.canTarget(archer, SKILLS.direct_shot, { x: 5, y: 3 })).toBe(false);
-    expect(battle.blockedTiles(archer, SKILLS.direct_shot)).toContainEqual({ x: 5, y: 3 });
-    expect(battle.canTarget(archer, SKILLS.indirect_shot, { x: 5, y: 3 })).toBe(true);
+    expect(SKILLS.direct_shot.los).toBe('sight');
+    expect(battle.canTarget(archer, SKILLS.direct_shot, { x: 5, y: 3 })).toBe(true); // units don't block sight
+    const lineOfFire = { ...SKILLS.direct_shot, los: 'fire' as const };
+    expect(battle.canTarget(archer, lineOfFire, { x: 5, y: 3 })).toBe(false);
+    expect(battle.blockedTiles(archer, lineOfFire)).toContainEqual({ x: 5, y: 3 });
+    map.tiles[3][3] = 'grass';
+    map.tiles[2][3] = 'rock';
+    expect(battle.canTarget(archer, SKILLS.direct_shot, { x: 5, y: 1 })).toBe(false); // rock blocks sight
   });
 
   it('projectile spells need line of sight; Freeze, heal and cleanse do not', () => {
@@ -148,8 +163,8 @@ describe('ranges, lines and tags', () => {
     ]);
     expect(battle.skillRange(m, SKILLS.arcane_shift)).toBe(2);
     expect(battle.skillRange(m, SKILLS.charge)).toBe(4);
-    expect(battle.canTarget(m, SKILLS.arcane_shift, { x: 3, y: 1 })).toBe(true);
-    expect(battle.canTarget(m, SKILLS.arcane_shift, { x: 3, y: 2 })).toBe(false); // 2.24 > 2
+    expect(battle.canTarget(m, SKILLS.arcane_shift, { x: 3, y: 2 })).toBe(true); // 2.24 rounds to 2
+    expect(battle.canTarget(m, SKILLS.arcane_shift, { x: 3, y: 3 })).toBe(false); // 2.83 rounds to 3
     battle.wait(m);
     battle.endPhase();
     battle.perform(e, 'freeze', { x: 1, y: 1 });
@@ -228,12 +243,27 @@ describe('skills', () => {
     expect(a.hp).toBe(500);
   });
 
-  it('spear thrust hits the first enemy in a line and knocks it back', () => {
+  it('spear thrust uses normal range 2 and hits the first enemy on the way', () => {
+    const { battle, units: [s, near, far] } = setup(openMap(), [
+      { c: hero('spear'), team: 'player', at: { x: 3, y: 3 } },
+      { c: hero('bow'), team: 'enemy', at: { x: 4, y: 3 } },
+      { c: hero('bow'), team: 'enemy', at: { x: 5, y: 3 } },
+    ]);
+    expect(battle.rangeTiles(s, SKILLS.spear_thrust)).toHaveLength(20);
+    expect(battle.canTarget(s, SKILLS.spear_thrust, { x: 5, y: 2 })).toBe(true); // 2-over-1
+    expect(battle.canTarget(s, SKILLS.spear_thrust, { x: 5, y: 1 })).toBe(false); // diagonal 2.83
+    battle.perform(s, 'spear_thrust', { x: 5, y: 3 }); // aimed at the far one; the near one is in the way
+    expect(near.hp).toBe(500 - 67);
+    expect(near).toMatchObject({ x: 4, y: 3 }); // knockback blocked by the far one
+    expect(far.hp).toBe(500);
+  });
+
+  it('spear thrust knocks the target back along the thrust', () => {
     const { battle, units: [s, e] } = setup(openMap(), [
       { c: hero('spear'), team: 'player', at: { x: 1, y: 3 } },
       { c: hero('bow'), team: 'enemy', at: { x: 3, y: 3 } },
     ]);
-    battle.perform(s, 'spear_thrust', { x: 2, y: 3 });
+    battle.perform(s, 'spear_thrust', { x: 3, y: 3 });
     expect(e.hp).toBe(500 - 67);
     expect(e).toMatchObject({ x: 4, y: 3 });
   });
@@ -363,18 +393,16 @@ describe('engagement', () => {
     expect(e.engagedWith).toBe(a.uid);
   });
 
-  it('engaged units have half Defense but take 50% less damage from their opponent', () => {
+  it('engaged units have half Defense (no damage reduction from their opponent)', () => {
     const { battle, units: [a, e, archer] } = duel();
     battle.perform(a, 'sword_slash', { x: 4, y: 3 });
     expect(battle.stat(a, 'defense')).toBe(38); // 75 / 2
     battle.endPhase();
     const before = a.hp;
     battle.perform(e, 'sword_slash', { x: 3, y: 3 });
-    // 100 x 100/138 = 72.5, halved vs the opponent -> 36
-    expect(before - a.hp).toBe(36);
-    // Anyone else hits the weakened defense at full strength: 80 x 100/138 = 58
+    expect(before - a.hp).toBe(72); // 100 x 100/138
     battle.perform(archer, 'direct_shot', { x: 3, y: 3 });
-    expect(before - 36 - a.hp).toBe(58);
+    expect(before - 72 - a.hp).toBe(58); // 80 x 100/138
   });
 
   it("engaged units can't move or attack anyone else; others can't steal the engagement", () => {
@@ -515,9 +543,10 @@ describe('battles', () => {
     }
   });
 
-  it('generated maps keep deployment zones open', () => {
+  it('generated maps use the configured size and keep deployment zones open', () => {
     for (let seed = 0; seed < 30; seed++) {
       const map = generateMap(makeRng(seed));
+      expect([map.width, map.height]).toEqual([STAT_CONFIG.map.width, STAT_CONFIG.map.height]);
       for (const p of deploymentTiles(map, 'enemy', 6)) expect(passable(map, p.x, p.y)).toBe(true);
     }
   });

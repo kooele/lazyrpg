@@ -32,9 +32,19 @@
   "_forestDefense": "Extra Defense for a unit standing in forest.",
 
   "engagement": {
-    "_comment": "Engaged units (see the Engage tag in skills.json) have their Defense multiplied by defenseMultiplier, and take opponentDamageTaken x damage from the unit they are engaged with.",
-    "defenseMultiplier": 0.5,
-    "opponentDamageTaken": 0.5
+    "_comment": "Engaged units (see the Engage tag in skills.json) have their Defense multiplied by defenseMultiplier.",
+    "defenseMultiplier": 0.5
+  },
+
+  "rangeRounding": {
+    "_comment": "Ranges of at least fromRange use rounded distance: a tile is in range if its distance, rounded to the nearest whole tile, is within the range (so range 2 also reaches 2-over-1-up). Smaller ranges (1, 1.5) use exact distance so melee reach stays precise.",
+    "fromRange": 2
+  },
+
+  "map": {
+    "_comment": "Battlefield size in tiles. Tiles shrink to fit the screen.",
+    "width": 18,
+    "height": 13
   },
 
   "hitChance": {

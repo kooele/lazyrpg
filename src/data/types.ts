@@ -23,8 +23,6 @@ export const STAT_INFO: Record<StatKey, { name: string; short: string; descripti
  */
 export type LosRule = 'sight' | 'fire';
 
-export type Emblem = 'circle' | 'square' | 'diamond' | 'triangle';
-
 export interface WeaponDef {
   id: string;
   name: string;
@@ -76,7 +74,7 @@ export interface DamagePart {
  * How a skill is aimed:
  *  unit      – click a tile in range; affects the unit standing there (empty tiles allowed)
  *  self      – centered on the caster (optionally hitting everything within aoeRadius)
- *  line      – pick one of 8 directions; hits the first matching unit within lineLength tiles
+ *  line      – aim at a tile in range; hits the first matching unit on the straight path to it
  *  cone      – pick a direction; sets up an overwatch cone
  *  emptyTile – an empty, walkable tile (e.g. teleport)
  */
@@ -121,8 +119,6 @@ export interface SkillDef {
   cleanse?: boolean;
   /** For target 'self': affect units within this distance of the caster. */
   aoeRadius?: number;
-  /** For target 'line'. */
-  lineLength?: number;
   cone?: ConeDef;
   teleport?: boolean;
   /** Dash next to the target (path of at most `range` steps, diagonals allowed) before hitting it. */
@@ -144,7 +140,6 @@ export type BodyModel = (typeof BODY_MODELS)[number];
 export interface Appearance {
   /** Color of the unit's base (the disc it stands on). */
   color: string;
-  emblem: Emblem;
   /** Body art: public/art/units/<model>.svg. Older saves without it get one assigned. */
   model: BodyModel;
 }

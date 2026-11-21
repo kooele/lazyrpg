@@ -4,7 +4,7 @@
 import { SKILLS, STATUSES, isFree } from '../data/content';
 import type { SkillDef } from '../data/types';
 import type { Battle, Unit } from './battle';
-import { DIRS, DIRS8, TERRAIN, dist, key, passable, type Point } from './grid';
+import { DIRS, TERRAIN, dist, key, passable, type Point } from './grid';
 
 export interface AiAction {
   id: string;
@@ -23,7 +23,6 @@ function aimPoints(battle: Battle, skill: SkillDef, from: Point): Point[] {
     case 'self':
       return [from];
     case 'line':
-      return DIRS8.map((d) => ({ x: from.x + d.x, y: from.y + d.y }));
     case 'unit':
       return battle.living().map((t) => ({ x: t.x, y: t.y }));
     default:

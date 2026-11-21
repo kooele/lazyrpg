@@ -49,7 +49,7 @@ export function createCharacter(name: string, color = PALETTE[0], weaponId = DEF
     xp: 0,
     weaponId,
     skillIds: [],
-    appearance: { color, emblem: 'circle', model: model ?? modelFor(id) },
+    appearance: { color, model: model ?? modelFor(id) },
   };
 }
 

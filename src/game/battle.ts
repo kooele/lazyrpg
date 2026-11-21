@@ -3,8 +3,9 @@ import { DEFAULT_WEAPON, ENEMY_COLOR, SKILLS, STATUSES, TREE_SKILLS, WEAPONS, ha
 import { STAT_CONFIG, type StatConfig } from '../data/stats';
 import type { Character, DamagePart, LosRule, SkillDef, StatKey, Stats } from '../data/types';
 import { allSkills, deriveStats, modelFor, newId, skillSlots, type Rng } from './character';
+import { losFor, minRangeFor, rangeFor, type ReachContext } from './reach';
 import {
-  DIRS, DIRS8, EPS, TERRAIN, coneTiles, dist, hasLineOfSight, inBounds, key, passable, snapDirection,
+  DIRS, DIRS8, EPS, TERRAIN, coneTiles, dist, hasLineOfSight, inBounds, key, passable, tilesBetween, withinRange,
   type BattleMap, type Point,
 } from './grid';
 
@@ -172,19 +173,22 @@ export class Battle {
     return SKILLS[(WEAPONS[u.character.weaponId] ?? WEAPONS[DEFAULT_WEAPON]).skills[0]];
   }
 
+  /** What the unit's tag-dependent skills scale from (Movement, weapon). */
+  reachContext(u: Unit): ReachContext {
+    return { movement: this.stat(u, 'movement'), basic: this.basicAttack(u) };
+  }
+
   /** Effective range: 'movement' skills scale with Movement, 'weapon' skills use the weapon's range. */
   skillRange(u: Unit, s: SkillDef): number {
-    if (hasTag(s, 'movement')) return Math.floor((s.rangeScale ?? 1) * this.stat(u, 'movement'));
-    if (hasTag(s, 'weapon')) return this.basicAttack(u).range;
-    return s.range;
+    return rangeFor(s, this.reachContext(u));
   }
 
   skillMinRange(u: Unit, s: SkillDef): number {
-    return hasTag(s, 'weapon') ? this.basicAttack(u).minRange : s.minRange;
+    return minRangeFor(s, this.reachContext(u));
   }
 
   skillLos(u: Unit, s: SkillDef): LosRule | undefined {
-    return hasTag(s, 'weapon') ? this.basicAttack(u).los : s.los;
+    return losFor(s, this.reachContext(u));
   }
 
   /** Off cooldown and not blocked by a disabled weapon. */
@@ -442,23 +446,19 @@ export class Battle {
     const minRange = this.skillMinRange(caster, skill);
     switch (skill.target) {
       case 'self':
-        return d <= (skill.aoeRadius ?? 0) + EPS;
-      case 'line': {
-        const dx = tile.x - from.x;
-        const dy = tile.y - from.y;
-        const steps = Math.max(Math.abs(dx), Math.abs(dy));
-        const straight = dx === 0 || dy === 0 || Math.abs(dx) === Math.abs(dy);
-        return straight && steps >= 1 && steps <= (skill.lineLength ?? 1);
-      }
+        return withinRange(d, skill.aoeRadius ?? 0);
+      case 'line':
+        // Aim at any tile in normal range; the attack travels in a straight line toward it.
+        return d >= minRange - EPS && withinRange(d, range);
       case 'cone':
-        return d >= 1 - EPS && d <= (skill.cone?.radius ?? range) + EPS;
+        return d >= 1 - EPS && withinRange(d, skill.cone?.radius ?? range);
       case 'emptyTile': {
-        if (d < minRange - EPS || d > range + EPS) return false;
+        if (d < minRange - EPS || !withinRange(d, range)) return false;
         const occupant = this.occupantFrom(caster, from, tile);
         return passable(this.map, tile.x, tile.y) && !occupant;
       }
       case 'unit': {
-        if (d < minRange - EPS || d > range + EPS) return false;
+        if (d < minRange - EPS || !withinRange(d, range)) return false;
         const los = this.skillLos(caster, skill);
         if (los && !this.clearLine(from, tile, los, caster)) return false;
         if (skill.charge) return this.chargeDestination(caster, tile, from, skill) !== null;
@@ -489,7 +489,7 @@ export class Battle {
     for (let y = 0; y < this.map.height; y++) {
       for (let x = 0; x < this.map.width; x++) {
         const d = dist(from, { x, y });
-        if (d < minRange - EPS || d > range + EPS) continue;
+        if (d < minRange - EPS || !withinRange(d, range)) continue;
         if (!this.clearLine(from, { x, y }, los, caster)) out.push({ x, y });
       }
     }
@@ -517,20 +517,14 @@ export class Battle {
         for (let y = 0; y < this.map.height; y++) {
           for (let x = 0; x < this.map.width; x++) {
             const d = dist(from, { x, y });
-            if (d > 0 && d <= r + EPS) out.push({ x, y });
+            if (d > 0 && withinRange(d, r)) out.push({ x, y });
           }
         }
         return out;
       }
-      case 'line': {
-        const dir = snapDirection(from, tile);
-        const out: Point[] = [];
-        for (let i = 1; i <= (skill.lineLength ?? 1); i++) {
-          const p = { x: from.x + dir.x * i, y: from.y + dir.y * i };
-          if (this.inMap(p)) out.push(p);
-        }
-        return out;
-      }
+      case 'line':
+        // The straight path from the user to the aimed tile, nearest first.
+        return [...tilesBetween(from, tile), tile].filter((p) => this.inMap(p));
       case 'cone':
         return coneTiles(this.map, from, tile, skill.cone!.angle, skill.cone!.radius);
       default:
@@ -560,7 +554,7 @@ export class Battle {
         if (!skill.aoeRadius) return [caster];
         return this.living().filter((t) => {
           const pos = t === caster ? from : t;
-          return this.matches(caster, skill, t) && dist(from, pos) <= skill.aoeRadius! + EPS;
+          return this.matches(caster, skill, t) && withinRange(dist(from, pos), skill.aoeRadius!);
         });
       }
       case 'line': {
@@ -645,7 +639,7 @@ export class Battle {
     for (let y = 0; y < this.map.height; y++) {
       for (let x = 0; x < this.map.width; x++) {
         const p = { x, y };
-        if (all || viewers.some((v) => dist(v, p) <= this.stat(v, 'vision') + EPS && hasLineOfSight(this.map, v, p))) seen.add(key(x, y));
+        if (all || viewers.some((v) => withinRange(dist(v, p), this.stat(v, 'vision')) && hasLineOfSight(this.map, v, p))) seen.add(key(x, y));
       }
     }
     return seen;
@@ -665,9 +659,7 @@ export class Battle {
       (part.mAtk ?? 0) * this.stat(attacker, 'mAtk') +
       (part.def ?? 0) * this.stat(attacker, 'defense') +
       (part.missingHp ?? 0) * (target.stats.health - target.hp);
-    // Engaged units brace against their opponent: they take less damage from them.
-    const engagedBonus = target.engagedWith === attacker.uid ? this.rules.engagement.opponentDamageTaken : 1;
-    return Math.max(1, Math.round(raw * defenseMultiplier(this.stat(target, 'defense')) * engagedBonus));
+    return Math.max(1, Math.round(raw * defenseMultiplier(this.stat(target, 'defense'))));
   }
 
   /** Predicted damage of each hit of `skill` on `target` (accounts for missing health growing). */
@@ -892,7 +884,7 @@ export function generateEnemies(stage: number, partySize: number, rng: Rng): Cha
       xp: 0,
       weaponId,
       skillIds: [],
-      appearance: { color: ENEMY_COLOR, emblem: 'triangle', model: modelFor(id + i) },
+      appearance: { color: ENEMY_COLOR, model: modelFor(id + i) },
     };
     const pool = [...TREE_SKILLS];
     while (c.skillIds.length < skillSlots(c) && pool.length) {

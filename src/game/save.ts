@@ -1,5 +1,5 @@
 // Save / load. Saves are pretty-printed JSON so players can read (and edit!) them.
-import { EMBLEMS, MAX_PARTY_SIZE, NAME_MAX_LENGTH, SKILLS, TREE_SKILLS, WEAPONS, skillSlotsForLevel } from '../data/content';
+import { MAX_PARTY_SIZE, NAME_MAX_LENGTH, SKILLS, TREE_SKILLS, WEAPONS, skillSlotsForLevel } from '../data/content';
 import { BODY_MODELS, type Character, type GameState } from '../data/types';
 import { modelFor } from './character';
 
@@ -80,9 +80,6 @@ function validateCharacter(raw: unknown, path: string): string | Character {
   if (typeof appearance.color !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(appearance.color)) {
     return `${path}.appearance.color must be a hex color like "#3d7be0"`;
   }
-  if (typeof appearance.emblem !== 'string' || !(EMBLEMS as readonly string[]).includes(appearance.emblem)) {
-    return `${path}.appearance.emblem must be one of: ${EMBLEMS.join(', ')}`;
-  }
   if (appearance.model !== undefined && !(BODY_MODELS as readonly unknown[]).includes(appearance.model)) {
     return `${path}.appearance.model must be one of: ${BODY_MODELS.join(', ')}`;
   }
@@ -95,7 +92,6 @@ function validateCharacter(raw: unknown, path: string): string | Character {
     skillIds: [...(skillIds as string[])],
     appearance: {
       color: appearance.color.toLowerCase(),
-      emblem: appearance.emblem as Character['appearance']['emblem'],
       model: (appearance.model as Character['appearance']['model'] | undefined) ?? modelFor(id),
     },
   };
@@ -193,7 +189,7 @@ export function exportToFile(state: GameState): void {
   const a = document.createElement('a');
   const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
   a.href = url;
-  a.download = `lazyrpg-save-${stamp}.json`;
+  a.download = `l-rpg-save-${stamp}.json`;
   document.body.appendChild(a);
   a.click();
   a.remove();

@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { SKILLS, WEAPONS, hasTag, isFree, skillDetails, skillFormula, tagNames } from '../data/content';
+import { SKILLS, WEAPONS, isFree, skillDetails, skillFormula, tagNames } from '../data/content';
 import type { SkillDef } from '../data/types';
 import { bestAction, bestFreeAction, planTurn, shouldDisengage } from '../game/ai';
 import {
@@ -11,14 +11,19 @@ import { TERRAIN, generateMap, key, type Point } from '../game/grid';
 import { markDirty, requireState } from '../game/session';
 import { COLORS, HEIGHT, WIDTH, button, confirmDialog, figure, panel, setupCamera, text } from '../ui/widgets';
 
-const TILE = 56;
+/** Tile size in layout pixels; set per battle so the map fits the 672x500 board area. */
+let TILE = 56;
+/** Scale factor relative to the original 56px tiles (for sizes drawn inside a tile). */
+let K = 1;
+const BOARD_W = 672;
+const BOARD_H = 500;
 const MAP_X = 16;
 const MAP_Y = 72;
 const SIDE_X = 704;
 const SIDE_W = 240;
 /** Where a unit's feet are, relative to its tile center; the HP bar sits just below. */
-const FEET_Y = 14;
-const HP_Y = 21;
+let FEET_Y = 14;
+let HP_Y = 21;
 
 /**
  * busy   – animating or enemy turn, no input
@@ -74,6 +79,10 @@ export class BattleScene extends Phaser.Scene {
     const state = requireState();
     const rng = makeRng(Date.now() & 0xffffffff);
     const map = generateMap(rng);
+    TILE = Math.floor(Math.min(BOARD_W / map.width, BOARD_H / map.height));
+    K = TILE / 56;
+    FEET_Y = Math.round(14 * K);
+    HP_Y = Math.round(21 * K);
     const party = state.party;
     const foes = generateEnemies(state.progress.stage, party.length, rng);
     const pSpots = deploymentTiles(map, 'player', party.length);
@@ -151,15 +160,15 @@ export class BattleScene extends Phaser.Scene {
         if ((x + y) % 2 === 0) g.fillStyle(0xffffff, 0.03).fillRect(px, py, TILE, TILE);
         if (t === 'forest') {
           g.fillStyle(0x1f3f1d);
-          g.fillTriangle(px + 14, py + 40, px + 24, py + 14, px + 34, py + 40);
-          g.fillTriangle(px + 26, py + 46, px + 38, py + 18, px + 48, py + 46);
+          g.fillTriangle(px + 14 * K, py + 40 * K, px + 24 * K, py + 14 * K, px + 34 * K, py + 40 * K);
+          g.fillTriangle(px + 26 * K, py + 46 * K, px + 38 * K, py + 18 * K, px + 48 * K, py + 46 * K);
         } else if (t === 'rock') {
-          g.fillStyle(0x8a8a93).fillCircle(px + 22, py + 32, 13).fillCircle(px + 36, py + 26, 10);
-          g.fillStyle(0x55555c).fillCircle(px + 30, py + 38, 8);
+          g.fillStyle(0x8a8a93).fillCircle(px + 22 * K, py + 32 * K, 13 * K).fillCircle(px + 36 * K, py + 26 * K, 10 * K);
+          g.fillStyle(0x55555c).fillCircle(px + 30 * K, py + 38 * K, 8 * K);
         } else if (t === 'water') {
           g.lineStyle(2, 0x5b8fcf, 0.8);
-          g.lineBetween(px + 10, py + 22, px + 26, py + 22);
-          g.lineBetween(px + 28, py + 36, px + 46, py + 36);
+          g.lineBetween(px + 10 * K, py + 22 * K, px + 26 * K, py + 22 * K);
+          g.lineBetween(px + 28 * K, py + 36 * K, px + 46 * K, py + 36 * K);
         }
       }
     }
@@ -171,8 +180,8 @@ export class BattleScene extends Phaser.Scene {
   private createUnitView(u: Unit): void {
     const c = this.tileCenter(u);
     // Figure stands with its feet near the bottom of the tile; HP bar underneath.
-    const fig = figure(this, 0, FEET_Y, 52, u.character.appearance, u.character.weaponId, { enemy: u.team === 'enemy' });
-    const statusText = text(this, -27, 4, '', { fontSize: '9px', fontStyle: 'bold', color: '#ffb35c', stroke: '#000000', strokeThickness: 3 }).setOrigin(0, 1);
+    const fig = figure(this, 0, FEET_Y, 52 * K, u.character.appearance, u.character.weaponId, { enemy: u.team === 'enemy' });
+    const statusText = text(this, -27 * K, 4 * K, '', { fontSize: '9px', fontStyle: 'bold', color: '#ffb35c', stroke: '#000000', strokeThickness: 3 }).setOrigin(0, 1);
     const hpBar = this.add.graphics();
     const container = this.add.container(c.x, c.y, [fig, statusText, hpBar]);
     this.views.set(u.uid, { container, hpBar, statusText });
@@ -187,11 +196,12 @@ export class BattleScene extends Phaser.Scene {
     const pct = u.hp / max;
     const shield = Math.min(1 - pct, this.battle.shieldOf(u) / max);
     view.hpBar.clear();
-    view.hpBar.fillStyle(0x000000, 0.7).fillRect(-21, HP_Y, 42, 6);
-    view.hpBar.fillStyle(pct > 0.5 ? 0x6fdc8c : pct > 0.25 ? 0xe0b44c : 0xff6b6b).fillRect(-20, HP_Y + 1, 40 * pct, 4);
+    const w = 40 * K;
+    view.hpBar.fillStyle(0x000000, 0.7).fillRect(-w / 2 - 1, HP_Y, w + 2, 6);
+    view.hpBar.fillStyle(pct > 0.5 ? 0x6fdc8c : pct > 0.25 ? 0xe0b44c : 0xff6b6b).fillRect(-w / 2, HP_Y + 1, w * pct, 4);
     if (this.battle.shieldOf(u) > 0) {
-      view.hpBar.fillStyle(0x8ecbff).fillRect(-20 + 40 * pct, HP_Y + 1, Math.max(2, 40 * shield), 4);
-      view.hpBar.lineStyle(1, 0x8ecbff).strokeRect(-21, HP_Y, 42, 6);
+      view.hpBar.fillStyle(0x8ecbff).fillRect(-w / 2 + w * pct, HP_Y + 1, Math.max(2, w * shield), 4);
+      view.hpBar.lineStyle(1, 0x8ecbff).strokeRect(-w / 2 - 1, HP_Y, w + 2, 6);
     }
     const tags: string[] = [];
     for (const st of u.statuses) {
@@ -277,7 +287,7 @@ export class BattleScene extends Phaser.Scene {
         fill(p, 0x000000, 0.3);
         const px = MAP_X + p.x * TILE;
         const py = MAP_Y + p.y * TILE;
-        g.lineStyle(2, 0x9aa3bd, 0.6).lineBetween(px + 18, py + 18, px + TILE - 18, py + TILE - 18).lineBetween(px + TILE - 18, py + 18, px + 18, py + TILE - 18);
+        g.lineStyle(2, 0x9aa3bd, 0.6).lineBetween(px + 18 * K, py + 18 * K, px + TILE - 18 * K, py + TILE - 18 * K).lineBetween(px + TILE - 18 * K, py + 18 * K, px + 18 * K, py + TILE - 18 * K);
       }
       const h = this.hoverTile;
       if (this.mode === 'target' && h && b.canTarget(caster, shown, h)) {
@@ -299,11 +309,11 @@ export class BattleScene extends Phaser.Scene {
       for (const u of b.readyUnits()) {
         const c = this.tileCenter(u);
         const isSel = u === sel;
-        this.rings.lineStyle(isSel ? 3 : 2, 0xffd166, isSel ? 1 : 0.4).strokeEllipse(c.x, c.y + FEET_Y, 46, 18);
+        this.rings.lineStyle(isSel ? 3 : 2, 0xffd166, isSel ? 1 : 0.4).strokeEllipse(c.x, c.y + FEET_Y, 46 * K, 18 * K);
       }
     } else if (this.casterUid && this.mode !== 'over') {
       const c = this.tileCenter(b.unit(this.casterUid));
-      this.rings.lineStyle(3, 0xff6b6b, 1).strokeEllipse(c.x, c.y + FEET_Y, 46, 18);
+      this.rings.lineStyle(3, 0xff6b6b, 1).strokeEllipse(c.x, c.y + FEET_Y, 46 * K, 18 * K);
     }
   }
 
@@ -369,8 +379,7 @@ export class BattleScene extends Phaser.Scene {
           selected: this.mode === 'target' && this.action?.id === id,
           fontSize: 14,
           onHover: () => {
-            const rangeNow = hasTag(s, 'movement') || hasTag(s, 'weapon') ? ` (now ${b.skillRange(u, s)})` : '';
-            this.hoverText.setText(`${s.name} [${tagNames(s).join(', ')}]\n${skillFormula(s)}\n${skillDetails(s)}${rangeNow}${cd > 0 ? `\nReady ${cd === 1 ? 'next turn' : `in ${cd} turns`}.` : ''}`);
+            this.hoverText.setText(`${s.name} [${tagNames(s).join(', ')}]\n${skillFormula(s)}\n${skillDetails(s)}${cd > 0 ? `\nReady ${cd === 1 ? 'next turn' : `in ${cd} turns`}.` : ''}`);
             if (this.mode === 'select') {
               this.previewAction = s;
               this.drawOverlay();
@@ -500,7 +509,7 @@ export class BattleScene extends Phaser.Scene {
     this.renderSidebar();
     this.drawOverlay();
     const how = this.action.target === 'cone' ? 'click to aim the cone'
-      : this.action.target === 'line' ? 'click a direction'
+      : this.action.target === 'line' ? 'click a tile to thrust toward'
         : this.action.target === 'self' ? 'click inside the box to use it' : 'click a tile in the box';
     this.hoverText.setText(`${this.action.name}: ${how} (right-click / Esc to cancel).`);
   }
