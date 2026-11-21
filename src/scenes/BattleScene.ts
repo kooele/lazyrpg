@@ -200,7 +200,8 @@ export class BattleScene extends Phaser.Scene {
   private unitFigure(u: Unit, x: number, feetY: number, height: number): Phaser.GameObjects.Container {
     const def = u.character.enemyType ? ENEMIES[u.character.enemyType] : null;
     if (def && def.art.kind !== 'human') return monsterFigure(this, x, feetY, height, def.art.kind, def.art.color);
-    return figure(this, x, feetY, height, u.character.appearance, u.character.weaponId, { enemy: u.team === 'enemy' });
+    // People are slimmer than monsters, so they're drawn a little taller (heads may overlap the tile above).
+    return figure(this, x, feetY, height * 1.2, u.character.appearance, u.character.weaponId, { enemy: u.team === 'enemy' });
   }
 
   private createUnitView(u: Unit): void {

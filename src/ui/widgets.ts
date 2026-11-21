@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { WEAPONS } from '../data/content';
+import { DEFAULT_WEAPON, WEAPONS } from '../data/content';
 import type { Appearance } from '../data/types';
 
 export const WIDTH = 960;
@@ -156,15 +156,17 @@ export function overlayInput(scene: Phaser.Scene, x: number, y: number, w: numbe
 
 // ---- unit art -----------------------------------------------------------------
 
-/** Unit art is a 64x80 SVG canvas with the feet at y = 76. */
+/** Unit art is a 64x80 SVG canvas with the feet at y = 76: one sprite per body model and weapon. */
 export const ART_W = 64;
 export const ART_H = 80;
 const FEET = 76;
 /** Textures are rasterized this many times larger than 64x80 so they stay sharp in big previews. */
 export const ART_TEXTURE_SCALE = 1.6;
 
-export const bodyKey = (model: string) => `body-${model}`;
-export const weaponKey = (weaponId: string) => `weapon-${WEAPONS[weaponId]?.art ?? weaponId}`;
+/** Weapon art name used in sprite file names (falls back to the default weapon's). */
+export const weaponArt = (weaponId: string) => WEAPONS[weaponId]?.art ?? WEAPONS[DEFAULT_WEAPON].art;
+/** Texture key of a body model holding a weapon (public/art/units/<model>_<art>.svg). */
+export const unitKey = (model: string, weaponArtName: string) => `unit-${model}-${weaponArtName}`;
 
 export interface FigureOptions {
   /** Enemies stand on a dark-rimmed base and face left. */
@@ -174,7 +176,7 @@ export interface FigureOptions {
 }
 
 /**
- * A unit figure: body + weapon art standing on a coloured base.
+ * A unit figure (body model holding its weapon) standing on a coloured base.
  * (x, feetY) is where the feet touch the ground; `height` is the full art height.
  */
 export function figure(
@@ -192,8 +194,8 @@ export function figure(
     g.lineStyle(Math.max(1.5, 2 * scale), opts.enemy ? 0x2a0a0a : 0xffffff, 0.9).strokeEllipse(0, 0, rx * 2, ry * 2);
     parts.push(g);
   }
-  for (const key of [bodyKey(appearance.model), weaponKey(weaponId)]) {
-    if (!scene.textures.exists(key)) continue;
+  const key = unitKey(appearance.model, weaponArt(weaponId));
+  if (scene.textures.exists(key)) {
     const img = scene.add.image(0, 0, key).setOrigin(0.5, FEET / ART_H).setDisplaySize(ART_W * scale, height);
     if (opts.enemy) img.setFlipX(true);
     parts.push(img);
