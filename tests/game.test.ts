@@ -7,7 +7,7 @@ import type { Character } from '../src/data/types';
 import { runAiTurn, shouldDisengage } from '../src/game/ai';
 import { Battle, defenseMultiplier, deploymentTiles, generateEnemies, makeUnit, type Team } from '../src/game/battle';
 import { createCharacter, deriveStats, grantXp, makeRng } from '../src/game/character';
-import { generateMap, hasLineOfSight, passable, type BattleMap, type Point, type Terrain } from '../src/game/grid';
+import { generateMap, hasLineOfSight, passable, withinRange, type BattleMap, type Point, type Terrain } from '../src/game/grid';
 import { newGameState, parseSave, serializeSave } from '../src/game/save';
 
 function openMap(w = 10, h = 7): BattleMap {
@@ -118,6 +118,15 @@ describe('ranges, lines and tags', () => {
     expect(battle.canTarget(a, SKILLS.slash_and_smash, { x: 4, y: 4 })).toBe(false);
   });
 
+  it('ranges of 2+ use rounded distance; 1 and 1.5 stay exact', () => {
+    const count = (r: number) => {
+      let n = 0;
+      for (let x = -8; x <= 8; x++) for (let y = -8; y <= 8; y++) if ((x || y) && withinRange(Math.hypot(x, y), r)) n++;
+      return n;
+    };
+    expect([count(1), count(1.5), count(2), count(5)]).toEqual([4, 8, 20, 96]);
+  });
+
   it('direct shot needs line of FIRE: units in between block it', () => {
     const { battle, units: [archer] } = setup(openMap(), [
       { c: hero('bow'), team: 'player', at: { x: 1, y: 3 } },
@@ -148,8 +157,8 @@ describe('ranges, lines and tags', () => {
     ]);
     expect(battle.skillRange(m, SKILLS.arcane_shift)).toBe(2);
     expect(battle.skillRange(m, SKILLS.charge)).toBe(4);
-    expect(battle.canTarget(m, SKILLS.arcane_shift, { x: 3, y: 1 })).toBe(true);
-    expect(battle.canTarget(m, SKILLS.arcane_shift, { x: 3, y: 2 })).toBe(false); // 2.24 > 2
+    expect(battle.canTarget(m, SKILLS.arcane_shift, { x: 3, y: 2 })).toBe(true); // 2.24 rounds to 2
+    expect(battle.canTarget(m, SKILLS.arcane_shift, { x: 3, y: 3 })).toBe(false); // 2.83 rounds to 3
     battle.wait(m);
     battle.endPhase();
     battle.perform(e, 'freeze', { x: 1, y: 1 });

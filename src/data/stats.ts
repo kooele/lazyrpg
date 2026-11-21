@@ -23,6 +23,11 @@ export interface EngagementRules {
   defenseMultiplier: number;
 }
 
+export interface RangeRoundingRules {
+  /** Ranges >= this use distance rounded to the nearest tile; smaller ranges are exact. */
+  fromRange: number;
+}
+
 export interface MapRules {
   width: number;
   height: number;
@@ -35,6 +40,7 @@ export interface StatConfig {
   forestDefense: number;
   engagement: EngagementRules;
   map: MapRules;
+  rangeRounding: RangeRoundingRules;
   hitChance: HitChanceRules;
   vision: VisionRules;
 }
@@ -62,6 +68,7 @@ export function parseStatConfig(data: unknown): StatConfig {
   const vision = obj(rec.vision ?? { enabled: false }, 'vision');
   const eng = obj(rec.engagement ?? { defenseMultiplier: 0.5 }, 'engagement');
   const map = obj(rec.map ?? { width: 18, height: 13 }, 'map');
+  const rounding = obj(rec.rangeRounding ?? { fromRange: 2 }, 'rangeRounding');
   const cfg: StatConfig = {
     base: readStats(rec.base, 'base'),
     growthPerLevel: readStats(rec.growthPerLevel, 'growthPerLevel'),
@@ -71,6 +78,7 @@ export function parseStatConfig(data: unknown): StatConfig {
       defenseMultiplier: num(eng.defenseMultiplier, 'engagement.defenseMultiplier'),
     },
     map: { width: Math.round(num(map.width, 'map.width')), height: Math.round(num(map.height, 'map.height')) },
+    rangeRounding: { fromRange: num(rounding.fromRange, 'rangeRounding.fromRange') },
     hitChance: {
       enabled: hit.enabled === true,
       base: num(hit.base, 'hitChance.base'),

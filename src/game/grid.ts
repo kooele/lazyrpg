@@ -27,6 +27,16 @@ export const manhattan = (a: Point, b: Point) => Math.abs(a.x - b.x) + Math.abs(
 /** Euclidean distance; all skill ranges use this (1.5 reaches diagonal neighbours). */
 export const dist = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
 export const EPS = 1e-6;
+
+/**
+ * Is a tile at distance `d` within `range`? Ranges of `rangeRounding.fromRange` (2) and up
+ * round the distance to the nearest whole tile, giving rounder, roomier shapes; smaller
+ * ranges (1, 1.5) compare exactly so melee reach stays precise.
+ */
+export function withinRange(d: number, range: number): boolean {
+  if (range >= STAT_CONFIG.rangeRounding.fromRange) return Math.round(d) <= range;
+  return d <= range + EPS;
+}
 export const DIRS: Point[] = [{ x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 }];
 export const DIRS8: Point[] = [...DIRS, { x: 1, y: 1 }, { x: 1, y: -1 }, { x: -1, y: 1 }, { x: -1, y: -1 }];
 
@@ -74,7 +84,7 @@ export function coneTiles(map: BattleMap, from: Point, toward: Point, angleDeg: 
   for (let y = 0; y < map.height; y++) {
     for (let x = 0; x < map.width; x++) {
       if (x === from.x && y === from.y) continue;
-      if (dist(from, { x, y }) > radius + EPS) continue;
+      if (!withinRange(dist(from, { x, y }), radius)) continue;
       let diff = Math.atan2(y - from.y, x - from.x) - dir;
       diff = Math.atan2(Math.sin(diff), Math.cos(diff));
       if (Math.abs(diff) <= half) out.push({ x, y });

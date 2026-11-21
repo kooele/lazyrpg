@@ -6,7 +6,8 @@ import { STAT_CONFIG, visibleStatKeys } from '../data/stats';
 import { BODY_MODELS, STAT_INFO, STAT_KEYS, type Character, type SkillDef, type SkillTab, type StatKey } from '../data/types';
 import { cloneCharacter, createCharacter, deriveStats, levelStats, skillSlots } from '../game/character';
 import { markDirty, requireState } from '../game/session';
-import { COLORS, Tooltip, button, figure, hex, overlayInput, panel, setupCamera, text, toast } from '../ui/widgets';
+import { COLORS, Tooltip, button, figure, hex, overlayInput, panel, reachDiagram, setupCamera, text, toast } from '../ui/widgets';
+import { skillShape, type ReachContext } from '../game/reach';
 
 interface CreatorData {
   mode: 'create' | 'edit';
@@ -68,8 +69,30 @@ export class CharacterCreatorScene extends Phaser.Scene {
     this.render();
   }
 
+  /** What this adventurer's Movement / weapon-scaled skills reach. */
+  private reachContext(): ReachContext {
+    return { movement: deriveStats(this.draft).movement, basic: SKILLS[WEAPONS[this.draft.weaponId].skills[0]] };
+  }
+
+  private isSupport(s: SkillDef): boolean {
+    return s.affects === 'ally';
+  }
+
+  /** Tile diagram for a skill (user in gold, covered tiles in red/green). */
+  private diagram(s: SkillDef, maxSize = 96) {
+    return reachDiagram(this, skillShape(s, this.reachContext()), this.isSupport(s), maxSize);
+  }
+
   private skillInfo(s: SkillDef): string {
-    return `${s.name}  [${tagNames(s).join(', ')}]\n${s.description}\n\n${skillFormula(s)}\n${skillDetails(s)}`;
+    const shape = skillShape(s, this.reachContext());
+    const note = shape.kind === 'cone' ? '\nShown facing right; aim it any way.'
+      : shape.kind === 'line' ? '\nPick one of the 8 directions.'
+        : shape.kind === 'self' ? '\nAffects only you.' : '';
+    return `${s.name}  [${tagNames(s).join(', ')}]\n${s.description}\n\n${skillFormula(s)}\n${skillDetails(s)}${note}`;
+  }
+
+  private showSkill(s: SkillDef): void {
+    this.tooltip.show(this.skillInfo(s), this.diagram(s));
   }
 
   /** Make an object show a tooltip while hovered. */
@@ -160,15 +183,20 @@ export class CharacterCreatorScene extends Phaser.Scene {
       L.add(t);
       mx += t.width + 16;
     }
-    L.add(text(this, 342, 272, 'Weapon skills (always equipped)', { fontSize: '12px', color: COLORS.dim }));
-    let sy = 292;
+    L.add(text(this, 342, 268, 'Weapon skills (always equipped)', { fontSize: '12px', color: COLORS.dim }));
+    let sy = 286;
     w.skills.forEach((sid, i) => {
       const s = SKILLS[sid];
-      L.add(this.tip(text(this, 342, sy, `${s.name}${i === 0 ? '  (basic attack)' : ''}`, { fontSize: '15px' }), () => this.skillInfo(s)));
-      L.add(text(this, 342, sy + 20, skillDetails(s), { fontSize: '11px', color: COLORS.gold }));
-      const desc = text(this, 342, sy + 36, s.description, { fontSize: '12px', color: COLORS.dim, wordWrap: { width: 266 } });
+      const name = text(this, 342, sy, `${s.name}${i === 0 ? '  (basic)' : ''}`, { fontSize: '15px' }).setInteractive();
+      name.on('pointerover', () => this.showSkill(s)).on('pointerout', () => this.tooltip.hide());
+      L.add(name);
+      L.add(text(this, 342, sy + 19, skillDetails(s), { fontSize: '11px', color: COLORS.gold }));
+      const desc = text(this, 342, sy + 33, s.description, { fontSize: '12px', color: COLORS.dim, wordWrap: { width: 194 }, lineSpacing: -1 });
       L.add(desc);
-      sy += 48 + desc.height;
+      const mini = this.diagram(s, 56);
+      mini.container.setPosition(608 - mini.size, sy + 2);
+      L.add(mini.container);
+      sy += Math.max(38 + desc.height, mini.size + 8);
     });
 
     // ---- Right: skill trees (hover a skill for details) --------------------------------
@@ -188,7 +216,7 @@ export class CharacterCreatorScene extends Phaser.Scene {
         const s = SKILLS[sid];
         const on = d.skillIds.includes(sid);
         L.add(button(this, 636, ty, 300, 30, `${on ? '✔ ' : ''}${s.name}`, () => this.toggleSkill(sid), {
-          selected: on, fontSize: 14, ...hover(() => this.skillInfo(s)),
+          selected: on, fontSize: 14, onHover: () => this.showSkill(s), onOut: () => this.tooltip.hide(),
         }));
         ty += 34;
       }

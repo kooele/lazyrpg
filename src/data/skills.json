@@ -51,26 +51,26 @@
       "shield": { "maxHpPct": 0.1, "turns": 1 }
     },
     "spear_thrust": {
-      "name": "Spear Thrust", "description": "Thrust in a direction, hitting the first enemy within 2 tiles for 100% P.Atk and knocking it back 1 tile.",
+      "name": "Spear Thrust", "description": "Thrust in a direction, hitting the first enemy in the line for 100% P.Atk and knocking it back 1 tile.",
       "tags": ["melee", "knockback"],
       "target": "line", "affects": "enemy", "range": 2, "minRange": 1, "lineLength": 2, "cooldown": 0,
       "hits": [{ "pAtk": 1 }], "knockback": 1
     },
     "circle_swing": {
-      "name": "Circle Swing", "description": "Sweep all 8 surrounding tiles, hitting every unit (allies included) for 100% P.Atk and knocking them back 1 tile.",
+      "name": "Circle Swing", "description": "Sweep the tiles around you, hitting every unit (allies included) for 100% P.Atk and knocking them back 1 tile.",
       "tags": ["melee", "area", "knockback"],
       "target": "self", "affects": "any", "range": 0, "minRange": 0, "aoeRadius": 1.5, "cooldown": 2,
       "hits": [{ "pAtk": 1 }], "knockback": 1
     },
     "intercept": {
-      "name": "Intercept", "description": "Guard a 60° cone up to 2 tiles away. The first enemy to move into it takes 100% P.Atk and is stopped.",
+      "name": "Intercept", "description": "Guard a cone in any direction. The first enemy to move into it takes 100% P.Atk and is stopped.",
       "tags": ["reaction", "melee"],
       "target": "cone", "affects": "enemy", "range": 2, "minRange": 1, "cooldown": 0,
       "hits": [{ "pAtk": 1 }],
       "cone": { "angle": 60, "radius": 2, "interrupt": true }
     },
     "direct_shot": {
-      "name": "Direct Shot", "description": "Shoot an enemy for 100% P.Atk. Blocked by rocks and by units in the way.",
+      "name": "Direct Shot", "description": "Shoot an enemy for 100% P.Atk. Rocks and units in the way block the shot.",
       "tags": ["projectile"],
       "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "los": "fire", "cooldown": 0,
       "hits": [{ "pAtk": 1 }]
@@ -82,7 +82,7 @@
       "hits": [{ "pAtk": 0.7 }]
     },
     "overwatch": {
-      "name": "Overwatch", "description": "Watch a 60° cone up to 5 tiles away. The first enemy to move into it is shot for 100% P.Atk but keeps moving.",
+      "name": "Overwatch", "description": "Watch a cone in any direction. The first enemy to move into it is shot for 100% P.Atk but keeps moving.",
       "tags": ["reaction", "projectile"],
       "target": "cone", "affects": "enemy", "range": 5, "minRange": 1, "cooldown": 0,
       "hits": [{ "pAtk": 1 }],
@@ -114,7 +114,7 @@
       "hits": [{ "mAtk": 1 }], "knockback": 2
     },
     "arcane_shift": {
-      "name": "Arcane Shift", "description": "Teleport to an empty tile within 50% of your Movement.",
+      "name": "Arcane Shift", "description": "Teleport to an empty tile.",
       "tags": ["movement"],
       "target": "emptyTile", "affects": "ally", "range": 2, "rangeScale": 0.5, "minRange": 1, "cooldown": 2,
       "teleport": true
@@ -146,19 +146,19 @@
       "cleanse": true
     },
     "charge": {
-      "name": "Charge", "description": "Dash next to an enemy within 100% of your Movement and strike it for 80% P.Atk.",
+      "name": "Charge", "description": "Dash next to an enemy and strike it for 80% P.Atk.",
       "tags": ["movement", "melee", "engage"],
       "target": "unit", "affects": "enemy", "range": 4, "rangeScale": 1, "minRange": 1, "cooldown": 2,
       "hits": [{ "pAtk": 0.8 }], "charge": true
     },
     "kick": {
-      "name": "Kick", "description": "Kick an adjacent enemy for 60% P.Atk.",
+      "name": "Kick", "description": "Kick an enemy for 60% P.Atk.",
       "tags": ["melee", "engage", "free"],
       "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 1,
       "hits": [{ "pAtk": 0.6 }]
     },
     "execute": {
-      "name": "Execute", "description": "Strike an enemy for 50% P.Atk + 10% of its missing Health, at your weapon's range.",
+      "name": "Execute", "description": "Strike an enemy for 50% P.Atk + 10% of its missing Health.",
       "tags": ["weapon"],
       "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 0,
       "hits": [{ "pAtk": 0.5, "missingHp": 0.1 }]

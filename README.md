@@ -69,6 +69,8 @@ Hitting a unit with an **Engage** skill locks you both together, unless the targ
 - *Line of sight* (no rock in between): Magic Bolt, Arcane Bolt, Arcane Pulse, Fireball, Overwatch.
 - *Line of fire* (no rock **or unit** in between): Direct Shot.
 - No line needed: melee skills, Indirect Shot, Freeze, Heal, Cleanse, Arcane Shift.
+- **Ranges** use Euclidean distance. Ranges of 2 or more round the distance to the nearest tile, so range 2 also reaches 2-over-1-up and shapes are rounder. Ranges 1 and 1.5 stay exact: 1 is the 4 neighbours, 1.5 adds the diagonals. Set `rangeRounding.fromRange` in `stats.json` to change the cut-off.
+- Skill tooltips and the weapon panel show a **tile diagram** of what each skill covers, with you in gold, rather than describing range in words.
 - A cooldown of N means the skill can't be used during your next N turns.
 - `hitChance` and `vision` (fog of war) are built but switched off in `stats.json`.
 

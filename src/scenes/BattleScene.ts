@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { SKILLS, WEAPONS, hasTag, isFree, skillDetails, skillFormula, tagNames } from '../data/content';
+import { SKILLS, WEAPONS, isFree, skillDetails, skillFormula, tagNames } from '../data/content';
 import type { SkillDef } from '../data/types';
 import { bestAction, bestFreeAction, planTurn, shouldDisengage } from '../game/ai';
 import {
@@ -379,8 +379,7 @@ export class BattleScene extends Phaser.Scene {
           selected: this.mode === 'target' && this.action?.id === id,
           fontSize: 14,
           onHover: () => {
-            const rangeNow = hasTag(s, 'movement') || hasTag(s, 'weapon') ? ` (now ${b.skillRange(u, s)})` : '';
-            this.hoverText.setText(`${s.name} [${tagNames(s).join(', ')}]\n${skillFormula(s)}\n${skillDetails(s)}${rangeNow}${cd > 0 ? `\nReady ${cd === 1 ? 'next turn' : `in ${cd} turns`}.` : ''}`);
+            this.hoverText.setText(`${s.name} [${tagNames(s).join(', ')}]\n${skillFormula(s)}\n${skillDetails(s)}${cd > 0 ? `\nReady ${cd === 1 ? 'next turn' : `in ${cd} turns`}.` : ''}`);
             if (this.mode === 'select') {
               this.previewAction = s;
               this.drawOverlay();

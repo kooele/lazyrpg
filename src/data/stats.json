@@ -36,6 +36,11 @@
     "defenseMultiplier": 0.5
   },
 
+  "rangeRounding": {
+    "_comment": "Ranges of at least fromRange use rounded distance: a tile is in range if its distance, rounded to the nearest whole tile, is within the range (so range 2 also reaches 2-over-1-up). Smaller ranges (1, 1.5) use exact distance so melee reach stays precise.",
+    "fromRange": 2
+  },
+
   "map": {
     "_comment": "Battlefield size in tiles. Tiles shrink to fit the screen.",
     "width": 18,
