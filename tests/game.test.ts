@@ -662,6 +662,14 @@ describe('enemies', () => {
     expect(allSkills(makeEnemy('slime', 3, makeRng(1)))).toEqual(['slam', 'sticky_spit']);
   });
 
+  it('bandits use their own body models; monsters have monster art', () => {
+    for (let i = 0; i < 20; i++) expect(['b1', 'b2', 'b3', 'b4']).toContain(makeEnemy('bandit', 4, makeRng(i)).appearance.model);
+    expect(parseEnemies(enemiesJson).enemies.wolf.art).toMatchObject({ kind: 'wolf' });
+    const bad = clone(enemiesJson);
+    bad.enemies.bandit.art.models = ['zz'];
+    expect(() => parseEnemies(bad)).toThrow(/enemies\.bandit\.art\.models\[0\]/);
+  });
+
   it('Slime: Slam engages; Sticky Spit slows and cuts Defense by 25%', () => {
     const slime = makeUnit(makeEnemy('slime', 3, makeRng(1)), 'enemy', { x: 5, y: 3 });
     const a = makeUnit(hero('spear'), 'player', { x: 3, y: 3 });

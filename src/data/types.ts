@@ -138,12 +138,16 @@ export interface SkillTreeDef {
 
 export const BODY_MODELS = ['m1', 'm2', 'm3', 'm4', 'f1', 'f2', 'f3', 'f4'] as const;
 export type BodyModel = (typeof BODY_MODELS)[number];
+/** Body models only enemies use (bandits). */
+export const ENEMY_MODELS = ['b1', 'b2', 'b3', 'b4'] as const;
+export type EnemyModel = (typeof ENEMY_MODELS)[number];
+export type UnitModel = BodyModel | EnemyModel;
 
 export interface Appearance {
   /** Color of the unit's base (the disc it stands on). */
   color: string;
-  /** Body art: public/art/units/<model>.svg. Older saves without it get one assigned. */
-  model: BodyModel;
+  /** Body art: public/art/units/<model>_<weapon>.svg. Older saves without it get one assigned. */
+  model: UnitModel;
 }
 
 export type MonsterKind = 'rat' | 'slime' | 'wolf' | 'human';
@@ -156,7 +160,9 @@ export interface EnemyDef {
   levels: [number, number];
   /** Share of the encounter budget one unit uses. */
   threat: number;
-  art: { kind: MonsterKind; color?: string };
+  /** Monsters: public/art/monsters/<kind>.svg (color is used by tools/generate-art.mjs).
+   *  Humans: body models to pick from (default: the adventurer models). */
+  art: { kind: MonsterKind; color?: string; models?: UnitModel[] };
   /** Stats at the lowest level. */
   stats: Stats;
   growthPerLevel: Partial<Stats>;

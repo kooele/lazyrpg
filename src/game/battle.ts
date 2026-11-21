@@ -977,7 +977,7 @@ export function makeEnemy(type: string, level: number, rng: Rng): Character {
     enemyType: type,
     weaponId,
     skillIds: [],
-    appearance: { color: ENEMY_COLOR, model: modelFor(id) },
+    appearance: { color: ENEMY_COLOR, model: modelFor(id, def.art.models) },
   };
 }
 

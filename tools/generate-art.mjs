@@ -4,13 +4,17 @@
 // Style: "storybook" - no outlines, simple dot eyes, a muted watercolour palette,
 // soft light from the top-left and a light paper texture. Figures are 5 heads tall.
 //
-// Each body model is drawn once per weapon (the pose depends on the weapon), as
-// units/<model>_<weapon art>.svg on a 64x80 canvas with the feet at y = 76.
-import { mkdirSync, writeFileSync } from 'node:fs';
+// Each body model (adventurers m1-m4/f1-f4, bandits b1-b4) is drawn once per weapon
+// (the pose depends on the weapon), as units/<model>_<weapon art>.svg on a 64x80 canvas
+// with the feet at y = 76. Monsters (rat, slime, wolf) are monsters/<kind>.svg on a wider
+// 96x80 canvas, facing right, feet at y = 76; their colours come from src/data/enemies.json.
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'art', 'units');
+const repo = join(dirname(fileURLToPath(import.meta.url)), '..');
+const root = join(repo, 'public', 'art', 'units');
+const monsterRoot = join(repo, 'public', 'art', 'monsters');
 
 // ---- colour helpers -------------------------------------------------------------------------
 function mix(hex, to, f) {
@@ -42,6 +46,13 @@ const MODELS = {
   f3: { female: true, skin: '#7a4a2f', hair: '#1c1416', hairStyle: 'bun', eyes: '#3a2418', outfit: 'armor', cloth: '#c9772f', accent: '#e0c070', legs: '#3f3630', boots: '#4e3424' },
   f4: { female: true, skin: '#e0b088', hair: '#e8cf7a', hairStyle: 'bob', eyes: '#3d6fb8', outfit: 'robe', cloth: '#a8324a', accent: '#e0c070', legs: '#2f3540', boots: '#6b4a2e' },
 };
+// Bandits: hoods, masks, an eye patch, a headscarf; ragged leather, round wooden shields, hex orbs.
+const BANDITS = {
+  b1: { bandit: true, female: false, skin: '#e8b890', hair: '#3a2a20', hairStyle: 'hood', hood: '#4e3e32', mask: '#8a2f2a', eyes: '#3a2418', outfit: 'leather', cloth: '#a08a62', leather: '#6a4428', accent: '#8a6a3a', legs: '#3e3a34', boots: '#3e2a1c' },
+  b2: { bandit: true, female: false, skin: '#c58a62', hair: '#2a1d17', hairStyle: 'bald', beard: true, eyepatch: true, scar: true, eyes: '#3a2418', outfit: 'leather', bareArms: true, cloth: '#7a3a2e', leather: '#4a3424', accent: '#8a6a3a', legs: '#3a3632', boots: '#3e2a1c' },
+  b3: { bandit: true, female: true, skin: '#f0c8a2', hair: '#2b2220', hairStyle: 'ponytail', headscarf: '#9a3a2e', scar: true, eyes: '#4a3020', outfit: 'leather', cloth: '#8a7a5a', leather: '#4a5a36', accent: '#8a6a3a', legs: '#3b3632', boots: '#3e2a1c' },
+  b4: { bandit: true, female: true, skin: '#8a5a3c', hair: '#1c1416', hairStyle: 'hood', hood: '#4a5248', mask: '#3a3a3e', eyes: '#3a2418', outfit: 'leather', cloth: '#6a5a6e', leather: '#34303a', accent: '#8a6a3a', legs: '#33302e', boots: '#3e2a1c' },
+};
 const WEAPONS = ['sword_shield', 'spear', 'bow', 'staff'];
 const METAL = '#b9c3cf';
 const WOOD = '#8a5a34';
@@ -49,7 +60,7 @@ const WOOD = '#8a5a34';
 // ---- one figure -------------------------------------------------------------------------------
 function figure(id, model, weapon) {
   const P = {};
-  for (const k of ['skin', 'hair', 'eyes', 'cloth', 'accent', 'legs', 'boots']) P[k] = paint(model[k]);
+  for (const k of ['skin', 'hair', 'eyes', 'cloth', 'accent', 'legs', 'boots', 'hood', 'mask', 'leather', 'headscarf']) if (model[k]) P[k] = paint(model[k]);
   const metal = paint(METAL);
   const wood = paint(WOOD);
   const female = model.female;
@@ -108,6 +119,9 @@ function figure(id, model, weapon) {
   if (model.hairStyle === 'ponytail') {
     back.push(path(`M${at(0.5, 0.05)} Q${at(1.9, 0.1)} ${at(1.55, 1.2)} Q${at(1.45, 1.9)} ${at(1.05, 2.25)} Q${at(1.15, 1.5)} ${at(0.7, 0.9)} Z`, dark(P.hair, 0.12)));
   }
+  if (model.hairStyle === 'hood') {
+    back.push(path(`M${at(-1.35, 0.95)} Q${at(-1.5, -0.38)} ${at(0, -0.33)} Q${at(1.5, -0.38)} ${at(1.35, 0.95)} L${at(1.55, 1.45)} Q${at(0, 1.6)} ${at(-1.55, 1.45)} Z`, dark(P.hood, 0.2)));
+  }
   if (model.hairStyle === 'bun') back.push(circle(32, top + H * 0.02, H * 0.26, dark(P.hair, 0.08)));
   if (weapon === 'bow') {
     // Quiver across the back, arrows over the right shoulder.
@@ -164,6 +178,26 @@ function figure(id, model, weapon) {
     parts.push(path(`M${n(32 + sW - 1.2)} ${n(shoulderY + 0.6)} L${n(32 + 2.2)} ${n(shoulderY + 0.6)} L${n(32 + 1)} ${n(waistY)} L${n(32 + wW)} ${n(waistY)} L${n(32 + sW - 0.6)} ${n(shoulderY + 3)} Z`, vest));
     parts.push(path(`M${n(32 - 2.6)} ${n(shoulderY)} L32 ${n(shoulderY + 3.2)} L${n(32 + 2.6)} ${n(shoulderY)} Z`, dark(P.skin, 0.08)));
     belt(dark(P.legs, 0.1));
+  } else if (model.outfit === 'leather') {
+    // Ragged shirt with a torn hem, leather jerkin, a strap across the chest, belt pouch.
+    const skirtY = hipY + (kneeY - hipY) * 0.42;
+    const teeth = 6;
+    let hem = '';
+    for (let i = 0; i <= teeth; i++) {
+      const x = 32 + hipW + 1.6 - (i / teeth) * (2 * hipW + 3.2);
+      hem += ` L${n(x)} ${n(skirtY + (i % 2 ? -1.4 : 0.4))}`;
+    }
+    parts.push(path(`M${n(32 - sW + 1.5)} ${n(shoulderY)} Q${n(32 - sW)} ${n(shoulderY)} ${n(32 - sW)} ${n(shoulderY + 2)} L${n(32 - wW)} ${n(waistY)}
+      L${n(32 - hipW - 1.6)} ${n(skirtY)} L${n(32 + hipW + 1.6)} ${n(skirtY)} ${hem} Z
+      M${n(32 + wW)} ${n(waistY)} L${n(32 + sW)} ${n(shoulderY + 2)} Q${n(32 + sW)} ${n(shoulderY)} ${n(32 + sW - 1.5)} ${n(shoulderY)} L${n(32 - sW + 1.5)} ${n(shoulderY)} L${n(32 - wW)} ${n(waistY)} Z`, P.cloth));
+    parts.push(path(`M${n(32 - sW + 0.8)} ${n(shoulderY + 0.5)} L${n(32 - 2.4)} ${n(shoulderY + 0.5)} L32 ${n(shoulderY + 4.5)} L${n(32 + 2.4)} ${n(shoulderY + 0.5)} L${n(32 + sW - 0.8)} ${n(shoulderY + 0.5)}
+      L${n(32 + wW + 0.6)} ${n(hipY + 1)} L${n(32 + 1.5)} ${n(hipY + 2)} L${n(32 - wW - 0.6)} ${n(hipY + 1)} Z`, P.leather));
+    parts.push(limb([[32 - 1.6, shoulderY + 6], [32 + 1.6, shoulderY + 6]], 0.5, dark(P.leather, 0.35)));
+    parts.push(limb([[32 - 1.6, shoulderY + 8.5], [32 + 1.6, shoulderY + 8.5]], 0.5, dark(P.leather, 0.35)));
+    parts.push(limb([[32 - sW + 1.6, shoulderY + 1], [32 + wW + 0.2, waistY]], 1.4, dark(P.leather, 0.3)));
+    parts.push(path(`M${n(32 - 2.2)} ${n(shoulderY + 4.6)} h2.4 v2.4 h-2.4 Z`, paint('#8a8a8a')));
+    belt(dark(P.leather, 0.25));
+    parts.push(path(`M${n(32 + wW - 3.4)} ${n(waistY + beltH)} h3.4 v3.2 q-1.7 1.2 -3.4 0 Z`, dark(P.leather, 0.1)));
   } else {
     const hemY = kneeY + (ankleY - kneeY) * 0.3;
     const hemW = sW * 1.2;
@@ -182,13 +216,14 @@ function figure(id, model, weapon) {
   for (const [s, hand] of [[-1, hands.r], [1, hands.l]]) {
     const sh = [32 + s * (sW - armW * 0.45), shoulderY + armW * 0.5];
     const elbow = [32 + s * (sW + armW * 0.25), waistY - 1];
-    parts.push(limb([sh, elbow, hand], armW, P.cloth));
+    parts.push(limb([sh, elbow, hand], armW, model.bareArms ? P.skin : P.cloth));
+    if (model.bareArms) parts.push(limb([sh, [sh[0] + (elbow[0] - sh[0]) * 0.35, sh[1] + (elbow[1] - sh[1]) * 0.35]], armW + 0.4, P.cloth));
     const ex = elbow[0] + (hand[0] - elbow[0]) * 0.55;
     const ey = elbow[1] + (hand[1] - elbow[1]) * 0.55;
     if (model.outfit === 'robe') {
       parts.push(path(`M${n(ex - armW * 0.8)} ${n(ey - 1)} L${n(ex + armW * 0.8)} ${n(ey - 1)} L${n(ex + armW)} ${n(ey + 1.2)} L${n(ex - armW)} ${n(ey + 1.2)} Z`, P.accent));
     } else {
-      const glove = model.outfit === 'armor' ? metal : dark(P.accent, 0.1);
+      const glove = model.outfit === 'armor' ? metal : model.outfit === 'leather' ? dark(P.leather, 0.1) : dark(P.accent, 0.1);
       parts.push(limb([[ex, ey], [hand[0] - (hand[0] - elbow[0]) * 0.08, hand[1] - (hand[1] - elbow[1]) * 0.08]], armW + 0.5, glove));
     }
     parts.push(circle(hand[0], hand[1], handR, P.skin));
@@ -197,7 +232,7 @@ function figure(id, model, weapon) {
   // ---- neck & head ----
   const neckW = hw * 0.36;
   parts.push(path(`M${n(32 - neckW)} ${n(chin - 2.5)} L${n(32 - neckW)} ${n(shoulderY + 0.8)} Q32 ${n(shoulderY + 1.8)} ${n(32 + neckW)} ${n(shoulderY + 0.8)} L${n(32 + neckW)} ${n(chin - 2.5)} Z`, dark(P.skin, 0.12)));
-  if (!female && model.hairStyle !== 'long') {
+  if (!female && model.hairStyle !== 'long' && model.hairStyle !== 'hood') {
     for (const s of [-1, 1]) parts.push(`<ellipse cx="${n(32 + s * hw)}" cy="${n(top + H * 0.58)}" rx="${n(H * 0.07)}" ry="${n(H * 0.11)}" fill="${P.skin}"/>`);
   }
   const jawX = hw * 0.62;
@@ -211,15 +246,22 @@ function figure(id, model, weapon) {
   const eyeY = top + H * 0.57;
   for (const s of [-1, 1]) {
     const x = 32 + s * hw * 0.42;
+    if (model.eyepatch && s === 1) {
+      face.push(`<path d="M${at(-1.0, 0.3)} L${at(1.02, 0.72)}" stroke="#1e1a1c" stroke-width="${n(H * 0.035)}"/>`);
+      face.push(`<ellipse cx="${n(x)}" cy="${n(eyeY + 0.2)}" rx="${n(H * 0.1)}" ry="${n(H * 0.085)}" fill="#1e1a1c"/>`);
+      face.push(`<path d="M${n(x - H * 0.09)} ${n(eyeY - H * 0.16)} L${n(x + H * 0.08)} ${n(eyeY - H * 0.12)}" stroke="${dark(P.hair, 0.25)}" stroke-width="${n(H * 0.035)}" stroke-linecap="round"/>`);
+      continue;
+    }
     face.push(`<ellipse cx="${n(x)}" cy="${n(eyeY)}" rx="${n(H * 0.05)}" ry="${n(H * 0.066)}" fill="${dark(P.eyes, 0.6)}"/>`);
     face.push(circle(x - H * 0.017, eyeY - H * 0.022, H * 0.017, '#ffffff'));
     const browY = eyeY - H * (female ? 0.15 : 0.13);
     face.push(`<path d="M${n(x - H * 0.075)} ${n(browY + (female ? 0.2 : 0.1))} Q${n(x)} ${n(browY - H * 0.03)} ${n(x + H * 0.075)} ${n(browY + (female ? 0.2 : 0.1))}" stroke="${dark(P.hair, 0.25)}" stroke-width="${n(H * (female ? 0.022 : 0.032))}" fill="none" stroke-linecap="round"/>`);
     if (female) face.push(`<path d="M${n(x + s * H * 0.04)} ${n(eyeY - H * 0.05)} l${n(s * H * 0.04)} ${n(-H * 0.025)}" stroke="${dark(P.eyes, 0.6)}" stroke-width="${n(H * 0.018)}" stroke-linecap="round"/>`);
-    face.push(`<ellipse cx="${n(x + s * H * 0.04)}" cy="${n(eyeY + H * 0.14)}" rx="${n(H * 0.07)}" ry="${n(H * 0.035)}" fill="#ff8fa3" opacity="${female ? 0.35 : 0.2}"/>`);
+    if (!model.mask && !model.bandit) face.push(`<ellipse cx="${n(x + s * H * 0.04)}" cy="${n(eyeY + H * 0.14)}" rx="${n(H * 0.07)}" ry="${n(H * 0.035)}" fill="#ff8fa3" opacity="${female ? 0.35 : 0.2}"/>`);
   }
-  face.push(circle(32, eyeY + H * 0.12, H * 0.013, dark(P.skin, 0.35)));
-  if (!model.beard) {
+  if (model.scar) face.push(`<path d="M${at(-0.62, 0.42)} L${at(-0.3, 0.8)} M${at(-0.56, 0.58)} L${at(-0.4, 0.55)} M${at(-0.47, 0.7)} L${at(-0.32, 0.66)}" stroke="${dark(P.skin, 0.3)}" stroke-width="${n(H * 0.022)}" stroke-linecap="round" opacity="0.8"/>`);
+  if (!model.mask) face.push(circle(32, eyeY + H * 0.12, H * 0.013, dark(P.skin, 0.35)));
+  if (!model.beard && !model.mask) {
     const mw = H * 0.06;
     const my = top + H * 0.8;
     face.push(`<path d="M${n(32 - mw)} ${n(my)} Q32 ${n(my + H * 0.035)} ${n(32 + mw)} ${n(my)}" stroke="${female ? '#b85a64' : dark(P.skin, 0.45)}" stroke-width="${n(H * 0.03)}" fill="none" stroke-linecap="round"/>`);
@@ -262,11 +304,24 @@ function figure(id, model, weapon) {
       hair.push(path(`M${at(-1.08, 0.5)} Q${at(-1.2, 0.9)} ${at(-1.12, 1.1)} L${at(-0.86, 1.08)} Q${at(-0.86, 0.8)} ${at(-0.86, 0.5)} Z M${at(1.08, 0.5)} Q${at(1.2, 0.9)} ${at(1.12, 1.1)} L${at(0.86, 1.08)} Q${at(0.86, 0.8)} ${at(0.86, 0.5)} Z`, P.hair));
       break;
   }
+  if (model.hairStyle === 'hood') {
+    hair.push(fringe([[0.7, 0.3], [0.4, 0.34], [0, 0.3], [-0.4, 0.34], [-0.7, 0.3], [-1.06, 0.62]]));
+    hair.push(path(`M${at(-1.32, 1.2)} Q${at(-1.5, -0.36)} ${at(0, -0.32)} Q${at(1.5, -0.36)} ${at(1.32, 1.2)} L${at(1.0, 1.12)} Q${at(1.08, 0.12)} ${at(0, 0.14)} Q${at(-1.08, 0.12)} ${at(-1.0, 1.12)} Z`, P.hood));
+  }
+  if (model.headscarf) {
+    hair.push(path(`M${at(-1.1, 0.5)} Q${at(-1.22, -0.14)} ${at(0, -0.14)} Q${at(1.22, -0.14)} ${at(1.1, 0.5)} Q${at(0.6, 0.26)} ${at(0, 0.3)} Q${at(-0.6, 0.26)} ${at(-1.1, 0.5)} Z`, P.headscarf));
+    hair.push(path(`M${at(1.0, 0.25)} L${at(1.55, 0.45)} L${at(1.35, 0.7)} Z M${at(1.0, 0.3)} L${at(1.45, 0.85)} L${at(1.2, 0.95)} Z`, dark(P.headscarf, 0.1)));
+    hair.push(circle(32 + hw * 1.0, top + H * 0.3, H * 0.08, dark(P.headscarf, 0.15)));
+  }
+  if (model.mask) {
+    hair.push(path(`M${at(-1.02, 0.66)} Q${at(0, 0.74)} ${at(1.02, 0.66)} L${at(0.82, 0.98)} Q${at(0, 1.2)} ${at(-0.82, 0.98)} Z`, P.mask));
+    hair.push(`<path d="M${at(-0.5, 0.86)} Q${at(0, 0.95)} ${at(0.5, 0.86)} M${at(-0.3, 1.0)} Q${at(0, 1.06)} ${at(0.3, 1.0)}" stroke="${dark(P.mask, 0.3)}" stroke-width="${n(H * 0.02)}" fill="none"/>`);
+  }
   if (model.beard) {
     hair.push(path(`M${at(-0.98, 0.55)} Q${at(-1.0, 1.05)} ${at(0, 1.25)} Q${at(1.0, 1.05)} ${at(0.98, 0.55)} Q${at(0.75, 0.82)} ${at(0.3, 0.8)} Q${at(0, 0.74)} ${at(-0.3, 0.8)} Q${at(-0.75, 0.82)} ${at(-0.98, 0.55)} Z`, P.hair));
     hair.push(`<path d="M${at(-0.2, 0.9)} Q${at(0, 0.95)} ${at(0.2, 0.9)}" stroke="${dark(P.skin, 0.45)}" stroke-width="${n(H * 0.03)}" fill="none" stroke-linecap="round"/>`);
   }
-  if (model.hairStyle !== 'bald') {
+  if (model.hairStyle !== 'bald' && model.hairStyle !== 'hood' && !model.headscarf) {
     hair.push(`<path d="M${at(-0.55, 0.12)} Q${at(0, -0.02)} ${at(0.5, 0.12)}" stroke="${light(P.hair, 0.4)}" stroke-width="${n(H * 0.04)}" fill="none" stroke-linecap="round" opacity="0.7"/>`);
   }
 
@@ -289,17 +344,29 @@ function figure(id, model, weapon) {
     front.push(path(`M${n(gx + nx * bw)} ${n(gy + ny * bw)} L${n(tx + nx * bw - dx * 3)} ${n(ty + ny * bw - dy * 3)} L${n(tx)} ${n(ty)} L${n(tx - nx * bw - dx * 3)} ${n(ty - ny * bw - dy * 3)} L${n(gx - nx * bw)} ${n(gy - ny * bw)} Z`, '#d6dbe2'));
     front.push(limb([[gx + nx * 0.3, gy + ny * 0.3], [tx + nx * 0.3 - dx * 3, ty + ny * 0.3 - dy * 3]], 0.7, '#ffffff'));
     front.push(limb([[rx - dx * 2.5, ry - dy * 2.5], [gx, gy]], 1.5, '#5a3a22'));
-    front.push(limb([[gx + nx * 4, gy + ny * 4], [gx - nx * 4, gy - ny * 4]], 1.7, paint('#c9a050')));
-    front.push(circle(rx - dx * 3.4, ry - dy * 3.4, 1.2, paint('#c9a050')));
+    const guard = model.bandit ? paint('#5a5a5e') : paint('#c9a050');
+    front.push(limb([[gx + nx * 4, gy + ny * 4], [gx - nx * 4, gy - ny * 4]], 1.7, guard));
+    front.push(circle(rx - dx * 3.4, ry - dy * 3.4, 1.2, guard));
     gripOver(rx, ry);
-    const w = 7.3;
-    const ht = 19;
-    const t = ly - ht * 0.42;
-    const bt = ly + ht * 0.58;
-    const face1 = paint('#7d8aa3');
-    front.push(path(`M${n(lx - w)} ${n(t)} Q${n(lx)} ${n(t - 2)} ${n(lx + w)} ${n(t)} L${n(lx + w)} ${n(t + ht * 0.4)} Q${n(lx + w * 0.8)} ${n(bt - ht * 0.2)} ${n(lx)} ${n(bt)} Q${n(lx - w * 0.8)} ${n(bt - ht * 0.2)} ${n(lx - w)} ${n(t + ht * 0.4)} Z`, face1));
-    front.push(path(`M${n(lx - w + 1.5)} ${n(t + 1.2)} Q${n(lx)} ${n(t - 0.6)} ${n(lx + w - 1.5)} ${n(t + 1.2)} L${n(lx + w - 1.5)} ${n(t + ht * 0.4)} Q${n(lx + w * 0.7)} ${n(bt - ht * 0.25)} ${n(lx)} ${n(bt - 2)} Q${n(lx - w * 0.7)} ${n(bt - ht * 0.25)} ${n(lx - w + 1.5)} ${n(t + ht * 0.4)} Z`, paint('#a33b3b')));
-    front.push(`<path d="M${n(lx)} ${n(t + 2.5)} L${n(lx)} ${n(bt - 3.5)} M${n(lx - w * 0.55)} ${n(t + ht * 0.3)} L${n(lx + w * 0.55)} ${n(t + ht * 0.3)}" stroke="${paint('#e8c45a')}" stroke-width="1.8" stroke-linecap="round"/>`);
+    if (model.bandit) {
+      // Round wooden shield with an iron rim and boss.
+      const r = 8;
+      const cy = ly + 2;
+      front.push(circle(lx, cy, r, paint('#5e5e62')));
+      front.push(circle(lx, cy, r - 1.1, dark(wood, 0.05)));
+      for (const off of [-3.4, 0, 3.4]) front.push(limb([[lx + off, cy - Math.sqrt(Math.max(0, (r - 1.4) ** 2 - off * off))], [lx + off, cy + Math.sqrt(Math.max(0, (r - 1.4) ** 2 - off * off))]], 0.5, dark(wood, 0.35)));
+      front.push(circle(lx, cy, 2.2, paint('#8a8a90')));
+      front.push(circle(lx - 0.6, cy - 0.6, 0.7, '#dcdcdc'));
+    } else {
+      const w = 7.3;
+      const ht = 19;
+      const t = ly - ht * 0.42;
+      const bt = ly + ht * 0.58;
+      const face1 = paint('#7d8aa3');
+      front.push(path(`M${n(lx - w)} ${n(t)} Q${n(lx)} ${n(t - 2)} ${n(lx + w)} ${n(t)} L${n(lx + w)} ${n(t + ht * 0.4)} Q${n(lx + w * 0.8)} ${n(bt - ht * 0.2)} ${n(lx)} ${n(bt)} Q${n(lx - w * 0.8)} ${n(bt - ht * 0.2)} ${n(lx - w)} ${n(t + ht * 0.4)} Z`, face1));
+      front.push(path(`M${n(lx - w + 1.5)} ${n(t + 1.2)} Q${n(lx)} ${n(t - 0.6)} ${n(lx + w - 1.5)} ${n(t + 1.2)} L${n(lx + w - 1.5)} ${n(t + ht * 0.4)} Q${n(lx + w * 0.7)} ${n(bt - ht * 0.25)} ${n(lx)} ${n(bt - 2)} Q${n(lx - w * 0.7)} ${n(bt - ht * 0.25)} ${n(lx - w + 1.5)} ${n(t + ht * 0.4)} Z`, paint('#a33b3b')));
+      front.push(`<path d="M${n(lx)} ${n(t + 2.5)} L${n(lx)} ${n(bt - 3.5)} M${n(lx - w * 0.55)} ${n(t + ht * 0.3)} L${n(lx + w * 0.55)} ${n(t + ht * 0.3)}" stroke="${paint('#e8c45a')}" stroke-width="1.8" stroke-linecap="round"/>`);
+    }
   } else if (weapon === 'spear') {
     const x0 = rx + 0.5;
     const x1 = rx - 0.8;
@@ -314,8 +381,9 @@ function figure(id, model, weapon) {
     const sx = rx - 0.9;
     front.push(limb([[rx + 0.4, 76.5], [sx, topY + 6]], 1.9, dark(wood, 0.1)));
     front.push(path(`M${n(sx)} ${n(topY + 6.5)} Q${n(sx - 4.1)} ${n(topY + 4)} ${n(sx - 2.7)} ${n(topY - 0.5)} Q${n(sx - 1.7)} ${n(topY + 3.2)} ${n(sx)} ${n(topY + 4)} Q${n(sx + 1.7)} ${n(topY + 3.2)} ${n(sx + 2.7)} ${n(topY - 0.5)} Q${n(sx + 4.1)} ${n(topY + 4)} ${n(sx)} ${n(topY + 6.5)} Z`, paint('#c9a050')));
-    front.push(circle(sx, topY + 2.2, 6, 'url(#glow)'));
-    front.push(circle(sx, topY + 2.2, 2.6, 'url(#orb)'));
+    const hex = model.bandit ? 'H' : '';
+    front.push(circle(sx, topY + 2.2, 6, `url(#glow${hex})`));
+    front.push(circle(sx, topY + 2.2, 2.6, `url(#orb${hex})`));
     gripOver(rx, ry);
   } else if (weapon === 'bow') {
     // Bow held out in the left hand, string toward the body.
@@ -329,35 +397,118 @@ function figure(id, model, weapon) {
     gripOver(lx, ly);
   }
 
-  // ---- assemble: base art, soft light from the top-left, paper texture, crisp face ----
+  return storybook(64, `${id} (${weapon})`, back[0], `${back.slice(1).join('')}${parts.join('')}${hair.join('')}${front.join('')}`, face.join(''));
+}
+
+/**
+ * Wrap art in the storybook finish: a faint soft edge, soft light from the top-left,
+ * a light paper texture, and the face (eyes etc.) drawn crisp on top.
+ */
+function storybook(width, label, shadow, body, face, dx = 0) {
   const defs = `
     <radialGradient id="orb" cx="0.35" cy="0.35" r="0.7"><stop offset="0" stop-color="#ffffff"/><stop offset="0.4" stop-color="#a8e0f5"/><stop offset="1" stop-color="#4a8cc8"/></radialGradient>
     <radialGradient id="glow"><stop offset="0" stop-color="#a8e0f5" stop-opacity="0.7"/><stop offset="1" stop-color="#a8e0f5" stop-opacity="0"/></radialGradient>
+    <radialGradient id="orbH" cx="0.35" cy="0.35" r="0.7"><stop offset="0" stop-color="#ffffff"/><stop offset="0.4" stop-color="#d0a0f0"/><stop offset="1" stop-color="#6a3a9a"/></radialGradient>
+    <radialGradient id="glowH"><stop offset="0" stop-color="#c890f0" stop-opacity="0.7"/><stop offset="1" stop-color="#c890f0" stop-opacity="0"/></radialGradient>
     <filter id="dk" color-interpolation-filters="sRGB"><feComponentTransfer><feFuncR type="linear" slope="0.62"/><feFuncG type="linear" slope="0.6"/><feFuncB type="linear" slope="0.72"/></feComponentTransfer></filter>
     <linearGradient id="lg" x1="0" y1="0" x2="1" y2="0.5"><stop offset="0.35" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#fff" stop-opacity="0.65"/></linearGradient>
-    <mask id="mk" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="80"><rect width="64" height="80" fill="url(#lg)"/></mask>
+    <mask id="mk" maskUnits="userSpaceOnUse" x="0" y="0" width="${width}" height="80"><rect width="${width}" height="80" fill="url(#lg)"/></mask>
     <filter id="tx" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.55" numOctaves="2" seed="4"/><feColorMatrix values="0 0 0 0 0.35  0 0 0 0 0.28  0 0 0 0 0.2  0 0 0 0.55 -0.1"/><feComposite in2="SourceGraphic" operator="in"/></filter>
     <filter id="edge" x="-10%" y="-10%" width="120%" height="120%"><feMorphology in="SourceAlpha" operator="dilate" radius="0.45"/><feColorMatrix values="0 0 0 0 0.16  0 0 0 0 0.12  0 0 0 0 0.1  0 0 0 0.45 0"/></filter>`;
-  const body = `<g id="fig">${back.slice(1).join('')}${parts.join('')}${hair.join('')}${front.join('')}</g>`;
-  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 64 80" width="64" height="80">
-<!-- ${id} (${weapon}): generated by tools/generate-art.mjs -->
+  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ${width} 80" width="${width}" height="80">
+<!-- ${label}: generated by tools/generate-art.mjs -->
 <defs>${defs}</defs>
-${back[0]}
+${shadow}
 <use href="#fig" xlink:href="#fig" filter="url(#edge)"/>
-${body}
+<g id="fig"><g transform="translate(${dx} 0)">${body}</g></g>
 <use href="#fig" xlink:href="#fig" mask="url(#mk)" filter="url(#dk)" opacity="0.7"/>
 <use href="#fig" xlink:href="#fig" filter="url(#tx)" opacity="0.3"/>
-<g>${face.join('')}</g>
+<g transform="translate(${dx} 0)">${face}</g>
 </svg>
 `;
 }
 
+// ---- monsters (96x80, facing right, feet at y = 76) -------------------------------------------
+function monster(kind, color) {
+  const c = paint(color);
+  const lt = light(c, 0.35);
+  const dk = dark(c, 0.25);
+  const path = (d, fill, extra = '') => `<path d="${d.replace(/\s+/g, ' ').trim()}" fill="${fill}" ${extra}/>`;
+  const limb = (pts, w, col) => `<path d="M${pts.map((p) => `${n(p[0])} ${n(p[1])}`).join(' L')}" fill="none" stroke="${col}" stroke-width="${n(w)}" stroke-linecap="round" stroke-linejoin="round"/>`;
+  const circle = (x, y, r, fill, extra = '') => `<circle cx="${n(x)}" cy="${n(y)}" r="${n(r)}" fill="${fill}" ${extra}/>`;
+  const pink = paint('#e8a0a0');
+  const body = [];
+  const face = [];
+  let shadow = '<ellipse cx="48" cy="76.2" rx="24" ry="3" fill="#2a2018" opacity="0.25"/>';
+  if (kind === 'rat') {
+    body.push(`<path d="M26 69 Q10 72 7 60 Q5 50 13 45" fill="none" stroke="${dark(pink, 0.1)}" stroke-width="2.6" stroke-linecap="round"/>`);
+    body.push(`<path d="M10 51 Q6 47 13 45" fill="none" stroke="${dark(pink, 0.1)}" stroke-width="1.6" stroke-linecap="round"/>`);
+    body.push(`<ellipse cx="36" cy="74.5" rx="3.4" ry="1.8" fill="${dark(pink, 0.25)}"/><ellipse cx="62" cy="74.5" rx="3" ry="1.6" fill="${dark(pink, 0.25)}"/>`);
+    body.push(path('M22 70 Q17 51 40 47 Q60 43 71 53 Q77 62 72 72 Q50 78 22 70 Z', c));
+    body.push(`<ellipse cx="48" cy="71" rx="19" ry="4.6" fill="${lt}"/>`);
+    body.push(`<ellipse cx="36" cy="63" rx="10" ry="8" fill="${dark(c, 0.08)}"/>`);
+    body.push(path('M61 50 Q72 43 82 55 L90.5 61.5 Q89 66 80 67 Q68 68 61 61 Z', c));
+    body.push(path('M66 62 Q76 66 89 63 Q84 67 76 67 Q69 66 66 62 Z', lt));
+    body.push(circle(68, 47, 6.2, c));
+    body.push(circle(68.6, 47.6, 3.8, pink));
+    body.push(`<ellipse cx="44" cy="75" rx="4" ry="2" fill="${pink}"/><ellipse cx="73" cy="75" rx="3.6" ry="1.8" fill="${pink}"/>`);
+    body.push(limb([[72, 66], [73, 74]], 3.4, c));
+    body.push(`<path d="M34 49 l-1.5 -2.5 M40 47.5 l-1 -2.8 M46 47 l-0.4 -2.8 M52 47.2 l0.4 -2.6" stroke="${dk}" stroke-width="1" stroke-linecap="round"/>`);
+    body.push(`<path d="M86 63 L95 59.5 M86.5 64 L95.5 64.5 M86 65 L94 68.5" stroke="${paint('#e8e0d8')}" stroke-width="0.5" stroke-linecap="round"/>`);
+    body.push(`<path d="M85.5 66.2 h2 v1.8 h-2 Z" fill="#f4efe2"/>`);
+    face.push(circle(90.6, 61.8, 1.6, dark(pink, 0.15)));
+    face.push(`<ellipse cx="79.5" cy="56" rx="1.6" ry="1.9" fill="#1e1618"/>`);
+    face.push(circle(79, 55.4, 0.55, '#ffffff'));
+  } else if (kind === 'slime') {
+    shadow = '<ellipse cx="48" cy="76.2" rx="27" ry="3" fill="#2a2018" opacity="0.25"/>';
+    body.push(path('M21 76 Q16 74 19 67 Q21 38 48 35 Q75 38 77 67 Q80 74 75 76 Z', c, 'opacity="0.94"'));
+    body.push(`<ellipse cx="48" cy="61" rx="20" ry="13" fill="${lt}" opacity="0.35"/>`);
+    body.push(`<ellipse cx="48" cy="74" rx="26" ry="2.6" fill="${dk}" opacity="0.6"/>`);
+    body.push(path('M16 76 Q14 72 19 71 Q21 74 21 76 Z M75 76 Q76 71 80 72 Q82 75 79 76 Z', c));
+    body.push(`<ellipse cx="35" cy="46" rx="7" ry="3.6" fill="#ffffff" opacity="0.55" transform="rotate(-25 35 46)"/>`);
+    body.push(circle(29, 52, 1.4, '#ffffff', 'opacity="0.6"'));
+    body.push(circle(63, 66, 2.2, lt, 'opacity="0.7"') + circle(58, 70, 1.3, lt, 'opacity="0.7"') + circle(68, 56, 1.1, lt, 'opacity="0.7"'));
+    face.push(`<ellipse cx="40" cy="57" rx="2.6" ry="3.6" fill="#1e2a1e"/><ellipse cx="56" cy="57" rx="2.6" ry="3.6" fill="#1e2a1e"/>`);
+    face.push(circle(39.2, 55.8, 0.9, '#ffffff') + circle(55.2, 55.8, 0.9, '#ffffff'));
+    face.push(`<path d="M44.5 64 Q48 66.5 51.5 64" stroke="#1e2a1e" stroke-width="1.1" fill="none" stroke-linecap="round"/>`);
+    face.push(`<ellipse cx="35" cy="62" rx="3" ry="1.4" fill="#ff8fa3" opacity="0.35"/><ellipse cx="61" cy="62" rx="3" ry="1.4" fill="#ff8fa3" opacity="0.35"/>`);
+  } else if (kind === 'wolf') {
+    const fur = c;
+    body.push(path('M27 49 Q12 44 7 57 Q9 63 13 61 Q11 58 15 56 Q14 60 18 59 Q20 54 28 55 Z', fur));
+    body.push(limb([[33, 60], [30, 74.5]], 4, dk) + limb([[63, 60], [65, 74.5]], 4, dk));
+    body.push(path('M24 51 Q25 40 42 40 Q58 38 68 41 Q75 46 73 56 Q71 62 62 62 L35 62 Q24 62 24 51 Z', fur));
+    body.push(`<ellipse cx="49" cy="60.5" rx="14" ry="2.8" fill="${lt}"/>`);
+    body.push(`<ellipse cx="32" cy="54" rx="8.5" ry="8.5" fill="${dark(fur, 0.06)}"/>`);
+    body.push(limb([[31, 59], [28, 74.5]], 4.6, fur) + limb([[68, 57], [70, 74.5]], 4.6, fur));
+    body.push(`<ellipse cx="27.5" cy="75" rx="3.2" ry="1.5" fill="${dk}"/><ellipse cx="71" cy="75" rx="3.2" ry="1.5" fill="${dk}"/>`);
+    body.push(path('M63 45 Q64 29 76 27 Q84 27 86.5 33 L94.5 37.5 Q95.5 42 90 43 L82 44.5 Q76 51 67 50 Z', fur));
+    body.push(path('M66 46 Q72 52 70 60 Q66 58 64 52 Z', lt));
+    body.push(path('M82 44.5 L90 43 Q86 46.5 80 47 Z', lt));
+    body.push(path('M71.5 30.5 L73.5 18.5 L78.5 28 Z M77 28 L81.5 17.5 L83.5 30 Z', fur));
+    body.push(path('M73 28 L74 22 L76.5 27.5 Z M79 27.5 L81.3 21.5 L82.2 28.5 Z', dark(fur, 0.35)));
+    body.push(`<path d="M30 42 l-2 -3 M38 40 l-1 -3.2 M46 39.5 l0 -3 M54 39.5 l1 -3 M62 40.5 l1.6 -2.6" stroke="${dk}" stroke-width="1.1" stroke-linecap="round"/>`);
+    face.push(`<ellipse cx="94.2" cy="38.6" rx="1.6" ry="1.3" fill="#1a1416"/>`);
+    face.push(`<path d="M80.3 33.2 Q82.3 31.4 84.4 33 Q82.4 34.6 80.3 33.2 Z" fill="${paint('#e8b84a')}"/>`);
+    face.push(circle(82.6, 33.1, 0.7, '#1a1416'));
+    face.push(`<path d="M79 31.3 L84.6 31.8" stroke="${dark(fur, 0.45)}" stroke-width="0.8" stroke-linecap="round"/>`);
+    face.push(`<path d="M90 43 L84 44.4" stroke="#2a1e1e" stroke-width="0.7" stroke-linecap="round"/>`);
+  }
+  return storybook(96, kind, shadow, body.join(''), face.join(''), kind === 'slime' ? 0 : -3.5);
+}
+
 mkdirSync(root, { recursive: true });
 let count = 0;
-for (const [id, model] of Object.entries(MODELS)) {
+for (const [id, model] of Object.entries({ ...MODELS, ...BANDITS })) {
   for (const weapon of WEAPONS) {
     writeFileSync(join(root, `${id}_${weapon}.svg`), figure(id, model, weapon));
     count++;
   }
 }
 console.log(`Wrote ${count} unit sprites to ${root}`);
+
+mkdirSync(monsterRoot, { recursive: true });
+const enemies = JSON.parse(readFileSync(join(repo, 'src', 'data', 'enemies.json'), 'utf8')).enemies;
+const kinds = new Map();
+for (const def of Object.values(enemies)) if (def.art?.kind && def.art.kind !== 'human') kinds.set(def.art.kind, def.art.color ?? '#888888');
+for (const [kind, color] of kinds) writeFileSync(join(monsterRoot, `${kind}.svg`), monster(kind, color));
+console.log(`Wrote ${kinds.size} monster sprites to ${monsterRoot}`);

@@ -1,7 +1,7 @@
 // Loads and validates enemies.json (enemy types, their level ranges, stats and skills).
 import raw from './enemies.json';
 import { SKILLS, WEAPONS } from './content';
-import { STAT_KEYS, type EnemyDef, type MonsterKind, type Stats } from './types';
+import { BODY_MODELS, ENEMY_MODELS, STAT_KEYS, type EnemyDef, type MonsterKind, type Stats, type UnitModel } from './types';
 
 export interface EncounterRules {
   threatPerAdventurer: number;
@@ -48,6 +48,11 @@ export function parseEnemies(data: unknown): { enemies: Record<string, EnemyDef>
     const art = obj(d.art, `${p}.art`);
     const kind = str(art.kind, `${p}.art.kind`) as MonsterKind;
     if (!KINDS.includes(kind)) fail(`${p}.art.kind`, `must be one of: ${KINDS.join(', ')}`);
+    const allModels: readonly string[] = [...BODY_MODELS, ...ENEMY_MODELS];
+    const models = art.models === undefined ? undefined : list(art.models, `${p}.art.models`).map((m, i) => {
+      const id = str(m, `${p}.art.models[${i}]`);
+      return allModels.includes(id) ? (id as UnitModel) : fail(`${p}.art.models[${i}]`, `must be one of: ${allModels.join(', ')}`);
+    });
     const weapons = list(d.weapons, `${p}.weapons`).map((w, i) => {
       const wid = str(w, `${p}.weapons[${i}]`);
       return WEAPONS[wid] ? wid : fail(`${p}.weapons[${i}]`, `"${wid}" is not defined in weapons.json`);
@@ -65,7 +70,7 @@ export function parseEnemies(data: unknown): { enemies: Record<string, EnemyDef>
       name: str(d.name, `${p}.name`),
       levels: [levels[0], levels[1]],
       threat: num(d.threat ?? 1, `${p}.threat`),
-      art: { kind, color: typeof art.color === 'string' ? art.color : undefined },
+      art: { kind, color: typeof art.color === 'string' ? art.color : undefined, models },
       stats,
       growthPerLevel: growth,
       skills,

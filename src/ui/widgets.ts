@@ -421,73 +421,28 @@ export class ScrollList {
   }
 }
 
-// ---- monster placeholders ---------------------------------------------------------
+// ---- monsters -----------------------------------------------------------------------
+
+/** Monster art is a wider 96x80 SVG canvas (feet at y = 76), drawn facing right. */
+export const MONSTER_W = 96;
+export const monsterKey = (kind: string) => `monster-${kind}`;
 
 /**
- * Simple vector placeholders for non-human enemies (rat, slime, wolf), drawn in the
- * same 64x80 space as the unit art with feet at y = 76. Facing left like other enemies.
+ * A monster enemy (rat, slime, wolf) on a red-rimmed enemy base, facing left.
+ * `height` is the same full art height human units use.
  */
-export function monsterFigure(
-  scene: Phaser.Scene, x: number, feetY: number, height: number, kind: string, color = '#888888',
-): Phaser.GameObjects.Container {
-  const kb = height / ART_H; // base size (same as human units)
-  const k = kb * 1.55; // creatures are drawn larger: they only use the bottom of the 64x80 space
+export function monsterFigure(scene: Phaser.Scene, x: number, feetY: number, height: number, kind: string): Phaser.GameObjects.Container {
+  const kb = height / ART_H;
   const g = scene.add.graphics();
-  const c = hex(color);
-  const dark = Phaser.Display.Color.IntegerToColor(c).darken(35).color;
-  const lightC = Phaser.Display.Color.IntegerToColor(c).lighten(20).color;
-  // Local coords: (0,0) = feet; x mirrored so the creature faces left.
-  const X = (v: number) => -(v - 32) * k;
-  const Y = (v: number) => (v - 76) * k;
-  const R = (v: number) => v * k;
-  // Red-rimmed enemy base (same size as human units' bases)
   g.fillStyle(0x000000, 0.35).fillEllipse(0, 1.5 * kb, 36 * kb, 14 * kb);
   g.fillStyle(hex('#c0392b'), 1).fillEllipse(0, 0, 34 * kb, 12 * kb);
   g.lineStyle(Math.max(1.5, 2 * kb), 0x2a0a0a, 0.9).strokeEllipse(0, 0, 34 * kb, 12 * kb);
-  g.lineStyle(Math.max(1, R(1.2)), dark, 1);
-  if (kind === 'rat') {
-    g.lineStyle(Math.max(1.2, R(2)), 0xd9a0a0, 1);
-    g.beginPath(); g.moveTo(X(20), Y(70)); g.lineTo(X(12), Y(64)); g.lineTo(X(8), Y(56)); g.strokePath(); // tail
-    g.fillStyle(c).fillEllipse(X(30), Y(66), R(28), R(18));
-    g.fillStyle(c).fillCircle(X(43), Y(61), R(8));
-    g.fillStyle(lightC).fillEllipse(X(30), Y(70), R(18), R(6));
-    g.fillStyle(c).fillCircle(X(41), Y(53), R(4));
-    g.fillStyle(0xf0b0b0).fillCircle(X(41), Y(53), R(2.2));
-    g.fillStyle(0xf28a9a).fillCircle(X(51), Y(62), R(1.6)); // nose
-    g.fillStyle(0x1a1a1a).fillCircle(X(46), Y(59), R(1.4));
-    g.fillStyle(0xffffff).fillCircle(X(45.6), Y(58.6), R(0.5));
-    g.fillStyle(dark).fillRect(X(36), Y(74), R(3), R(4)).fillRect(X(25), Y(74), R(3), R(4));
-  } else if (kind === 'slime') {
-    g.fillStyle(c, 0.92);
-    g.beginPath();
-    g.moveTo(X(14), Y(75));
-    for (let i = 0; i <= 20; i++) {
-      const t = (i / 20) * Math.PI;
-      g.lineTo(X(32 - Math.cos(t) * 18), Y(75 - Math.sin(t) * 26 - (i % 5 === 2 ? 1 : 0)));
-    }
-    g.closePath();
-    g.fillPath();
-    g.strokePath();
-    g.fillStyle(0xffffff, 0.45).fillEllipse(X(25), Y(57), R(7), R(4));
-    g.fillStyle(0x1a1a1a).fillEllipse(X(27), Y(63), R(3), R(5)).fillEllipse(X(37), Y(63), R(3), R(5));
-    g.fillStyle(0xffffff).fillCircle(X(27.6), Y(61.5), R(0.8)).fillCircle(X(37.6), Y(61.5), R(0.8));
-    g.lineStyle(Math.max(1, R(1)), 0x1a1a1a, 1);
-    g.beginPath(); g.moveTo(X(29), Y(69)); g.lineTo(X(32), Y(70.5)); g.lineTo(X(35), Y(69)); g.strokePath();
-  } else if (kind === 'wolf') {
-    g.fillStyle(c);
-    g.beginPath(); g.moveTo(X(14), Y(58)); g.lineTo(X(6), Y(50)); g.lineTo(X(12), Y(61)); g.closePath(); g.fillPath(); // tail
-    g.fillEllipse(X(28), Y(60), R(30), R(16)); // body
-    for (const lx of [18, 24, 34, 39]) g.fillRect(X(lx + 3), Y(62), R(3.5), R(13)); // legs
-    g.fillCircle(X(44), Y(50), R(8)); // head
-    g.beginPath(); g.moveTo(X(48), Y(47)); g.lineTo(X(57), Y(52)); g.lineTo(X(48), Y(56)); g.closePath(); g.fillPath(); // snout
-    g.beginPath(); g.moveTo(X(39), Y(45)); g.lineTo(X(40), Y(36)); g.lineTo(X(44), Y(43)); g.closePath(); g.fillPath(); // ear
-    g.beginPath(); g.moveTo(X(44), Y(43)); g.lineTo(X(47), Y(35)); g.lineTo(X(49), Y(44)); g.closePath(); g.fillPath(); // ear
-    g.fillStyle(lightC).fillEllipse(X(30), Y(65), R(18), R(6));
-    g.fillStyle(0x1a1a1a).fillCircle(X(57), Y(52), R(1.4)); // nose
-    g.fillStyle(0xffd54a).fillCircle(X(46), Y(48), R(1.6)); // eye
-    g.fillStyle(0x1a1a1a).fillCircle(X(46.4), Y(48), R(0.7));
-  } else {
-    g.fillStyle(c).fillCircle(0, Y(60), R(12));
+  const parts: Phaser.GameObjects.GameObject[] = [g];
+  const key = monsterKey(kind);
+  if (scene.textures.exists(key)) {
+    // Creatures only use the lower part of the canvas, so they're drawn a little larger than people.
+    const h = height * 1.25;
+    parts.push(scene.add.image(0, 0, key).setOrigin(0.5, FEET / ART_H).setDisplaySize(MONSTER_W * (h / ART_H), h).setFlipX(true));
   }
-  return scene.add.container(x, feetY, [g]);
+  return scene.add.container(x, feetY, parts);
 }
