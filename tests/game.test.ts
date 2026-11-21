@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import skillsJson from '../src/data/skills.json';
 import weaponsJson from '../src/data/weapons.json';
-import { SKILLS, WEAPONS, parseContent, skillFormula } from '../src/data/content';
+import { SKILLS, TREE_SKILLS, WEAPONS, parseContent, skillFormula } from '../src/data/content';
+import enemiesJson from '../src/data/enemies.json';
+import { parseEnemies } from '../src/data/enemies';
 import { STAT_CONFIG, parseStatConfig } from '../src/data/stats';
 import type { Character } from '../src/data/types';
 import { runAiTurn, shouldDisengage } from '../src/game/ai';
-import { Battle, defenseMultiplier, deploymentTiles, generateEnemies, makeUnit, type Team } from '../src/game/battle';
-import { createCharacter, deriveStats, grantXp, makeRng } from '../src/game/character';
+import { Battle, defenseMultiplier, deploymentTiles, enemyTypesForStage, generateEnemies, makeEnemy, makeUnit, type Team } from '../src/game/battle';
+import { allSkills, createCharacter, deriveStats, grantXp, makeRng } from '../src/game/character';
 import { generateMap, hasLineOfSight, passable, withinRange, type BattleMap, type Point, type Terrain } from '../src/game/grid';
 import { newGameState, parseSave, serializeSave } from '../src/game/save';
 
@@ -556,6 +558,76 @@ describe('frameworks (switched off in stats.json)', () => {
   });
 });
 
+function randomParty(size: number, level: number, rng: () => number): Character[] {
+  const weapons = Object.keys(WEAPONS);
+  return Array.from({ length: size }, (_, i) => {
+    const c = hero(weapons[Math.floor(rng() * weapons.length)], [], `P${i}`);
+    c.level = level;
+    const pool = [...TREE_SKILLS];
+    while (c.skillIds.length < 2) c.skillIds.push(pool.splice(Math.floor(rng() * pool.length), 1)[0]);
+    return c;
+  });
+}
+
+describe('enemies', () => {
+  it('each stage uses the enemy types whose level range contains it', () => {
+    const at = (stage: number) => enemyTypesForStage(stage).map((t) => `${t.type}:${t.level}`).sort();
+    expect(at(1)).toEqual(['rat:1']);
+    expect(at(2)).toEqual(['rat:2', 'slime:2']);
+    expect(at(3)).toEqual(['slime:3', 'wolf:3']);
+    expect(at(4)).toEqual(['bandit:4', 'wolf:4']);
+    expect(at(5)).toEqual(['bandit:5']);
+    expect(at(9)).toEqual(['bandit:5']); // past the last range: toughest type, capped level
+  });
+
+  it('enemy stats and skills come from enemies.json, growing within the level range', () => {
+    const rat1 = makeEnemy('rat', 1, makeRng(1));
+    const rat2 = makeEnemy('rat', 2, makeRng(1));
+    expect(deriveStats(rat1)).toMatchObject({ health: 220, pAtk: 70, movement: 20 });
+    expect(deriveStats(rat2)).toMatchObject({ health: 250, pAtk: 78 });
+    expect(allSkills(rat1)).toEqual(['gnaw']);
+    expect(allSkills(makeEnemy('slime', 2, makeRng(1)))).toEqual(['slam']);
+    expect(allSkills(makeEnemy('slime', 3, makeRng(1)))).toEqual(['slam', 'sticky_spit']);
+    expect(allSkills(makeEnemy('wolf', 4, makeRng(1)))).toEqual(['bite', 'pounce', 'howl']);
+  });
+
+  it('bandits carry a weapon: its skills come first and it names them', () => {
+    for (let seed = 0; seed < 20; seed++) {
+      const b = makeEnemy('bandit', 5, makeRng(seed));
+      expect(WEAPONS[b.weaponId]).toBeDefined();
+      expect(allSkills(b)[0]).toBe(WEAPONS[b.weaponId].skills[0]);
+      expect(allSkills(b)).toContain('kick'); // unlocked at level 5
+      expect(b.name).toMatch(/^Bandit /);
+    }
+  });
+
+  it('weak types come in bigger packs (threat budget)', () => {
+    const rats = generateEnemies(1, 4, makeRng(3));
+    expect(rats).toHaveLength(8); // 0.5 threat each, budget 4
+    expect(rats.every((e) => e.enemyType === 'rat' && e.level === 1)).toBe(true);
+    const wolvesOrBandits = generateEnemies(4, 4, makeRng(3));
+    expect(wolvesOrBandits).toHaveLength(4);
+    expect(generateEnemies(1, 1, makeRng(3))).toHaveLength(2);
+  });
+
+  it('enemies.json is validated with precise errors', () => {
+    const bad = JSON.parse(JSON.stringify(enemiesJson));
+    bad.enemies.rat.skills = ['laser_eyes'];
+    expect(() => parseEnemies(bad)).toThrow(/enemies.rat.skills\[0\].*laser_eyes/);
+  });
+
+  it('monsters fight with their own basic attack and use their skills in battle', () => {
+    const wolf = makeUnit(makeEnemy('wolf', 4, makeRng(1)), 'enemy', { x: 6, y: 3 });
+    const a = makeUnit(hero(), 'player', { x: 1, y: 3 });
+    const battle = new Battle(openMap(), [a, wolf], makeRng(1));
+    expect(battle.basicAttack(wolf).id).toBe('bite');
+    battle.endPhase();
+    battle.perform(wolf, 'pounce', { x: 1, y: 3 }); // leaps 4 tiles (Movement 24 / 4 = 6 max)
+    expect(a.hp).toBeLessThan(500);
+    expect(a.engagedWith).toBe(wolf.uid);
+  });
+});
+
 describe('battles', () => {
   it('teams alternate turns; every unit moves and acts once per turn', () => {
     const { battle, units: [a, b, e] } = setup(openMap(), [
@@ -580,7 +652,7 @@ describe('battles', () => {
     for (let seed = 0; seed < 16; seed++) {
       const rng = makeRng(seed);
       const map = generateMap(rng);
-      const party = generateEnemies(1 + (seed % 3), 4, rng).slice(0, 4);
+      const party = randomParty(4, 1 + (seed % 3), rng);
       const foes = generateEnemies(1 + (seed % 3), 4, rng);
       const pd = deploymentTiles(map, 'player', party.length);
       const ed = deploymentTiles(map, 'enemy', foes.length);

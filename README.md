@@ -18,6 +18,7 @@ Everything gameplay-related lives in plain JSON files in `src/data/`. Each file 
 | `stats.json` | Base stats and per-level growth, Defense scaling, terrain movement costs, forest bonus, map size, hit-chance and vision switches |
 | `skills.json` | Every skill (numbers and descriptions), tags, status effects (Burn, Slow), skill trees |
 | `weapons.json` | Weapons: stat multipliers and granted skills |
+| `enemies.json` | Enemy types: level range, stats, skills, art, and how big encounters are |
 
 Tooltips show a formula line generated from the numbers (e.g. "80% P.Atk, then 40% P.Atk + 100% Def"), so it stays correct even if a description is out of date.
 
@@ -55,6 +56,19 @@ Every skill has tags that explain how it behaves. These four change the rules:
 - **Free Action**: doesn't use your action, and can be used before or after it (Kick). The turn doesn't end automatically while a unit still has a free action with a target in reach; press **End Turn** when done.
 
 Descriptive tags: Melee, Projectile, Indirect, Area, Knockback, Reaction, Teleport, Debuff, Support.
+
+### Enemies
+
+Each enemy type has a fixed level range and its own stats and skills (`src/data/enemies.json`). A battle at stage N uses the types whose range contains N, at level N.
+
+| Type | Levels | Skills |
+|---|---|---|
+| Giant Rat | 1–2 | Gnaw. Fast and weak; comes in packs. |
+| Green Slime | 2–3 | Slam; Sticky Spit at level 3 (ranged, applies Slow). Slow-moving and tough. |
+| Grey Wolf | 3–4 | Bite (Engage) and Pounce (leaps in, Engage); Howl at level 4 (Frenzy: +20 P.Atk to nearby allies). Very fast. |
+| Bandit | 4–5 | Carries a random weapon and uses its skills. Hexers also have Fireball, Archers Execute; all learn Kick at level 5. |
+
+Encounter size is a threat budget: 1 per Adventurer. Rats cost 0.5 (two per Adventurer), slimes 0.75, wolves and bandits 1. Past stage 5, bandits keep coming at level 5, and the budget grows 25% per stage. Rats, slimes and wolves use simple placeholder figures until monster art is made. Hover an enemy in battle to see its skills.
 
 ### Engagement
 

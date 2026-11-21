@@ -144,12 +144,38 @@ export interface Appearance {
   model: BodyModel;
 }
 
-/** An Adventurer as stored in the save file. Stats are derived from level + weapon. */
+export type MonsterKind = 'rat' | 'slime' | 'wolf' | 'human';
+
+/** An enemy type from enemies.json. */
+export interface EnemyDef {
+  id: string;
+  name: string;
+  /** Lowest and highest level this type ever appears at. */
+  levels: [number, number];
+  /** Share of the encounter budget one unit uses. */
+  threat: number;
+  art: { kind: MonsterKind; color?: string };
+  /** Stats at the lowest level. */
+  stats: Stats;
+  growthPerLevel: Partial<Stats>;
+  /** First skill = basic attack (for human types with a weapon, the weapon's basic attack comes first). */
+  skills: string[];
+  skillsByLevel: Record<number, string[]>;
+  /** Human types: possible weapons, their display names, and extra skills per weapon. */
+  weapons: string[];
+  weaponNames: Record<string, string>;
+  weaponSkills: Record<string, string[]>;
+}
+
+/** A party member (Adventurer) or an enemy. Adventurers' stats come from level + weapon. */
 export interface Character {
   id: string;
   name: string;
   level: number;
   xp: number;
+  /** Enemies only: the enemies.json type. Their stats and skills come from that type. */
+  enemyType?: string;
+  /** Weapon id; empty for monsters that fight with their bodies. */
   weaponId: string;
   /** Skills picked from the skill trees (weapon skills are always available). */
   skillIds: string[];

@@ -1,4 +1,5 @@
 import { DEFAULT_WEAPON, PALETTE, TREE_SKILLS, WEAPONS, XP_PER_LEVEL, skillSlotsForLevel } from '../data/content';
+import { ENEMIES } from '../data/enemies';
 import { STAT_CONFIG } from '../data/stats';
 import { BODY_MODELS, STAT_KEYS, type BodyModel, type Character, type Stats } from '../data/types';
 
@@ -14,9 +15,18 @@ export function levelStats(level: number): Stats {
   return out;
 }
 
-/** Final stats: level stats x weapon multipliers (rounded). */
+/** Stats of an enemy type at a level (before weapon multipliers). */
+export function enemyLevelStats(type: string, level: number): Stats {
+  const def = ENEMIES[type];
+  const out = { ...def.stats };
+  const steps = Math.max(0, level - def.levels[0]);
+  for (const k of STAT_KEYS) out[k] += (def.growthPerLevel[k] ?? 0) * steps;
+  return out;
+}
+
+/** Final stats: level stats (or the enemy type's stats) x weapon multipliers (rounded). */
 export function deriveStats(c: Character): Stats {
-  const out = levelStats(c.level);
+  const out = c.enemyType ? enemyLevelStats(c.enemyType, c.level) : levelStats(c.level);
   const mult = WEAPONS[c.weaponId]?.statMultipliers ?? {};
   for (const k of STAT_KEYS) out[k] = Math.round(out[k] * (mult[k] ?? 1));
   out.movement = Math.max(1, out.movement);
@@ -35,9 +45,19 @@ export function skillSlots(c: Character): number {
   return skillSlotsForLevel(c.level);
 }
 
-/** Weapon skills (always available) followed by the picked tree skills. */
+/**
+ * Every skill the unit has. Adventurers: weapon skills, then picked tree skills.
+ * Enemies: weapon skills (if any), the type's skills, weapon extras, then skills unlocked by level.
+ * The first skill is always the basic attack.
+ */
 export function allSkills(c: Character): string[] {
-  return [...(WEAPONS[c.weaponId]?.skills ?? []), ...c.skillIds.slice(0, skillSlots(c))];
+  const weaponSkills = WEAPONS[c.weaponId]?.skills ?? [];
+  if (c.enemyType) {
+    const def = ENEMIES[c.enemyType];
+    const byLevel = Object.entries(def.skillsByLevel).filter(([lvl]) => c.level >= Number(lvl)).flatMap(([, s]) => s);
+    return [...new Set([...weaponSkills, ...def.skills, ...(def.weaponSkills[c.weaponId] ?? []), ...byLevel])];
+  }
+  return [...weaponSkills, ...c.skillIds.slice(0, skillSlots(c))];
 }
 
 export function createCharacter(name: string, color = PALETTE[0], weaponId = DEFAULT_WEAPON, model?: BodyModel): Character {

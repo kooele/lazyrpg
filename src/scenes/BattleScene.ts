@@ -9,7 +9,8 @@ import {
 import { grantXp, makeRng } from '../game/character';
 import { TERRAIN, generateMap, key, type Point } from '../game/grid';
 import { markDirty, requireState } from '../game/session';
-import { COLORS, HEIGHT, ScrollList, WIDTH, button, confirmDialog, figure, panel, setupCamera, text } from '../ui/widgets';
+import { COLORS, HEIGHT, ScrollList, WIDTH, button, confirmDialog, figure, monsterFigure, panel, setupCamera, text } from '../ui/widgets';
+import { ENEMIES } from '../data/enemies';
 
 /** Tile size in layout pixels; set per battle so the map fits the 672x500 board area. */
 let TILE = 56;
@@ -195,10 +196,17 @@ export class BattleScene extends Phaser.Scene {
     for (let y = 0; y <= map.height; y++) g.lineBetween(MAP_X, MAP_Y + y * TILE, MAP_X + map.width * TILE, MAP_Y + y * TILE);
   }
 
+  /** Adventurers and human enemies use the body art; monsters use their own figure. */
+  private unitFigure(u: Unit, x: number, feetY: number, height: number): Phaser.GameObjects.Container {
+    const def = u.character.enemyType ? ENEMIES[u.character.enemyType] : null;
+    if (def && def.art.kind !== 'human') return monsterFigure(this, x, feetY, height, def.art.kind, def.art.color);
+    return figure(this, x, feetY, height, u.character.appearance, u.character.weaponId, { enemy: u.team === 'enemy' });
+  }
+
   private createUnitView(u: Unit): void {
     const c = this.tileCenter(u);
     // Figure stands with its feet near the bottom of the tile; HP bar underneath.
-    const fig = figure(this, 0, FEET_Y, 52 * K, u.character.appearance, u.character.weaponId, { enemy: u.team === 'enemy' });
+    const fig = this.unitFigure(u, 0, FEET_Y, 52 * K);
     const statusText = text(this, -27 * K, 4 * K, '', { fontSize: '9px', fontStyle: 'bold', color: '#ffb35c', stroke: '#000000', strokeThickness: 3 }).setOrigin(0, 1);
     const hpBar = this.add.graphics();
     const container = this.add.container(c.x, c.y, [fig, statusText, hpBar]);
@@ -370,9 +378,9 @@ export class BattleScene extends Phaser.Scene {
     const u = this.selected ?? (this.casterUid ? b.unit(this.casterUid) : null);
     S.add(panel(this, SIDE_X, 16, SIDE_W, 160));
     if (u) {
-      S.add(figure(this, SIDE_X + 28, 64, 46, u.character.appearance, u.character.weaponId, { enemy: u.team === 'enemy' }));
+      S.add(this.unitFigure(u, SIDE_X + 28, 64, 46));
       S.add(text(this, SIDE_X + 52, 24, u.character.name, { fontSize: '17px' }));
-      S.add(text(this, SIDE_X + 52, 46, `Lv ${u.character.level} · ${WEAPONS[u.character.weaponId].name}${u.team === 'enemy' ? ' (enemy)' : ''}`, {
+      S.add(text(this, SIDE_X + 52, 46, `Lv ${u.character.level} · ${WEAPONS[u.character.weaponId]?.name ?? (u.character.enemyType ? 'Monster' : '')}${u.team === 'enemy' ? ' (enemy)' : ''}`, {
         color: u.team === 'enemy' ? COLORS.bad : COLORS.dim, fontSize: '12px',
       }));
       S.add(text(this, SIDE_X + 10, 70, this.unitSummary(u), { fontSize: '12px', lineSpacing: 3, wordWrap: { width: SIDE_W - 20 } }));
@@ -449,6 +457,7 @@ export class BattleScene extends Phaser.Scene {
     if (u.overwatch) effects.push(`Watching: ${SKILLS[u.overwatch.skillId].name}`);
     const opp = b.opponentOf(u);
     if (opp) effects.push(`Engaged with ${opp.character.name}`);
+    if (u.team === 'enemy') effects.push(`Skills: ${b.skillIds(u).map((id) => SKILLS[id].name).join(', ')}`);
     return [
       `HP ${u.hp}/${u.stats.health}${shield ? ` +${shield} shield` : ''}   Move ${b.stat(u, 'movement')}`,
       `P.Atk ${b.stat(u, 'pAtk')}  M.Atk ${b.stat(u, 'mAtk')}  Def ${b.stat(u, 'defense')}${terrainDef ? ' (forest)' : ''}`,

@@ -1,0 +1,53 @@
+{
+  "_readme": "Enemy types. Each type always fights within its level range: an encounter at stage N uses the types whose range contains N, at level N (clamped into their range). Past the highest range, the toughest types keep appearing at their top level. stats are at the type's lowest level; growthPerLevel is added per level above that. skills: the first one is the basic attack (also used for opportunity attacks). skillsByLevel adds skills from that level up. Human types can use weapons: they get the weapon's skills and stat multipliers, plus weaponSkills for that weapon. threat is how much of the encounter budget one unit uses (the budget is threatPerAdventurer x party size).",
+
+  "encounter": {
+    "threatPerAdventurer": 1,
+    "maxEnemies": 8
+  },
+
+  "enemies": {
+    "rat": {
+      "name": "Giant Rat",
+      "levels": [1, 2],
+      "threat": 0.5,
+      "art": { "kind": "rat", "color": "#8a7a70" },
+      "stats": { "health": 220, "pAtk": 70, "mAtk": 0, "defense": 20, "movement": 20, "accuracy": 0, "evasion": 10, "vision": 6 },
+      "growthPerLevel": { "health": 30, "pAtk": 8, "defense": 3 },
+      "skills": ["gnaw"]
+    },
+    "slime": {
+      "name": "Green Slime",
+      "levels": [2, 3],
+      "threat": 0.75,
+      "art": { "kind": "slime", "color": "#5fcf6a" },
+      "stats": { "health": 420, "pAtk": 80, "mAtk": 80, "defense": 40, "movement": 12, "accuracy": 0, "evasion": 0, "vision": 5 },
+      "growthPerLevel": { "health": 50, "pAtk": 8, "mAtk": 10, "defense": 5 },
+      "skills": ["slam"],
+      "skillsByLevel": { "3": ["sticky_spit"] }
+    },
+    "wolf": {
+      "name": "Grey Wolf",
+      "levels": [3, 4],
+      "threat": 1,
+      "art": { "kind": "wolf", "color": "#7f8ea3" },
+      "stats": { "health": 460, "pAtk": 120, "mAtk": 0, "defense": 40, "movement": 24, "accuracy": 0, "evasion": 10, "vision": 8 },
+      "growthPerLevel": { "health": 50, "pAtk": 10, "defense": 5 },
+      "skills": ["bite", "pounce"],
+      "skillsByLevel": { "4": ["howl"] }
+    },
+    "bandit": {
+      "name": "Bandit",
+      "levels": [4, 5],
+      "threat": 1,
+      "art": { "kind": "human" },
+      "weapons": ["sword_shield", "spear", "bow", "staff"],
+      "weaponNames": { "sword_shield": "Bandit Thug", "spear": "Bandit Lancer", "bow": "Bandit Archer", "staff": "Bandit Hexer" },
+      "stats": { "health": 560, "pAtk": 130, "mAtk": 110, "defense": 60, "movement": 16, "accuracy": 0, "evasion": 0, "vision": 8 },
+      "growthPerLevel": { "health": 50, "pAtk": 10, "mAtk": 10, "defense": 5 },
+      "skills": [],
+      "weaponSkills": { "staff": ["fireball"], "bow": ["execute"] },
+      "skillsByLevel": { "5": ["kick"] }
+    }
+  }
+}
