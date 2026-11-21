@@ -114,7 +114,10 @@ function floodCount(map: BattleMap, sx: number, sy: number): number {
  * impassable terrain so both teams always have room to deploy, and every
  * passable tile is guaranteed to be connected.
  */
-export function generateMap(rng: Rng, width = 12, height = 9): BattleMap {
+export function generateMap(rng: Rng, width = STAT_CONFIG.map.width, height = STAT_CONFIG.map.height): BattleMap {
+  // Terrain density was tuned on a 12x9 map; scale the number of clusters with the area.
+  const density = (width * height) / (12 * 9);
+  const n = (base: number) => Math.max(1, Math.round(base * density));
   for (let attempt = 0; attempt < 200; attempt++) {
     const tiles: Terrain[][] = Array.from({ length: height }, () => Array<Terrain>(width).fill('grass'));
     const place = (terrain: Terrain, clusters: number, size: number, allowEdges: boolean) => {
@@ -130,9 +133,9 @@ export function generateMap(rng: Rng, width = 12, height = 9): BattleMap {
         }
       }
     };
-    place('forest', 4, 5, true);
-    place('rock', 3, 3, false);
-    if (rng() < 0.6) place('water', 1, 6, false);
+    place('forest', n(4), 5, true);
+    place('rock', n(3), 3, false);
+    if (rng() < 0.6) place('water', n(1), 6, false);
 
     const map: BattleMap = { width, height, tiles };
     let total = 0;

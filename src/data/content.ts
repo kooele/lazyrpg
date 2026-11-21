@@ -256,7 +256,6 @@ export function tagNames(s: SkillDef): string[] {
 
 export const PALETTE = ['#3d7be0', '#36b37e', '#e0b44c', '#9b59d0', '#e07b3d', '#2bb5c4', '#e05a9b', '#c9ced8'];
 export const ENEMY_COLOR = '#c0392b';
-export const EMBLEMS = ['circle', 'square', 'diamond', 'triangle'] as const;
 
 export const MAX_PARTY_SIZE = 4;
 export const XP_PER_LEVEL = 100;

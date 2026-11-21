@@ -21,8 +21,11 @@ export interface VisionRules {
 export interface EngagementRules {
   /** Defense multiplier while engaged (0.5 = half Defense). */
   defenseMultiplier: number;
-  /** Damage multiplier for hits from the engaged opponent (0.5 = 50% less). */
-  opponentDamageTaken: number;
+}
+
+export interface MapRules {
+  width: number;
+  height: number;
 }
 
 export interface StatConfig {
@@ -31,6 +34,7 @@ export interface StatConfig {
   defenseScale: number;
   forestDefense: number;
   engagement: EngagementRules;
+  map: MapRules;
   hitChance: HitChanceRules;
   vision: VisionRules;
 }
@@ -56,7 +60,8 @@ export function parseStatConfig(data: unknown): StatConfig {
   const rec = obj(data, '(root)');
   const hit = obj(rec.hitChance ?? { enabled: false, base: 100, min: 0, max: 100, reactionModifier: 0 }, 'hitChance');
   const vision = obj(rec.vision ?? { enabled: false }, 'vision');
-  const eng = obj(rec.engagement ?? { defenseMultiplier: 0.5, opponentDamageTaken: 0.5 }, 'engagement');
+  const eng = obj(rec.engagement ?? { defenseMultiplier: 0.5 }, 'engagement');
+  const map = obj(rec.map ?? { width: 18, height: 13 }, 'map');
   const cfg: StatConfig = {
     base: readStats(rec.base, 'base'),
     growthPerLevel: readStats(rec.growthPerLevel, 'growthPerLevel'),
@@ -64,8 +69,8 @@ export function parseStatConfig(data: unknown): StatConfig {
     forestDefense: num(rec.forestDefense ?? 0, 'forestDefense'),
     engagement: {
       defenseMultiplier: num(eng.defenseMultiplier, 'engagement.defenseMultiplier'),
-      opponentDamageTaken: num(eng.opponentDamageTaken, 'engagement.opponentDamageTaken'),
     },
+    map: { width: Math.round(num(map.width, 'map.width')), height: Math.round(num(map.height, 'map.height')) },
     hitChance: {
       enabled: hit.enabled === true,
       base: num(hit.base, 'hitChance.base'),
@@ -78,6 +83,7 @@ export function parseStatConfig(data: unknown): StatConfig {
   if (!(cfg.defenseScale > 0)) throw new Error('stats.json: "defenseScale" must be a positive number');
   if (cfg.base.health <= 0) throw new Error('stats.json: "base.health" must be positive');
   if (cfg.base.movement < 1) throw new Error('stats.json: "base.movement" must be at least 1');
+  if (cfg.map.width < 8 || cfg.map.height < 6) throw new Error('stats.json: "map" must be at least 8 x 6 tiles');
   if (cfg.hitChance.min > cfg.hitChance.max) throw new Error('stats.json: "hitChance.min" must not exceed "hitChance.max"');
   return cfg;
 }

@@ -363,18 +363,16 @@ describe('engagement', () => {
     expect(e.engagedWith).toBe(a.uid);
   });
 
-  it('engaged units have half Defense but take 50% less damage from their opponent', () => {
+  it('engaged units have half Defense (no damage reduction from their opponent)', () => {
     const { battle, units: [a, e, archer] } = duel();
     battle.perform(a, 'sword_slash', { x: 4, y: 3 });
     expect(battle.stat(a, 'defense')).toBe(38); // 75 / 2
     battle.endPhase();
     const before = a.hp;
     battle.perform(e, 'sword_slash', { x: 3, y: 3 });
-    // 100 x 100/138 = 72.5, halved vs the opponent -> 36
-    expect(before - a.hp).toBe(36);
-    // Anyone else hits the weakened defense at full strength: 80 x 100/138 = 58
+    expect(before - a.hp).toBe(72); // 100 x 100/138
     battle.perform(archer, 'direct_shot', { x: 3, y: 3 });
-    expect(before - 36 - a.hp).toBe(58);
+    expect(before - 72 - a.hp).toBe(58); // 80 x 100/138
   });
 
   it("engaged units can't move or attack anyone else; others can't steal the engagement", () => {
@@ -515,9 +513,10 @@ describe('battles', () => {
     }
   });
 
-  it('generated maps keep deployment zones open', () => {
+  it('generated maps use the configured size and keep deployment zones open', () => {
     for (let seed = 0; seed < 30; seed++) {
       const map = generateMap(makeRng(seed));
+      expect([map.width, map.height]).toEqual([STAT_CONFIG.map.width, STAT_CONFIG.map.height]);
       for (const p of deploymentTiles(map, 'enemy', 6)) expect(passable(map, p.x, p.y)).toBe(true);
     }
   });

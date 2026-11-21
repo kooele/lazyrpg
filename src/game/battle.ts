@@ -665,9 +665,7 @@ export class Battle {
       (part.mAtk ?? 0) * this.stat(attacker, 'mAtk') +
       (part.def ?? 0) * this.stat(attacker, 'defense') +
       (part.missingHp ?? 0) * (target.stats.health - target.hp);
-    // Engaged units brace against their opponent: they take less damage from them.
-    const engagedBonus = target.engagedWith === attacker.uid ? this.rules.engagement.opponentDamageTaken : 1;
-    return Math.max(1, Math.round(raw * defenseMultiplier(this.stat(target, 'defense')) * engagedBonus));
+    return Math.max(1, Math.round(raw * defenseMultiplier(this.stat(target, 'defense'))));
   }
 
   /** Predicted damage of each hit of `skill` on `target` (accounts for missing health growing). */
@@ -892,7 +890,7 @@ export function generateEnemies(stage: number, partySize: number, rng: Rng): Cha
       xp: 0,
       weaponId,
       skillIds: [],
-      appearance: { color: ENEMY_COLOR, emblem: 'triangle', model: modelFor(id + i) },
+      appearance: { color: ENEMY_COLOR, model: modelFor(id + i) },
     };
     const pool = [...TREE_SKILLS];
     while (c.skillIds.length < skillSlots(c) && pool.length) {

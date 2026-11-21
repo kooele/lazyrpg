@@ -1,4 +1,4 @@
-# LazyRPG Tactics
+# L RPG
 
 A small turn-based tactical RPG that runs in the browser, built with [Phaser 4](https://phaser.io), TypeScript and Vite.
 
@@ -7,7 +7,7 @@ A small turn-based tactical RPG that runs in the browser, built with [Phaser 4](
 1. **Main menu**: New Game, Continue, Save Game, Load Game.
 2. **Adventurers**: There are no fixed classes. Every party member is an Adventurer, and you build them by mixing a weapon with picks from the skill trees (up to 4 in the party).
 3. **Camp**: the hub between battles. Recruit, customize or dismiss Adventurers, then start the next battle.
-4. **Tactical battle**: XCOM-style alternating turns. On your turn, every Adventurer can move once and act once, in any order (click a unit or press Tab). Hover a skill to see its range box; any tile in range can be targeted. Forest gives +20 Defense and costs 2 movement; rock and water block movement, and rock blocks line of sight.
+4. **Tactical battle**: XCOM-style alternating turns. On your turn, every Adventurer can move once and act once, in any order (click a unit or press Tab). Hover a skill to see its range box; any tile in range can be targeted. The map is 18×13 tiles (set in `stats.json`). Forest gives +20 Defense and costs 2 movement; rock and water block movement, and rock blocks line of sight.
 
 ### Editing the game data
 
@@ -15,7 +15,7 @@ Everything gameplay-related lives in plain JSON files in `src/data/`. Each file 
 
 | File | What's in it |
 |---|---|
-| `stats.json` | Base stats and per-level growth, Defense scaling, forest bonus, engagement numbers, hit-chance and vision switches |
+| `stats.json` | Base stats and per-level growth, Defense scaling, forest bonus, engagement Defense penalty, map size, hit-chance and vision switches |
 | `skills.json` | Every skill (numbers and descriptions), tags, status effects (Burn, Slow), skill trees |
 | `weapons.json` | Weapons: stat multipliers and granted skills |
 
@@ -35,10 +35,10 @@ Weapons **multiply** these stats:
 
 | Weapon | Multipliers | Skills (the first is the basic attack) |
 |---|---|---|
-| Sword & Shield | 100% P.Atk, 80% M.Atk, 150% Def | Sword Slash, Slash and Smash, Shield Up |
-| Spear | 100% P.Atk, 80% M.Atk | Spear Thrust, Circle Swing, Intercept |
-| Bow | 80% P.Atk, 80% M.Atk | Direct Shot, Indirect Shot, Overwatch |
-| Staff | 50% P.Atk, 120% M.Atk | Empowered Strike, Magic Bolt |
+| Sword & Shield | x1 P.Atk, x0.8 M.Atk, x1.5 Def | Sword Slash, Slash and Smash, Shield Up |
+| Spear | x1 P.Atk, x0.8 M.Atk | Spear Thrust, Circle Swing, Intercept |
+| Bow | x0.8 P.Atk, x0.8 M.Atk | Direct Shot, Indirect Shot, Overwatch |
+| Staff | x0.5 P.Atk, x1.2 M.Atk | Empowered Strike, Magic Bolt |
 
 ### Skill trees (mix freely; 2 slots, 3 at Lv 3, 4 at Lv 6)
 
@@ -60,7 +60,7 @@ Descriptive tags: Melee, Projectile, Indirect, Area, Knockback, Reaction, Debuff
 
 Hitting a unit with an **Engage** skill locks you both together, unless the target is already engaged with someone else. While engaged:
 - You can't move, and you can only attack your opponent. Healing and buffs are fine.
-- Your Defense is halved, but you take 50% less damage from your opponent. Other enemies flanking you hit harder.
+- Your Defense is halved, so everyone (your opponent included) hits you harder.
 - **Disengage** (button in the battle sidebar) breaks free, but your opponent gets a free basic attack on you (an opportunity attack). You can then move and act normally.
 - Engagement also ends if either unit falls, or if they're knocked or teleported apart.
 

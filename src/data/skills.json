@@ -12,153 +12,153 @@
   },
 
   "tags": {
-    "melee": { "name": "Melee", "description": "A close-range strike. No line of sight needed." },
-    "engage": { "name": "Engage", "description": "On hit, you and the target become engaged (unless the target is already engaged). Engaged units can't move or attack anyone else until they disengage, which gives the opponent a free basic attack. Engaged units have half Defense but take 50% less damage from their opponent." },
-    "projectile": { "name": "Projectile", "description": "Needs a clear line to the target (line of sight, or line of fire for direct shots)." },
-    "indirect": { "name": "Indirect", "description": "Arcs over obstacles: no line of sight needed." },
+    "melee": { "name": "Melee", "description": "Close-range attack. No line of sight needed." },
+    "engage": { "name": "Engage", "description": "On hit, you and the target become engaged (unless the target is already engaged). Engaged units have half Defense, can't move, and can only attack each other until one disengages, which gives the other a free basic attack." },
+    "projectile": { "name": "Projectile", "description": "Needs a clear line to the target: line of sight (rocks block) or line of fire (rocks and units block)." },
+    "indirect": { "name": "Indirect", "description": "Arcs over obstacles. No line of sight needed." },
     "area": { "name": "Area", "description": "Affects several tiles at once." },
-    "knockback": { "name": "Knockback", "description": "Pushes targets away. Blocked by walls and other units." },
-    "reaction": { "name": "Reaction", "description": "Sets up a watch that fires during the enemy's turn when they move into it." },
-    "movement": { "name": "Movement", "description": "Range scales with your Movement stat (rounded down), so Slow shortens it." },
-    "weapon": { "name": "Weapon", "description": "Uses your equipped weapon's basic-attack range and line rules. Unusable while your weapon is disabled." },
-    "free": { "name": "Free Action", "description": "Doesn't use your action: you can still act afterwards." },
+    "knockback": { "name": "Knockback", "description": "Pushes targets away. Walls and other units stop the push." },
+    "reaction": { "name": "Reaction", "description": "Sets a watch that triggers during the enemy's turn when they move into it. Lasts until your next turn." },
+    "movement": { "name": "Movement", "description": "Range scales with your Movement (rounded down), so Slow shortens it." },
+    "weapon": { "name": "Weapon", "description": "Uses your weapon's basic-attack range and line rules. Unusable while your weapon is disabled." },
+    "free": { "name": "Free Action", "description": "Doesn't use your action. You can still act afterwards." },
     "debuff": { "name": "Debuff", "description": "Applies a harmful effect that Cleanse can remove." },
-    "support": { "name": "Support", "description": "Helps allies or yourself." }
+    "support": { "name": "Support", "description": "Helps an ally or yourself." }
   },
 
   "statuses": {
-    "burn": { "name": "Burn", "debuff": true, "stacking": true, "tick": "start", "damagePctMaxHpPerStack": 0.01, "description": "Takes 1% max health per stack at the start of each of its turns. Ignores Defense and shields." },
+    "burn": { "name": "Burn", "debuff": true, "stacking": true, "tick": "start", "damagePctMaxHpPerStack": 0.01, "description": "Lose 1% of max Health per stack at the start of each turn. Ignores Defense and shields." },
     "slow": { "name": "Slow", "debuff": true, "stacking": false, "tick": "end", "statMods": { "movement": -1 }, "description": "-1 Movement." }
   },
 
   "skills": {
     "sword_slash": {
-      "name": "Sword Slash", "description": "Strike a unit for 100% P.Atk.",
+      "name": "Sword Slash", "description": "Slash an enemy for 100% P.Atk.",
       "tags": ["melee", "engage"],
       "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 0,
       "hits": [{ "pAtk": 1 }]
     },
     "slash_and_smash": {
-      "name": "Slash and Smash", "description": "Sword for 80% P.Atk, then shield for 40% P.Atk + 100% Def.",
+      "name": "Slash and Smash", "description": "Slash an enemy for 80% P.Atk, then bash it with your shield for 40% P.Atk + 100% Def.",
       "tags": ["melee", "engage"],
       "target": "unit", "affects": "enemy", "range": 1, "minRange": 1, "cooldown": 2,
       "hits": [{ "pAtk": 0.8 }, { "pAtk": 0.4, "def": 1 }]
     },
     "shield_up": {
-      "name": "Shield Up", "description": "Gain a shield worth 10% of max health until your next turn.",
+      "name": "Shield Up", "description": "Gain a shield equal to 10% of your max Health until your next turn.",
       "tags": ["support"],
       "target": "self", "affects": "ally", "range": 0, "minRange": 0, "cooldown": 1,
       "shield": { "maxHpPct": 0.1, "turns": 1 }
     },
     "spear_thrust": {
-      "name": "Spear Thrust", "description": "Thrust up to 2 tiles in a direction: 100% P.Atk to the first enemy hit, knocking it back 1 tile.",
+      "name": "Spear Thrust", "description": "Thrust in a direction, hitting the first enemy within 2 tiles for 100% P.Atk and knocking it back 1 tile.",
       "tags": ["melee", "knockback"],
       "target": "line", "affects": "enemy", "range": 2, "minRange": 1, "lineLength": 2, "cooldown": 0,
       "hits": [{ "pAtk": 1 }], "knockback": 1
     },
     "circle_swing": {
-      "name": "Circle Swing", "description": "Hit ALL units on the 8 surrounding tiles (allies too!) for 100% P.Atk and knock them back 1 tile.",
+      "name": "Circle Swing", "description": "Sweep all 8 surrounding tiles, hitting every unit (allies included) for 100% P.Atk and knocking them back 1 tile.",
       "tags": ["melee", "area", "knockback"],
       "target": "self", "affects": "any", "range": 0, "minRange": 0, "aoeRadius": 1.5, "cooldown": 2,
       "hits": [{ "pAtk": 1 }], "knockback": 1
     },
     "intercept": {
-      "name": "Intercept", "description": "Watch a 60° cone (2 tiles). Strikes the first enemy that moves into it for 100% P.Atk and stops its movement.",
+      "name": "Intercept", "description": "Guard a 60° cone up to 2 tiles away. The first enemy to move into it takes 100% P.Atk and is stopped.",
       "tags": ["reaction", "melee"],
       "target": "cone", "affects": "enemy", "range": 2, "minRange": 1, "cooldown": 0,
       "hits": [{ "pAtk": 1 }],
       "cone": { "angle": 60, "radius": 2, "interrupt": true }
     },
     "direct_shot": {
-      "name": "Direct Shot", "description": "Shoot a unit for 100% P.Atk. Needs line of fire: rocks AND units in between block the shot.",
+      "name": "Direct Shot", "description": "Shoot an enemy for 100% P.Atk. Blocked by rocks and by units in the way.",
       "tags": ["projectile"],
       "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "los": "fire", "cooldown": 0,
       "hits": [{ "pAtk": 1 }]
     },
     "indirect_shot": {
-      "name": "Indirect Shot", "description": "Lob an arrow over obstacles for 70% P.Atk.",
+      "name": "Indirect Shot", "description": "Lob an arrow at an enemy for 70% P.Atk. Arcs over obstacles.",
       "tags": ["indirect"],
       "target": "unit", "affects": "enemy", "range": 6, "minRange": 1, "cooldown": 0,
       "hits": [{ "pAtk": 0.7 }]
     },
     "overwatch": {
-      "name": "Overwatch", "description": "Watch a 90° cone (5 tiles). Shoots the first enemy that moves into it for 100% P.Atk without stopping it.",
+      "name": "Overwatch", "description": "Watch a 60° cone up to 5 tiles away. The first enemy to move into it is shot for 100% P.Atk but keeps moving.",
       "tags": ["reaction", "projectile"],
       "target": "cone", "affects": "enemy", "range": 5, "minRange": 1, "cooldown": 0,
       "hits": [{ "pAtk": 1 }],
-      "cone": { "angle": 90, "radius": 5, "interrupt": false, "los": "sight" }
+      "cone": { "angle": 60, "radius": 5, "interrupt": false, "los": "sight" }
     },
     "empowered_strike": {
-      "name": "Empowered Strike", "description": "Strike a unit for 100% P.Atk + 50% M.Atk.",
+      "name": "Empowered Strike", "description": "Strike an enemy for 100% P.Atk + 50% M.Atk.",
       "tags": ["melee", "engage"],
       "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 0,
       "hits": [{ "pAtk": 1, "mAtk": 0.5 }]
     },
     "magic_bolt": {
-      "name": "Magic Bolt", "description": "Bolt a unit for 50% P.Atk + 50% M.Atk.",
+      "name": "Magic Bolt", "description": "Fire a bolt at an enemy for 50% P.Atk + 50% M.Atk.",
       "tags": ["projectile"],
       "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "los": "sight", "cooldown": 0,
       "hits": [{ "pAtk": 0.5, "mAtk": 0.5 }]
     },
 
     "arcane_bolt": {
-      "name": "Arcane Bolt", "description": "Blast a unit for 100% M.Atk.",
+      "name": "Arcane Bolt", "description": "Fire an arcane bolt at an enemy for 100% M.Atk.",
       "tags": ["projectile"],
       "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "los": "sight", "cooldown": 0,
       "hits": [{ "mAtk": 1 }]
     },
     "arcane_pulse": {
-      "name": "Arcane Pulse", "description": "Blast a unit for 100% M.Atk and knock it back 2 tiles.",
+      "name": "Arcane Pulse", "description": "Blast an enemy for 100% M.Atk and knock it back 2 tiles.",
       "tags": ["projectile", "knockback"],
       "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "los": "sight", "cooldown": 2,
       "hits": [{ "mAtk": 1 }], "knockback": 2
     },
     "arcane_shift": {
-      "name": "Arcane Shift", "description": "Teleport yourself to an empty tile within 50% of your Movement.",
+      "name": "Arcane Shift", "description": "Teleport to an empty tile within 50% of your Movement.",
       "tags": ["movement"],
       "target": "emptyTile", "affects": "ally", "range": 2, "rangeScale": 0.5, "minRange": 1, "cooldown": 2,
       "teleport": true
     },
     "fireball": {
-      "name": "Fireball", "description": "100% M.Atk and 1 stack of Burn for 2 turns.",
+      "name": "Fireball", "description": "Hurl a fireball at an enemy for 100% M.Atk and apply 1 stack of Burn for 2 turns.",
       "tags": ["projectile", "debuff"],
       "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "los": "sight", "cooldown": 2,
       "hits": [{ "mAtk": 1 }],
       "applyStatus": [{ "status": "burn", "stacks": 1, "turns": 2 }]
     },
     "freeze": {
-      "name": "Freeze", "description": "Freeze a unit for 100% M.Atk and Slow it (-1 Movement) for 2 turns.",
+      "name": "Freeze", "description": "Freeze an enemy for 100% M.Atk and apply Slow for 2 turns.",
       "tags": ["debuff"],
       "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "cooldown": 2,
       "hits": [{ "mAtk": 1 }],
       "applyStatus": [{ "status": "slow", "turns": 2 }]
     },
     "heal": {
-      "name": "Heal", "description": "Heal a unit for 80% M.Atk.",
+      "name": "Heal", "description": "Heal an ally or yourself for 80% M.Atk.",
       "tags": ["support"],
       "target": "unit", "affects": "ally", "range": 5, "minRange": 0, "cooldown": 2,
       "heal": { "mAtk": 0.8 }
     },
     "cleanse": {
-      "name": "Cleanse", "description": "Remove all debuffs (Burn, Slow...) from a unit.",
+      "name": "Cleanse", "description": "Remove all debuffs from an ally or yourself.",
       "tags": ["support"],
       "target": "unit", "affects": "ally", "range": 5, "minRange": 0, "cooldown": 0,
       "cleanse": true
     },
     "charge": {
-      "name": "Charge", "description": "Dash next to a unit within 100% of your Movement and strike for 80% P.Atk.",
+      "name": "Charge", "description": "Dash next to an enemy within 100% of your Movement and strike it for 80% P.Atk.",
       "tags": ["movement", "melee", "engage"],
       "target": "unit", "affects": "enemy", "range": 4, "rangeScale": 1, "minRange": 1, "cooldown": 2,
       "hits": [{ "pAtk": 0.8 }], "charge": true
     },
     "kick": {
-      "name": "Kick", "description": "Kick for 60% P.Atk. Free: you can still act afterwards.",
+      "name": "Kick", "description": "Kick an adjacent enemy for 60% P.Atk.",
       "tags": ["melee", "engage", "free"],
       "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 1,
       "hits": [{ "pAtk": 0.6 }]
     },
     "execute": {
-      "name": "Execute", "description": "50% P.Atk plus 10% of the target's missing health, at your weapon's range.",
+      "name": "Execute", "description": "Strike an enemy for 50% P.Atk + 10% of its missing Health, at your weapon's range.",
       "tags": ["weapon"],
       "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 0,
       "hits": [{ "pAtk": 0.5, "missingHp": 0.1 }]

@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { WEAPONS } from '../data/content';
-import type { Appearance, Emblem } from '../data/types';
+import type { Appearance } from '../data/types';
 
 export const WIDTH = 960;
 export const HEIGHT = 640;
@@ -92,33 +92,6 @@ export function button(
     if (enabled) onClick();
   });
   return c;
-}
-
-/** Draw a character token: colored disc with an emblem. */
-export function drawToken(
-  g: Phaser.GameObjects.Graphics, x: number, y: number, r: number,
-  color: string, emblem: Emblem, ring = 0xffffff,
-): void {
-  g.fillStyle(0x000000, 0.35).fillCircle(x + 2, y + 3, r);
-  g.fillStyle(hex(color), 1).fillCircle(x, y, r);
-  g.lineStyle(Math.max(2, r / 8), ring, 1).strokeCircle(x, y, r);
-  const s = r * 0.45;
-  g.fillStyle(0xffffff, 0.9);
-  switch (emblem) {
-    case 'circle':
-      g.fillCircle(x, y, s * 0.8);
-      break;
-    case 'square':
-      g.fillRect(x - s * 0.75, y - s * 0.75, s * 1.5, s * 1.5);
-      break;
-    case 'diamond':
-      g.fillTriangle(x, y - s, x + s, y, x, y + s);
-      g.fillTriangle(x, y - s, x - s, y, x, y + s);
-      break;
-    case 'triangle':
-      g.fillTriangle(x, y - s, x + s, y + s * 0.8, x - s, y + s * 0.8);
-      break;
-  }
 }
 
 /** Modal yes/no dialog drawn on top of the scene. */
@@ -214,14 +187,6 @@ export function figure(
     g.fillStyle(0x000000, 0.35).fillEllipse(0, 1.5 * scale, rx * 2 + 4, ry * 2 + 3);
     g.fillStyle(hex(appearance.color), 1).fillEllipse(0, 0, rx * 2, ry * 2);
     g.lineStyle(Math.max(1.5, 2 * scale), opts.enemy ? 0x2a0a0a : 0xffffff, 0.9).strokeEllipse(0, 0, rx * 2, ry * 2);
-    // Small emblem on the front of the base.
-    const e = 2.6 * scale;
-    const ey = ry * 0.55;
-    g.fillStyle(0xffffff, 0.9);
-    if (appearance.emblem === 'circle') g.fillCircle(0, ey, e);
-    else if (appearance.emblem === 'square') g.fillRect(-e, ey - e * 0.8, e * 2, e * 1.6);
-    else if (appearance.emblem === 'diamond') g.fillTriangle(0, ey - e, e * 1.3, ey, 0, ey + e).fillTriangle(0, ey - e, -e * 1.3, ey, 0, ey + e);
-    else g.fillTriangle(0, ey - e, e * 1.2, ey + e * 0.8, -e * 1.2, ey + e * 0.8);
     parts.push(g);
   }
   for (const key of [bodyKey(appearance.model), weaponKey(weaponId)]) {
@@ -231,4 +196,44 @@ export function figure(
     parts.push(img);
   }
   return scene.add.container(x, feetY, parts);
+}
+
+// ---- tooltip ------------------------------------------------------------------
+
+/**
+ * A floating tooltip that follows the pointer. Call `show(text)` on hover and
+ * `hide()` on pointer-out. It flips sides to stay on screen.
+ */
+export class Tooltip {
+  private readonly box: Phaser.GameObjects.Container;
+  private readonly bg: Phaser.GameObjects.Rectangle;
+  private readonly label: Phaser.GameObjects.Text;
+
+  constructor(private readonly scene: Phaser.Scene, private readonly width = 280) {
+    this.bg = scene.add.rectangle(0, 0, width, 10, 0x0b0e18, 0.96).setOrigin(0).setStrokeStyle(1.5, COLORS.accent);
+    this.label = text(scene, 10, 8, '', { fontSize: '13px', wordWrap: { width: width - 20 }, lineSpacing: 3 });
+    this.box = scene.add.container(0, 0, [this.bg, this.label]).setDepth(5000).setVisible(false);
+    scene.input.on('pointermove', () => this.box.visible && this.place());
+  }
+
+  show(value: string): void {
+    this.label.setText(value);
+    this.bg.setSize(this.width, this.label.height + 16);
+    this.box.setVisible(true);
+    this.place();
+  }
+
+  hide(): void {
+    this.box.setVisible(false);
+  }
+
+  private place(): void {
+    const p = this.scene.input.activePointer;
+    const h = this.bg.height;
+    let x = p.worldX + 16;
+    let y = p.worldY + 18;
+    if (x + this.width > WIDTH - 4) x = p.worldX - this.width - 12;
+    if (y + h > HEIGHT - 4) y = p.worldY - h - 10;
+    this.box.setPosition(Math.max(4, x), Math.max(4, y));
+  }
 }

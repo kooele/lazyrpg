@@ -23,8 +23,6 @@ export const STAT_INFO: Record<StatKey, { name: string; short: string; descripti
  */
 export type LosRule = 'sight' | 'fire';
 
-export type Emblem = 'circle' | 'square' | 'diamond' | 'triangle';
-
 export interface WeaponDef {
   id: string;
   name: string;
@@ -144,7 +142,6 @@ export type BodyModel = (typeof BODY_MODELS)[number];
 export interface Appearance {
   /** Color of the unit's base (the disc it stands on). */
   color: string;
-  emblem: Emblem;
   /** Body art: public/art/units/<model>.svg. Older saves without it get one assigned. */
   model: BodyModel;
 }

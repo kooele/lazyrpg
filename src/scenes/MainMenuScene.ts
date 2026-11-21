@@ -12,8 +12,7 @@ export class MainMenuScene extends Phaser.Scene {
     setupCamera(this);
     this.drawBackdrop();
 
-    text(this, WIDTH / 2, 120, 'LAZYRPG', { fontSize: '64px', color: COLORS.gold, fontStyle: 'bold' }).setOrigin(0.5);
-    text(this, WIDTH / 2, 180, 'T A C T I C S', { fontSize: '20px', color: COLORS.dim }).setOrigin(0.5);
+    text(this, WIDTH / 2, 140, 'L RPG', { fontSize: '72px', color: COLORS.gold, fontStyle: 'bold' }).setOrigin(0.5);
 
     const inGame = session.state !== null;
     const items: [string, () => void, boolean][] = [
@@ -55,9 +54,9 @@ export class MainMenuScene extends Phaser.Scene {
     for (let x = 0; x <= WIDTH; x += 48) g.lineBetween(x, 0, x, HEIGHT);
     for (let y = 0; y <= HEIGHT; y += 48) g.lineBetween(0, y, WIDTH, y);
     // A little standoff: two adventurers facing two bandits.
-    figure(this, 140, 470, 120, { color: '#3d7be0', emblem: 'square', model: 'm1' }, 'sword_shield');
-    figure(this, 230, 560, 110, { color: '#36b37e', emblem: 'diamond', model: 'f2' }, 'staff');
-    figure(this, 820, 470, 120, { color: '#c0392b', emblem: 'triangle', model: 'm3' }, 'spear', { enemy: true });
-    figure(this, 730, 560, 110, { color: '#c0392b', emblem: 'triangle', model: 'f3' }, 'bow', { enemy: true });
+    figure(this, 140, 470, 120, { color: '#3d7be0', model: 'm1' }, 'sword_shield');
+    figure(this, 230, 560, 110, { color: '#36b37e', model: 'f2' }, 'staff');
+    figure(this, 820, 470, 120, { color: '#c0392b', model: 'm3' }, 'spear', { enemy: true });
+    figure(this, 730, 560, 110, { color: '#c0392b', model: 'f3' }, 'bow', { enemy: true });
   }
 }
