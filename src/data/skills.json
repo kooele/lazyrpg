@@ -13,12 +13,13 @@
 
   "tags": {
     "melee": { "name": "Melee", "description": "Close-range attack. No line of sight needed." },
-    "engage": { "name": "Engage", "description": "On hit, you and the target become engaged (unless the target is already engaged). Engaged units have half Defense, can't move, and can only attack each other until one disengages, which gives the other a free basic attack." },
+    "engage": { "name": "Engage", "description": "On hit, you and the target become engaged (unless the target is already engaged). Engaged units can't move and can only attack each other until one disengages, which gives the other a free basic attack. Being knocked back breaks the engagement." },
     "projectile": { "name": "Projectile", "description": "Needs a clear line to the target: line of sight (rocks block) or line of fire (rocks and units block)." },
     "indirect": { "name": "Indirect", "description": "Arcs over obstacles. No line of sight needed." },
     "area": { "name": "Area", "description": "Affects several tiles at once." },
-    "knockback": { "name": "Knockback", "description": "Pushes targets away. Walls and other units stop the push." },
+    "knockback": { "name": "Knockback", "description": "Pushes targets away. Walls and other units stop the push. A unit that is pushed breaks free of any engagement." },
     "reaction": { "name": "Reaction", "description": "Sets a watch that triggers during the enemy's turn when they move into it. Lasts until your next turn." },
+    "teleport": { "name": "Teleport", "description": "Moves you instantly, ignoring terrain and units in the way." },
     "movement": { "name": "Movement", "description": "Range scales with your Movement (rounded down), so Slow shortens it." },
     "weapon": { "name": "Weapon", "description": "Uses your weapon's basic-attack range and line rules. Unusable while your weapon is disabled." },
     "free": { "name": "Free Action", "description": "Doesn't use your action. You can still act afterwards." },
@@ -51,10 +52,10 @@
       "shield": { "maxHpPct": 0.1, "turns": 1 }
     },
     "spear_thrust": {
-      "name": "Spear Thrust", "description": "Thrust toward a tile, hitting the first enemy in the way for 100% P.Atk and knocking it back 1 tile.",
-      "tags": ["melee", "knockback"],
+      "name": "Spear Thrust", "description": "Thrust toward a tile, hitting the first enemy in the way for 100% P.Atk.",
+      "tags": ["melee"],
       "target": "line", "affects": "enemy", "range": 2, "minRange": 1, "cooldown": 0,
-      "hits": [{ "pAtk": 1 }], "knockback": 1
+      "hits": [{ "pAtk": 1 }]
     },
     "circle_swing": {
       "name": "Circle Swing", "description": "Sweep the tiles around you, hitting every unit (allies included) for 100% P.Atk and knocking them back 1 tile.",
@@ -115,8 +116,8 @@
     },
     "arcane_shift": {
       "name": "Arcane Shift", "description": "Teleport to an empty tile.",
-      "tags": ["movement"],
-      "target": "emptyTile", "affects": "ally", "range": 2, "rangeScale": 0.5, "minRange": 1, "cooldown": 2,
+      "tags": ["teleport"],
+      "target": "emptyTile", "affects": "ally", "range": 2, "minRange": 1, "cooldown": 2,
       "teleport": true
     },
     "fireball": {

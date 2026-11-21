@@ -60,6 +60,8 @@ export class BattleScene extends Phaser.Scene {
   /** Skill whose range is previewed while hovering its button. */
   private previewAction: SkillDef | null = null;
   private hoverTile: Point | null = null;
+  /** A confirm dialog is open: ignore clicks on the board behind it. */
+  private dialogOpen = false;
 
   constructor() {
     super('Battle');
@@ -74,6 +76,7 @@ export class BattleScene extends Phaser.Scene {
     this.action = null;
     this.previewAction = null;
     this.hoverTile = null;
+    this.dialogOpen = false;
     setupCamera(this);
 
     const state = requireState();
@@ -493,7 +496,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private cycleUnit(): void {
-    if (this.mode !== 'select' && this.mode !== 'target') return;
+    if ((this.mode !== 'select' && this.mode !== 'target') || this.dialogOpen) return;
     const ready = this.battle.readyUnits();
     if (ready.length === 0) return;
     const i = ready.findIndex((u) => u.uid === this.selectedUid);
@@ -515,7 +518,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private cancel(): void {
-    if (this.mode !== 'target') return;
+    if (this.mode !== 'target' || this.dialogOpen) return;
     this.action = null;
     this.mode = 'select';
     this.renderSidebar();
@@ -576,7 +579,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private async onClick(tile: Point | null): Promise<void> {
-    if (!tile || this.battle.phase !== 'player') return;
+    if (!tile || this.battle.phase !== 'player' || this.dialogOpen) return;
     const b = this.battle;
     const u = this.selected;
     const clicked = b.unitAt(tile.x, tile.y);
@@ -584,17 +587,65 @@ export class BattleScene extends Phaser.Scene {
     if (this.mode === 'target' && u && this.action) {
       if (!b.canTarget(u, this.action, tile)) return this.cancel();
       const action = this.action;
-      this.mode = 'busy';
-      this.action = null;
-      this.casterUid = u.uid;
-      this.refresh();
-      await this.resolve(u, action, tile);
-      this.casterUid = null;
-      this.afterUnitDone();
+      const warning = this.targetWarning(u, action, tile);
+      if (warning) {
+        this.ask(warning, () => void this.useSkill(u, action, tile), 'Use anyway');
+        return;
+      }
+      await this.useSkill(u, action, tile);
       return;
     }
     if (this.mode !== 'select') return;
+    await this.onSelectClick(tile, u, clicked);
+  }
 
+  /** Open a confirm dialog that blocks board input while it's up. */
+  private ask(message: string, onYes: () => void, yesLabel: string): void {
+    this.dialogOpen = true;
+    confirmDialog(this, message, () => {
+      this.dialogOpen = false;
+      onYes();
+    }, yesLabel, () => {
+      this.dialogOpen = false;
+    });
+  }
+
+  /**
+   * Why the player might not mean this: attacking empty ground or an ally,
+   * or healing / cleansing an enemy. Null when the target makes sense.
+   */
+  private targetWarning(u: Unit, s: SkillDef, tile: Point): string | null {
+    const b = this.battle;
+    const occupant = b.unitAt(tile.x, tile.y);
+    const targets = b.targetsOf(u, s, tile);
+    const offensive = s.affects !== 'ally' && !s.cone && (!!s.hits?.length || !!s.applyStatus?.length);
+    if (offensive) {
+      const allies = targets.filter((t) => t.team === u.team);
+      if (allies.length) return `${s.name} will also hit your own ${allies.length > 1 ? 'allies' : 'ally'} ${allies.map((a) => a.character.name).join(', ')}.\nUse it anyway?`;
+      if (targets.length === 0) {
+        if (occupant && occupant.team === u.team && occupant !== u) return `${occupant.character.name} is your ally: ${s.name} won't affect them and will be wasted.\nUse it anyway?`;
+        return `No enemy there: ${s.name} will hit nothing${s.charge ? ' (you will only dash)' : ''}.\nUse it anyway?`;
+      }
+    }
+    if ((s.heal || s.cleanse) && occupant && occupant.team !== u.team) {
+      return `${occupant.character.name} is an enemy: ${s.name} won't affect them and will be wasted.\nUse it anyway?`;
+    }
+    return null;
+  }
+
+  private async useSkill(u: Unit, action: SkillDef, tile: Point): Promise<void> {
+    if (this.mode !== 'target') return;
+    this.mode = 'busy';
+    this.action = null;
+    this.casterUid = u.uid;
+    this.refresh();
+    await this.resolve(u, action, tile);
+    this.casterUid = null;
+    this.afterUnitDone();
+  }
+
+  private async onSelectClick(tile: Point, u: Unit | null, clicked: Unit | undefined): Promise<void> {
+    const b = this.battle;
     if (clicked && clicked.team === 'player' && clicked !== u) return this.selectUnit(clicked);
 
     const k = key(tile.x, tile.y);
@@ -774,7 +825,8 @@ export class BattleScene extends Phaser.Scene {
       this.showEvent(e, summary, n++);
     }
     this.flashArea(s, u, target);
-    const detail = summary.length ? `: ${summary.join(', ')}` : s.cone ? ' and watches the area.' : s.teleport ? '.' : ' — it hits nothing.';
+    const detail = summary.length ? `: ${summary.join(', ')}`
+      : s.cone ? ' and watches the area.' : s.teleport ? '.' : s.hits?.length ? ' — it hits nothing.' : ' — it has no effect.';
     this.addLog(`${u.character.name} uses ${s.name}${detail}`);
     this.refresh();
     await this.wait(events.length ? 800 : 400);
@@ -859,7 +911,8 @@ export class BattleScene extends Phaser.Scene {
 
   private retreat(): void {
     if (this.mode !== 'select' && this.mode !== 'target') return;
-    confirmDialog(this, 'Retreat to camp?\nThis counts as a defeat (no XP).', () => this.endBattle('defeat'), 'Retreat');
+    if (this.dialogOpen) return;
+    this.ask('Retreat to camp?\nThis counts as a defeat (no XP).', () => this.endBattle('defeat'), 'Retreat');
   }
 
   private endBattle(outcome: 'victory' | 'defeat'): void {

@@ -15,7 +15,7 @@ Everything gameplay-related lives in plain JSON files in `src/data/`. Each file 
 
 | File | What's in it |
 |---|---|
-| `stats.json` | Base stats and per-level growth, Defense scaling, forest bonus, engagement Defense penalty, map size, hit-chance and vision switches |
+| `stats.json` | Base stats and per-level growth, Defense scaling, forest bonus, map size, hit-chance and vision switches |
 | `skills.json` | Every skill (numbers and descriptions), tags, status effects (Burn, Slow), skill trees |
 | `weapons.json` | Weapons: stat multipliers and granted skills |
 
@@ -49,20 +49,21 @@ Weapons **multiply** these stats:
 
 Every skill has tags that explain how it behaves. These four change the rules:
 
-- **Movement**: range = rangeScale × Movement, rounded down. Arcane Shift uses 50%, Charge 100%. Slow shortens it.
+- **Movement**: range = rangeScale × Movement, rounded down. Charge uses 100%, and Slow shortens it. (Arcane Shift has a fixed range of 2.)
 - **Weapon**: uses your weapon's basic-attack range and line rules (Execute with a Bow reaches 5 tiles). Unusable while the weapon is disabled (nothing disables weapons yet).
 - **Engage**: see below. Sword Slash, Slash and Smash, Empowered Strike, Kick, Charge.
 - **Free Action**: doesn't use your action (Kick).
 
-Descriptive tags: Melee, Projectile, Indirect, Area, Knockback, Reaction, Debuff, Support.
+Descriptive tags: Melee, Projectile, Indirect, Area, Knockback, Reaction, Teleport, Debuff, Support.
 
 ### Engagement
 
 Hitting a unit with an **Engage** skill locks you both together, unless the target is already engaged with someone else. While engaged:
 - You can't move, and you can only attack your opponent. Healing and buffs are fine.
-- Your Defense is halved, so everyone (your opponent included) hits you harder.
 - **Disengage** (button in the battle sidebar) breaks free, but your opponent gets a free basic attack on you (an opportunity attack). You can then move and act normally.
-- Engagement also ends if either unit falls, or if they're knocked or teleported apart.
+- Engagement also ends if either unit falls, or if either one is successfully pushed by a knockback (Circle Swing, Arcane Pulse), even if they still end up next to each other. A push that's blocked doesn't break it.
+
+In battle, the game asks for confirmation before you attack an empty tile or an ally, or heal or cleanse an enemy.
 
 ### Lines, cooldowns, and prepared systems
 

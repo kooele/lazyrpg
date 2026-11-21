@@ -18,11 +18,6 @@ export interface VisionRules {
   enabled: boolean;
 }
 
-export interface EngagementRules {
-  /** Defense multiplier while engaged (0.5 = half Defense). */
-  defenseMultiplier: number;
-}
-
 export interface RangeRoundingRules {
   /** Ranges >= this use distance rounded to the nearest tile; smaller ranges are exact. */
   fromRange: number;
@@ -38,7 +33,6 @@ export interface StatConfig {
   growthPerLevel: Stats;
   defenseScale: number;
   forestDefense: number;
-  engagement: EngagementRules;
   map: MapRules;
   rangeRounding: RangeRoundingRules;
   hitChance: HitChanceRules;
@@ -66,7 +60,6 @@ export function parseStatConfig(data: unknown): StatConfig {
   const rec = obj(data, '(root)');
   const hit = obj(rec.hitChance ?? { enabled: false, base: 100, min: 0, max: 100, reactionModifier: 0 }, 'hitChance');
   const vision = obj(rec.vision ?? { enabled: false }, 'vision');
-  const eng = obj(rec.engagement ?? { defenseMultiplier: 0.5 }, 'engagement');
   const map = obj(rec.map ?? { width: 18, height: 13 }, 'map');
   const rounding = obj(rec.rangeRounding ?? { fromRange: 2 }, 'rangeRounding');
   const cfg: StatConfig = {
@@ -74,9 +67,6 @@ export function parseStatConfig(data: unknown): StatConfig {
     growthPerLevel: readStats(rec.growthPerLevel, 'growthPerLevel'),
     defenseScale: num(rec.defenseScale, 'defenseScale'),
     forestDefense: num(rec.forestDefense ?? 0, 'forestDefense'),
-    engagement: {
-      defenseMultiplier: num(eng.defenseMultiplier, 'engagement.defenseMultiplier'),
-    },
     map: { width: Math.round(num(map.width, 'map.width')), height: Math.round(num(map.height, 'map.height')) },
     rangeRounding: { fromRange: num(rounding.fromRange, 'rangeRounding.fromRange') },
     hitChance: {
