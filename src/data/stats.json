@@ -2,11 +2,11 @@
   "_readme": "Unit stat tuning. Edit numbers here; the game picks them up on the next build (npm run dev hot-reloads). Keys starting with _ are comments and are ignored.",
 
   "base": {
-    "_comment": "Stats every Adventurer (and enemy) has at level 1, before weapon bonuses.",
-    "health": 600,
+    "_comment": "Stats every Adventurer (and enemy) has at level 1. Weapons then multiply these (see weapons.json).",
+    "health": 500,
     "pAtk": 100,
     "mAtk": 100,
-    "defense": 0,
+    "defense": 50,
     "movement": 4,
     "accuracy": 0,
     "evasion": 0,
@@ -15,10 +15,10 @@
 
   "growthPerLevel": {
     "_comment": "Added automatically for every level above 1.",
-    "health": 60,
+    "health": 50,
     "pAtk": 10,
     "mAtk": 10,
-    "defense": 2,
+    "defense": 5,
     "movement": 0,
     "accuracy": 0,
     "evasion": 0,
@@ -30,6 +30,12 @@
 
   "forestDefense": 20,
   "_forestDefense": "Extra Defense for a unit standing in forest.",
+
+  "engagement": {
+    "_comment": "Engaged units (see the Engage tag in skills.json) have their Defense multiplied by defenseMultiplier, and take opponentDamageTaken x damage from the unit they are engaged with.",
+    "defenseMultiplier": 0.5,
+    "opponentDamageTaken": 0.5
+  },
 
   "hitChance": {
     "_comment": "Disabled for now: every attack hits. When enabled: hit% = base + attacker Accuracy + skill accuracy - target Evasion (+ reaction modifier for overwatch), clamped to [min, max]. Heals, shields and cleanses never miss.",

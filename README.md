@@ -9,49 +9,72 @@ A small turn-based tactical RPG that runs in the browser, built with [Phaser 4](
 3. **Camp**: the hub between battles. Recruit, customize or dismiss Adventurers, then start the next battle.
 4. **Tactical battle**: XCOM-style alternating turns. On your turn, every Adventurer can move once and act once, in any order (click a unit or press Tab). Hover a skill to see its range box; any tile in range can be targeted. Forest gives +20 Defense and costs 2 movement; rock and water block movement, and rock blocks line of sight.
 
-### Stats
+### Editing the game data
 
-Base stats and per-level growth are in **`src/data/stats.json`**. Edit that file to rebalance.
+Everything gameplay-related lives in plain JSON files in `src/data/`. Each file is checked when the game loads, and a mistake fails with a message naming the exact field (e.g. `skills.json: "skills.kick.tags[3]" "flying" is not defined in "tags"`).
+
+| File | What's in it |
+|---|---|
+| `stats.json` | Base stats and per-level growth, Defense scaling, forest bonus, engagement numbers, hit-chance and vision switches |
+| `skills.json` | Every skill (numbers and descriptions), tags, status effects (Burn, Slow), skill trees |
+| `weapons.json` | Weapons: stat multipliers and granted skills |
+
+Tooltips show a formula line generated from the numbers (e.g. "80% P.Atk, then 40% P.Atk + 100% Def"), so it stays correct even if a description is out of date.
+
+### Stats
 
 | Stat | Default | Meaning |
 |---|---|---|
-| Health | 600 (+60/level) | Max health |
-| P.Atk | 100 | Physical power; skills deal a % of it |
-| M.Atk | 100 | Magic power and healing |
-| Defense | 0 | Damage taken × 100 / (100 + Defense): 100 Defense = 2× effective health |
+| Health | 500 (+50/level) | Max health |
+| P.Atk | 100 (+10) | Physical power; skills deal a % of it |
+| M.Atk | 100 (+10) | Magic power and healing |
+| Defense | 50 (+5) | Damage taken × 100 / (100 + Defense) |
 | Movement | 4 | Movement points per turn |
 
-Stats grow automatically on level up (100 XP per level). Range is Euclidean: 1 = the 4 neighbours, 1.5 includes diagonals.
+Weapons **multiply** these stats:
 
-**Line of sight vs line of fire.** Projectile skills need a clear line to the target:
-- *Line of sight*: no rock in between. Used by Magic Bolt, Arcane Bolt, Fireball and Overwatch.
-- *Line of fire*: no rock **and no unit** in between. Used by Direct Shot.
-
-Melee skills, Indirect Shot (lobbed), Heal, Cleanse and Arcane Shift need neither. When targeting, tiles in range but blocked are greyed out with an ✕.
-
-**Prepared but switched off** (in `stats.json`):
-- `hitChance`: hit% = base + Accuracy + skill accuracy − Evasion (overwatch gets a reaction modifier), clamped to a min/max. Misses show as MISS.
-- `vision`: fog of war based on each unit's Vision range plus line of sight.
-
-Set `"enabled": true` to try either one. Accuracy, Evasion and Vision then appear in the stat panels.
-
-### Weapons (each grants its skills; the first is the basic attack)
-
-| Weapon | Stats | Skills |
+| Weapon | Multipliers | Skills (the first is the basic attack) |
 |---|---|---|
-| Sword & Shield | +40 P.Atk, +20 Def | Sword Slash, Slash and Smash, Shield Up |
-| Spear | +50 P.Atk | Spear Thrust, Circle Swing, Intercept |
-| Bow | +40 P.Atk | Direct Shot, Indirect Shot, Overwatch |
-| Staff | +10 P.Atk, +50 M.Atk | Empowered Strike, Magic Bolt |
+| Sword & Shield | 100% P.Atk, 80% M.Atk, 150% Def | Sword Slash, Slash and Smash, Shield Up |
+| Spear | 100% P.Atk, 80% M.Atk | Spear Thrust, Circle Swing, Intercept |
+| Bow | 80% P.Atk, 80% M.Atk | Direct Shot, Indirect Shot, Overwatch |
+| Staff | 50% P.Atk, 120% M.Atk | Empowered Strike, Magic Bolt |
 
-### Skill trees (pick freely across trees; 2 slots, 3 at Lv 3, 4 at Lv 6)
+### Skill trees (mix freely; 2 slots, 3 at Lv 3, 4 at Lv 6)
 
-- **Mage**: Arcanist (Arcane Bolt, Arcane Shift), Elementalist (Fireball), Cleric (Heal, Cleanse)
-- **Warrior**: Vanguard (Charge), Infighter (Kick, a free action), Assassin (Execute)
+- **Mage**: Arcanist (Arcane Bolt, Arcane Pulse, Arcane Shift), Elementalist (Fireball, Freeze), Cleric (Heal, Cleanse)
+- **Warrior**: Vanguard (Charge), Infighter (Kick), Assassin (Execute)
 
-A cooldown of N means the skill can't be used during your next N turns.
+### Tags
 
-Weapons, skills and trees are defined in `src/data/content.ts`.
+Every skill has tags that explain how it behaves. These four change the rules:
+
+- **Movement**: range = rangeScale × Movement, rounded down. Arcane Shift uses 50%, Charge 100%. Slow shortens it.
+- **Weapon**: uses your weapon's basic-attack range and line rules (Execute with a Bow reaches 5 tiles). Unusable while the weapon is disabled (nothing disables weapons yet).
+- **Engage**: see below. Sword Slash, Slash and Smash, Empowered Strike, Kick, Charge.
+- **Free Action**: doesn't use your action (Kick).
+
+Descriptive tags: Melee, Projectile, Indirect, Area, Knockback, Reaction, Debuff, Support.
+
+### Engagement
+
+Hitting a unit with an **Engage** skill locks you both together, unless the target is already engaged with someone else. While engaged:
+- You can't move, and you can only attack your opponent. Healing and buffs are fine.
+- Your Defense is halved, but you take 50% less damage from your opponent. Other enemies flanking you hit harder.
+- **Disengage** (button in the battle sidebar) breaks free, but your opponent gets a free basic attack on you (an opportunity attack). You can then move and act normally.
+- Engagement also ends if either unit falls, or if they're knocked or teleported apart.
+
+### Lines, cooldowns, and prepared systems
+
+- *Line of sight* (no rock in between): Magic Bolt, Arcane Bolt, Arcane Pulse, Fireball, Overwatch.
+- *Line of fire* (no rock **or unit** in between): Direct Shot.
+- No line needed: melee skills, Indirect Shot, Freeze, Heal, Cleanse, Arcane Shift.
+- A cooldown of N means the skill can't be used during your next N turns.
+- `hitChance` and `vision` (fog of war) are built but switched off in `stats.json`.
+
+### Art
+
+Adventurers are drawn from 8 human body models (4 male, 4 female) plus a weapon sprite, all SVG in `public/art/`, so they stay sharp at 4K. They're generated by `node tools/generate-art.mjs`: edit the colors or shapes there and re-run it, or replace the SVGs with your own art (same 64×80 canvas, feet at y = 76).
 
 ## Save files
 
@@ -71,7 +94,7 @@ Saves are **pretty-printed JSON**. You can save to 3 browser slots, or Export a 
       "xp": 75,
       "weaponId": "staff",
       "skillIds": ["fireball", "heal"],
-      "appearance": { "color": "#3d7be0", "emblem": "circle" }
+      "appearance": { "color": "#3d7be0", "emblem": "circle", "model": "f2" }
     }
   ]
 }
@@ -90,7 +113,8 @@ npm run build    # type-check + production build into dist/
 
 ```
 src/
-  data/       stats.json (base stats + growth), content.ts (weapons, skills, skill trees), types.ts
+  data/       stats.json, skills.json, weapons.json (editable game data) + loaders/validation
+public/art/   unit and weapon SVGs (tools/generate-art.mjs regenerates them)
   game/       pure game logic, no Phaser: character stats, battle rules, AI, map generation, save/load
   scenes/     Phaser scenes: MainMenu, SaveLoad, CharacterCreator, Camp, Battle
   ui/         small UI helpers (buttons, panels, tokens, dialogs)

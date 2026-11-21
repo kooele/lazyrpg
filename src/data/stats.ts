@@ -18,11 +18,19 @@ export interface VisionRules {
   enabled: boolean;
 }
 
+export interface EngagementRules {
+  /** Defense multiplier while engaged (0.5 = half Defense). */
+  defenseMultiplier: number;
+  /** Damage multiplier for hits from the engaged opponent (0.5 = 50% less). */
+  opponentDamageTaken: number;
+}
+
 export interface StatConfig {
   base: Stats;
   growthPerLevel: Stats;
   defenseScale: number;
   forestDefense: number;
+  engagement: EngagementRules;
   hitChance: HitChanceRules;
   vision: VisionRules;
 }
@@ -48,11 +56,16 @@ export function parseStatConfig(data: unknown): StatConfig {
   const rec = obj(data, '(root)');
   const hit = obj(rec.hitChance ?? { enabled: false, base: 100, min: 0, max: 100, reactionModifier: 0 }, 'hitChance');
   const vision = obj(rec.vision ?? { enabled: false }, 'vision');
+  const eng = obj(rec.engagement ?? { defenseMultiplier: 0.5, opponentDamageTaken: 0.5 }, 'engagement');
   const cfg: StatConfig = {
     base: readStats(rec.base, 'base'),
     growthPerLevel: readStats(rec.growthPerLevel, 'growthPerLevel'),
     defenseScale: num(rec.defenseScale, 'defenseScale'),
     forestDefense: num(rec.forestDefense ?? 0, 'forestDefense'),
+    engagement: {
+      defenseMultiplier: num(eng.defenseMultiplier, 'engagement.defenseMultiplier'),
+      opponentDamageTaken: num(eng.opponentDamageTaken, 'engagement.opponentDamageTaken'),
+    },
     hitChance: {
       enabled: hit.enabled === true,
       base: num(hit.base, 'hitChance.base'),

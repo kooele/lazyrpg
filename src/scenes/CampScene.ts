@@ -3,7 +3,7 @@ import { MAX_PARTY_SIZE, SKILLS, WEAPONS, XP_PER_LEVEL } from '../data/content';
 import type { Character } from '../data/types';
 import { deriveStats, skillSlots } from '../game/character';
 import { markDirty, requireState, session } from '../game/session';
-import { COLORS, HEIGHT, WIDTH, button, confirmDialog, drawToken, panel, text, setupCamera } from '../ui/widgets';
+import { COLORS, HEIGHT, WIDTH, button, confirmDialog, figure, panel, text, setupCamera } from '../ui/widgets';
 
 /** Party hub between battles: view, recruit, edit and dismiss party members. */
 export class CampScene extends Phaser.Scene {
@@ -56,7 +56,7 @@ export class CampScene extends Phaser.Scene {
     const freeSlots = skillSlots(c) - c.skillIds.length;
     panel(this, x, y, 216, 440);
     const g = this.add.graphics();
-    drawToken(g, x + 40, y + 42, 26, c.appearance.color, c.appearance.emblem);
+    figure(this, x + 40, y + 70, 62, c.appearance, c.weaponId);
     text(this, x + 76, y + 18, c.name, { fontSize: '18px', wordWrap: { width: 134 } });
     text(this, x + 76, y + 44, `Lv ${c.level} Adventurer`, { color: COLORS.dim, fontSize: '14px' });
 

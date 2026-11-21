@@ -1,6 +1,6 @@
-import { PALETTE, TREE_SKILLS, WEAPONS, XP_PER_LEVEL, skillSlotsForLevel } from '../data/content';
+import { DEFAULT_WEAPON, PALETTE, TREE_SKILLS, WEAPONS, XP_PER_LEVEL, skillSlotsForLevel } from '../data/content';
 import { STAT_CONFIG } from '../data/stats';
-import { STAT_KEYS, type Character, type Stats } from '../data/types';
+import { BODY_MODELS, STAT_KEYS, type BodyModel, type Character, type Stats } from '../data/types';
 
 export function newId(prefix = 'c'): string {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
@@ -14,14 +14,21 @@ export function levelStats(level: number): Stats {
   return out;
 }
 
-/** Final stats: level stats + weapon bonus. */
+/** Final stats: level stats x weapon multipliers (rounded). */
 export function deriveStats(c: Character): Stats {
   const out = levelStats(c.level);
-  const bonus = WEAPONS[c.weaponId]?.bonus ?? {};
-  for (const k of STAT_KEYS) out[k] += bonus[k] ?? 0;
+  const mult = WEAPONS[c.weaponId]?.statMultipliers ?? {};
+  for (const k of STAT_KEYS) out[k] = Math.round(out[k] * (mult[k] ?? 1));
   out.movement = Math.max(1, out.movement);
   out.health = Math.max(1, out.health);
   return out;
+}
+
+/** Pick a body model deterministically from an id (used for old saves and enemies). */
+export function modelFor(seed: string): BodyModel {
+  let h = 0;
+  for (const ch of seed) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return BODY_MODELS[h % BODY_MODELS.length];
 }
 
 export function skillSlots(c: Character): number {
@@ -33,15 +40,16 @@ export function allSkills(c: Character): string[] {
   return [...(WEAPONS[c.weaponId]?.skills ?? []), ...c.skillIds.slice(0, skillSlots(c))];
 }
 
-export function createCharacter(name: string, color = PALETTE[0], weaponId = 'sword_shield'): Character {
+export function createCharacter(name: string, color = PALETTE[0], weaponId = DEFAULT_WEAPON, model?: BodyModel): Character {
+  const id = newId();
   return {
-    id: newId(),
+    id,
     name,
     level: 1,
     xp: 0,
     weaponId,
     skillIds: [],
-    appearance: { color, emblem: 'circle' },
+    appearance: { color, emblem: 'circle', model: model ?? modelFor(id) },
   };
 }
 
@@ -63,7 +71,7 @@ export function cloneCharacter(c: Character): Character {
 
 /** Ensure weapon/skills are legal for the character's level. */
 export function sanitizeLoadout(c: Character): void {
-  if (!WEAPONS[c.weaponId]) c.weaponId = 'sword_shield';
+  if (!WEAPONS[c.weaponId]) c.weaponId = DEFAULT_WEAPON;
   c.skillIds = [...new Set(c.skillIds)].filter((s) => TREE_SKILLS.includes(s)).slice(0, skillSlots(c));
 }
 
