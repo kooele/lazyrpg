@@ -2,7 +2,7 @@
 // battle rules and by the UI's tile diagrams.
 import { hasTag } from '../data/content';
 import type { LosRule, SkillDef } from '../data/types';
-import { DIRS8, EPS, dist, withinRange, type Point } from './grid';
+import { EPS, dist, withinRange, type Point } from './grid';
 
 export interface ReachContext {
   /** The user's current Movement (for 'movement' skills). */
@@ -29,11 +29,10 @@ export function losFor(s: SkillDef, ctx: ReachContext): LosRule | undefined {
  * The tiles a skill covers, as offsets from the user (who stands at 0,0).
  *  targets – tiles you can aim at (range band)
  *  area    – tiles hit around you
- *  line    – the 8 directions you can thrust in
  *  cone    – an example cone pointing right (aim it any way)
  *  self    – only you
  */
-export function skillShape(s: SkillDef, ctx: ReachContext): { kind: 'targets' | 'area' | 'line' | 'cone' | 'self'; tiles: Point[] } {
+export function skillShape(s: SkillDef, ctx: ReachContext): { kind: 'targets' | 'area' | 'cone' | 'self'; tiles: Point[] } {
   const tiles: Point[] = [];
   const scan = (r: number, keep: (p: Point, d: number) => boolean) => {
     const R = Math.ceil(r) + 1;
@@ -47,9 +46,6 @@ export function skillShape(s: SkillDef, ctx: ReachContext): { kind: 'targets' | 
       if (!s.aoeRadius) return { kind: 'self', tiles };
       scan(s.aoeRadius, (_p, d) => withinRange(d, s.aoeRadius!));
       return { kind: 'area', tiles };
-    case 'line':
-      for (const dir of DIRS8) for (let i = 1; i <= (s.lineLength ?? 1); i++) tiles.push({ x: dir.x * i, y: dir.y * i });
-      return { kind: 'line', tiles };
     case 'cone': {
       const half = ((s.cone?.angle ?? 60) / 2) * (Math.PI / 180) + EPS;
       const r = s.cone?.radius ?? s.range;

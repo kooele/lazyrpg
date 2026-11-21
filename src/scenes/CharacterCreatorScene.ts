@@ -86,7 +86,6 @@ export class CharacterCreatorScene extends Phaser.Scene {
   private skillInfo(s: SkillDef): string {
     const shape = skillShape(s, this.reachContext());
     const note = shape.kind === 'cone' ? '\nShown facing right; aim it any way.'
-      : shape.kind === 'line' ? '\nPick one of the 8 directions.'
         : shape.kind === 'self' ? '\nAffects only you.' : '';
     return `${s.name}  [${tagNames(s).join(', ')}]\n${s.description}\n\n${skillFormula(s)}\n${skillDetails(s)}${note}`;
   }
@@ -173,18 +172,20 @@ export class CharacterCreatorScene extends Phaser.Scene {
     const w = WEAPONS[d.weaponId];
     L.add(panel(this, 330, 172, 290, 376));
     L.add(text(this, 342, 180, w.name, { fontSize: '18px', color: COLORS.gold }));
-    L.add(text(this, 342, 204, w.description, { fontSize: '13px', color: COLORS.dim, wordWrap: { width: 266 } }));
+    const wdesc = text(this, 342, 204, w.description, { fontSize: '13px', color: COLORS.dim, wordWrap: { width: 266 } });
+    L.add(wdesc);
+    const my = 204 + wdesc.height + 6;
     const changed = STAT_KEYS.filter((k) => (w.statMultipliers[k] ?? 1) !== 1);
-    if (changed.length === 0) L.add(text(this, 342, 244, 'No stat changes', { fontSize: '14px', color: COLORS.dim }));
+    if (changed.length === 0) L.add(text(this, 342, my, 'No stat changes', { fontSize: '14px', color: COLORS.dim }));
     let mx = 342;
     for (const k of changed) {
       const m = w.statMultipliers[k]!;
-      const t = text(this, mx, 244, `${mult(m)} ${STAT_INFO[k].short}`, { fontSize: '14px', color: m > 1 ? COLORS.good : COLORS.bad });
+      const t = text(this, mx, my, `${mult(m)} ${STAT_INFO[k].short}`, { fontSize: '14px', color: m > 1 ? COLORS.good : COLORS.bad });
       L.add(t);
       mx += t.width + 16;
     }
-    L.add(text(this, 342, 268, 'Weapon skills (always equipped)', { fontSize: '12px', color: COLORS.dim }));
-    let sy = 286;
+    L.add(text(this, 342, my + 24, 'Weapon skills (always equipped)', { fontSize: '12px', color: COLORS.dim }));
+    let sy = my + 42;
     w.skills.forEach((sid, i) => {
       const s = SKILLS[sid];
       const name = text(this, 342, sy, `${s.name}${i === 0 ? '  (basic)' : ''}`, { fontSize: '15px' }).setInteractive();

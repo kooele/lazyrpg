@@ -509,7 +509,7 @@ export class BattleScene extends Phaser.Scene {
     this.renderSidebar();
     this.drawOverlay();
     const how = this.action.target === 'cone' ? 'click to aim the cone'
-      : this.action.target === 'line' ? 'click a direction'
+      : this.action.target === 'line' ? 'click a tile to thrust toward'
         : this.action.target === 'self' ? 'click inside the box to use it' : 'click a tile in the box';
     this.hoverText.setText(`${this.action.name}: ${how} (right-click / Esc to cancel).`);
   }

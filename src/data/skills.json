@@ -2,13 +2,13 @@
   "_readme": "Skills, tags, status effects and skill trees. Percentages are fractions (0.8 = 80%). Ranges are in tiles (Euclidean: 1 = the 4 neighbours, 1.5 includes diagonals). Cooldown N = can't be used during your next N turns. Keys starting with _ are comments. The game checks this file on load and reports the exact field if something is wrong.",
 
   "_fields": {
-    "target": "unit (aim at a tile, affects the unit there) | self | line (8 directions) | cone (overwatch) | emptyTile",
+    "target": "unit (aim at a tile, affects the unit there) | self | line (aim at a tile, hits the first unit on the straight path to it) | cone (overwatch) | emptyTile",
     "affects": "enemy | ally | any (friend and foe)",
     "hits": "list of hits, each { pAtk, mAtk, def, missingHp } as fractions",
-    "los": "sight (rocks block) | fire (rocks AND units block). Omit for none.",
+    "los": "sight = line of sight (rocks block) | fire = line of fire (rocks AND units block; kept for future skills). Omit for none.",
     "rangeScale": "for 'movement' skills: range = floor(rangeScale x Movement)",
     "applyStatus": "list of { status, turns, stacks }",
-    "optional": "heal { mAtk }, shield { maxHpPct, turns }, knockback (tiles), cleanse, teleport, charge, aoeRadius, lineLength, cone { angle, radius, interrupt, los }, accuracy"
+    "optional": "heal { mAtk }, shield { maxHpPct, turns }, knockback (tiles), cleanse, teleport, charge, aoeRadius, cone { angle, radius, interrupt, los }, accuracy"
   },
 
   "tags": {
@@ -51,9 +51,9 @@
       "shield": { "maxHpPct": 0.1, "turns": 1 }
     },
     "spear_thrust": {
-      "name": "Spear Thrust", "description": "Thrust in a direction, hitting the first enemy in the line for 100% P.Atk and knocking it back 1 tile.",
+      "name": "Spear Thrust", "description": "Thrust toward a tile, hitting the first enemy in the way for 100% P.Atk and knocking it back 1 tile.",
       "tags": ["melee", "knockback"],
-      "target": "line", "affects": "enemy", "range": 2, "minRange": 1, "lineLength": 2, "cooldown": 0,
+      "target": "line", "affects": "enemy", "range": 2, "minRange": 1, "cooldown": 0,
       "hits": [{ "pAtk": 1 }], "knockback": 1
     },
     "circle_swing": {
@@ -70,9 +70,9 @@
       "cone": { "angle": 60, "radius": 2, "interrupt": true }
     },
     "direct_shot": {
-      "name": "Direct Shot", "description": "Shoot an enemy for 100% P.Atk. Rocks and units in the way block the shot.",
+      "name": "Direct Shot", "description": "Shoot an enemy for 100% P.Atk.",
       "tags": ["projectile"],
-      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "los": "fire", "cooldown": 0,
+      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "los": "sight", "cooldown": 0,
       "hits": [{ "pAtk": 1 }]
     },
     "indirect_shot": {

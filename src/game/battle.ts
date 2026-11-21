@@ -5,7 +5,7 @@ import type { Character, DamagePart, LosRule, SkillDef, StatKey, Stats } from '.
 import { allSkills, deriveStats, modelFor, newId, skillSlots, type Rng } from './character';
 import { losFor, minRangeFor, rangeFor, type ReachContext } from './reach';
 import {
-  DIRS, DIRS8, EPS, TERRAIN, coneTiles, dist, hasLineOfSight, inBounds, key, passable, snapDirection, withinRange,
+  DIRS, DIRS8, EPS, TERRAIN, coneTiles, dist, hasLineOfSight, inBounds, key, passable, tilesBetween, withinRange,
   type BattleMap, type Point,
 } from './grid';
 
@@ -447,13 +447,9 @@ export class Battle {
     switch (skill.target) {
       case 'self':
         return withinRange(d, skill.aoeRadius ?? 0);
-      case 'line': {
-        const dx = tile.x - from.x;
-        const dy = tile.y - from.y;
-        const steps = Math.max(Math.abs(dx), Math.abs(dy));
-        const straight = dx === 0 || dy === 0 || Math.abs(dx) === Math.abs(dy);
-        return straight && steps >= 1 && steps <= (skill.lineLength ?? 1);
-      }
+      case 'line':
+        // Aim at any tile in normal range; the attack travels in a straight line toward it.
+        return d >= minRange - EPS && withinRange(d, range);
       case 'cone':
         return d >= 1 - EPS && withinRange(d, skill.cone?.radius ?? range);
       case 'emptyTile': {
@@ -526,15 +522,9 @@ export class Battle {
         }
         return out;
       }
-      case 'line': {
-        const dir = snapDirection(from, tile);
-        const out: Point[] = [];
-        for (let i = 1; i <= (skill.lineLength ?? 1); i++) {
-          const p = { x: from.x + dir.x * i, y: from.y + dir.y * i };
-          if (this.inMap(p)) out.push(p);
-        }
-        return out;
-      }
+      case 'line':
+        // The straight path from the user to the aimed tile, nearest first.
+        return [...tilesBetween(from, tile), tile].filter((p) => this.inMap(p));
       case 'cone':
         return coneTiles(this.map, from, tile, skill.cone!.angle, skill.cone!.radius);
       default:

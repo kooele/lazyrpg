@@ -254,7 +254,7 @@ export class Tooltip {
 // ---- tile diagrams --------------------------------------------------------------
 
 export interface ReachShape {
-  kind: 'targets' | 'area' | 'line' | 'cone' | 'self';
+  kind: 'targets' | 'area' | 'cone' | 'self';
   tiles: { x: number; y: number }[];
 }
 

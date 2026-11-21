@@ -127,15 +127,21 @@ describe('ranges, lines and tags', () => {
     expect([count(1), count(1.5), count(2), count(5)]).toEqual([4, 8, 20, 96]);
   });
 
-  it('direct shot needs line of FIRE: units in between block it', () => {
-    const { battle, units: [archer] } = setup(openMap(), [
+  it('direct shot needs line of sight; the line-of-fire rule (units block) is still available', () => {
+    const map = openMap();
+    const { battle, units: [archer] } = setup(map, [
       { c: hero('bow'), team: 'player', at: { x: 1, y: 3 } },
       { c: hero(), team: 'player', at: { x: 3, y: 3 } },
       { c: hero(), team: 'enemy', at: { x: 5, y: 3 } },
     ]);
-    expect(battle.canTarget(archer, SKILLS.direct_shot, { x: 5, y: 3 })).toBe(false);
-    expect(battle.blockedTiles(archer, SKILLS.direct_shot)).toContainEqual({ x: 5, y: 3 });
-    expect(battle.canTarget(archer, SKILLS.indirect_shot, { x: 5, y: 3 })).toBe(true);
+    expect(SKILLS.direct_shot.los).toBe('sight');
+    expect(battle.canTarget(archer, SKILLS.direct_shot, { x: 5, y: 3 })).toBe(true); // units don't block sight
+    const lineOfFire = { ...SKILLS.direct_shot, los: 'fire' as const };
+    expect(battle.canTarget(archer, lineOfFire, { x: 5, y: 3 })).toBe(false);
+    expect(battle.blockedTiles(archer, lineOfFire)).toContainEqual({ x: 5, y: 3 });
+    map.tiles[3][3] = 'grass';
+    map.tiles[2][3] = 'rock';
+    expect(battle.canTarget(archer, SKILLS.direct_shot, { x: 5, y: 1 })).toBe(false); // rock blocks sight
   });
 
   it('projectile spells need line of sight; Freeze, heal and cleanse do not', () => {
@@ -237,12 +243,27 @@ describe('skills', () => {
     expect(a.hp).toBe(500);
   });
 
-  it('spear thrust hits the first enemy in a line and knocks it back', () => {
+  it('spear thrust uses normal range 2 and hits the first enemy on the way', () => {
+    const { battle, units: [s, near, far] } = setup(openMap(), [
+      { c: hero('spear'), team: 'player', at: { x: 3, y: 3 } },
+      { c: hero('bow'), team: 'enemy', at: { x: 4, y: 3 } },
+      { c: hero('bow'), team: 'enemy', at: { x: 5, y: 3 } },
+    ]);
+    expect(battle.rangeTiles(s, SKILLS.spear_thrust)).toHaveLength(20);
+    expect(battle.canTarget(s, SKILLS.spear_thrust, { x: 5, y: 2 })).toBe(true); // 2-over-1
+    expect(battle.canTarget(s, SKILLS.spear_thrust, { x: 5, y: 1 })).toBe(false); // diagonal 2.83
+    battle.perform(s, 'spear_thrust', { x: 5, y: 3 }); // aimed at the far one; the near one is in the way
+    expect(near.hp).toBe(500 - 67);
+    expect(near).toMatchObject({ x: 4, y: 3 }); // knockback blocked by the far one
+    expect(far.hp).toBe(500);
+  });
+
+  it('spear thrust knocks the target back along the thrust', () => {
     const { battle, units: [s, e] } = setup(openMap(), [
       { c: hero('spear'), team: 'player', at: { x: 1, y: 3 } },
       { c: hero('bow'), team: 'enemy', at: { x: 3, y: 3 } },
     ]);
-    battle.perform(s, 'spear_thrust', { x: 2, y: 3 });
+    battle.perform(s, 'spear_thrust', { x: 3, y: 3 });
     expect(e.hp).toBe(500 - 67);
     expect(e).toMatchObject({ x: 4, y: 3 });
   });

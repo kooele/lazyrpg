@@ -140,13 +140,11 @@ export function parseContent(skillsData: unknown, weaponsData: unknown): GameCon
       knockback: S.optNum(r.knockback, `${p}.knockback`),
       cleanse: S.bool(r.cleanse, `${p}.cleanse`) || undefined,
       aoeRadius: S.optNum(r.aoeRadius, `${p}.aoeRadius`),
-      lineLength: S.optNum(r.lineLength, `${p}.lineLength`),
       cone,
       teleport: S.bool(r.teleport, `${p}.teleport`) || undefined,
       charge: S.bool(r.charge, `${p}.charge`) || undefined,
     };
     if (skill.target === 'cone' && !skill.cone) fail('skills.json', `${p}.cone`, 'is required when target is "cone"');
-    if (skill.target === 'line' && !skill.lineLength) fail('skills.json', `${p}.lineLength`, 'is required when target is "line"');
     if (skillTags.includes('movement') && skill.rangeScale === undefined) fail('skills.json', `${p}.rangeScale`, 'is required for "movement" skills');
     skills[id] = skill;
   }
