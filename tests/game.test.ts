@@ -441,7 +441,7 @@ describe('engagement', () => {
     battle.endPhase();
     expect(battle.canMove(a)).toBe(false);
     expect(battle.canTarget(a, SKILLS.sword_slash, { x: 4, y: 3 })).toBe(true);
-    expect(battle.engagementBlock(a, SKILLS.sword_slash, { x: 3, y: 5 })).toMatch(/only attack/);
+    expect(battle.engagementBlock(a, SKILLS.sword_slash, { x: 3, y: 5 })).toMatch(/can't target anyone else/);
     // b attacks the already-engaged enemy: no new engagement.
     battle.move(b, { x: 4, y: 4 });
     battle.perform(b, 'sword_slash', { x: 4, y: 3 });
@@ -496,10 +496,10 @@ describe('engagement', () => {
     expect(a).toMatchObject({ x: 1, y: 3 });
   });
 
-  it('engaged units can heal themselves but no one else', () => {
+  it('engaged units can heal and cleanse themselves but no one else', () => {
     const { battle, units: [a, e, , ally] } = duel();
     a.character.weaponId = 'staff';
-    a.character.skillIds = ['heal'];
+    a.character.skillIds = ['heal', 'cleanse'];
     battle.perform(a, 'empowered_strike', { x: 4, y: 3 });
     battle.endPhase();
     battle.endPhase();
@@ -507,8 +507,11 @@ describe('engagement', () => {
     battle.endPhase();
     expect(a.engagedWith).toBe(e.uid);
     expect(battle.canTarget(a, SKILLS.heal, { x: ally.x, y: ally.y })).toBe(false);
-    expect(battle.engagementBlock(a, SKILLS.heal, { x: 4, y: 3 })).toMatch(/only heal yourself/);
+    expect(battle.engagementBlock(a, SKILLS.heal, { x: 4, y: 3 })).toMatch(/can't target anyone else/);
     expect(battle.canTarget(a, SKILLS.heal, { x: 3, y: 3 })).toBe(true);
+    expect(battle.canTarget(a, SKILLS.cleanse, { x: ally.x, y: ally.y })).toBe(false);
+    expect(battle.engagementBlock(a, SKILLS.cleanse, { x: 4, y: 3 })).toMatch(/can't target anyone else/);
+    expect(battle.canTarget(a, SKILLS.cleanse, { x: 3, y: 3 })).toBe(true);
   });
 
   it('a blocked push keeps the engagement', () => {

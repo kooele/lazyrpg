@@ -238,22 +238,21 @@ export class Battle {
 
   /**
    * Why an engaged unit can't use `skill` on `tile` (null if it can): engaged units
-   * can't move (incl. Movement skills) or attack anyone but their opponent.
+   * can't move (incl. Movement skills), attack anyone but their opponent, or heal/cleanse anyone but themselves.
    */
   engagementBlock(caster: Unit, skill: SkillDef, tile: Point, from: Point = caster): string | null {
     const opp = this.opponentOf(caster);
     if (!opp) return null;
     // Teleports (Arcane Shift) are the exception: they slip out of the engagement for free.
     if (hasTag(skill, 'movement') || skill.charge) return `Engaged with ${opp.character.name}: disengage before moving.`;
-    // Heals only on yourself while engaged.
-    if (skill.heal && this.targetsOf(caster, skill, tile, from).some((t) => t !== caster)) {
-      return `Engaged with ${opp.character.name}: you can only heal yourself until you disengage.`;
-    }
+    const busy = `Engaged with ${opp.character.name}: you can't target anyone else until you disengage.`;
+    // Heal and Cleanse only on yourself while engaged.
+    if ((skill.heal || skill.cleanse) && this.targetsOf(caster, skill, tile, from).some((t) => t !== caster)) return busy;
     if (!this.isAttack(skill)) return null;
     if (skill.cone) return `Engaged with ${opp.character.name}: can't watch other enemies.`;
     const foes = this.targetsOf(caster, skill, tile, from).filter((t) => t.team !== caster.team);
     const onlyOpponent = skill.target === 'self' ? foes.every((t) => t === opp) : foes.length === 1 && foes[0] === opp;
-    return onlyOpponent ? null : `Engaged with ${opp.character.name}: you can only attack them until you disengage.`;
+    return onlyOpponent ? null : busy;
   }
 
   /** The opponent's free basic attack when someone breaks away from an engagement (ignores range). */
