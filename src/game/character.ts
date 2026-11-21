@@ -1,7 +1,7 @@
 import { DEFAULT_WEAPON, PALETTE, TREE_SKILLS, WEAPONS, XP_PER_LEVEL, skillSlotsForLevel } from '../data/content';
 import { ENEMIES } from '../data/enemies';
 import { STAT_CONFIG } from '../data/stats';
-import { BODY_MODELS, STAT_KEYS, type BodyModel, type Character, type Stats } from '../data/types';
+import { BODY_MODELS, STAT_KEYS, type BodyModel, type Character, type Stats, type UnitModel } from '../data/types';
 
 export function newId(prefix = 'c'): string {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
@@ -35,10 +35,13 @@ export function deriveStats(c: Character): Stats {
 }
 
 /** Pick a body model deterministically from an id (used for old saves and enemies). */
-export function modelFor(seed: string): BodyModel {
+export function modelFor(seed: string): BodyModel;
+export function modelFor(seed: string, models?: readonly UnitModel[]): UnitModel;
+export function modelFor(seed: string, models: readonly UnitModel[] = BODY_MODELS): UnitModel {
+  const list = models.length ? models : BODY_MODELS;
   let h = 0;
   for (const ch of seed) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  return BODY_MODELS[h % BODY_MODELS.length];
+  return list[h % list.length];
 }
 
 export function skillSlots(c: Character): number {

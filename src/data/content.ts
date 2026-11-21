@@ -80,6 +80,7 @@ export function parseContent(skillsData: unknown, weaponsData: unknown): GameCon
       tick: S.oneOf(st.tick ?? 'start', `${p}.tick`, ['start', 'end'] as const),
       damagePctMaxHpPerStack: S.optNum(st.damagePctMaxHpPerStack, `${p}.damagePctMaxHpPerStack`),
       statMods: st.statMods === undefined ? undefined : S.stats(st.statMods, `${p}.statMods`),
+      statPct: st.statPct === undefined ? undefined : S.stats(st.statPct, `${p}.statPct`),
     };
   }
 

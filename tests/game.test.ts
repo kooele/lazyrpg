@@ -117,7 +117,21 @@ describe('ranges, lines and tags', () => {
       { c: hero(), team: 'enemy', at: { x: 9, y: 6 } },
     ]);
     expect(battle.canTarget(a, SKILLS.sword_slash, { x: 4, y: 4 })).toBe(true);
-    expect(battle.canTarget(a, SKILLS.slash_and_smash, { x: 4, y: 4 })).toBe(false);
+    expect(battle.canTarget(a, SKILLS.slash_and_smash, { x: 4, y: 4 })).toBe(true);
+    expect(withinRange(Math.SQRT2, 1)).toBe(false);
+  });
+
+  it('attacks aimed straight at an ally hit them; lines pass allies they are not aimed at', () => {
+    const { battle, units: [a, ally, foe] } = setup(openMap(), [
+      { c: hero('spear'), team: 'player', at: { x: 3, y: 3 } },
+      { c: hero(), team: 'player', at: { x: 4, y: 3 } },
+      { c: hero(), team: 'enemy', at: { x: 5, y: 3 } },
+    ]);
+    expect(battle.targetsOf(a, SKILLS.spear_thrust, { x: 5, y: 3 })).toEqual([foe]);
+    expect(battle.targetsOf(a, SKILLS.spear_thrust, { x: 4, y: 3 })).toEqual([ally]);
+    battle.perform(a, 'spear_thrust', { x: 4, y: 3 });
+    expect(ally.hp).toBeLessThan(ally.stats.health);
+    expect(ally.engagedWith).toBeNull();
   });
 
   it('ranges of 2+ use rounded distance; 1 and 1.5 stay exact', () => {
@@ -496,6 +510,46 @@ describe('engagement', () => {
     expect(a).toMatchObject({ x: 1, y: 3 });
   });
 
+  it('engaged spears can Spear Thrust and Circle Swing their opponent, incl. diagonally', () => {
+    for (const opp of [{ x: 4, y: 3 }, { x: 4, y: 4 }]) {
+      const { battle, units: [a, e] } = setup(openMap(), [
+        { c: hero('spear'), team: 'player', at: { x: 3, y: 3 } },
+        { c: hero(), team: 'enemy', at: opp },
+        { c: hero(), team: 'enemy', at: { x: 2, y: 3 } },
+      ]);
+      a.engagedWith = e.uid;
+      e.engagedWith = a.uid;
+      expect(battle.canTarget(a, SKILLS.spear_thrust, opp)).toBe(true);
+      expect(battle.canTarget(a, SKILLS.spear_thrust, { x: 2, y: 3 })).toBe(false);
+      expect(battle.canTarget(a, SKILLS.circle_swing, { x: 3, y: 3 })).toBe(true); // also hits the other enemy
+    }
+    const { battle, units: [a, e] } = setup(openMap(), [
+      { c: hero('spear'), team: 'player', at: { x: 3, y: 3 } },
+      { c: hero(), team: 'enemy', at: { x: 4, y: 3 } },
+    ]);
+    a.engagedWith = e.uid;
+    e.engagedWith = a.uid;
+    expect(battle.canTarget(a, SKILLS.spear_thrust, { x: 5, y: 3 })).toBe(true); // range 2, through the opponent
+  });
+
+  it('an engaged unit can Charge its opponent but nobody else', () => {
+    const { battle, units: [a, e] } = setup(openMap(), [
+      { c: hero('sword_shield', ['charge']), team: 'player', at: { x: 3, y: 3 } },
+      { c: hero(), team: 'enemy', at: { x: 4, y: 4 } },
+      { c: hero(), team: 'enemy', at: { x: 6, y: 3 } },
+    ]);
+    a.character.level = 5;
+    a.engagedWith = e.uid;
+    e.engagedWith = a.uid;
+    expect(battle.canTarget(a, SKILLS.charge, { x: 4, y: 4 })).toBe(true);
+    expect(battle.canTarget(a, SKILLS.charge, { x: 6, y: 3 })).toBe(false);
+    expect(battle.canTarget(a, SKILLS.charge, { x: 3, y: 5 })).toBe(false);
+    const hp = e.hp;
+    battle.perform(a, 'charge', { x: 4, y: 4 });
+    expect(e.hp).toBeLessThan(hp);
+    expect(a).toMatchObject({ x: 3, y: 3 });
+  });
+
   it('engaged units can heal and cleanse themselves but no one else', () => {
     const { battle, units: [a, e, , ally] } = duel();
     a.character.weaponId = 'staff';
@@ -606,6 +660,31 @@ describe('enemies', () => {
     expect(allSkills(rat1)).toEqual(['gnaw']);
     expect(allSkills(makeEnemy('slime', 2, makeRng(1)))).toEqual(['slam']);
     expect(allSkills(makeEnemy('slime', 3, makeRng(1)))).toEqual(['slam', 'sticky_spit']);
+  });
+
+  it('bandits use their own body models; monsters have monster art', () => {
+    for (let i = 0; i < 20; i++) expect(['b1', 'b2', 'b3', 'b4']).toContain(makeEnemy('bandit', 4, makeRng(i)).appearance.model);
+    expect(parseEnemies(enemiesJson).enemies.wolf.art).toMatchObject({ kind: 'wolf' });
+    const bad = clone(enemiesJson);
+    bad.enemies.bandit.art.models = ['zz'];
+    expect(() => parseEnemies(bad)).toThrow(/enemies\.bandit\.art\.models\[0\]/);
+  });
+
+  it('Slime: Slam engages; Sticky Spit slows and cuts Defense by 25%', () => {
+    const slime = makeUnit(makeEnemy('slime', 3, makeRng(1)), 'enemy', { x: 5, y: 3 });
+    const a = makeUnit(hero('spear'), 'player', { x: 3, y: 3 });
+    const b = makeUnit(hero('spear'), 'player', { x: 4, y: 4 });
+    const battle = new Battle(openMap(), [a, b, slime], makeRng(1));
+    battle.endPhase();
+    const def = battle.stat(a, 'defense');
+    battle.perform(slime, 'sticky_spit', { x: 3, y: 3 });
+    expect(battle.stat(a, 'defense')).toBe(Math.round(def * 0.75));
+    expect(a.statuses.map((s) => s.id).sort()).toEqual(['corrode', 'slow']);
+    expect(SKILLS.sticky_spit.cooldown).toBe(2);
+    battle.endPhase();
+    battle.endPhase();
+    battle.perform(slime, 'slam', { x: 4, y: 4 });
+    expect(slime.engagedWith).toBe(b.uid);
     expect(allSkills(makeEnemy('wolf', 4, makeRng(1)))).toEqual(['bite', 'pounce', 'howl']);
   });
 
@@ -678,17 +757,39 @@ describe('progression and enemy behaviour', () => {
     expect(flee.moveTo.x).toBeGreaterThan(9); // backs away toward its friend
   });
 
-  it('a hurt unit with no healthy allies makes a last stand instead of running', () => {
-    const map = openMap(16, 7);
-    const archer = makeUnit(makeEnemy('bandit', 4, makeRng(5)), 'enemy', { x: 9, y: 3 });
+  it('a hurt unit with no healthy allies and no way out makes a last stand instead of running', () => {
+    const map = openMap(30, 21);
+    const archer = makeUnit(makeEnemy('bandit', 4, makeRng(5)), 'enemy', { x: 15, y: 10 });
     archer.character.weaponId = 'bow';
-    const knights = [2, 3, 4].map((y) => makeUnit(hero('sword_shield', ['charge'], `K${y}`), 'player', { x: 6, y }));
+    const knights = [9, 10, 11].map((y) => makeUnit(hero('sword_shield', ['charge'], `K${y}`), 'player', { x: 12, y }));
     const battle = new Battle(map, [archer, ...knights], makeRng(1));
     battle.endPhase();
     archer.hp = Math.round(archer.stats.health * 0.2);
     expect(planTurn(battle, archer).action).toBeDefined();
     runAiTurn(battle, archer);
     expect(knights.some((k) => k.hp < k.stats.health)).toBe(true); // it fought
+  });
+
+  it('a badly hurt enemy that can reach the map edge flees the battle', () => {
+    const rat = makeUnit(makeEnemy('rat', 1, makeRng(2)), 'enemy', { x: 2, y: 3 });
+    const a = makeUnit(hero(), 'player', { x: 5, y: 3 });
+    const battle = new Battle(openMap(), [rat, a], makeRng(1));
+    battle.endPhase();
+    rat.hp = Math.round(rat.stats.health * 0.2);
+    runAiTurn(battle, rat);
+    expect(rat.alive).toBe(false);
+    expect(rat.escaped).toBe(true);
+    expect(battle.outcome()).toBe('victory');
+  });
+
+  it('healthy weak enemies keep advancing even into a crowd', () => {
+    const map = openMap(20, 7);
+    const rat = makeUnit(makeEnemy('rat', 1, makeRng(2)), 'enemy', { x: 17, y: 3 });
+    const heroes = [2, 3, 4].map((y) => makeUnit(hero('bow', [], `B${y}`), 'player', { x: 6, y }));
+    const battle = new Battle(map, [rat, ...heroes], makeRng(1));
+    battle.endPhase();
+    runAiTurn(battle, rat);
+    expect(rat.x).toBeLessThan(17);
   });
 
   it('a badly hurt melee unit breaks out of an engagement to flee', () => {
