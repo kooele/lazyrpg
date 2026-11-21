@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
-import type { Emblem } from '../data/types';
+import { WEAPONS } from '../data/content';
+import type { Appearance, Emblem } from '../data/types';
 
 export const WIDTH = 960;
 export const HEIGHT = 640;
@@ -175,4 +176,59 @@ export function overlayInput(scene: Phaser.Scene, x: number, y: number, w: numbe
     input.remove();
   });
   return input;
+}
+
+// ---- unit art -----------------------------------------------------------------
+
+/** Unit art is a 64x80 SVG canvas with the feet at y = 76. */
+export const ART_W = 64;
+export const ART_H = 80;
+const FEET = 76;
+/** Textures are rasterized this many times larger than 64x80 so they stay sharp in big previews. */
+export const ART_TEXTURE_SCALE = 1.6;
+
+export const bodyKey = (model: string) => `body-${model}`;
+export const weaponKey = (weaponId: string) => `weapon-${WEAPONS[weaponId]?.art ?? weaponId}`;
+
+export interface FigureOptions {
+  /** Enemies stand on a dark-rimmed base and face left. */
+  enemy?: boolean;
+  /** Draw the coloured base the figure stands on (default true). */
+  base?: boolean;
+}
+
+/**
+ * A unit figure: body + weapon art standing on a coloured base.
+ * (x, feetY) is where the feet touch the ground; `height` is the full art height.
+ */
+export function figure(
+  scene: Phaser.Scene, x: number, feetY: number, height: number,
+  appearance: Appearance, weaponId: string, opts: FigureOptions = {},
+): Phaser.GameObjects.Container {
+  const scale = height / ART_H;
+  const parts: Phaser.GameObjects.GameObject[] = [];
+  if (opts.base !== false) {
+    const g = scene.add.graphics();
+    const rx = 17 * scale;
+    const ry = 6 * scale;
+    g.fillStyle(0x000000, 0.35).fillEllipse(0, 1.5 * scale, rx * 2 + 4, ry * 2 + 3);
+    g.fillStyle(hex(appearance.color), 1).fillEllipse(0, 0, rx * 2, ry * 2);
+    g.lineStyle(Math.max(1.5, 2 * scale), opts.enemy ? 0x2a0a0a : 0xffffff, 0.9).strokeEllipse(0, 0, rx * 2, ry * 2);
+    // Small emblem on the front of the base.
+    const e = 2.6 * scale;
+    const ey = ry * 0.55;
+    g.fillStyle(0xffffff, 0.9);
+    if (appearance.emblem === 'circle') g.fillCircle(0, ey, e);
+    else if (appearance.emblem === 'square') g.fillRect(-e, ey - e * 0.8, e * 2, e * 1.6);
+    else if (appearance.emblem === 'diamond') g.fillTriangle(0, ey - e, e * 1.3, ey, 0, ey + e).fillTriangle(0, ey - e, -e * 1.3, ey, 0, ey + e);
+    else g.fillTriangle(0, ey - e, e * 1.2, ey + e * 0.8, -e * 1.2, ey + e * 0.8);
+    parts.push(g);
+  }
+  for (const key of [bodyKey(appearance.model), weaponKey(weaponId)]) {
+    if (!scene.textures.exists(key)) continue;
+    const img = scene.add.image(0, 0, key).setOrigin(0.5, FEET / ART_H).setDisplaySize(ART_W * scale, height);
+    if (opts.enemy) img.setFlipX(true);
+    parts.push(img);
+  }
+  return scene.add.container(x, feetY, parts);
 }

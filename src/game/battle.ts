@@ -1,8 +1,8 @@
 // Pure battle rules (no rendering). BattleScene drives this and animates the events it returns.
-import { ENEMY_COLOR, SKILLS, TREE_SKILLS, WEAPONS } from '../data/content';
+import { DEFAULT_WEAPON, ENEMY_COLOR, SKILLS, STATUSES, TREE_SKILLS, WEAPONS, hasTag, isFree } from '../data/content';
 import { STAT_CONFIG, type StatConfig } from '../data/stats';
 import type { Character, DamagePart, LosRule, SkillDef, StatKey, Stats } from '../data/types';
-import { allSkills, deriveStats, newId, skillSlots, type Rng } from './character';
+import { allSkills, deriveStats, modelFor, newId, skillSlots, type Rng } from './character';
 import {
   DIRS, DIRS8, EPS, TERRAIN, coneTiles, dist, hasLineOfSight, inBounds, key, passable, snapDirection,
   type BattleMap, type Point,
@@ -11,16 +11,17 @@ import {
 export type Team = 'player' | 'enemy';
 
 export interface Status {
-  id: 'burn' | 'shield';
+  /** 'shield', or a status id from skills.json ("burn", "slow"...). */
+  id: string;
   name: string;
   /** Debuffs can be removed by Cleanse. */
   debuff: boolean;
-  /** Burn stacks. */
   stacks: number;
   /** Remaining shield points. */
   amount: number;
-  /** Ticks down at the start of the unit's own turn; removed at 0. */
+  /** Turns left; counts down at the start or end of the unit's own turn (see `tick`). */
   turns: number;
+  tick: 'start' | 'end';
 }
 
 export interface Overwatch {
@@ -52,11 +53,20 @@ export interface Unit {
   startPos: Point;
   /** Active overwatch / intercept, cleared at the start of the unit's next turn. */
   overwatch: Overwatch | null;
+  /** uid of the unit this one is engaged with (see the Engage tag). */
+  engagedWith: string | null;
+  /** 'weapon'-tagged skills are unusable while true (nothing sets it yet). */
+  weaponDisabled: boolean;
 }
 
+/** Why damage happened: a skill, a status tick (e.g. Burn), overwatch, or an opportunity attack on disengage. */
+export type DamageCause = 'skill' | 'status' | 'overwatch' | 'opportunity';
+
 export type BattleEvent =
-  | { type: 'damage'; source?: string; target: string; amount: number; absorbed: number; killed: boolean; cause: 'skill' | 'burn' | 'overwatch' }
-  | { type: 'miss'; source: string; target: string; chance: number; cause: 'skill' | 'overwatch' }
+  | { type: 'damage'; source?: string; target: string; amount: number; absorbed: number; killed: boolean; cause: DamageCause }
+  | { type: 'miss'; source: string; target: string; chance: number; cause: DamageCause }
+  | { type: 'engage'; source: string; target: string }
+  | { type: 'disengage'; source: string; target: string; reason: 'disengage' | 'separated' }
   | { type: 'heal'; source: string; target: string; amount: number }
   | { type: 'shield'; source: string; target: string; amount: number }
   | { type: 'status'; source: string; target: string; name: string }
@@ -99,6 +109,8 @@ export function makeUnit(character: Character, team: Team, pos: Point): Unit {
     locked: false,
     startPos: { x: pos.x, y: pos.y },
     overwatch: null,
+    engagedWith: null,
+    weaponDisabled: false,
   };
 }
 
@@ -138,11 +150,127 @@ export class Battle {
     return this.units.find((u) => u.alive && u.x === x && u.y === y);
   }
 
-  /** Current stat including terrain (forest adds Defense). */
+  /** Current stat including status effects, terrain (forest adds Defense) and engagement (halves Defense). */
   stat(u: Unit, stat: StatKey): number {
     let value = u.stats[stat];
-    if (stat === 'defense') value += TERRAIN[this.map.tiles[u.y][u.x]].defense;
-    return value;
+    for (const s of u.statuses) {
+      const mod = STATUSES[s.id]?.statMods?.[stat];
+      if (mod) value += mod * Math.max(1, s.stacks);
+    }
+    if (stat === 'defense') {
+      value += TERRAIN[this.map.tiles[u.y][u.x]].defense;
+      if (u.engagedWith) value *= this.rules.engagement.defenseMultiplier;
+    }
+    if (stat === 'movement') value = Math.max(0, value);
+    return Math.round(value);
+  }
+
+  // ---- skill properties that depend on the user (tags) ----------------------------
+
+  /** The weapon's basic attack (first weapon skill). */
+  basicAttack(u: Unit): SkillDef {
+    return SKILLS[(WEAPONS[u.character.weaponId] ?? WEAPONS[DEFAULT_WEAPON]).skills[0]];
+  }
+
+  /** Effective range: 'movement' skills scale with Movement, 'weapon' skills use the weapon's range. */
+  skillRange(u: Unit, s: SkillDef): number {
+    if (hasTag(s, 'movement')) return Math.floor((s.rangeScale ?? 1) * this.stat(u, 'movement'));
+    if (hasTag(s, 'weapon')) return this.basicAttack(u).range;
+    return s.range;
+  }
+
+  skillMinRange(u: Unit, s: SkillDef): number {
+    return hasTag(s, 'weapon') ? this.basicAttack(u).minRange : s.minRange;
+  }
+
+  skillLos(u: Unit, s: SkillDef): LosRule | undefined {
+    return hasTag(s, 'weapon') ? this.basicAttack(u).los : s.los;
+  }
+
+  /** Off cooldown and not blocked by a disabled weapon. */
+  isUsable(u: Unit, skillId: string): boolean {
+    return this.isReady(u, skillId) && !(u.weaponDisabled && hasTag(SKILLS[skillId], 'weapon'));
+  }
+
+  // ---- engagement ------------------------------------------------------------------
+
+  opponentOf(u: Unit): Unit | null {
+    return u.engagedWith ? this.unit(u.engagedWith) : null;
+  }
+
+  private engage(a: Unit, b: Unit): void {
+    a.engagedWith = b.uid;
+    b.engagedWith = a.uid;
+    // Engaged units can't attack anyone else, so standing watches end.
+    a.overwatch = null;
+    b.overwatch = null;
+  }
+
+  private breakEngagement(u: Unit): Unit | null {
+    const o = this.opponentOf(u);
+    u.engagedWith = null;
+    if (o && o.engagedWith === u.uid) o.engagedWith = null;
+    return o;
+  }
+
+  /** Engagements end when the two units are pushed or teleported apart. */
+  private separationEvents(): BattleEvent[] {
+    const events: BattleEvent[] = [];
+    for (const u of this.living()) {
+      const o = this.opponentOf(u);
+      if (o && (!o.alive || dist(u, o) > 1.5 + EPS)) {
+        this.breakEngagement(u);
+        events.push({ type: 'disengage', source: u.uid, target: o.uid, reason: 'separated' });
+      }
+    }
+    return events;
+  }
+
+  /** Is this skill an attack on enemies (as opposed to healing/buffing)? */
+  private isAttack(s: SkillDef): boolean {
+    return s.affects !== 'ally' && (!!s.hits?.length || !!s.cone || !!s.applyStatus?.length);
+  }
+
+  /**
+   * Why an engaged unit can't use `skill` on `tile` (null if it can): engaged units
+   * can't move (incl. Movement skills) or attack anyone but their opponent.
+   */
+  engagementBlock(caster: Unit, skill: SkillDef, tile: Point, from: Point = caster): string | null {
+    const opp = this.opponentOf(caster);
+    if (!opp) return null;
+    if (hasTag(skill, 'movement') || skill.teleport || skill.charge) return `Engaged with ${opp.character.name}: disengage before moving.`;
+    if (!this.isAttack(skill)) return null;
+    if (skill.cone) return `Engaged with ${opp.character.name}: can't watch other enemies.`;
+    const foes = this.targetsOf(caster, skill, tile, from).filter((t) => t.team !== caster.team);
+    const onlyOpponent = skill.target === 'self' ? foes.every((t) => t === opp) : foes.length === 1 && foes[0] === opp;
+    return onlyOpponent ? null : `Engaged with ${opp.character.name}: you can only attack them until you disengage.`;
+  }
+
+  /**
+   * Break off an engagement. The opponent gets a free basic attack (opportunity attack).
+   * Doesn't use the unit's action; it can then move and act normally.
+   */
+  disengage(u: Unit): BattleEvent[] {
+    const opp = this.opponentOf(u);
+    if (!opp) throw new Error(`${u.character.name} is not engaged`);
+    if (!this.canAct(u)) throw new Error(`${u.character.name} has already acted`);
+    const events: BattleEvent[] = [];
+    this.breakEngagement(u);
+    events.push({ type: 'disengage', source: u.uid, target: opp.uid, reason: 'disengage' });
+    const basic = this.basicAttack(opp);
+    const chance = this.hitChance(opp, u, basic, true);
+    if (!this.rollHit(chance)) {
+      events.push({ type: 'miss', source: opp.uid, target: u.uid, chance, cause: 'opportunity' });
+    } else {
+      for (const part of basic.hits ?? []) {
+        if (!u.alive) break;
+        events.push(this.dealDamage(u, this.hitDamage(opp, u, part), opp.uid, 'opportunity'));
+      }
+    }
+    u.locked = true;
+    u.startPos = { x: u.x, y: u.y };
+    if (!u.alive) u.acted = true;
+    return events;
   }
 
   shieldOf(u: Unit): number {
@@ -165,7 +293,7 @@ export class Battle {
   }
 
   canMove(u: Unit): boolean {
-    return u.alive && u.team === this.phase && !u.moved && !u.acted;
+    return u.alive && u.team === this.phase && !u.moved && !u.acted && !u.engagedWith;
   }
 
   canAct(u: Unit): boolean {
@@ -303,8 +431,15 @@ export class Battle {
 
   /** Can `caster`, standing on `from`, aim `skill` at `tile`? */
   canTarget(caster: Unit, skill: SkillDef, tile: Point, from: Point = caster): boolean {
+    return this.inReach(caster, skill, tile, from) && !this.engagementBlock(caster, skill, tile, from);
+  }
+
+  /** Range / line / landing checks only (ignores engagement). */
+  private inReach(caster: Unit, skill: SkillDef, tile: Point, from: Point): boolean {
     if (!this.inMap(tile)) return false;
     const d = dist(from, tile);
+    const range = this.skillRange(caster, skill);
+    const minRange = this.skillMinRange(caster, skill);
     switch (skill.target) {
       case 'self':
         return d <= (skill.aoeRadius ?? 0) + EPS;
@@ -316,16 +451,17 @@ export class Battle {
         return straight && steps >= 1 && steps <= (skill.lineLength ?? 1);
       }
       case 'cone':
-        return d >= 1 - EPS && d <= (skill.cone?.radius ?? skill.range) + EPS;
+        return d >= 1 - EPS && d <= (skill.cone?.radius ?? range) + EPS;
       case 'emptyTile': {
-        if (d < skill.minRange - EPS || d > skill.range + EPS) return false;
+        if (d < minRange - EPS || d > range + EPS) return false;
         const occupant = this.occupantFrom(caster, from, tile);
         return passable(this.map, tile.x, tile.y) && !occupant;
       }
       case 'unit': {
-        if (d < skill.minRange - EPS || d > skill.range + EPS) return false;
-        if (skill.los && !this.clearLine(from, tile, skill.los, caster)) return false;
-        if (skill.charge) return this.chargeDestination(caster, tile, from) !== null;
+        if (d < minRange - EPS || d > range + EPS) return false;
+        const los = this.skillLos(caster, skill);
+        if (los && !this.clearLine(from, tile, los, caster)) return false;
+        if (skill.charge) return this.chargeDestination(caster, tile, from, skill) !== null;
         return true;
       }
     }
@@ -345,13 +481,16 @@ export class Battle {
 
   /** Tiles within the skill's distance that are ruled out only by a blocked line (shown greyed out). */
   blockedTiles(caster: Unit, skill: SkillDef, from: Point = caster): Point[] {
-    if (!skill.los || skill.target !== 'unit') return [];
+    const los = this.skillLos(caster, skill);
+    if (!los || skill.target !== 'unit') return [];
+    const range = this.skillRange(caster, skill);
+    const minRange = this.skillMinRange(caster, skill);
     const out: Point[] = [];
     for (let y = 0; y < this.map.height; y++) {
       for (let x = 0; x < this.map.width; x++) {
         const d = dist(from, { x, y });
-        if (d < skill.minRange - EPS || d > skill.range + EPS) continue;
-        if (!this.clearLine(from, { x, y }, skill.los, caster)) out.push({ x, y });
+        if (d < minRange - EPS || d > range + EPS) continue;
+        if (!this.clearLine(from, { x, y }, los, caster)) out.push({ x, y });
       }
     }
     return out;
@@ -443,7 +582,9 @@ export class Battle {
    * Where a Charge aimed at `tile` ends: next to the target (or on the tile itself
    * if it is empty), reachable in at most `range` steps (diagonals allowed). Null if impossible.
    */
-  chargeDestination(caster: Unit, tile: Point, from: Point = caster): Point | null {
+  chargeDestination(caster: Unit, tile: Point, from: Point = caster, skill?: SkillDef): Point | null {
+    const chargeSkill = skill ?? Object.values(SKILLS).find((x) => x.charge);
+    if (!chargeSkill) return null;
     const target = this.occupantFrom(caster, from, tile);
     if (target === caster) return null;
     const free = (p: Point) => passable(this.map, p.x, p.y) && (!this.occupantFrom(caster, from, p) || (p.x === from.x && p.y === from.y));
@@ -456,7 +597,7 @@ export class Battle {
     }
     if (goals.length === 0) return null;
     const goalKeys = new Set(goals.map((p) => key(p.x, p.y)));
-    const maxSteps = Math.floor(SKILLS.charge.range);
+    const maxSteps = Math.floor(this.skillRange(caster, chargeSkill));
     const seen = new Map<string, number>([[key(from.x, from.y), 0]]);
     const queue: Point[] = [{ x: from.x, y: from.y }];
     let best: Point | null = null;
@@ -524,7 +665,9 @@ export class Battle {
       (part.mAtk ?? 0) * this.stat(attacker, 'mAtk') +
       (part.def ?? 0) * this.stat(attacker, 'defense') +
       (part.missingHp ?? 0) * (target.stats.health - target.hp);
-    return Math.max(1, Math.round(raw * defenseMultiplier(this.stat(target, 'defense'))));
+    // Engaged units brace against their opponent: they take less damage from them.
+    const engagedBonus = target.engagedWith === attacker.uid ? this.rules.engagement.opponentDamageTaken : 1;
+    return Math.max(1, Math.round(raw * defenseMultiplier(this.stat(target, 'defense')) * engagedBonus));
   }
 
   /** Predicted damage of each hit of `skill` on `target` (accounts for missing health growing). */
@@ -549,7 +692,7 @@ export class Battle {
     return Math.round((skill.heal?.mAtk ?? 0) * this.stat(caster, 'mAtk'));
   }
 
-  private dealDamage(target: Unit, amount: number, source: string | undefined, cause: 'skill' | 'burn' | 'overwatch', bypassShield = false): BattleEvent {
+  private dealDamage(target: Unit, amount: number, source: string | undefined, cause: DamageCause, bypassShield = false): BattleEvent {
     let absorbed = 0;
     if (!bypassShield) {
       for (const s of target.statuses) {
@@ -565,6 +708,7 @@ export class Battle {
     if (killed) {
       target.alive = false;
       target.overwatch = null;
+      this.breakEngagement(target);
     }
     return { type: 'damage', source, target: target.uid, amount: amount - absorbed, absorbed, killed, cause };
   }
@@ -577,12 +721,15 @@ export class Battle {
     if (!this.canAct(u)) throw new Error(`${u.character.name} has already acted`);
     if (!this.skillIds(u).includes(skillId)) throw new Error(`${u.character.name} doesn't have ${skill.name}`);
     if (!this.isReady(u, skillId)) throw new Error(`${skill.name} is on cooldown`);
+    if (!this.isUsable(u, skillId)) throw new Error(`${skill.name} needs a weapon`);
+    const block = this.engagementBlock(u, skill, tile);
+    if (block) throw new Error(block);
     if (!this.canTarget(u, skill, tile)) throw new Error('Target out of range');
 
     const events: BattleEvent[] = [];
     const origin = { x: u.x, y: u.y };
     if (skill.charge) {
-      const dest = this.chargeDestination(u, tile)!;
+      const dest = this.chargeDestination(u, tile, u, skill)!;
       if (dest.x !== u.x || dest.y !== u.y) {
         u.x = dest.x;
         u.y = dest.y;
@@ -616,17 +763,12 @@ export class Battle {
         events.push(this.dealDamage(t, this.hitDamage(u, t, part), u.uid, 'skill'));
       }
       if (!t.alive) continue;
-      if (skill.burn) {
-        const existing = t.statuses.find((s) => s.id === 'burn');
-        if (existing) {
-          existing.stacks += skill.burn.stacks;
-          existing.turns = Math.max(existing.turns, skill.burn.turns);
-        } else {
-          t.statuses.push({ id: 'burn', name: 'Burn', debuff: true, stacks: skill.burn.stacks, amount: 0, turns: skill.burn.turns });
-        }
-        const stacks = t.statuses.find((s) => s.id === 'burn')!.stacks;
-        events.push({ type: 'status', source: u.uid, target: t.uid, name: `Burn x${stacks}` });
+      // Engage: a hit locks both units together, unless either is already engaged.
+      if (hasTag(skill, 'engage') && t.team !== u.team && skill.hits?.length && u.alive && !u.engagedWith && !t.engagedWith) {
+        this.engage(u, t);
+        events.push({ type: 'engage', source: u.uid, target: t.uid });
       }
+      for (const a of skill.applyStatus ?? []) events.push(this.applyStatus(u, t, a.status, a.turns, a.stacks ?? 1));
       if (skill.heal) {
         const amount = Math.min(this.healAmount(u, skill), t.stats.health - t.hp);
         t.hp += amount;
@@ -635,7 +777,7 @@ export class Battle {
       if (skill.shield) {
         const amount = Math.round(t.stats.health * skill.shield.maxHpPct);
         t.statuses = t.statuses.filter((s) => s.id !== 'shield');
-        t.statuses.push({ id: 'shield', name: 'Shield', debuff: false, stacks: 0, amount, turns: skill.shield.turns });
+        t.statuses.push({ id: 'shield', name: 'Shield', debuff: false, stacks: 0, amount, turns: skill.shield.turns, tick: 'start' });
         events.push({ type: 'shield', source: u.uid, target: t.uid, amount });
       }
       if (skill.cleanse) {
@@ -662,10 +804,25 @@ export class Battle {
 
     // Cooldown N = can't be used during the next N turns. The counter ticks at the
     // start of each of the unit's turns, so store N + 1 (it hits 0 on the turn it's usable).
+    events.push(...this.separationEvents());
+
     if (skill.cooldown > 0) u.cooldowns[skillId] = skill.cooldown + 1;
-    if (skill.free) u.locked = true;
+    if (isFree(skill)) u.locked = true;
     else u.acted = true;
     return events;
+  }
+
+  private applyStatus(source: Unit, t: Unit, id: string, turns: number, stacks: number): BattleEvent {
+    const def = STATUSES[id];
+    const existing = t.statuses.find((s) => s.id === id);
+    if (existing) {
+      if (def.stacking) existing.stacks += stacks;
+      existing.turns = Math.max(existing.turns, turns);
+    } else {
+      t.statuses.push({ id, name: def.name, debuff: def.debuff, stacks: def.stacking ? stacks : 1, amount: 0, turns, tick: def.tick });
+    }
+    const now = t.statuses.find((s) => s.id === id)!;
+    return { type: 'status', source: source.uid, target: t.uid, name: def.stacking ? `${def.name} x${now.stacks}` : def.name };
   }
 
   // ---- turn flow --------------------------------------------------------------------
@@ -685,11 +842,12 @@ export class Battle {
       u.overwatch = null;
       for (const k of Object.keys(u.cooldowns)) u.cooldowns[k] = Math.max(0, u.cooldowns[k] - 1);
       for (const s of u.statuses) {
-        if (s.id === 'burn' && u.alive) {
-          const amount = Math.max(1, Math.round(u.stats.health * 0.01 * s.stacks));
-          events.push(this.dealDamage(u, amount, undefined, 'burn', true));
+        const dot = STATUSES[s.id]?.damagePctMaxHpPerStack;
+        if (dot && u.alive) {
+          const amount = Math.max(1, Math.round(u.stats.health * dot * s.stacks));
+          events.push(this.dealDamage(u, amount, undefined, 'status', true));
         }
-        s.turns -= 1;
+        if (s.tick === 'start') s.turns -= 1;
       }
       u.statuses = u.statuses.filter((s) => s.turns > 0);
       if (!u.alive) u.acted = true;
@@ -699,6 +857,11 @@ export class Battle {
 
   /** End the current team's turn; returns events from the start of the next turn (e.g. Burn). */
   endPhase(): BattleEvent[] {
+    // Effects that last "through" the unit's turn (e.g. Slow) count down now.
+    for (const u of this.living(this.phase)) {
+      for (const s of u.statuses) if (s.tick === 'end') s.turns -= 1;
+      u.statuses = u.statuses.filter((s) => s.turns > 0);
+    }
     const next: Team = this.phase === 'player' ? 'enemy' : 'player';
     if (next === 'player') this.round += 1;
     return this.beginPhase(next);
@@ -719,16 +882,17 @@ export function generateEnemies(stage: number, partySize: number, rng: Rng): Cha
   const weapons = Object.keys(WEAPONS);
   const enemies: Character[] = [];
   for (let i = 0; i < count; i++) {
-    const weaponId = i === 0 ? 'sword_shield' : weapons[Math.floor(rng() * weapons.length)];
+    const weaponId = i === 0 ? DEFAULT_WEAPON : weapons[Math.floor(rng() * weapons.length)];
     const names = ENEMY_NAMES[weaponId] ?? ['Bandit'];
+    const id = newId('e');
     const c: Character = {
-      id: newId('e'),
+      id,
       name: names[Math.floor(rng() * names.length)],
       level: stage,
       xp: 0,
       weaponId,
       skillIds: [],
-      appearance: { color: ENEMY_COLOR, emblem: 'triangle' },
+      appearance: { color: ENEMY_COLOR, emblem: 'triangle', model: modelFor(id + i) },
     };
     const pool = [...TREE_SKILLS];
     while (c.skillIds.length < skillSlots(c) && pool.length) {

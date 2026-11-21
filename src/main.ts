@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { BattleScene } from './scenes/BattleScene';
+import { BootScene } from './scenes/BootScene';
 import { CampScene } from './scenes/CampScene';
 import { CharacterCreatorScene } from './scenes/CharacterCreatorScene';
 import { MainMenuScene } from './scenes/MainMenuScene';
@@ -15,7 +16,7 @@ const game = new Phaser.Game({
   backgroundColor: COLORS.bg,
   antialias: true,
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-  scene: [MainMenuScene, CampScene, CharacterCreatorScene, SaveLoadScene, BattleScene],
+  scene: [BootScene, MainMenuScene, CampScene, CharacterCreatorScene, SaveLoadScene, BattleScene],
 });
 
 // Handy for debugging from the browser console: `lazyrpg.scene.getScenes(true)`.

@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
-import { SKILLS, WEAPONS, skillDetails } from '../data/content';
+import { SKILLS, WEAPONS, hasTag, isFree, skillDetails, skillFormula, tagNames } from '../data/content';
 import type { SkillDef } from '../data/types';
-import { bestAction, bestFreeAction, planTurn } from '../game/ai';
+import { bestAction, bestFreeAction, planTurn, shouldDisengage } from '../game/ai';
 import {
   Battle, deploymentTiles, generateEnemies, makeUnit, victoryXp,
   type BattleEvent, type MoveResult, type Unit,
@@ -9,13 +9,16 @@ import {
 import { grantXp, makeRng } from '../game/character';
 import { TERRAIN, generateMap, key, type Point } from '../game/grid';
 import { markDirty, requireState } from '../game/session';
-import { COLORS, HEIGHT, WIDTH, button, confirmDialog, drawToken, panel, setupCamera, text } from '../ui/widgets';
+import { COLORS, HEIGHT, WIDTH, button, confirmDialog, figure, panel, setupCamera, text } from '../ui/widgets';
 
 const TILE = 56;
 const MAP_X = 16;
 const MAP_Y = 72;
 const SIDE_X = 704;
 const SIDE_W = 240;
+/** Where a unit's feet are, relative to its tile center; the HP bar sits just below. */
+const FEET_Y = 14;
+const HP_Y = 21;
 
 /**
  * busy   – animating or enemy turn, no input
@@ -167,14 +170,11 @@ export class BattleScene extends Phaser.Scene {
 
   private createUnitView(u: Unit): void {
     const c = this.tileCenter(u);
-    const g = this.add.graphics();
-    drawToken(g, 0, -4, 19, u.character.appearance.color, u.character.appearance.emblem, u.team === 'player' ? 0xffffff : 0x2a0a0a);
-    const tag = text(this, 10, -28, WEAPONS[u.character.weaponId].tag, {
-      fontSize: '10px', fontStyle: 'bold', color: '#ffffff', backgroundColor: u.team === 'player' ? '#2a3a66' : '#661a1a', padding: { x: 2, y: 0 },
-    });
-    const statusText = text(this, -26, -28, '', { fontSize: '10px', fontStyle: 'bold', color: '#ffb35c', stroke: '#000000', strokeThickness: 3 });
+    // Figure stands with its feet near the bottom of the tile; HP bar underneath.
+    const fig = figure(this, 0, FEET_Y, 52, u.character.appearance, u.character.weaponId, { enemy: u.team === 'enemy' });
+    const statusText = text(this, -27, 4, '', { fontSize: '9px', fontStyle: 'bold', color: '#ffb35c', stroke: '#000000', strokeThickness: 3 }).setOrigin(0, 1);
     const hpBar = this.add.graphics();
-    const container = this.add.container(c.x, c.y, [g, tag, statusText, hpBar]);
+    const container = this.add.container(c.x, c.y, [fig, statusText, hpBar]);
     this.views.set(u.uid, { container, hpBar, statusText });
     this.drawHp(u);
   }
@@ -187,15 +187,18 @@ export class BattleScene extends Phaser.Scene {
     const pct = u.hp / max;
     const shield = Math.min(1 - pct, this.battle.shieldOf(u) / max);
     view.hpBar.clear();
-    view.hpBar.fillStyle(0x000000, 0.7).fillRect(-21, 18, 42, 6);
-    view.hpBar.fillStyle(pct > 0.5 ? 0x6fdc8c : pct > 0.25 ? 0xe0b44c : 0xff6b6b).fillRect(-20, 19, 40 * pct, 4);
+    view.hpBar.fillStyle(0x000000, 0.7).fillRect(-21, HP_Y, 42, 6);
+    view.hpBar.fillStyle(pct > 0.5 ? 0x6fdc8c : pct > 0.25 ? 0xe0b44c : 0xff6b6b).fillRect(-20, HP_Y + 1, 40 * pct, 4);
     if (this.battle.shieldOf(u) > 0) {
-      view.hpBar.fillStyle(0x8ecbff).fillRect(-20 + 40 * pct, 19, Math.max(2, 40 * shield), 4);
-      view.hpBar.lineStyle(1, 0x8ecbff).strokeRect(-21, 18, 42, 6);
+      view.hpBar.fillStyle(0x8ecbff).fillRect(-20 + 40 * pct, HP_Y + 1, Math.max(2, 40 * shield), 4);
+      view.hpBar.lineStyle(1, 0x8ecbff).strokeRect(-21, HP_Y, 42, 6);
     }
     const tags: string[] = [];
-    const burn = u.statuses.find((s) => s.id === 'burn');
-    if (burn) tags.push(`B${burn.stacks}`);
+    for (const st of u.statuses) {
+      if (st.id === 'shield') continue;
+      tags.push(st.stacks > 1 ? `${st.name[0]}${st.stacks}` : st.name.slice(0, 2).toUpperCase());
+    }
+    if (u.engagedWith) tags.push('ENG');
     if (u.overwatch) tags.push(SKILLS[u.overwatch.skillId].cone?.interrupt ? 'IC' : 'OW');
     view.statusText.setText(tags.join(' '));
   }
@@ -242,6 +245,16 @@ export class BattleScene extends Phaser.Scene {
       }
     }
 
+    // Engagement links: a chain between engaged pairs.
+    for (const u of b.living()) {
+      const o = b.opponentOf(u);
+      if (!o || u.uid > o.uid) continue;
+      const a = this.tileCenter(u);
+      const c = this.tileCenter(o);
+      g.lineStyle(5, 0x000000, 0.5).lineBetween(a.x, a.y - 4, c.x, c.y - 4);
+      g.lineStyle(3, 0xff9f43, 0.95).lineBetween(a.x, a.y - 4, c.x, c.y - 4);
+    }
+
     // Movement range for the selected unit.
     if (this.mode === 'select' && sel && b.canMove(sel) && !this.previewAction) {
       for (const k of this.reach.keys()) {
@@ -270,7 +283,7 @@ export class BattleScene extends Phaser.Scene {
       if (this.mode === 'target' && h && b.canTarget(caster, shown, h)) {
         for (const p of b.areaTiles(caster, shown, h)) fill(p, 0xffd166, 0.5);
         if (shown.charge) {
-          const land = b.chargeDestination(caster, h);
+          const land = b.chargeDestination(caster, h, caster, shown);
           if (land) outline(land, 0x4aa3ff, 1, 6);
         }
       }
@@ -286,11 +299,11 @@ export class BattleScene extends Phaser.Scene {
       for (const u of b.readyUnits()) {
         const c = this.tileCenter(u);
         const isSel = u === sel;
-        this.rings.lineStyle(isSel ? 3 : 2, 0xffd166, isSel ? 1 : 0.35).strokeCircle(c.x, c.y - 4, 25);
+        this.rings.lineStyle(isSel ? 3 : 2, 0xffd166, isSel ? 1 : 0.4).strokeEllipse(c.x, c.y + FEET_Y, 46, 18);
       }
     } else if (this.casterUid && this.mode !== 'over') {
       const c = this.tileCenter(b.unit(this.casterUid));
-      this.rings.lineStyle(3, 0xff6b6b, 1).strokeCircle(c.x, c.y - 4, 25);
+      this.rings.lineStyle(3, 0xff6b6b, 1).strokeEllipse(c.x, c.y + FEET_Y, 46, 18);
     }
   }
 
@@ -302,15 +315,13 @@ export class BattleScene extends Phaser.Scene {
     this.topBar.add(text(this, MAP_X, 26, mine ? 'YOUR TURN' : 'ENEMY TURN', {
       fontSize: '22px', fontStyle: 'bold', color: mine ? '#8ecbff' : COLORS.bad,
     }));
-    const g = this.add.graphics();
-    this.topBar.add(g);
     const heroes = b.living('player');
     heroes.forEach((u, i) => {
       const x = MAP_X + 190 + i * 52;
       const ready = mine && !u.acted;
-      drawToken(g, x, 38, 17, u.character.appearance.color, u.character.appearance.emblem, u.uid === this.selectedUid ? 0xffd166 : 0xffffff);
-      if (!ready) g.fillStyle(0x0e1018, 0.6).fillCircle(x, 38, 19);
-      const hit = this.add.zone(x, 38, 40, 40).setInteractive({ useHandCursor: true });
+      if (u.uid === this.selectedUid) this.topBar.add(this.add.rectangle(x, 36, 44, 56, 0xffd166, 0.18).setStrokeStyle(2, 0xffd166));
+      this.topBar.add(figure(this, x, 58, 46, u.character.appearance, u.character.weaponId).setAlpha(ready ? 1 : 0.35));
+      const hit = this.add.zone(x, 36, 44, 56).setInteractive({ useHandCursor: true });
       hit.on('pointerup', () => this.selectUnit(u));
       this.topBar.add(hit);
     });
@@ -329,9 +340,7 @@ export class BattleScene extends Phaser.Scene {
     const u = this.selected ?? (this.casterUid ? b.unit(this.casterUid) : null);
     S.add(panel(this, SIDE_X, 16, SIDE_W, 160));
     if (u) {
-      const g = this.add.graphics();
-      drawToken(g, SIDE_X + 28, 44, 16, u.character.appearance.color, u.character.appearance.emblem);
-      S.add(g);
+      S.add(figure(this, SIDE_X + 28, 64, 46, u.character.appearance, u.character.weaponId, { enemy: u.team === 'enemy' }));
       S.add(text(this, SIDE_X + 52, 24, u.character.name, { fontSize: '17px' }));
       S.add(text(this, SIDE_X + 52, 46, `Lv ${u.character.level} · ${WEAPONS[u.character.weaponId].name}${u.team === 'enemy' ? ' (enemy)' : ''}`, {
         color: u.team === 'enemy' ? COLORS.bad : COLORS.dim, fontSize: '12px',
@@ -354,13 +363,14 @@ export class BattleScene extends Phaser.Scene {
       for (const id of b.skillIds(u)) {
         const s = SKILLS[id];
         const cd = u.cooldowns[id] ?? 0;
-        const label = `${s.name}${s.free ? ' · free' : ''}${cd > 0 ? ` (${cd})` : ''}`;
+        const label = `${s.name}${isFree(s) ? ' · free' : ''}${cd > 0 ? ` (${cd})` : ''}`;
         S.add(button(this, SIDE_X, y, SIDE_W, 30, label, () => this.selectAction(id), {
           enabled: canAct && cd <= 0,
           selected: this.mode === 'target' && this.action?.id === id,
           fontSize: 14,
           onHover: () => {
-            this.hoverText.setText(`${s.name}: ${s.description}\n${skillDetails(s)}${cd > 0 ? `\nReady ${cd === 1 ? 'next turn' : `in ${cd} turns`}.` : ''}`);
+            const rangeNow = hasTag(s, 'movement') || hasTag(s, 'weapon') ? ` (now ${b.skillRange(u, s)})` : '';
+            this.hoverText.setText(`${s.name} [${tagNames(s).join(', ')}]\n${skillFormula(s)}\n${skillDetails(s)}${rangeNow}${cd > 0 ? `\nReady ${cd === 1 ? 'next turn' : `in ${cd} turns`}.` : ''}`);
             if (this.mode === 'select') {
               this.previewAction = s;
               this.drawOverlay();
@@ -376,9 +386,20 @@ export class BattleScene extends Phaser.Scene {
         y += 34;
       }
       S.add(button(this, SIDE_X, y + 2, 116, 30, 'Wait', () => this.waitUnit(), { enabled: canAct, fontSize: 14 }));
-      S.add(button(this, SIDE_X + 124, y + 2, 116, 30, 'Undo move', () => this.undoMove(), {
-        enabled: interactive && b.canUndoMove(u), fontSize: 14,
-      }));
+      const opp = b.opponentOf(u);
+      if (opp) {
+        S.add(button(this, SIDE_X + 124, y + 2, 116, 30, 'Disengage', () => void this.disengageUnit(), {
+          enabled: canAct, fontSize: 14, fill: 0x4a3418,
+          onHover: () => {
+            const dmg = b.previewHits(opp, b.basicAttack(opp), u).reduce((a, c) => a + c, 0);
+            this.hoverText.setText(`Break away from ${opp.character.name}. They get a free ${b.basicAttack(opp).name} (~${dmg} dmg). You can then move and act normally.`);
+          },
+        }));
+      } else {
+        S.add(button(this, SIDE_X + 124, y + 2, 116, 30, 'Undo move', () => this.undoMove(), {
+          enabled: interactive && b.canUndoMove(u), fontSize: 14,
+        }));
+      }
     }
     S.add(button(this, SIDE_X, 590, SIDE_W, 40, 'End Turn', () => this.endPlayerPhase(), {
       enabled: interactive, fill: 0x4a2a22, fontSize: 16, selected: interactive && b.readyUnits().length === 0,
@@ -389,8 +410,10 @@ export class BattleScene extends Phaser.Scene {
     const b = this.battle;
     const shield = b.shieldOf(u);
     const terrainDef = TERRAIN[b.map.tiles[u.y][u.x]].defense;
-    const effects = u.statuses.map((s) => (s.id === 'burn' ? `Burn x${s.stacks} (${s.turns}t)` : `${s.name} ${s.amount} (${s.turns}t)`));
+    const effects = u.statuses.map((s) => (s.id === 'shield' ? `Shield ${s.amount} (${s.turns}t)` : `${s.name}${s.stacks > 1 ? ` x${s.stacks}` : ''} (${s.turns}t)`));
     if (u.overwatch) effects.push(`Watching: ${SKILLS[u.overwatch.skillId].name}`);
+    const opp = b.opponentOf(u);
+    if (opp) effects.push(`Engaged with ${opp.character.name}`);
     return [
       `HP ${u.hp}/${u.stats.health}${shield ? ` +${shield} shield` : ''}   Move ${b.stat(u, 'movement')}`,
       `P.Atk ${b.stat(u, 'pAtk')}  M.Atk ${b.stat(u, 'mAtk')}  Def ${b.stat(u, 'defense')}${terrainDef ? ' (forest)' : ''}`,
@@ -499,6 +522,30 @@ export class BattleScene extends Phaser.Scene {
     this.selectUnit(u);
   }
 
+  private async disengageUnit(): Promise<void> {
+    const u = this.selected;
+    if (!u || !this.battle.opponentOf(u) || !this.battle.canAct(u) || (this.mode !== 'select' && this.mode !== 'target')) return;
+    this.mode = 'busy';
+    this.action = null;
+    await this.showDisengage(u, this.battle.disengage(u));
+    if (!u.alive) {
+      this.selectedUid = null;
+      this.afterUnitDone();
+      return;
+    }
+    this.mode = 'select';
+    this.selectUnit(u);
+  }
+
+  private async showDisengage(u: Unit, events: BattleEvent[]): Promise<void> {
+    const summary: string[] = [];
+    events.forEach((e, i) => this.showEvent(e, summary, i));
+    const hits = summary.filter((x) => !x.startsWith('breaks away'));
+    this.addLog(`${u.character.name} disengages${hits.length ? ` — opportunity attack: ${hits.join(', ')}` : ''}.`);
+    this.refresh();
+    await this.wait(800);
+  }
+
   private waitUnit(): void {
     const u = this.selected;
     if (!u || !this.battle.canAct(u)) return;
@@ -572,9 +619,11 @@ export class BattleScene extends Phaser.Scene {
     const u = this.selected;
     if (this.mode === 'target' && this.action && u) {
       const blocked = b.blockedTiles(u, this.action).some((p) => p.x === tile.x && p.y === tile.y);
-      const why = blocked
-        ? this.action.los === 'fire' ? 'No line of fire: a rock or unit is in the way.' : 'No line of sight: a rock is in the way.'
-        : "Can't aim there — click to cancel.";
+      const los = b.skillLos(u, this.action);
+      const engaged = b.engagementBlock(u, this.action, tile);
+      const why = engaged ?? (blocked
+        ? los === 'fire' ? 'No line of fire: a rock or unit is in the way.' : 'No line of sight: a rock is in the way.'
+        : "Can't aim there — click to cancel.");
       info = b.canTarget(u, this.action, tile) ? `${this.preview(u, this.action, tile)}\n${info}` : `${why}\n${info}`;
     }
     this.hoverText.setText(info);
@@ -586,7 +635,7 @@ export class BattleScene extends Phaser.Scene {
     if (s.teleport) return '→ Teleport here';
     const lines: string[] = [];
     if (s.charge) {
-      const land = b.chargeDestination(u, tile);
+      const land = b.chargeDestination(u, tile, u, s);
       if (land && (land.x !== u.x || land.y !== u.y)) lines.push('→ Dash in, then strike');
     }
     const targets = b.targetsOf(u, s, tile);
@@ -629,6 +678,10 @@ export class BattleScene extends Phaser.Scene {
       this.casterUid = u.uid;
       this.refresh();
       await this.wait(250);
+      if (shouldDisengage(b, u)) {
+        await this.showDisengage(u, b.disengage(u));
+        if (!u.alive || b.outcome()) continue;
+      }
       const plan = planTurn(b, u);
       if (b.canMove(u) && (plan.moveTo.x !== u.x || plan.moveTo.y !== u.y)) {
         const result = b.move(u, plan.moveTo);
@@ -743,21 +796,31 @@ export class BattleScene extends Phaser.Scene {
 
   private showEvent(e: BattleEvent, summary: string[], index: number): void {
     if (e.type === 'move' || e.type === 'overwatch') return;
+    if (e.type === 'disengage') {
+      summary.push(e.reason === 'separated' ? 'engagement broken' : `breaks away from ${this.battle.unit(e.target).character.name}`);
+      return;
+    }
     const t = this.battle.unit(e.target);
     const name = t.character.name;
     const delay = index * 180;
     switch (e.type) {
       case 'damage': {
-        const color = e.cause === 'burn' ? '#ffb35c' : '#ff6b6b';
+        const color = e.cause === 'status' ? '#ffb35c' : '#ff6b6b';
+        if (e.cause === 'opportunity') this.floatText(t, 'Opportunity!', '#ff9f43', delay);
         if (e.amount > 0) this.floatText(t, `-${e.amount}`, color, delay);
         if (e.absorbed > 0) this.floatText(t, `(${e.absorbed} blocked)`, '#8ecbff', delay + 90);
         this.drawHp(t);
-        if (e.cause !== 'burn') this.cameras.main.shake(70, 0.002);
+        if (e.cause !== 'status') this.cameras.main.shake(70, 0.002);
         summary.push(`${name} -${e.amount}${e.absorbed ? ` (${e.absorbed} shielded)` : ''}${e.killed ? ' ☠' : ''}`);
         if (e.killed) {
           const v = this.views.get(t.uid)!;
           this.tweens.add({ targets: v.container, alpha: 0, scale: 0.5, delay: delay + 200, duration: 500, onComplete: () => v.container.setVisible(false) });
         }
+        break;
+      }
+      case 'engage': {
+        this.floatText(t, 'Engaged!', '#ff9f43', delay + 150);
+        summary.push(`engaged ${name}`);
         break;
       }
       case 'miss':

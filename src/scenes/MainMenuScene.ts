@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { newGameState } from '../game/save';
 import { session } from '../game/session';
-import { COLORS, HEIGHT, WIDTH, button, confirmDialog, drawToken, text, setupCamera } from '../ui/widgets';
+import { COLORS, HEIGHT, WIDTH, button, confirmDialog, figure, text, setupCamera } from '../ui/widgets';
 
 export class MainMenuScene extends Phaser.Scene {
   constructor() {
@@ -54,9 +54,10 @@ export class MainMenuScene extends Phaser.Scene {
     g.lineStyle(1, 0x1d2338, 1);
     for (let x = 0; x <= WIDTH; x += 48) g.lineBetween(x, 0, x, HEIGHT);
     for (let y = 0; y <= HEIGHT; y += 48) g.lineBetween(0, y, WIDTH, y);
-    drawToken(g, 150, 420, 34, '#3d7be0', 'square');
-    drawToken(g, 230, 500, 28, '#36b37e', 'diamond');
-    drawToken(g, 810, 420, 34, '#c0392b', 'triangle', 0x2a0a0a);
-    drawToken(g, 730, 500, 28, '#c0392b', 'triangle', 0x2a0a0a);
+    // A little standoff: two adventurers facing two bandits.
+    figure(this, 140, 470, 120, { color: '#3d7be0', emblem: 'square', model: 'm1' }, 'sword_shield');
+    figure(this, 230, 560, 110, { color: '#36b37e', emblem: 'diamond', model: 'f2' }, 'staff');
+    figure(this, 820, 470, 120, { color: '#c0392b', emblem: 'triangle', model: 'm3' }, 'spear', { enemy: true });
+    figure(this, 730, 560, 110, { color: '#c0392b', emblem: 'triangle', model: 'f3' }, 'bow', { enemy: true });
   }
 }

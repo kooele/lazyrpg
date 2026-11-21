@@ -1,6 +1,7 @@
 // Save / load. Saves are pretty-printed JSON so players can read (and edit!) them.
 import { EMBLEMS, MAX_PARTY_SIZE, NAME_MAX_LENGTH, SKILLS, TREE_SKILLS, WEAPONS, skillSlotsForLevel } from '../data/content';
-import type { Character, GameState } from '../data/types';
+import { BODY_MODELS, type Character, type GameState } from '../data/types';
+import { modelFor } from './character';
 
 export const SAVE_FORMAT = 'lazyrpg-save';
 /** v1: class + attribute points. v2: classless Adventurers with weapon + skill-tree picks. */
@@ -82,6 +83,9 @@ function validateCharacter(raw: unknown, path: string): string | Character {
   if (typeof appearance.emblem !== 'string' || !(EMBLEMS as readonly string[]).includes(appearance.emblem)) {
     return `${path}.appearance.emblem must be one of: ${EMBLEMS.join(', ')}`;
   }
+  if (appearance.model !== undefined && !(BODY_MODELS as readonly unknown[]).includes(appearance.model)) {
+    return `${path}.appearance.model must be one of: ${BODY_MODELS.join(', ')}`;
+  }
   return {
     id,
     name: name.trim(),
@@ -89,7 +93,11 @@ function validateCharacter(raw: unknown, path: string): string | Character {
     xp,
     weaponId,
     skillIds: [...(skillIds as string[])],
-    appearance: { color: appearance.color.toLowerCase(), emblem: appearance.emblem as Character['appearance']['emblem'] },
+    appearance: {
+      color: appearance.color.toLowerCase(),
+      emblem: appearance.emblem as Character['appearance']['emblem'],
+      model: (appearance.model as Character['appearance']['model'] | undefined) ?? modelFor(id),
+    },
   };
 }
 

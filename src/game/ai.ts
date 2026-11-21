@@ -1,7 +1,7 @@
 // Utility-scoring AI. For every reachable tile x every ready skill x every
 // sensible aim point, score the outcome and pick the best. If nothing scores,
 // advance toward the enemy and set up overwatch if the weapon has it.
-import { SKILLS } from '../data/content';
+import { SKILLS, STATUSES, isFree } from '../data/content';
 import type { SkillDef } from '../data/types';
 import type { Battle, Unit } from './battle';
 import { DIRS, DIRS8, TERRAIN, dist, key, passable, type Point } from './grid';
@@ -43,7 +43,13 @@ function scoreSkill(battle: Battle, u: Unit, skill: SkillDef, from: Point, aim: 
       if (friendly) score -= dealt * 1.5;
       else score += hit * (dealt + (total >= pool ? 400 : 0));
     }
-    if (skill.burn && !friendly) score += t.stats.health * 0.01 * skill.burn.stacks * skill.burn.turns;
+    if (!friendly) {
+      for (const a of skill.applyStatus ?? []) {
+        const def = STATUSES[a.status];
+        score += t.stats.health * (def.damagePctMaxHpPerStack ?? 0) * (a.stacks ?? 1) * a.turns;
+        if (def.statMods) score += 15 * a.turns;
+      }
+    }
     if (skill.heal) {
       const missing = t.stats.health - t.hp;
       if (missing / t.stats.health >= 0.25) score += Math.min(missing, battle.healAmount(u, skill));
@@ -54,7 +60,10 @@ function scoreSkill(battle: Battle, u: Unit, skill: SkillDef, from: Point, aim: 
       if (threatened && battle.shieldOf(t) === 0) score += t.stats.health * skill.shield.maxHpPct * 0.5;
     }
     if (skill.cleanse) {
-      for (const s of t.statuses) if (s.debuff) score += t.stats.health * 0.01 * s.stacks * s.turns;
+      for (const s of t.statuses) {
+        if (!s.debuff) continue;
+        score += t.stats.health * (STATUSES[s.id]?.damagePctMaxHpPerStack ?? 0) * s.stacks * s.turns + 15 * s.turns;
+      }
     }
   }
   return score;
@@ -66,7 +75,7 @@ function bestFrom(
   let best: { action: AiAction; score: number } | null = null;
   for (const id of battle.skillIds(u)) {
     const skill = SKILLS[id];
-    if (!battle.isReady(u, id) || !!skill.free !== wantFree || skill.cone || skill.teleport) continue;
+    if (!battle.isUsable(u, id) || isFree(skill) !== wantFree || skill.cone || skill.teleport) continue;
     if (!includeDefensive && skill.shield) continue;
     for (const aim of aimPoints(battle, skill, from)) {
       if (!battle.canTarget(u, skill, aim, from)) continue;
@@ -127,6 +136,19 @@ function distanceField(battle: Battle, u: Unit): Map<string, number> {
 }
 
 /** Decide where to move: the tile with the best available action, else closer to the enemy. */
+/**
+ * Should an engaged unit break away? Ranged fighters (bow, staff bolt users) do,
+ * as long as the opponent's free opportunity attack won't drop them too low.
+ */
+export function shouldDisengage(battle: Battle, u: Unit): boolean {
+  const opp = battle.opponentOf(u);
+  if (!opp || !battle.canAct(u)) return false;
+  const ranged = battle.basicAttack(u).range > 1.5 || battle.basicAttack(u).los !== undefined;
+  if (!ranged) return false;
+  const hit = battle.previewHits(opp, battle.basicAttack(opp), u).reduce((a, b) => a + b, 0);
+  return u.hp - hit > u.stats.health * 0.3;
+}
+
 export function planTurn(battle: Battle, u: Unit): AiPlan {
   const reach = battle.canMove(u) ? battle.reachable(u) : new Map([[key(u.x, u.y), { cost: 0, prev: null }]]);
   const tiles = [...reach.keys()].map((k) => {
@@ -169,6 +191,8 @@ export function planTurn(battle: Battle, u: Unit): AiPlan {
  * scene runs the same steps with animations).
  */
 export function runAiTurn(battle: Battle, u: Unit): void {
+  if (shouldDisengage(battle, u)) battle.disengage(u);
+  if (!u.alive) return;
   const plan = planTurn(battle, u);
   if (battle.canMove(u) && (plan.moveTo.x !== u.x || plan.moveTo.y !== u.y)) battle.move(u, plan.moveTo);
   if (!battle.canAct(u)) return;

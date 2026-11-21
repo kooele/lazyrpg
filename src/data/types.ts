@@ -31,9 +31,35 @@ export interface WeaponDef {
   /** Short tag drawn on battle tokens. */
   tag: string;
   description: string;
-  bonus: Partial<Stats>;
+  /** Sprite name: public/art/weapons/<art>.svg */
+  art: string;
+  /** Multipliers on the Adventurer's base stats (1.5 = 150%). Missing stats = 100%. */
+  statMultipliers: Partial<Stats>;
   /** Skills granted by the weapon. The first one is the basic attack. */
   skills: string[];
+}
+
+export interface TagDef {
+  id: string;
+  name: string;
+  description: string;
+}
+
+/** A status effect definition (Burn, Slow...). Shields are handled separately. */
+export interface StatusDef {
+  id: string;
+  name: string;
+  description: string;
+  /** Cleanse removes debuffs. */
+  debuff: boolean;
+  /** Re-applying adds stacks (otherwise it just refreshes the duration). */
+  stacking: boolean;
+  /** When the duration counts down: at the start or the end of the affected unit's turn. */
+  tick: 'start' | 'end';
+  /** Damage per stack at the start of the unit's turn, as a fraction of max health. */
+  damagePctMaxHpPerStack?: number;
+  /** Stat changes while active (per stack for stacking effects). */
+  statMods?: Partial<Stats>;
 }
 
 /** One hit of a damaging skill. Values are fractions (0.8 = 80%). */
@@ -82,13 +108,15 @@ export interface SkillDef {
   accuracy?: number;
   /** Turns the skill is unavailable after use (1 = can't be used next turn; 0 = every turn). */
   cooldown: number;
-  /** Costs no action: the unit can still act afterwards. */
-  free?: boolean;
+  /** Classification tags (see skills.json "tags"). engage / movement / weapon / free change behavior. */
+  tags: string[];
+  /** For 'movement' skills: range = floor(rangeScale x Movement). */
+  rangeScale?: number;
   /** Damage hits, applied in order. */
   hits?: DamagePart[];
   heal?: { mAtk: number };
   shield?: { maxHpPct: number; turns: number };
-  burn?: { stacks: number; turns: number };
+  applyStatus?: { status: string; turns: number; stacks?: number }[];
   knockback?: number;
   cleanse?: boolean;
   /** For target 'self': affect units within this distance of the caster. */
@@ -97,11 +125,11 @@ export interface SkillDef {
   lineLength?: number;
   cone?: ConeDef;
   teleport?: boolean;
-  /** Dash next to the target (path of at most `range` steps) before hitting it. */
+  /** Dash next to the target (path of at most `range` steps, diagonals allowed) before hitting it. */
   charge?: boolean;
 }
 
-export type SkillTab = 'mage' | 'warrior';
+export type SkillTab = string;
 
 export interface SkillTreeDef {
   id: string;
@@ -110,9 +138,15 @@ export interface SkillTreeDef {
   skills: string[];
 }
 
+export const BODY_MODELS = ['m1', 'm2', 'm3', 'm4', 'f1', 'f2', 'f3', 'f4'] as const;
+export type BodyModel = (typeof BODY_MODELS)[number];
+
 export interface Appearance {
+  /** Color of the unit's base (the disc it stands on). */
   color: string;
   emblem: Emblem;
+  /** Body art: public/art/units/<model>.svg. Older saves without it get one assigned. */
+  model: BodyModel;
 }
 
 /** An Adventurer as stored in the save file. Stats are derived from level + weapon. */
