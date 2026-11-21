@@ -18,6 +18,7 @@ Everything gameplay-related lives in plain JSON files in `src/data/`. Each file 
 | `stats.json` | Base stats and per-level growth, Defense scaling, terrain movement costs, forest bonus, map size, hit-chance and vision switches |
 | `skills.json` | Every skill (numbers and descriptions), tags, status effects (Burn, Slow), skill trees |
 | `weapons.json` | Weapons: stat multipliers and granted skills |
+| `enemies.json` | Enemy types: level range, stats, skills, art, and how big encounters are |
 
 Tooltips show a formula line generated from the numbers (e.g. "80% P.Atk, then 40% P.Atk + 100% Def"), so it stays correct even if a description is out of date.
 
@@ -30,6 +31,8 @@ Tooltips show a formula line generated from the numbers (e.g. "80% P.Atk, then 4
 | M.Atk | 100 (+10) | Magic power and healing |
 | Defense | 50 (+5) | Damage taken × 100 / (100 + Defense) |
 | Movement | 16 | Movement points per turn: grass costs 4, forest 6, river 8 (so 16 = 4 grass tiles) |
+
+Stats grow automatically on level up (100 XP per level). Each won battle gives every Adventurer 100 XP (`xpPerVictory` in `stats.json`), so a party that keeps winning is level N at stage N.
 
 Weapons **multiply** these stats:
 
@@ -52,15 +55,31 @@ Every skill has tags that explain how it behaves. These four change the rules:
 - **Movement**: range in tiles = rangeScale × Movement ÷ 4 (the grass cost), rounded down. Charge uses 100% (4 tiles at Movement 16), and Slow (−4 Movement) shortens it. Arcane Shift has a fixed range of 2.
 - **Weapon**: uses your weapon's basic-attack range and line rules (Execute with a Bow reaches 5 tiles). Unusable while the weapon is disabled (nothing disables weapons yet).
 - **Engage**: see below. Sword Slash, Slash and Smash, Empowered Strike, Kick, Charge.
-- **Free Action**: doesn't use your action (Kick).
+- **Free Action**: doesn't use your action, and can be used before or after it (Kick). The turn doesn't end automatically while a unit still has a free action with a target in reach; press **End Turn** when done.
 
 Descriptive tags: Melee, Projectile, Indirect, Area, Knockback, Reaction, Teleport, Debuff, Support.
+
+### Enemies
+
+Each enemy type has a fixed level range and its own stats and skills (`src/data/enemies.json`). A battle at stage N uses the types whose range contains N, at level N.
+
+| Type | Levels | Skills |
+|---|---|---|
+| Giant Rat | 1–2 | Gnaw. Fast and weak; comes in packs. |
+| Green Slime | 2–3 | Slam; Sticky Spit at level 3 (ranged, applies Slow). Slow-moving and tough. |
+| Grey Wolf | 3–4 | Bite (Engage) and Pounce (leaps in, Engage); Howl at level 4 (Frenzy: +20 P.Atk to nearby allies). Very fast. |
+| Bandit | 4–5 | Carries a random weapon but only uses its basic attack (no Slash and Smash, Circle Swing...). Thugs also have Shield Up, Hexers Fireball, Archers Execute; all learn Kick at level 5. |
+
+**Enemy AI** weighs how dangerous a tile is (how much the party could hit it for next turn) against what it can do from there. Healthy enemies take small risks freely. Below 35% health, an enemy with healthy allies falls back to regroup with them, and may disengage to do it. One that's on its own makes a last stand rather than running forever.
+
+Encounter size is a threat budget: 1 per Adventurer. Rats cost 0.5 (two per Adventurer), slimes 0.75, wolves and bandits 1. Past stage 5, bandits keep coming at level 5, and the budget grows 25% per stage. Rats, slimes and wolves use simple placeholder figures until monster art is made. Hover an enemy in battle to see its skills.
 
 ### Engagement
 
 Hitting a unit with an **Engage** skill locks you both together, unless the target is already engaged with someone else. While engaged:
-- You can't move, and you can only attack your opponent. Healing and buffs are fine.
+- You can't move, you can only attack your opponent, and you can only heal or cleanse yourself.
 - **Disengage** (button in the battle sidebar) breaks free, but your opponent gets a free basic attack on you (an opportunity attack). You can then move and act normally.
+- **Arcane Shift** (Teleport) slips out of an engagement with no opportunity attack.
 - Engagement also ends if either unit falls, or if either one is successfully pushed by a knockback (Circle Swing, Arcane Pulse), even if they still end up next to each other. The pushed unit takes a free basic attack from its old opponent, just like disengaging. A push that's blocked doesn't break it.
 
 Heal and Cleanse work on any unit, enemies included. In battle, the game asks for confirmation before you attack an empty tile or an ally, or heal or cleanse an enemy. The battle log keeps the whole fight: scroll it with the mouse wheel or the bar on its right.

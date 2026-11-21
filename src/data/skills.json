@@ -13,7 +13,7 @@
 
   "tags": {
     "melee": { "name": "Melee", "description": "Close-range attack. No line of sight needed." },
-    "engage": { "name": "Engage", "description": "On hit, you and the target become engaged (unless the target is already engaged). Engaged units can't move and can only attack each other. Breaking away (disengaging, or being knocked back) gives the opponent a free basic attack." },
+    "engage": { "name": "Engage", "description": "On hit, you and the target become engaged (unless the target is already engaged). Engaged units can't move, can only attack each other, and can only heal or cleanse themselves. Breaking away (disengaging, or being knocked back) gives the opponent a free basic attack." },
     "projectile": { "name": "Projectile", "description": "Needs a clear line to the target: line of sight (rocks block) or line of fire (rocks and units block)." },
     "indirect": { "name": "Indirect", "description": "Arcs over obstacles. No line of sight needed." },
     "area": { "name": "Area", "description": "Affects several tiles at once." },
@@ -24,11 +24,13 @@
     "weapon": { "name": "Weapon", "description": "Uses your weapon's basic-attack range and line rules. Unusable while your weapon is disabled." },
     "free": { "name": "Free Action", "description": "Doesn't use your action. You can still act afterwards." },
     "debuff": { "name": "Debuff", "description": "Applies a harmful effect that Cleanse can remove." },
+    "monster": { "name": "Monster", "description": "A natural attack used by monsters." },
     "support": { "name": "Support", "description": "Restores or protects. Heal and Cleanse work on any unit, enemies included." }
   },
 
   "statuses": {
     "burn": { "name": "Burn", "debuff": true, "stacking": true, "tick": "start", "damagePctMaxHpPerStack": 0.01, "description": "Lose 1% of max Health per stack at the start of each turn. Ignores Defense and shields." },
+    "frenzy": { "name": "Frenzy", "debuff": false, "stacking": false, "tick": "end", "statMods": { "pAtk": 20 }, "description": "+20 P.Atk." },
     "slow": { "name": "Slow", "debuff": true, "stacking": false, "tick": "end", "statMods": { "movement": -4 }, "description": "-4 Movement (one grass tile)." }
   },
 
@@ -161,9 +163,49 @@
     "execute": {
       "name": "Execute", "description": "Strike an enemy for 100% P.Atk + 15% of its missing Health.",
       "tags": ["weapon"],
-      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 0,
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 2,
       "hits": [{ "pAtk": 1, "missingHp": 0.15 }]
+    },
+
+    "_monsters": "Skills used only by monsters (see enemies.json). They are not in any skill tree.",
+    "gnaw": {
+      "name": "Gnaw", "description": "Gnaw an enemy for 100% P.Atk.",
+      "tags": ["monster", "melee"],
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 0,
+      "hits": [{ "pAtk": 1 }]
+    },
+    "slam": {
+      "name": "Slam", "description": "Slam into an enemy for 100% P.Atk.",
+      "tags": ["monster", "melee"],
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 0,
+      "hits": [{ "pAtk": 1 }]
+    },
+    "sticky_spit": {
+      "name": "Sticky Spit", "description": "Spit goo at an enemy for 60% M.Atk and apply Slow for 2 turns.",
+      "tags": ["monster", "projectile", "debuff"],
+      "target": "unit", "affects": "enemy", "range": 3, "minRange": 1, "los": "sight", "cooldown": 2,
+      "hits": [{ "mAtk": 0.6 }],
+      "applyStatus": [{ "status": "slow", "turns": 2 }]
+    },
+    "bite": {
+      "name": "Bite", "description": "Bite an enemy for 100% P.Atk and latch on.",
+      "tags": ["monster", "melee", "engage"],
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 0,
+      "hits": [{ "pAtk": 1 }]
+    },
+    "pounce": {
+      "name": "Pounce", "description": "Leap next to an enemy and strike it for 90% P.Atk.",
+      "tags": ["monster", "movement", "melee", "engage"],
+      "target": "unit", "affects": "enemy", "range": 4, "rangeScale": 1, "minRange": 1, "cooldown": 2,
+      "hits": [{ "pAtk": 0.9 }], "charge": true
+    },
+    "howl": {
+      "name": "Howl", "description": "Howl to rouse yourself and nearby allies: Frenzy (+20 P.Atk) for 2 turns.",
+      "tags": ["monster", "area", "support"],
+      "target": "self", "affects": "ally", "range": 0, "minRange": 0, "aoeRadius": 3, "cooldown": 3,
+      "applyStatus": [{ "status": "frenzy", "turns": 2 }]
     }
+
   },
 
   "skillTabs": [

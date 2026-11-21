@@ -25,6 +25,9 @@
     "vision": 0
   },
 
+  "xpPerVictory": 100,
+  "_xpPerVictory": "XP each Adventurer gets for winning a battle (100 XP = 1 level), so a party that keeps winning is about level N at stage N.",
+
   "defenseScale": 100,
   "_defenseScale": "Damage taken is multiplied by defenseScale / (defenseScale + Defense). With 100: 100 Defense = 2x effective health, 200 = 3x. Negative Defense increases damage taken.",
 

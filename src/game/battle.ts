@@ -1,8 +1,9 @@
 // Pure battle rules (no rendering). BattleScene drives this and animates the events it returns.
-import { DEFAULT_WEAPON, ENEMY_COLOR, SKILLS, STATUSES, TREE_SKILLS, WEAPONS, hasTag, isFree } from '../data/content';
+import { DEFAULT_WEAPON, ENEMY_COLOR, SKILLS, STATUSES, WEAPONS, hasTag, isFree } from '../data/content';
+import { ENCOUNTER, ENEMIES } from '../data/enemies';
 import { STAT_CONFIG, type StatConfig } from '../data/stats';
 import type { Character, DamagePart, LosRule, SkillDef, StatKey, Stats } from '../data/types';
-import { allSkills, deriveStats, modelFor, newId, skillSlots, type Rng } from './character';
+import { allSkills, deriveStats, modelFor, newId, type Rng } from './character';
 import { losFor, minRangeFor, rangeFor, type ReachContext } from './reach';
 import {
   DIRS, DIRS8, EPS, TERRAIN, coneTiles, dist, hasLineOfSight, inBounds, key, passable, tilesBetween, withinRange,
@@ -67,7 +68,7 @@ export type BattleEvent =
   | { type: 'damage'; source?: string; target: string; amount: number; absorbed: number; killed: boolean; cause: DamageCause }
   | { type: 'miss'; source: string; target: string; chance: number; cause: DamageCause }
   | { type: 'engage'; source: string; target: string }
-  | { type: 'disengage'; source: string; target: string; reason: 'disengage' | 'separated' | 'displaced' }
+  | { type: 'disengage'; source: string; target: string; reason: 'disengage' | 'separated' | 'displaced' | 'escaped' }
   | { type: 'heal'; source: string; target: string; amount: number }
   | { type: 'shield'; source: string; target: string; amount: number }
   | { type: 'status'; source: string; target: string; name: string }
@@ -88,8 +89,9 @@ export interface ReachInfo {
   prev: string | null;
 }
 
-export function victoryXp(stage: number): number {
-  return 60 + stage * 20;
+/** XP for winning a battle (stats.json xpPerVictory; the same at every stage). */
+export function victoryXp(_stage: number): number {
+  return STAT_CONFIG.xpPerVictory;
 }
 
 export function makeUnit(character: Character, team: Team, pos: Point): Unit {
@@ -169,7 +171,7 @@ export class Battle {
 
   /** The weapon's basic attack (first weapon skill). */
   basicAttack(u: Unit): SkillDef {
-    return SKILLS[(WEAPONS[u.character.weaponId] ?? WEAPONS[DEFAULT_WEAPON]).skills[0]];
+    return SKILLS[allSkills(u.character)[0] ?? WEAPONS[DEFAULT_WEAPON].skills[0]];
   }
 
   /** What the unit's tag-dependent skills scale from (Movement, weapon). */
@@ -236,17 +238,21 @@ export class Battle {
 
   /**
    * Why an engaged unit can't use `skill` on `tile` (null if it can): engaged units
-   * can't move (incl. Movement skills) or attack anyone but their opponent.
+   * can't move (incl. Movement skills), attack anyone but their opponent, or heal/cleanse anyone but themselves.
    */
   engagementBlock(caster: Unit, skill: SkillDef, tile: Point, from: Point = caster): string | null {
     const opp = this.opponentOf(caster);
     if (!opp) return null;
-    if (hasTag(skill, 'movement') || skill.teleport || skill.charge) return `Engaged with ${opp.character.name}: disengage before moving.`;
+    // Teleports (Arcane Shift) are the exception: they slip out of the engagement for free.
+    if (hasTag(skill, 'movement') || skill.charge) return `Engaged with ${opp.character.name}: disengage before moving.`;
+    const busy = `Engaged with ${opp.character.name}: you can't target anyone else until you disengage.`;
+    // Heal and Cleanse only on yourself while engaged.
+    if ((skill.heal || skill.cleanse) && this.targetsOf(caster, skill, tile, from).some((t) => t !== caster)) return busy;
     if (!this.isAttack(skill)) return null;
     if (skill.cone) return `Engaged with ${opp.character.name}: can't watch other enemies.`;
     const foes = this.targetsOf(caster, skill, tile, from).filter((t) => t.team !== caster.team);
     const onlyOpponent = skill.target === 'self' ? foes.every((t) => t === opp) : foes.length === 1 && foes[0] === opp;
-    return onlyOpponent ? null : `Engaged with ${opp.character.name}: you can only attack them until you disengage.`;
+    return onlyOpponent ? null : busy;
   }
 
   /** The opponent's free basic attack when someone breaks away from an engagement (ignores range). */
@@ -311,6 +317,27 @@ export class Battle {
   /** Units of the current team that still have an action this turn. */
   readyUnits(): Unit[] {
     return this.living(this.phase).filter((u) => !u.acted);
+  }
+
+  /** Can `u` use this skill right now (ignoring targets)? Free skills work even after the unit's main action. */
+  canUseSkill(u: Unit, skillId: string): boolean {
+    const skill = SKILLS[skillId];
+    const inTurn = isFree(skill) ? u.alive && u.team === this.phase : this.canAct(u);
+    return inTurn && this.skillIds(u).includes(skillId) && this.isUsable(u, skillId);
+  }
+
+  /** Free skills (e.g. Kick) the unit could use right now on at least one unit. */
+  usableFreeActions(u: Unit): string[] {
+    return this.skillIds(u).filter((id) => {
+      const s = SKILLS[id];
+      if (!isFree(s) || !this.canUseSkill(u, id)) return false;
+      return this.rangeTiles(u, s).some((t) => this.targetsOf(u, s, t).length > 0);
+    });
+  }
+
+  /** Units the player can still do something with this turn (an action, or a usable free action). */
+  commandableUnits(): Unit[] {
+    return this.living(this.phase).filter((u) => this.canAct(u) || this.usableFreeActions(u).length > 0);
   }
 
   // ---- movement -----------------------------------------------------------------
@@ -715,7 +742,7 @@ export class Battle {
   perform(u: Unit, skillId: string, tile: Point): BattleEvent[] {
     const skill = SKILLS[skillId];
     if (!skill) throw new Error(`Unknown skill ${skillId}`);
-    if (!this.canAct(u)) throw new Error(`${u.character.name} has already acted`);
+    if (!(isFree(skill) ? u.alive && u.team === this.phase : this.canAct(u))) throw new Error(`${u.character.name} has already acted`);
     if (!this.skillIds(u).includes(skillId)) throw new Error(`${u.character.name} doesn't have ${skill.name}`);
     if (!this.isReady(u, skillId)) throw new Error(`${skill.name} is on cooldown`);
     if (!this.isUsable(u, skillId)) throw new Error(`${skill.name} needs a weapon`);
@@ -734,6 +761,12 @@ export class Battle {
       }
     }
     if (skill.teleport) {
+      // Teleporting out of an engagement breaks it with no opportunity attack.
+      const opp = this.opponentOf(u);
+      if (opp) {
+        this.breakEngagement(u);
+        events.push({ type: 'disengage', source: u.uid, target: opp.uid, reason: 'escaped' });
+      }
       u.x = tile.x;
       u.y = tile.y;
       events.push({ type: 'move', target: u.uid, from: origin, to: { ...tile }, kind: 'teleport' });
@@ -877,37 +910,56 @@ export class Battle {
 
 // ---- encounter setup ------------------------------------------------------------------
 
-const ENEMY_NAMES: Record<string, string[]> = {
-  sword_shield: ['Brigand', 'Sellsword', 'Marauder'],
-  spear: ['Pikeman', 'Lancer', 'Halberdier'],
-  bow: ['Poacher', 'Sniper', 'Scout'],
-  staff: ['Hexer', 'Warlock', 'Acolyte'],
-};
-
-export function generateEnemies(stage: number, partySize: number, rng: Rng): Character[] {
-  const count = Math.min(6, Math.max(1, partySize + Math.floor((stage - 1) / 3)));
-  const weapons = Object.keys(WEAPONS);
-  const enemies: Character[] = [];
-  for (let i = 0; i < count; i++) {
-    const weaponId = i === 0 ? DEFAULT_WEAPON : weapons[Math.floor(rng() * weapons.length)];
-    const names = ENEMY_NAMES[weaponId] ?? ['Bandit'];
-    const id = newId('e');
-    const c: Character = {
-      id,
-      name: names[Math.floor(rng() * names.length)],
-      level: stage,
-      xp: 0,
-      weaponId,
-      skillIds: [],
-      appearance: { color: ENEMY_COLOR, model: modelFor(id + i) },
-    };
-    const pool = [...TREE_SKILLS];
-    while (c.skillIds.length < skillSlots(c) && pool.length) {
-      c.skillIds.push(pool.splice(Math.floor(rng() * pool.length), 1)[0]);
-    }
-    enemies.push(c);
+/** The enemy types that fight at `stage`, each at its level for that stage. */
+export function enemyTypesForStage(stage: number): { type: string; level: number }[] {
+  const defs = Object.values(ENEMIES);
+  let fit = defs.filter((d) => d.levels[0] <= stage && stage <= d.levels[1]);
+  if (fit.length === 0) {
+    const top = Math.max(...defs.map((d) => d.levels[1]));
+    const bottom = Math.min(...defs.map((d) => d.levels[0]));
+    // Past every range: the toughest types at their top level. In a gap: the next types up.
+    fit = stage > top ? defs.filter((d) => d.levels[1] === top)
+      : stage < bottom ? defs.filter((d) => d.levels[0] === bottom)
+        : defs.filter((d) => d.levels[0] === Math.min(...defs.filter((x) => x.levels[0] > stage).map((x) => x.levels[0])));
   }
-  return enemies;
+  return fit.map((d) => ({ type: d.id, level: Math.max(d.levels[0], Math.min(d.levels[1], stage)) }));
+}
+
+/** Build one enemy of a type at a level. Human types pick a weapon. */
+export function makeEnemy(type: string, level: number, rng: Rng): Character {
+  const def = ENEMIES[type];
+  const weaponId = def.weapons.length ? def.weapons[Math.floor(rng() * def.weapons.length)] : '';
+  const id = newId('e');
+  return {
+    id,
+    name: def.weaponNames[weaponId] ?? def.name,
+    level,
+    xp: 0,
+    enemyType: type,
+    weaponId,
+    skillIds: [],
+    appearance: { color: ENEMY_COLOR, model: modelFor(id) },
+  };
+}
+
+/**
+ * An encounter for `stage`: random picks from the types that fit the stage until the
+ * threat budget (threatPerAdventurer x party size) is spent. Weak types come in bigger packs.
+ * Past the last level range, the budget keeps growing by 25% of a party per stage.
+ */
+export function generateEnemies(stage: number, partySize: number, rng: Rng): Character[] {
+  const options = enemyTypesForStage(stage);
+  const top = Math.max(...Object.values(ENEMIES).map((d) => d.levels[1]));
+  const party = Math.max(1, partySize);
+  const budget = party * ENCOUNTER.threatPerAdventurer * (1 + Math.max(0, stage - top) * 0.25);
+  const out: Character[] = [];
+  let spent = 0;
+  while (spent < budget - 1e-9 && out.length < ENCOUNTER.maxEnemies) {
+    const pick = options[Math.floor(rng() * options.length)];
+    out.push(makeEnemy(pick.type, pick.level, rng));
+    spent += ENEMIES[pick.type].threat;
+  }
+  return out;
 }
 
 /** Deployment spots near the left (player) or right (enemy) edge. */
