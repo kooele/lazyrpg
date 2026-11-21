@@ -77,7 +77,7 @@ Encounter size is a threat budget: 1 per Adventurer. Rats cost 0.5 (two per Adve
 ### Engagement
 
 Hitting a unit with an **Engage** skill locks you both together, unless the target is already engaged with someone else. While engaged:
-- You can't move, and you can only attack your opponent. Healing and buffs are fine.
+- You can't move, you can only attack your opponent, and you can only heal yourself.
 - **Disengage** (button in the battle sidebar) breaks free, but your opponent gets a free basic attack on you (an opportunity attack). You can then move and act normally.
 - **Arcane Shift** (Teleport) slips out of an engagement with no opportunity attack.
 - Engagement also ends if either unit falls, or if either one is successfully pushed by a knockback (Circle Swing, Arcane Pulse), even if they still end up next to each other. The pushed unit takes a free basic attack from its old opponent, just like disengaging. A push that's blocked doesn't break it.

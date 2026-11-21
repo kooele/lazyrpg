@@ -245,6 +245,10 @@ export class Battle {
     if (!opp) return null;
     // Teleports (Arcane Shift) are the exception: they slip out of the engagement for free.
     if (hasTag(skill, 'movement') || skill.charge) return `Engaged with ${opp.character.name}: disengage before moving.`;
+    // Heals only on yourself while engaged.
+    if (skill.heal && this.targetsOf(caster, skill, tile, from).some((t) => t !== caster)) {
+      return `Engaged with ${opp.character.name}: you can only heal yourself until you disengage.`;
+    }
     if (!this.isAttack(skill)) return null;
     if (skill.cone) return `Engaged with ${opp.character.name}: can't watch other enemies.`;
     const foes = this.targetsOf(caster, skill, tile, from).filter((t) => t.team !== caster.team);

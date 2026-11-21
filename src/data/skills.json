@@ -13,7 +13,7 @@
 
   "tags": {
     "melee": { "name": "Melee", "description": "Close-range attack. No line of sight needed." },
-    "engage": { "name": "Engage", "description": "On hit, you and the target become engaged (unless the target is already engaged). Engaged units can't move and can only attack each other. Breaking away (disengaging, or being knocked back) gives the opponent a free basic attack." },
+    "engage": { "name": "Engage", "description": "On hit, you and the target become engaged (unless the target is already engaged). Engaged units can't move, can only attack each other, and can only heal themselves. Breaking away (disengaging, or being knocked back) gives the opponent a free basic attack." },
     "projectile": { "name": "Projectile", "description": "Needs a clear line to the target: line of sight (rocks block) or line of fire (rocks and units block)." },
     "indirect": { "name": "Indirect", "description": "Arcs over obstacles. No line of sight needed." },
     "area": { "name": "Area", "description": "Affects several tiles at once." },
@@ -163,7 +163,7 @@
     "execute": {
       "name": "Execute", "description": "Strike an enemy for 100% P.Atk + 15% of its missing Health.",
       "tags": ["weapon"],
-      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 0,
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 2,
       "hits": [{ "pAtk": 1, "missingHp": 0.15 }]
     },
 

@@ -496,6 +496,21 @@ describe('engagement', () => {
     expect(a).toMatchObject({ x: 1, y: 3 });
   });
 
+  it('engaged units can heal themselves but no one else', () => {
+    const { battle, units: [a, e, , ally] } = duel();
+    a.character.weaponId = 'staff';
+    a.character.skillIds = ['heal'];
+    battle.perform(a, 'empowered_strike', { x: 4, y: 3 });
+    battle.endPhase();
+    battle.endPhase();
+    battle.endPhase();
+    battle.endPhase();
+    expect(a.engagedWith).toBe(e.uid);
+    expect(battle.canTarget(a, SKILLS.heal, { x: ally.x, y: ally.y })).toBe(false);
+    expect(battle.engagementBlock(a, SKILLS.heal, { x: 4, y: 3 })).toMatch(/only heal yourself/);
+    expect(battle.canTarget(a, SKILLS.heal, { x: 3, y: 3 })).toBe(true);
+  });
+
   it('a blocked push keeps the engagement', () => {
     const { units: [a, e] } = duel();
     const mage = makeUnit(hero('staff', ['arcane_pulse'], 'M'), 'player', { x: 5, y: 3 });
