@@ -52,7 +52,7 @@ Every skill has tags that explain how it behaves. These four change the rules:
 - **Movement**: range in tiles = rangeScale × Movement ÷ 4 (the grass cost), rounded down. Charge uses 100% (4 tiles at Movement 16), and Slow (−4 Movement) shortens it. Arcane Shift has a fixed range of 2.
 - **Weapon**: uses your weapon's basic-attack range and line rules (Execute with a Bow reaches 5 tiles). Unusable while the weapon is disabled (nothing disables weapons yet).
 - **Engage**: see below. Sword Slash, Slash and Smash, Empowered Strike, Kick, Charge.
-- **Free Action**: doesn't use your action (Kick).
+- **Free Action**: doesn't use your action, and can be used before or after it (Kick). The turn doesn't end automatically while a unit still has a free action with a target in reach; press **End Turn** when done.
 
 Descriptive tags: Melee, Projectile, Indirect, Area, Knockback, Reaction, Teleport, Debuff, Support.
 
@@ -61,6 +61,7 @@ Descriptive tags: Melee, Projectile, Indirect, Area, Knockback, Reaction, Telepo
 Hitting a unit with an **Engage** skill locks you both together, unless the target is already engaged with someone else. While engaged:
 - You can't move, and you can only attack your opponent. Healing and buffs are fine.
 - **Disengage** (button in the battle sidebar) breaks free, but your opponent gets a free basic attack on you (an opportunity attack). You can then move and act normally.
+- **Arcane Shift** (Teleport) slips out of an engagement with no opportunity attack.
 - Engagement also ends if either unit falls, or if either one is successfully pushed by a knockback (Circle Swing, Arcane Pulse), even if they still end up next to each other. The pushed unit takes a free basic attack from its old opponent, just like disengaging. A push that's blocked doesn't break it.
 
 Heal and Cleanse work on any unit, enemies included. In battle, the game asks for confirmation before you attack an empty tile or an ally, or heal or cleanse an enemy. The battle log keeps the whole fight: scroll it with the mouse wheel or the bar on its right.

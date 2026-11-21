@@ -206,4 +206,9 @@ export function runAiTurn(battle: Battle, u: Unit): void {
   const action = bestAction(battle, u);
   if (action) battle.perform(u, action.id, action.target);
   else battle.wait(u);
+  // Free actions also work after the main action (e.g. Kick once something is in reach).
+  if (!free && u.alive && !battle.outcome()) {
+    const late = bestFreeAction(battle, u);
+    if (late) battle.perform(u, late.id, late.target);
+  }
 }

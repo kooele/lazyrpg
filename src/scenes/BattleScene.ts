@@ -285,9 +285,11 @@ export class BattleScene extends Phaser.Scene {
 
     // Movement range for the selected unit.
     if (this.mode === 'select' && sel && b.canMove(sel) && !this.previewAction) {
+      // Pale fill + bright outline: stays readable on any terrain, including blue water.
       for (const k of this.reach.keys()) {
         const [x, y] = k.split(',').map(Number);
-        fill({ x, y }, 0x4aa3ff, 0.32);
+        fill({ x, y }, 0xe8fbff, 0.28);
+        outline({ x, y }, 0xffffff, 0.9, 3);
       }
     }
 
@@ -324,7 +326,7 @@ export class BattleScene extends Phaser.Scene {
     // Selection rings: gold for the commanded unit, faint for other ready units.
     this.rings.clear();
     if (b.phase === 'player' && this.mode !== 'over') {
-      for (const u of b.readyUnits()) {
+      for (const u of b.commandableUnits()) {
         const c = this.tileCenter(u);
         const isSel = u === sel;
         this.rings.lineStyle(isSel ? 3 : 2, 0xffd166, isSel ? 1 : 0.4).strokeEllipse(c.x, c.y + FEET_Y, 46 * K, 18 * K);
@@ -375,8 +377,9 @@ export class BattleScene extends Phaser.Scene {
       }));
       S.add(text(this, SIDE_X + 10, 70, this.unitSummary(u), { fontSize: '12px', lineSpacing: 3, wordWrap: { width: SIDE_W - 20 } }));
       if (u.team === 'player' && b.phase === 'player') {
-        const status = u.acted ? 'Done this turn' : u.moved ? 'Moved — can still act' : 'Ready to move and act';
-        S.add(text(this, SIDE_X + 10, 156, status, { fontSize: '12px', color: u.acted ? COLORS.dim : COLORS.good }));
+        const freeLeft = u.acted && b.usableFreeActions(u).length > 0;
+        const status = freeLeft ? 'Acted — free action available' : u.acted ? 'Done this turn' : u.moved ? 'Moved — can still act' : 'Ready to move and act';
+        S.add(text(this, SIDE_X + 10, 156, status, { fontSize: '12px', color: u.acted && !freeLeft ? COLORS.dim : COLORS.good }));
       }
     }
 
@@ -389,11 +392,12 @@ export class BattleScene extends Phaser.Scene {
     if (u && u.team === 'player') {
       const canAct = interactive && b.canAct(u);
       for (const id of b.skillIds(u)) {
+        const usable = interactive && b.canUseSkill(u, id);
         const s = SKILLS[id];
         const cd = u.cooldowns[id] ?? 0;
         const label = `${s.name}${isFree(s) ? ' · free' : ''}${cd > 0 ? ` (${cd})` : ''}`;
         S.add(button(this, SIDE_X, y, SIDE_W, 30, label, () => this.selectAction(id), {
-          enabled: canAct && cd <= 0,
+          enabled: usable && cd <= 0,
           selected: this.mode === 'target' && this.action?.id === id,
           fontSize: 14,
           onHover: () => {
@@ -412,10 +416,9 @@ export class BattleScene extends Phaser.Scene {
         }));
         y += 34;
       }
-      S.add(button(this, SIDE_X, y + 2, 116, 30, 'Wait', () => this.waitUnit(), { enabled: canAct, fontSize: 14 }));
       const opp = b.opponentOf(u);
       if (opp) {
-        S.add(button(this, SIDE_X + 124, y + 2, 116, 30, 'Disengage', () => void this.disengageUnit(), {
+        S.add(button(this, SIDE_X, y + 2, 116, 30, 'Disengage', () => void this.disengageUnit(), {
           enabled: canAct, fontSize: 14, fill: 0x4a3418,
           onHover: () => {
             const dmg = b.previewHits(opp, b.basicAttack(opp), u).reduce((a, c) => a + c, 0);
@@ -423,13 +426,18 @@ export class BattleScene extends Phaser.Scene {
           },
         }));
       } else {
-        S.add(button(this, SIDE_X + 124, y + 2, 116, 30, 'Undo move', () => this.undoMove(), {
+        S.add(button(this, SIDE_X, y + 2, 116, 30, 'Undo move', () => this.undoMove(), {
           enabled: interactive && b.canUndoMove(u), fontSize: 14,
         }));
       }
+      y += 2;
     }
-    S.add(button(this, SIDE_X, 590, SIDE_W, 40, 'End Turn', () => this.endPlayerPhase(), {
-      enabled: interactive, fill: 0x4a2a22, fontSize: 16, selected: interactive && b.readyUnits().length === 0,
+    // Ends the whole team's turn (there is no per-unit turn order to wait in).
+    const endX = u && u.team === 'player' ? SIDE_X + 124 : SIDE_X;
+    const endW = u && u.team === 'player' ? 116 : SIDE_W;
+    S.add(button(this, endX, y, endW, 30, 'End Turn', () => this.endPlayerPhase(), {
+      enabled: interactive, fill: 0x4a2a22, fontSize: 14, selected: interactive && b.readyUnits().length === 0,
+      onHover: () => this.hoverText.setText('End your turn. Units that have not acted give up their action, and the enemy moves next.'),
     }));
   }
 
@@ -520,7 +528,7 @@ export class BattleScene extends Phaser.Scene {
 
   private cycleUnit(): void {
     if ((this.mode !== 'select' && this.mode !== 'target') || this.dialogOpen) return;
-    const ready = this.battle.readyUnits();
+    const ready = this.battle.commandableUnits();
     if (ready.length === 0) return;
     const i = ready.findIndex((u) => u.uid === this.selectedUid);
     this.selectUnit(ready[(i + 1) % ready.length]);
@@ -528,7 +536,7 @@ export class BattleScene extends Phaser.Scene {
 
   private selectAction(id: string): void {
     const u = this.selected;
-    if (!u || (this.mode !== 'select' && this.mode !== 'target') || !this.battle.canAct(u)) return;
+    if (!u || (this.mode !== 'select' && this.mode !== 'target') || !this.battle.canUseSkill(u, id)) return;
     this.action = SKILLS[id];
     this.previewAction = null;
     this.mode = 'target';
@@ -581,22 +589,18 @@ export class BattleScene extends Phaser.Scene {
     await this.wait(800);
   }
 
-  private waitUnit(): void {
-    const u = this.selected;
-    if (!u || !this.battle.canAct(u)) return;
-    this.battle.wait(u);
-    this.addLog(`${u.character.name} holds position.`);
-    this.afterUnitDone();
-  }
-
   /** After a hero acts: keep them selected if they can still act (free skill), else go to the next ready hero. */
   private afterUnitDone(): void {
     const outcome = this.battle.outcome();
     if (outcome) return this.endBattle(outcome);
     this.mode = 'select';
     this.action = null;
+    // Stay on the current unit while it can still do something (incl. a free action like Kick);
+    // otherwise move to the next unit that can act; end the turn only when nobody can do anything.
+    const b = this.battle;
     const cur = this.selected;
-    const next = cur && this.battle.canAct(cur) ? cur : this.battle.readyUnits()[0];
+    const commandable = b.commandableUnits();
+    const next = cur && commandable.includes(cur) ? cur : commandable.find((x) => b.canAct(x)) ?? commandable[0];
     if (next) this.selectUnit(next);
     else this.endPlayerPhase();
   }
@@ -781,6 +785,11 @@ export class BattleScene extends Phaser.Scene {
         b.wait(u);
         this.addLog(`${u.character.name} advances.`);
       }
+      // Free actions also work after the main action.
+      if (!free && u.alive && !b.outcome()) {
+        const late = bestFreeAction(b, u);
+        if (late) await this.enemyUse(u, late.id, late.target);
+      }
       this.refreshUnits();
     }
     this.casterUid = null;
@@ -882,7 +891,8 @@ export class BattleScene extends Phaser.Scene {
   private showEvent(e: BattleEvent, summary: string[], index: number): void {
     if (e.type === 'move' || e.type === 'overwatch') return;
     if (e.type === 'disengage') {
-      summary.push(e.reason === 'separated' ? 'engagement broken' : `breaks away from ${this.battle.unit(e.target).character.name}`);
+      const other = this.battle.unit(e.target).character.name;
+      summary.push(e.reason === 'escaped' ? `slips away from ${other}` : e.reason === 'separated' ? 'engagement broken' : `breaks away from ${other}`);
       return;
     }
     const t = this.battle.unit(e.target);

@@ -380,6 +380,19 @@ describe('skills', () => {
     expect(k.acted).toBe(true);
   });
 
+  it('free actions can be used after the main action, and keep the unit commandable', () => {
+    const { battle, units: [k] } = setup(openMap(), [
+      { c: hero('sword_shield', ['kick']), team: 'player', at: { x: 1, y: 1 } },
+      { c: hero('bow'), team: 'enemy', at: { x: 2, y: 1 } },
+    ]);
+    battle.perform(k, 'sword_slash', { x: 2, y: 1 });
+    expect(k.acted).toBe(true);
+    expect(battle.usableFreeActions(k)).toEqual(['kick']);
+    expect(battle.commandableUnits()).toContain(k);
+    battle.perform(k, 'kick', { x: 2, y: 1 });
+    expect(battle.commandableUnits()).toEqual([]);
+  });
+
   it("execute: 100% P.Atk + 15% of the target's missing health", () => {
     const { battle, units: [a, e] } = setup(openMap(), [
       { c: hero('sword_shield', ['execute']), team: 'player', at: { x: 1, y: 1 } },
@@ -463,6 +476,22 @@ describe('engagement', () => {
     expect(events).toContainEqual(expect.objectContaining({ type: 'damage', cause: 'opportunity', source: a.uid, target: e.uid }));
     expect(a.engagedWith).toBeNull();
     expect(e.engagedWith).toBeNull();
+  });
+
+  it('Arcane Shift escapes an engagement with no opportunity attack', () => {
+    const { battle, units: [a, e] } = duel();
+    a.character.skillIds = ['arcane_shift'];
+    battle.perform(a, 'sword_slash', { x: 4, y: 3 });
+    battle.endPhase();
+    battle.endPhase();
+    const hp = a.hp;
+    const events = battle.perform(a, 'arcane_shift', { x: 1, y: 3 });
+    expect(events).toContainEqual(expect.objectContaining({ type: 'disengage', reason: 'escaped' }));
+    expect(events.some((ev) => ev.type === 'damage')).toBe(false);
+    expect(a.hp).toBe(hp);
+    expect(a.engagedWith).toBeNull();
+    expect(e.engagedWith).toBeNull();
+    expect(a).toMatchObject({ x: 1, y: 3 });
   });
 
   it('a blocked push keeps the engagement', () => {

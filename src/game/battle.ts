@@ -67,7 +67,7 @@ export type BattleEvent =
   | { type: 'damage'; source?: string; target: string; amount: number; absorbed: number; killed: boolean; cause: DamageCause }
   | { type: 'miss'; source: string; target: string; chance: number; cause: DamageCause }
   | { type: 'engage'; source: string; target: string }
-  | { type: 'disengage'; source: string; target: string; reason: 'disengage' | 'separated' | 'displaced' }
+  | { type: 'disengage'; source: string; target: string; reason: 'disengage' | 'separated' | 'displaced' | 'escaped' }
   | { type: 'heal'; source: string; target: string; amount: number }
   | { type: 'shield'; source: string; target: string; amount: number }
   | { type: 'status'; source: string; target: string; name: string }
@@ -241,7 +241,8 @@ export class Battle {
   engagementBlock(caster: Unit, skill: SkillDef, tile: Point, from: Point = caster): string | null {
     const opp = this.opponentOf(caster);
     if (!opp) return null;
-    if (hasTag(skill, 'movement') || skill.teleport || skill.charge) return `Engaged with ${opp.character.name}: disengage before moving.`;
+    // Teleports (Arcane Shift) are the exception: they slip out of the engagement for free.
+    if (hasTag(skill, 'movement') || skill.charge) return `Engaged with ${opp.character.name}: disengage before moving.`;
     if (!this.isAttack(skill)) return null;
     if (skill.cone) return `Engaged with ${opp.character.name}: can't watch other enemies.`;
     const foes = this.targetsOf(caster, skill, tile, from).filter((t) => t.team !== caster.team);
@@ -311,6 +312,27 @@ export class Battle {
   /** Units of the current team that still have an action this turn. */
   readyUnits(): Unit[] {
     return this.living(this.phase).filter((u) => !u.acted);
+  }
+
+  /** Can `u` use this skill right now (ignoring targets)? Free skills work even after the unit's main action. */
+  canUseSkill(u: Unit, skillId: string): boolean {
+    const skill = SKILLS[skillId];
+    const inTurn = isFree(skill) ? u.alive && u.team === this.phase : this.canAct(u);
+    return inTurn && this.skillIds(u).includes(skillId) && this.isUsable(u, skillId);
+  }
+
+  /** Free skills (e.g. Kick) the unit could use right now on at least one unit. */
+  usableFreeActions(u: Unit): string[] {
+    return this.skillIds(u).filter((id) => {
+      const s = SKILLS[id];
+      if (!isFree(s) || !this.canUseSkill(u, id)) return false;
+      return this.rangeTiles(u, s).some((t) => this.targetsOf(u, s, t).length > 0);
+    });
+  }
+
+  /** Units the player can still do something with this turn (an action, or a usable free action). */
+  commandableUnits(): Unit[] {
+    return this.living(this.phase).filter((u) => this.canAct(u) || this.usableFreeActions(u).length > 0);
   }
 
   // ---- movement -----------------------------------------------------------------
@@ -715,7 +737,7 @@ export class Battle {
   perform(u: Unit, skillId: string, tile: Point): BattleEvent[] {
     const skill = SKILLS[skillId];
     if (!skill) throw new Error(`Unknown skill ${skillId}`);
-    if (!this.canAct(u)) throw new Error(`${u.character.name} has already acted`);
+    if (!(isFree(skill) ? u.alive && u.team === this.phase : this.canAct(u))) throw new Error(`${u.character.name} has already acted`);
     if (!this.skillIds(u).includes(skillId)) throw new Error(`${u.character.name} doesn't have ${skill.name}`);
     if (!this.isReady(u, skillId)) throw new Error(`${skill.name} is on cooldown`);
     if (!this.isUsable(u, skillId)) throw new Error(`${skill.name} needs a weapon`);
@@ -734,6 +756,12 @@ export class Battle {
       }
     }
     if (skill.teleport) {
+      // Teleporting out of an engagement breaks it with no opportunity attack.
+      const opp = this.opponentOf(u);
+      if (opp) {
+        this.breakEngagement(u);
+        events.push({ type: 'disengage', source: u.uid, target: opp.uid, reason: 'escaped' });
+      }
       u.x = tile.x;
       u.y = tile.y;
       events.push({ type: 'move', target: u.uid, from: origin, to: { ...tile }, kind: 'teleport' });
