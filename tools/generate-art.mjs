@@ -441,59 +441,55 @@ function monster(kind, color) {
   const face = [];
   let shadow = '<ellipse cx="48" cy="76.2" rx="24" ry="3" fill="#2a2018" opacity="0.25"/>';
   if (kind === 'rat') {
-    body.push(`<path d="M26 69 Q10 72 7 60 Q5 50 13 45" fill="none" stroke="${dark(pink, 0.1)}" stroke-width="2.6" stroke-linecap="round"/>`);
-    body.push(`<path d="M10 51 Q6 47 13 45" fill="none" stroke="${dark(pink, 0.1)}" stroke-width="1.6" stroke-linecap="round"/>`);
-    body.push(`<ellipse cx="36" cy="74.5" rx="3.4" ry="1.8" fill="${dark(pink, 0.25)}"/><ellipse cx="62" cy="74.5" rx="3" ry="1.6" fill="${dark(pink, 0.25)}"/>`);
-    body.push(path('M22 70 Q17 51 40 47 Q60 43 71 53 Q77 62 72 72 Q50 78 22 70 Z', c));
-    body.push(`<ellipse cx="48" cy="71" rx="19" ry="4.6" fill="${lt}"/>`);
-    body.push(`<ellipse cx="36" cy="63" rx="10" ry="8" fill="${dark(c, 0.08)}"/>`);
-    body.push(path('M61 50 Q72 43 82 55 L90.5 61.5 Q89 66 80 67 Q68 68 61 61 Z', c));
-    body.push(path('M66 62 Q76 66 89 63 Q84 67 76 67 Q69 66 66 62 Z', lt));
-    body.push(circle(68, 47, 6.2, c));
-    body.push(circle(68.6, 47.6, 3.8, pink));
-    body.push(`<ellipse cx="44" cy="75" rx="4" ry="2" fill="${pink}"/><ellipse cx="73" cy="75" rx="3.6" ry="1.8" fill="${pink}"/>`);
-    body.push(limb([[72, 66], [73, 74]], 3.4, c));
-    body.push(`<path d="M34 49 l-1.5 -2.5 M40 47.5 l-1 -2.8 M46 47 l-0.4 -2.8 M52 47.2 l0.4 -2.6" stroke="${dk}" stroke-width="1" stroke-linecap="round"/>`);
-    body.push(`<path d="M86 63 L95 59.5 M86.5 64 L95.5 64.5 M86 65 L94 68.5" stroke="${paint('#e8e0d8')}" stroke-width="0.5" stroke-linecap="round"/>`);
-    body.push(`<path d="M85.5 66.2 h2 v1.8 h-2 Z" fill="#f4efe2"/>`);
-    face.push(circle(90.6, 61.8, 1.6, dark(pink, 0.15)));
-    face.push(`<ellipse cx="79.5" cy="56" rx="1.6" ry="1.9" fill="#1e1618"/>`);
-    face.push(circle(79, 55.4, 0.55, '#ffffff'));
+    // Round, chubby body with a big head and big ears.
+    body.push(`<path d="M30 70 Q16 75 13.5 65 Q12.5 58.5 18 57.5" fill="none" stroke="${dark(pink, 0.08)}" stroke-width="2.3" stroke-linecap="round"/>`);
+    body.push(`<ellipse cx="44" cy="64" rx="18.5" ry="12" fill="${c}"/>`);
+    body.push(`<ellipse cx="46" cy="70" rx="12.5" ry="5" fill="${lt}"/>`);
+    body.push(circle(58, 44.5, 6, dark(c, 0.12)) + circle(58.3, 45, 3.6, dark(pink, 0.12)));
+    body.push(circle(64, 56, 11.5, c));
+    body.push(`<ellipse cx="74" cy="60" rx="6.5" ry="5" fill="${c}"/>`);
+    body.push(`<ellipse cx="73" cy="61.5" rx="5.5" ry="3.6" fill="${lt}"/>`);
+    body.push(circle(67.5, 45, 6.6, c) + circle(67.8, 45.6, 4.2, pink));
+    body.push(`<ellipse cx="36" cy="75.4" rx="3.6" ry="1.7" fill="${pink}"/><ellipse cx="51" cy="75.6" rx="3.4" ry="1.6" fill="${pink}"/><ellipse cx="63" cy="75.6" rx="3" ry="1.5" fill="${pink}"/>`);
+    body.push(`<path d="M76 61.5 L85 59.5 M76.5 63 L85 64.5" stroke="${paint('#eae2da')}" stroke-width="0.5" stroke-linecap="round"/>`);
+    face.push(circle(80.2, 59.2, 1.9, dark(pink, 0.12)));
+    face.push(circle(69, 53.8, 2.3, '#1e1618') + circle(68.3, 53, 0.8, '#ffffff'));
+    face.push(`<ellipse cx="70" cy="60.4" rx="2.6" ry="1.3" fill="#ff8fa3" opacity="0.4"/>`);
+    face.push(`<path d="M76.5 64.2 Q78 65.4 79.5 64.2" stroke="#3a2a2a" stroke-width="0.6" fill="none" stroke-linecap="round"/>`);
   } else if (kind === 'slime') {
-    shadow = '<ellipse cx="48" cy="76.2" rx="27" ry="3" fill="#2a2018" opacity="0.25"/>';
-    body.push(path('M21 76 Q16 74 19 67 Q21 38 48 35 Q75 38 77 67 Q80 74 75 76 Z', c, 'opacity="0.94"'));
-    body.push(`<ellipse cx="48" cy="61" rx="20" ry="13" fill="${lt}" opacity="0.35"/>`);
-    body.push(`<ellipse cx="48" cy="74" rx="26" ry="2.6" fill="${dk}" opacity="0.6"/>`);
-    body.push(path('M16 76 Q14 72 19 71 Q21 74 21 76 Z M75 76 Q76 71 80 72 Q82 75 79 76 Z', c));
-    body.push(`<ellipse cx="35" cy="46" rx="7" ry="3.6" fill="#ffffff" opacity="0.55" transform="rotate(-25 35 46)"/>`);
-    body.push(circle(29, 52, 1.4, '#ffffff', 'opacity="0.6"'));
-    body.push(circle(63, 66, 2.2, lt, 'opacity="0.7"') + circle(58, 70, 1.3, lt, 'opacity="0.7"') + circle(68, 56, 1.1, lt, 'opacity="0.7"'));
-    face.push(`<ellipse cx="40" cy="57" rx="2.6" ry="3.6" fill="#1e2a1e"/><ellipse cx="56" cy="57" rx="2.6" ry="3.6" fill="#1e2a1e"/>`);
-    face.push(circle(39.2, 55.8, 0.9, '#ffffff') + circle(55.2, 55.8, 0.9, '#ffffff'));
-    face.push(`<path d="M44.5 64 Q48 66.5 51.5 64" stroke="#1e2a1e" stroke-width="1.1" fill="none" stroke-linecap="round"/>`);
-    face.push(`<ellipse cx="35" cy="62" rx="3" ry="1.4" fill="#ff8fa3" opacity="0.35"/><ellipse cx="61" cy="62" rx="3" ry="1.4" fill="#ff8fa3" opacity="0.35"/>`);
+    // A gumdrop: soft rounded top, sitting flat on the ground (no rim at the bottom).
+    shadow = '<ellipse cx="48" cy="76.2" rx="25" ry="2.6" fill="#2a2018" opacity="0.25"/>';
+    body.push(path('M27 76 C18 76 18.5 64 23.5 55 C29 45 39.5 34.5 48 34 C56.5 34.5 67 45 72.5 55 C77.5 64 78 76 69 76 Z', c, 'opacity="0.95"'));
+    body.push(`<ellipse cx="48" cy="63" rx="17" ry="10" fill="${lt}" opacity="0.3"/>`);
+    body.push(`<ellipse cx="37" cy="47.5" rx="6" ry="3" fill="#ffffff" opacity="0.55" transform="rotate(-38 37 47.5)"/>`);
+    body.push(circle(31.5, 54, 1.3, '#ffffff', 'opacity="0.6"'));
+    body.push(circle(62, 67, 2, lt, 'opacity="0.7"') + circle(57, 71, 1.2, lt, 'opacity="0.7"') + circle(66, 59, 1, lt, 'opacity="0.7"'));
+    face.push(`<ellipse cx="41" cy="60" rx="2.5" ry="3.4" fill="#1e2a1e"/><ellipse cx="55" cy="60" rx="2.5" ry="3.4" fill="#1e2a1e"/>`);
+    face.push(circle(40.2, 58.9, 0.9, '#ffffff') + circle(54.2, 58.9, 0.9, '#ffffff'));
+    face.push(`<path d="M45 66.5 Q48 68.8 51 66.5" stroke="#1e2a1e" stroke-width="1.1" fill="none" stroke-linecap="round"/>`);
+    face.push(`<ellipse cx="36.5" cy="65" rx="2.8" ry="1.3" fill="#ff8fa3" opacity="0.35"/><ellipse cx="59.5" cy="65" rx="2.8" ry="1.3" fill="#ff8fa3" opacity="0.35"/>`);
   } else if (kind === 'wolf') {
+    // Sturdy and rounded: big head, short legs, fluffy upturned tail.
     const fur = c;
-    body.push(path('M27 49 Q12 44 7 57 Q9 63 13 61 Q11 58 15 56 Q14 60 18 59 Q20 54 28 55 Z', fur));
-    body.push(limb([[33, 60], [30, 74.5]], 4, dk) + limb([[63, 60], [65, 74.5]], 4, dk));
-    body.push(path('M24 51 Q25 40 42 40 Q58 38 68 41 Q75 46 73 56 Q71 62 62 62 L35 62 Q24 62 24 51 Z', fur));
-    body.push(`<ellipse cx="49" cy="60.5" rx="14" ry="2.8" fill="${lt}"/>`);
-    body.push(`<ellipse cx="32" cy="54" rx="8.5" ry="8.5" fill="${dark(fur, 0.06)}"/>`);
-    body.push(limb([[31, 59], [28, 74.5]], 4.6, fur) + limb([[68, 57], [70, 74.5]], 4.6, fur));
-    body.push(`<ellipse cx="27.5" cy="75" rx="3.2" ry="1.5" fill="${dk}"/><ellipse cx="71" cy="75" rx="3.2" ry="1.5" fill="${dk}"/>`);
-    body.push(path('M63 45 Q64 29 76 27 Q84 27 86.5 33 L94.5 37.5 Q95.5 42 90 43 L82 44.5 Q76 51 67 50 Z', fur));
-    body.push(path('M66 46 Q72 52 70 60 Q66 58 64 52 Z', lt));
-    body.push(path('M82 44.5 L90 43 Q86 46.5 80 47 Z', lt));
-    body.push(path('M71.5 30.5 L73.5 18.5 L78.5 28 Z M77 28 L81.5 17.5 L83.5 30 Z', fur));
-    body.push(path('M73 28 L74 22 L76.5 27.5 Z M79 27.5 L81.3 21.5 L82.2 28.5 Z', dark(fur, 0.35)));
-    body.push(`<path d="M30 42 l-2 -3 M38 40 l-1 -3.2 M46 39.5 l0 -3 M54 39.5 l1 -3 M62 40.5 l1.6 -2.6" stroke="${dk}" stroke-width="1.1" stroke-linecap="round"/>`);
-    face.push(`<ellipse cx="94.2" cy="38.6" rx="1.6" ry="1.3" fill="#1a1416"/>`);
-    face.push(`<path d="M80.3 33.2 Q82.3 31.4 84.4 33 Q82.4 34.6 80.3 33.2 Z" fill="${paint('#e8b84a')}"/>`);
-    face.push(circle(82.6, 33.1, 0.7, '#1a1416'));
-    face.push(`<path d="M79 31.3 L84.6 31.8" stroke="${dark(fur, 0.45)}" stroke-width="0.8" stroke-linecap="round"/>`);
-    face.push(`<path d="M90 43 L84 44.4" stroke="#2a1e1e" stroke-width="0.7" stroke-linecap="round"/>`);
+    body.push(path('M29 53 Q15 51 14 38 Q19 41 21 39 Q22 45 31 48 Z', fur));
+    body.push(path('M14.2 38.5 Q18 41 21 39 Q19 35.5 15.5 35 Z', lt));
+    body.push(limb([[34, 62], [34, 74.5]], 5.4, dk) + limb([[55, 62], [55.5, 74.5]], 5.4, dk));
+    body.push(`<ellipse cx="45" cy="56" rx="20" ry="11.5" fill="${fur}"/>`);
+    body.push(`<ellipse cx="45" cy="63" rx="13" ry="4" fill="${lt}"/>`);
+    body.push(limb([[39, 62], [38.5, 74.5]], 5.8, fur) + limb([[60, 61], [61, 74.5]], 5.8, fur));
+    body.push(`<ellipse cx="38.5" cy="75.2" rx="3.6" ry="1.6" fill="${lt}"/><ellipse cx="61.5" cy="75.2" rx="3.6" ry="1.6" fill="${lt}"/>`);
+    body.push(`<ellipse cx="62" cy="55" rx="7.5" ry="8.5" fill="${lt}"/>`);
+    body.push(path('M60.5 37 L62 22.5 Q63.5 22 69 32 Z M68 32 L73.5 20.5 Q75 21 76.5 33.5 Z', fur));
+    body.push(path('M62.3 33 L63 26 L66.5 32 Z M70.5 31.5 L73.8 25 L74.8 32 Z', paint('#d9b0b0')));
+    body.push(circle(68.5, 42, 12, fur));
+    body.push(`<ellipse cx="66" cy="49" rx="7" ry="4" fill="${lt}"/>`);
+    body.push(`<ellipse cx="79" cy="46.5" rx="7.5" ry="5.2" fill="${fur}"/>`);
+    body.push(`<ellipse cx="79.5" cy="48.5" rx="6.2" ry="3.4" fill="${lt}"/>`);
+    face.push(`<ellipse cx="86" cy="45" rx="2" ry="1.6" fill="#1a1416"/>`);
+    face.push(circle(73, 40.2, 2.1, '#1a1416') + circle(72.3, 39.4, 0.75, '#ffffff'));
+    face.push(`<path d="M81.5 50 Q83 51.2 84.6 50" stroke="#2a1e1e" stroke-width="0.6" fill="none" stroke-linecap="round"/>`);
   }
-  return storybook(96, kind, shadow, body.join(''), face.join(''), kind === 'slime' ? 0 : -3.5);
+  return storybook(96, kind, shadow, body.join(''), face.join(''), 0);
 }
 
 mkdirSync(root, { recursive: true });
