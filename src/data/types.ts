@@ -58,6 +58,8 @@ export interface StatusDef {
   damagePctMaxHpPerStack?: number;
   /** Stat changes while active (per stack for stacking effects). */
   statMods?: Partial<Stats>;
+  /** Percent stat changes while active (-0.25 = -25%), applied after flat changes and terrain. */
+  statPct?: Partial<Stats>;
 }
 
 /** One hit of a damaging skill. Values are fractions (0.8 = 80%). */

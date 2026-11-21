@@ -31,7 +31,8 @@
   "statuses": {
     "burn": { "name": "Burn", "debuff": true, "stacking": true, "tick": "start", "damagePctMaxHpPerStack": 0.01, "description": "Lose 1% of max Health per stack at the start of each turn. Ignores Defense and shields." },
     "frenzy": { "name": "Frenzy", "debuff": false, "stacking": false, "tick": "end", "statMods": { "pAtk": 20 }, "description": "+20 P.Atk." },
-    "slow": { "name": "Slow", "debuff": true, "stacking": false, "tick": "end", "statMods": { "movement": -4 }, "description": "-4 Movement (one grass tile)." }
+    "slow": { "name": "Slow", "debuff": true, "stacking": false, "tick": "end", "statMods": { "movement": -4 }, "description": "-4 Movement (one grass tile)." },
+    "corrode": { "name": "Corrode", "debuff": true, "stacking": false, "tick": "end", "statPct": { "defense": -0.25 }, "description": "-25% Defense." }
   },
 
   "skills": {
@@ -176,16 +177,16 @@
     },
     "slam": {
       "name": "Slam", "description": "Slam into an enemy for 100% P.Atk.",
-      "tags": ["monster", "melee"],
+      "tags": ["monster", "melee", "engage"],
       "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 0,
       "hits": [{ "pAtk": 1 }]
     },
     "sticky_spit": {
-      "name": "Sticky Spit", "description": "Spit goo at an enemy for 60% M.Atk and apply Slow for 2 turns.",
+      "name": "Sticky Spit", "description": "Spit goo at an enemy for 60% M.Atk and apply Slow and Corrode (-25% Defense) for 2 turns.",
       "tags": ["monster", "projectile", "debuff"],
       "target": "unit", "affects": "enemy", "range": 3, "minRange": 1, "los": "sight", "cooldown": 2,
       "hits": [{ "mAtk": 0.6 }],
-      "applyStatus": [{ "status": "slow", "turns": 2 }]
+      "applyStatus": [{ "status": "slow", "turns": 2 }, { "status": "corrode", "turns": 2 }]
     },
     "bite": {
       "name": "Bite", "description": "Bite an enemy for 100% P.Atk and latch on.",

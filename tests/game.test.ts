@@ -660,6 +660,23 @@ describe('enemies', () => {
     expect(allSkills(rat1)).toEqual(['gnaw']);
     expect(allSkills(makeEnemy('slime', 2, makeRng(1)))).toEqual(['slam']);
     expect(allSkills(makeEnemy('slime', 3, makeRng(1)))).toEqual(['slam', 'sticky_spit']);
+  });
+
+  it('Slime: Slam engages; Sticky Spit slows and cuts Defense by 25%', () => {
+    const slime = makeUnit(makeEnemy('slime', 3, makeRng(1)), 'enemy', { x: 5, y: 3 });
+    const a = makeUnit(hero('spear'), 'player', { x: 3, y: 3 });
+    const b = makeUnit(hero('spear'), 'player', { x: 4, y: 4 });
+    const battle = new Battle(openMap(), [a, b, slime], makeRng(1));
+    battle.endPhase();
+    const def = battle.stat(a, 'defense');
+    battle.perform(slime, 'sticky_spit', { x: 3, y: 3 });
+    expect(battle.stat(a, 'defense')).toBe(Math.round(def * 0.75));
+    expect(a.statuses.map((s) => s.id).sort()).toEqual(['corrode', 'slow']);
+    expect(SKILLS.sticky_spit.cooldown).toBe(2);
+    battle.endPhase();
+    battle.endPhase();
+    battle.perform(slime, 'slam', { x: 4, y: 4 });
+    expect(slime.engagedWith).toBe(b.uid);
     expect(allSkills(makeEnemy('wolf', 4, makeRng(1)))).toEqual(['bite', 'pounce', 'howl']);
   });
 

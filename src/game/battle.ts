@@ -166,6 +166,9 @@ export class Battle {
     if (stat === 'defense') {
       value += TERRAIN[this.map.tiles[u.y][u.x]].defense;
     }
+    let pct = 0;
+    for (const s of u.statuses) pct += (STATUSES[s.id]?.statPct?.[stat] ?? 0) * Math.max(1, s.stacks);
+    if (pct) value *= Math.max(0, 1 + pct);
     if (stat === 'movement') value = Math.max(0, value);
     return Math.round(value);
   }

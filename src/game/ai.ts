@@ -46,7 +46,7 @@ function scoreSkill(battle: Battle, u: Unit, skill: SkillDef, from: Point, aim: 
       const def = STATUSES[a.status];
       if (!friendly && def.debuff) {
         score += t.stats.health * (def.damagePctMaxHpPerStack ?? 0) * (a.stacks ?? 1) * a.turns;
-        if (def.statMods) score += 15 * a.turns;
+        if (def.statMods || def.statPct) score += 15 * a.turns;
       } else if (friendly && !def.debuff && !t.statuses.some((x) => x.id === a.status)) {
         // Buffs (e.g. Howl's Frenzy) are worth it when a fight is close.
         const fightNear = battle.living().some((f) => f.team !== u.team && dist(f, t) <= 6);

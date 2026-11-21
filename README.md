@@ -66,7 +66,7 @@ Each enemy type has a fixed level range and its own stats and skills (`src/data/
 | Type | Levels | Skills |
 |---|---|---|
 | Giant Rat | 1–2 | Gnaw. Fast and weak; comes in packs. |
-| Green Slime | 2–3 | Slam; Sticky Spit at level 3 (ranged, applies Slow). Slow-moving and tough. |
+| Green Slime | 2–3 | Slam (Engage); Sticky Spit at level 3 (ranged, applies Slow and Corrode: -25% Defense, 2-turn cooldown). Slow-moving and tough. |
 | Grey Wolf | 3–4 | Bite (Engage) and Pounce (leaps in, Engage); Howl at level 4 (Frenzy: +20 P.Atk to nearby allies). Very fast. |
 | Bandit | 4–5 | Carries a random weapon but only uses its basic attack (no Slash and Smash, Circle Swing...). Thugs also have Shield Up, Hexers Fireball, Archers Execute; all learn Kick at level 5. |
 
