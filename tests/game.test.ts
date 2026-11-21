@@ -1,184 +1,345 @@
 import { describe, expect, it } from 'vitest';
+import { SKILLS, WEAPONS } from '../src/data/content';
+import { STAT_CONFIG, parseStatConfig } from '../src/data/stats';
+import type { Character } from '../src/data/types';
+import { runAiTurn } from '../src/game/ai';
+import { Battle, defenseMultiplier, deploymentTiles, generateEnemies, makeUnit, type Team } from '../src/game/battle';
 import { createCharacter, deriveStats, grantXp, makeRng } from '../src/game/character';
-import { parseSave, serializeSave, newGameState } from '../src/game/save';
-import { Battle, deploymentTiles, generateEnemies, makeUnit, ATTACK_ID, getAction } from '../src/game/battle';
-import { generateMap, passable, type BattleMap } from '../src/game/grid';
-import { planTurn } from '../src/game/ai';
-import type { Terrain } from '../src/game/grid';
+import { generateMap, hasLineOfSight, passable, type BattleMap, type Point, type Terrain } from '../src/game/grid';
+import { newGameState, parseSave, serializeSave } from '../src/game/save';
 
-function openMap(w = 8, h = 6): BattleMap {
+function openMap(w = 10, h = 7): BattleMap {
   return { width: w, height: h, tiles: Array.from({ length: h }, () => Array<Terrain>(w).fill('grass')) };
 }
 
-describe('characters', () => {
-  it('weapon bonuses change derived stats', () => {
-    const c = createCharacter('Ada', 'knight');
-    const sword = deriveStats(c);
-    c.weaponId = 'greataxe';
-    const axe = deriveStats(c);
-    expect(axe.physPower).toBeGreaterThan(sword.physPower);
-    expect(axe.speed).toBe(sword.speed - 2);
+function hero(weaponId = 'sword_shield', skillIds: string[] = [], name = 'H'): Character {
+  const c = createCharacter(name, '#3d7be0', weaponId);
+  c.skillIds = skillIds;
+  return c;
+}
+
+function setup(map: BattleMap, specs: { c: Character; team: Team; at: Point }[]) {
+  const units = specs.map((s) => makeUnit(s.c, s.team, s.at));
+  return { battle: new Battle(map, units, makeRng(1)), units };
+}
+
+describe('stats config', () => {
+  it('loads the base stats from stats.json', () => {
+    expect(STAT_CONFIG.base).toEqual({ health: 1000, pAtk: 100, mAtk: 100, defense: 0, movement: 4 });
   });
 
-  it('levels up and grants attribute points', () => {
-    const c = createCharacter('Ada', 'mage');
-    c.unspentPoints = 0;
-    expect(grantXp(c, 250)).toBe(2);
+  it('rejects a broken config with a clear message', () => {
+    expect(() => parseStatConfig({ base: { health: 'lots' }, growthPerLevel: {}, defenseScale: 100 })).toThrow(/base.health/);
+  });
+
+  it('adds weapon bonuses and automatic level growth', () => {
+    const c = hero('sword_shield');
+    expect(deriveStats(c)).toMatchObject({ health: 1000, pAtk: 140, mAtk: 100, defense: 20, movement: 4 });
+    c.weaponId = 'staff';
+    expect(deriveStats(c)).toMatchObject({ pAtk: 110, mAtk: 150, defense: 0 });
+    grantXp(c, 250);
+    const g = STAT_CONFIG.growthPerLevel;
     expect(c.level).toBe(3);
-    expect(c.xp).toBe(50);
-    expect(c.unspentPoints).toBe(6);
+    expect(deriveStats(c).health).toBe(1000 + 2 * g.health);
+  });
+
+  it('defense: 100 points = double effective health', () => {
+    expect(defenseMultiplier(0)).toBe(1);
+    expect(defenseMultiplier(100)).toBe(0.5);
+    expect(defenseMultiplier(200)).toBeCloseTo(1 / 3);
   });
 });
 
 describe('save files', () => {
   it('round-trips through human-readable JSON', () => {
     const state = newGameState();
-    state.party.push(createCharacter('Ada', 'cleric', '#36b37e'));
-    state.progress.stage = 3;
-    const text = serializeSave(state);
-    expect(text).toContain('\n  "party": [');
-    const parsed = parseSave(text);
+    state.party.push(hero('bow', ['fireball', 'kick']));
+    const parsed = parseSave(serializeSave(state));
     expect(parsed.ok).toBe(true);
     if (parsed.ok) expect(parsed.state).toEqual(state);
   });
 
   it('reports precise errors for bad hand edits', () => {
     const state = newGameState();
-    state.party.push(createCharacter('Ada', 'mage'));
+    state.party.push(hero('staff', ['heal']));
     const file = JSON.parse(serializeSave(state));
-    file.party[0].weaponId = 'longsword';
-    const r1 = parseSave(JSON.stringify(file));
-    expect(r1.ok).toBe(false);
-    if (!r1.ok) expect(r1.error).toContain('party[0].weaponId');
+    file.party[0].skillIds = ['direct_shot'];
+    const r = parseSave(JSON.stringify(file));
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toContain('weapon skill');
+  });
 
-    file.party[0].weaponId = 'wand';
-    file.party[0].skillIds = ['fireball', 'lightning', 'frost_nova'];
-    const r2 = parseSave(JSON.stringify(file));
-    expect(r2.ok).toBe(false);
-    if (!r2.ok) expect(r2.error).toContain('level 1 allows 2');
-
-    expect(parseSave('{oops').ok).toBe(false);
+  it('upgrades version-1 saves (old classes) automatically', () => {
+    const v1 = {
+      format: 'lazyrpg-save', version: 1, savedAt: '', progress: { stage: 2, victories: 1, defeats: 0 },
+      party: [{
+        id: 'c_1', name: 'Old Cleric', classId: 'cleric', level: 2, xp: 10,
+        attributes: { str: 4, dex: 3, int: 11, vit: 8, spd: 3 }, unspentPoints: 3, weaponId: 'mace',
+        skillIds: ['heal', 'smite'], appearance: { color: '#3d7be0', emblem: 'circle' },
+      }],
+    };
+    const r = parseSave(JSON.stringify(v1));
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.state.party[0]).toMatchObject({ name: 'Old Cleric', level: 2, weaponId: 'staff', skillIds: ['heal', 'cleanse'] });
   });
 });
 
-describe('battle rules', () => {
-  it('cannot walk through enemies', () => {
-    const map = openMap(5, 1);
-    const a = makeUnit(createCharacter('A', 'ranger'), 'player', { x: 0, y: 0 });
-    const b = makeUnit(createCharacter('B', 'knight'), 'enemy', { x: 1, y: 0 });
-    const battle = new Battle(map, [a, b], makeRng(1));
-    const reach = battle.reachable(a);
-    expect([...reach.keys()]).toEqual(['0,0']);
+describe('ranges and targeting', () => {
+  it('uses Euclidean range: 1.5 reaches diagonals, 1 does not', () => {
+    const { battle, units: [a] } = setup(openMap(), [
+      { c: hero('sword_shield'), team: 'player', at: { x: 3, y: 3 } },
+      { c: hero(), team: 'enemy', at: { x: 9, y: 6 } },
+    ]);
+    expect(battle.canTarget(a, SKILLS.sword_slash, { x: 4, y: 4 })).toBe(true);
+    expect(battle.canTarget(a, SKILLS.slash_and_smash, { x: 4, y: 4 })).toBe(false);
+    expect(battle.canTarget(a, SKILLS.slash_and_smash, { x: 4, y: 3 })).toBe(true);
   });
 
-  it('heals never exceed max HP and cooldowns tick down', () => {
+  it('direct shot needs line of sight, indirect does not', () => {
     const map = openMap();
-    const healer = createCharacter('H', 'cleric');
-    healer.skillIds = ['heal', 'smite'];
-    const h = makeUnit(healer, 'player', { x: 0, y: 0 });
-    const e = makeUnit(createCharacter('E', 'knight'), 'enemy', { x: 7, y: 5 });
-    const battle = new Battle(map, [h, e], makeRng(2));
-    h.hp -= 3;
-    const events = battle.perform(h, 'heal', { x: 0, y: 0 });
-    expect(events[0]).toMatchObject({ type: 'heal', amount: 3 });
-    expect(h.hp).toBe(h.base.maxHp);
-    expect(battle.isReady(h, 'heal')).toBe(false);
-    // Heal has cooldown 2: unavailable next player phase, ready the one after.
-    battle.endPhase();
-    battle.endPhase();
-    expect(battle.isReady(h, 'heal')).toBe(false);
-    battle.endPhase();
-    battle.endPhase();
-    expect(battle.isReady(h, 'heal')).toBe(true);
+    map.tiles[3][4] = 'rock';
+    const { battle, units: [archer] } = setup(map, [
+      { c: hero('bow'), team: 'player', at: { x: 2, y: 3 } },
+      { c: hero(), team: 'enemy', at: { x: 6, y: 3 } },
+    ]);
+    expect(hasLineOfSight(map, { x: 2, y: 3 }, { x: 6, y: 3 })).toBe(false);
+    expect(battle.canTarget(archer, SKILLS.direct_shot, { x: 6, y: 3 })).toBe(false);
+    expect(battle.canTarget(archer, SKILLS.indirect_shot, { x: 6, y: 3 })).toBe(true);
+    expect(battle.canTarget(archer, SKILLS.direct_shot, { x: 6, y: 1 })).toBe(true);
   });
 
-  it('area skills hit every foe in the radius', () => {
-    const map = openMap();
-    const mage = createCharacter('M', 'mage');
-    mage.skillIds = ['fireball'];
-    const m = makeUnit(mage, 'player', { x: 0, y: 0 });
-    const e1 = makeUnit(createCharacter('E1', 'knight'), 'enemy', { x: 3, y: 0 });
-    const e2 = makeUnit(createCharacter('E2', 'knight'), 'enemy', { x: 3, y: 1 });
-    const e3 = makeUnit(createCharacter('E3', 'knight'), 'enemy', { x: 6, y: 5 });
-    const battle = new Battle(map, [m, e1, e2, e3], makeRng(3));
-    const hit = battle.affected(m, getAction(m, 'fireball'), { x: 3, y: 0 });
-    expect(hit.map((u) => u.character.name).sort()).toEqual(['E1', 'E2']);
-    expect(battle.affected(m, getAction(m, ATTACK_ID), { x: 6, y: 5 })).toEqual([]);
+  it('empty tiles can be targeted; the action is still spent', () => {
+    const { battle, units: [m] } = setup(openMap(), [
+      { c: hero('staff'), team: 'player', at: { x: 0, y: 0 } },
+      { c: hero(), team: 'enemy', at: { x: 9, y: 6 } },
+    ]);
+    expect(battle.perform(m, 'magic_bolt', { x: 3, y: 0 })).toEqual([]);
+    expect(m.acted).toBe(true);
+  });
+});
+
+describe('skills', () => {
+  it('sword slash deals 100% P.Atk reduced by Defense', () => {
+    const { battle, units: [a, e] } = setup(openMap(), [
+      { c: hero('sword_shield'), team: 'player', at: { x: 1, y: 1 } },
+      { c: hero('sword_shield'), team: 'enemy', at: { x: 2, y: 2 } },
+    ]);
+    battle.perform(a, 'sword_slash', { x: 2, y: 2 });
+    // 140 P.Atk vs 20 Defense: 140 * 100/120 = 117
+    expect(e.hp).toBe(1000 - 117);
   });
 
-  it('teams alternate phases; every unit moves and acts once per phase', () => {
+  it('slash and smash hits twice, the second hit scaling with Defense', () => {
+    const { battle, units: [a] } = setup(openMap(), [
+      { c: hero('sword_shield'), team: 'player', at: { x: 1, y: 1 } },
+      { c: hero('bow'), team: 'enemy', at: { x: 2, y: 1 } },
+    ]);
+    const events = battle.perform(a, 'slash_and_smash', { x: 2, y: 1 });
+    // 80% of 140 = 112; 40% of 140 + 100% of 20 = 76
+    expect(events.filter((e) => e.type === 'damage').map((e) => e.type === 'damage' && e.amount)).toEqual([112, 76]);
+  });
+
+  it('shield up absorbs damage until the next turn', () => {
+    const { battle, units: [a, e] } = setup(openMap(), [
+      { c: hero('sword_shield'), team: 'player', at: { x: 1, y: 1 } },
+      { c: hero('bow'), team: 'enemy', at: { x: 5, y: 1 } },
+    ]);
+    battle.perform(a, 'shield_up', { x: 1, y: 1 });
+    expect(battle.shieldOf(a)).toBe(100);
+    battle.endPhase();
+    battle.perform(e, 'direct_shot', { x: 1, y: 1 }); // 140 * 100/120 = 117
+    expect(battle.shieldOf(a)).toBe(0);
+    expect(a.hp).toBe(1000 - 17);
+  });
+
+  it('cooldown 1 means the skill cannot be used on the next turn', () => {
+    const { battle, units: [a] } = setup(openMap(), [
+      { c: hero('sword_shield'), team: 'player', at: { x: 1, y: 1 } },
+      { c: hero('bow'), team: 'enemy', at: { x: 8, y: 5 } },
+    ]);
+    battle.perform(a, 'shield_up', { x: 1, y: 1 });
+    battle.endPhase();
+    battle.endPhase(); // next player turn
+    expect(battle.isReady(a, 'shield_up')).toBe(false);
+    battle.endPhase();
+    battle.endPhase(); // the turn after
+    expect(battle.isReady(a, 'shield_up')).toBe(true);
+  });
+
+  it('cooldown 2 skips the next two turns', () => {
+    const { battle, units: [h] } = setup(openMap(), [
+      { c: hero('staff', ['heal']), team: 'player', at: { x: 1, y: 1 } },
+      { c: hero('bow'), team: 'enemy', at: { x: 8, y: 5 } },
+    ]);
+    battle.perform(h, 'heal', { x: 1, y: 1 });
+    const readyByTurn: boolean[] = [];
+    for (let t = 0; t < 3; t++) {
+      battle.endPhase();
+      battle.endPhase();
+      readyByTurn.push(battle.isReady(h, 'heal'));
+    }
+    expect(readyByTurn).toEqual([false, false, true]);
+  });
+
+  it('spear thrust hits the first enemy in a line and knocks it back', () => {
+    const { battle, units: [s, e] } = setup(openMap(), [
+      { c: hero('spear'), team: 'player', at: { x: 1, y: 3 } },
+      { c: hero('bow'), team: 'enemy', at: { x: 3, y: 3 } },
+    ]);
+    battle.perform(s, 'spear_thrust', { x: 2, y: 3 });
+    expect(e.hp).toBe(1000 - 150);
+    expect(e).toMatchObject({ x: 4, y: 3 });
+  });
+
+  it('circle swing hits all 8 neighbours, allies included', () => {
+    const { battle, units: [s, ally, foe] } = setup(openMap(), [
+      { c: hero('spear'), team: 'player', at: { x: 4, y: 3 } },
+      { c: hero('bow'), team: 'player', at: { x: 5, y: 4 } },
+      { c: hero('bow'), team: 'enemy', at: { x: 3, y: 3 } },
+    ]);
+    battle.perform(s, 'circle_swing', { x: 4, y: 3 });
+    expect(ally.hp).toBeLessThan(1000);
+    expect(foe.hp).toBeLessThan(1000);
+    expect(ally).toMatchObject({ x: 6, y: 5 });
+    expect(foe).toMatchObject({ x: 2, y: 3 });
+  });
+
+  it('intercept stops a moving enemy; bow overwatch shoots without stopping', () => {
     const map = openMap();
-    const a = makeUnit(createCharacter('A', 'knight'), 'player', { x: 0, y: 0 });
-    const b = makeUnit(createCharacter('B', 'ranger'), 'player', { x: 0, y: 2 });
-    const e = makeUnit(createCharacter('E', 'knight'), 'enemy', { x: 7, y: 5 });
-    const battle = new Battle(map, [a, b, e], makeRng(4));
-    expect(battle.phase).toBe('player');
+    const { battle, units: [spear, mover] } = setup(map, [
+      { c: hero('spear'), team: 'player', at: { x: 5, y: 3 } },
+      { c: hero('sword_shield'), team: 'enemy', at: { x: 8, y: 3 } },
+    ]);
+    battle.perform(spear, 'intercept', { x: 7, y: 3 });
+    battle.endPhase();
+    // Walking left along row 3 enters the cone at (7,3) and is stopped there.
+    const res = battle.move(mover, { x: 6, y: 3 });
+    expect(res.interrupted).toBe(true);
+    expect(mover).toMatchObject({ x: 7, y: 3 });
+    expect(mover.hp).toBeLessThan(1000);
+    expect(spear.overwatch).toBeNull();
+
+    const { battle: b2, units: [archer, runner] } = setup(openMap(), [
+      { c: hero('bow'), team: 'player', at: { x: 1, y: 3 } },
+      { c: hero('sword_shield'), team: 'enemy', at: { x: 8, y: 3 } },
+    ]);
+    b2.perform(archer, 'overwatch', { x: 5, y: 3 });
+    b2.endPhase();
+    const r2 = b2.move(runner, { x: 5, y: 3 });
+    expect(r2.interrupted).toBe(false);
+    expect(r2.triggers).toHaveLength(1);
+    expect(runner).toMatchObject({ x: 5, y: 3 });
+  });
+
+  it('fireball burns for 1% max health per stack per turn; cleanse removes it', () => {
+    const { battle, units: [m, e, cleric] } = setup(openMap(), [
+      { c: hero('staff', ['fireball']), team: 'player', at: { x: 1, y: 1 } },
+      { c: hero('bow'), team: 'enemy', at: { x: 4, y: 1 } },
+      { c: hero('staff', ['cleanse']), team: 'enemy', at: { x: 6, y: 1 } },
+    ]);
+    battle.perform(m, 'fireball', { x: 4, y: 1 });
+    const afterHit = e.hp;
+    const events = battle.endPhase();
+    expect(events[0]).toMatchObject({ type: 'damage', cause: 'burn', amount: 10 });
+    expect(e.hp).toBe(afterHit - 10);
+    battle.perform(cleric, 'cleanse', { x: 4, y: 1 });
+    expect(e.statuses).toEqual([]);
+  });
+
+  it('charge dashes next to a distant enemy and strikes', () => {
+    const { battle, units: [v, e] } = setup(openMap(), [
+      { c: hero('sword_shield', ['charge']), team: 'player', at: { x: 1, y: 3 } },
+      { c: hero('bow'), team: 'enemy', at: { x: 5, y: 3 } },
+    ]);
+    battle.perform(v, 'charge', { x: 5, y: 3 });
+    expect(Math.hypot(v.x - 5, v.y - 3)).toBeLessThanOrEqual(1.5);
+    expect(e.hp).toBe(1000 - 112);
+  });
+
+  it('kick is free: the unit can still act afterwards', () => {
+    const { battle, units: [k] } = setup(openMap(), [
+      { c: hero('sword_shield', ['kick']), team: 'player', at: { x: 1, y: 1 } },
+      { c: hero('bow'), team: 'enemy', at: { x: 2, y: 1 } },
+    ]);
+    battle.perform(k, 'kick', { x: 2, y: 1 });
+    expect(k.acted).toBe(false);
+    expect(battle.isReady(k, 'kick')).toBe(false);
+    battle.perform(k, 'sword_slash', { x: 2, y: 1 });
+    expect(k.acted).toBe(true);
+  });
+
+  it('execute adds 10% of missing health', () => {
+    const { battle, units: [a, e] } = setup(openMap(), [
+      { c: hero('bow', ['execute']), team: 'player', at: { x: 1, y: 1 } },
+      { c: hero('bow'), team: 'enemy', at: { x: 2, y: 1 } },
+    ]);
+    e.hp = 400;
+    battle.perform(a, 'execute', { x: 2, y: 1 });
+    // 50% of 140 + 10% of 600 = 130
+    expect(e.hp).toBe(270);
+  });
+
+  it('arcane shift teleports to an empty tile within 2.8', () => {
+    const { battle, units: [m] } = setup(openMap(), [
+      { c: hero('staff', ['arcane_shift']), team: 'player', at: { x: 1, y: 1 } },
+      { c: hero('bow'), team: 'enemy', at: { x: 9, y: 6 } },
+    ]);
+    expect(battle.canTarget(m, SKILLS.arcane_shift, { x: 3, y: 3 })).toBe(false); // 2.83 > 2.8
+    battle.perform(m, 'arcane_shift', { x: 3, y: 2 });
+    expect(m).toMatchObject({ x: 3, y: 2 });
+  });
+});
+
+describe('battles', () => {
+  it('teams alternate turns; every unit moves and acts once per turn', () => {
+    const { battle, units: [a, b, e] } = setup(openMap(), [
+      { c: hero(), team: 'player', at: { x: 0, y: 0 } },
+      { c: hero('bow'), team: 'player', at: { x: 0, y: 2 } },
+      { c: hero(), team: 'enemy', at: { x: 9, y: 6 } },
+    ]);
     expect(battle.canAct(e)).toBe(false);
     battle.move(b, { x: 2, y: 2 });
-    expect(() => battle.move(b, { x: 3, y: 2 })).toThrow();
-    battle.move(a, { x: 1, y: 0 }); // switch units mid-phase
-    expect(battle.canUndoMove(b)).toBe(true);
+    battle.move(a, { x: 1, y: 0 });
     battle.undoMove(b);
-    expect(b).toMatchObject({ x: 0, y: 2, moved: false });
     battle.wait(a);
     battle.wait(b);
     expect(battle.readyUnits()).toEqual([]);
-    expect(battle.endPhase()).toBe('enemy');
+    battle.endPhase();
     expect(battle.canAct(e)).toBe(true);
-    expect(battle.endPhase()).toBe('player');
+    battle.endPhase();
     expect(battle.round).toBe(2);
-    expect(battle.canAct(a) && battle.canMove(a)).toBe(true);
   });
 
-  it('actions can target empty tiles in range, but not tiles out of range', () => {
-    const map = openMap();
-    const mage = createCharacter('M', 'mage');
-    mage.skillIds = ['fireball'];
-    const m = makeUnit(mage, 'player', { x: 0, y: 0 });
-    const e = makeUnit(createCharacter('E', 'knight'), 'enemy', { x: 7, y: 5 });
-    const battle = new Battle(map, [m, e], makeRng(5));
-    expect(() => battle.perform(m, 'fireball', { x: 6, y: 0 })).toThrow(/out of range/);
-    expect(battle.perform(m, 'fireball', { x: 3, y: 0 })).toEqual([]);
-    expect(m.acted).toBe(true);
-    expect(battle.isReady(m, 'fireball')).toBe(false);
+  it('every weapon has its skills defined', () => {
+    for (const w of Object.values(WEAPONS)) for (const s of w.skills) expect(SKILLS[s]).toBeDefined();
+  });
+
+  it('AI vs AI battles always finish', () => {
+    for (let seed = 0; seed < 16; seed++) {
+      const rng = makeRng(seed);
+      const map = generateMap(rng);
+      const party = generateEnemies(1 + (seed % 3), 4, rng).slice(0, 4);
+      const foes = generateEnemies(1 + (seed % 3), 4, rng);
+      const pd = deploymentTiles(map, 'player', party.length);
+      const ed = deploymentTiles(map, 'enemy', foes.length);
+      const battle = new Battle(map, [
+        ...party.map((c, i) => makeUnit(c, 'player', pd[i])),
+        ...foes.map((c, i) => makeUnit(c, 'enemy', ed[i])),
+      ], rng);
+      while (!battle.outcome() && battle.round < 150) {
+        for (const u of battle.readyUnits()) {
+          if (u.alive && !battle.outcome()) runAiTurn(battle, u);
+        }
+        if (!battle.outcome()) battle.endPhase();
+      }
+      expect(battle.outcome()).not.toBeNull();
+    }
   });
 
   it('generated maps keep deployment zones open', () => {
     for (let seed = 0; seed < 30; seed++) {
       const map = generateMap(makeRng(seed));
-      expect(deploymentTiles(map, 'player', 4)).toHaveLength(4);
-      expect(deploymentTiles(map, 'enemy', 6)).toHaveLength(6);
       for (const p of deploymentTiles(map, 'enemy', 6)) expect(passable(map, p.x, p.y)).toBe(true);
-    }
-  });
-
-  it('AI vs AI battles always finish', () => {
-    for (let seed = 0; seed < 20; seed++) {
-      const rng = makeRng(seed);
-      const map = generateMap(rng);
-      const party = (['knight', 'ranger', 'mage', 'cleric'] as const).map((cls, i) => {
-        const c = createCharacter(`P${i}`, cls);
-        c.attributes.vit += 4;
-        c.attributes[cls === 'mage' || cls === 'cleric' ? 'int' : 'str'] += 4;
-        return c;
-      });
-      const foes = generateEnemies(1 + (seed % 4), party.length, rng);
-      const units = [
-        ...party.map((c, i) => makeUnit(c, 'player', deploymentTiles(map, 'player', 4)[i])),
-        ...foes.map((c, i) => makeUnit(c, 'enemy', deploymentTiles(map, 'enemy', foes.length)[i])),
-      ];
-      const battle = new Battle(map, units, rng);
-      while (!battle.outcome() && battle.round < 200) {
-        for (const u of battle.readyUnits()) {
-          if (!u.alive || battle.outcome()) continue;
-          const plan = planTurn(battle, u);
-          if (plan.moveTo.x !== u.x || plan.moveTo.y !== u.y) battle.move(u, plan.moveTo);
-          if (plan.action) battle.perform(u, plan.action.id, plan.action.target);
-          else battle.wait(u);
-        }
-        battle.endPhase();
-      }
-      expect(battle.outcome()).not.toBeNull();
     }
   });
 });

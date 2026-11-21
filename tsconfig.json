@@ -10,7 +10,8 @@
     "noFallthroughCasesInSwitch": true,
     "isolatedModules": true,
     "skipLibCheck": true,
-    "types": []
+    "types": [],
+    "resolveJsonModule": true
   },
   "include": ["src", "tests", "vite.config.ts"]
 }

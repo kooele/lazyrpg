@@ -1,83 +1,57 @@
-import {
-  CLASSES, CREATION_POINTS, PALETTE, POINTS_PER_LEVEL, SKILLS, WEAPONS, XP_PER_LEVEL, skillSlotsForLevel,
-} from '../data/content';
-import { ATTRIBUTE_KEYS, type Attributes, type Character, type ClassId } from '../data/types';
-
-export interface DerivedStats {
-  maxHp: number;
-  physPower: number;
-  magPower: number;
-  defense: number;
-  resistance: number;
-  speed: number;
-  move: number;
-  /** Bonus to hit chance (percentage points). */
-  accuracy: number;
-  /** Critical hit chance (percentage). */
-  crit: number;
-}
+import { PALETTE, TREE_SKILLS, WEAPONS, XP_PER_LEVEL, skillSlotsForLevel } from '../data/content';
+import { STAT_CONFIG } from '../data/stats';
+import { STAT_KEYS, type Character, type Stats } from '../data/types';
 
 export function newId(prefix = 'c'): string {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
-/** Attributes after weapon bonuses are applied (minimum 1 each). */
-export function effectiveAttributes(c: Character): Attributes {
-  const weapon = WEAPONS[c.weaponId];
-  const out = { ...c.attributes };
-  for (const key of ATTRIBUTE_KEYS) {
-    out[key] = Math.max(1, out[key] + (weapon?.bonus[key] ?? 0));
-  }
+/** Base stats + automatic level growth (no weapon). */
+export function levelStats(level: number): Stats {
+  const { base, growthPerLevel } = STAT_CONFIG;
+  const out = {} as Stats;
+  for (const k of STAT_KEYS) out[k] = base[k] + growthPerLevel[k] * (level - 1);
   return out;
 }
 
-export function deriveStats(c: Character): DerivedStats {
-  const cls = CLASSES[c.classId];
-  const weapon = WEAPONS[c.weaponId];
-  const a = effectiveAttributes(c);
-  return {
-    maxHp: cls.baseHp + a.vit * 3 + (c.level - 1) * 3,
-    physPower: a.str + (weapon?.damageType === 'physical' ? weapon.power : 0),
-    magPower: a.int + (weapon?.damageType === 'magical' ? weapon.power : 0),
-    defense: Math.floor(a.vit / 2) + cls.armor,
-    resistance: Math.floor((a.int + a.vit) / 3) + Math.floor(cls.armor / 2),
-    speed: a.spd,
-    move: cls.move + (a.spd >= 9 ? 1 : 0),
-    accuracy: a.dex * 2,
-    crit: a.dex * 2,
-  };
+/** Final stats: level stats + weapon bonus. */
+export function deriveStats(c: Character): Stats {
+  const out = levelStats(c.level);
+  const bonus = WEAPONS[c.weaponId]?.bonus ?? {};
+  for (const k of STAT_KEYS) out[k] += bonus[k] ?? 0;
+  out.movement = Math.max(1, out.movement);
+  out.health = Math.max(1, out.health);
+  return out;
 }
 
 export function skillSlots(c: Character): number {
   return skillSlotsForLevel(c.level);
 }
 
-export function createCharacter(name: string, classId: ClassId, color = PALETTE[0]): Character {
-  const cls = CLASSES[classId];
+/** Weapon skills (always available) followed by the picked tree skills. */
+export function allSkills(c: Character): string[] {
+  return [...(WEAPONS[c.weaponId]?.skills ?? []), ...c.skillIds.slice(0, skillSlots(c))];
+}
+
+export function createCharacter(name: string, color = PALETTE[0], weaponId = 'sword_shield'): Character {
   return {
     id: newId(),
     name,
-    classId,
     level: 1,
     xp: 0,
-    attributes: { ...cls.baseAttributes },
-    unspentPoints: CREATION_POINTS,
-    weaponId: cls.weapons[0],
-    skillIds: cls.skills.slice(0, 2),
+    weaponId,
+    skillIds: [],
     appearance: { color, emblem: 'circle' },
   };
 }
 
-/**
- * Add XP and apply any level ups. Returns the number of levels gained.
- */
+/** Add XP and apply any level ups (stat growth is automatic). Returns levels gained. */
 export function grantXp(c: Character, amount: number): number {
   c.xp += amount;
   let gained = 0;
   while (c.xp >= XP_PER_LEVEL) {
     c.xp -= XP_PER_LEVEL;
     c.level += 1;
-    c.unspentPoints += POINTS_PER_LEVEL;
     gained += 1;
   }
   return gained;
@@ -87,12 +61,10 @@ export function cloneCharacter(c: Character): Character {
   return JSON.parse(JSON.stringify(c)) as Character;
 }
 
-/** Ensure weapon/skills are legal for the character's class and level. */
+/** Ensure weapon/skills are legal for the character's level. */
 export function sanitizeLoadout(c: Character): void {
-  const cls = CLASSES[c.classId];
-  if (!cls.weapons.includes(c.weaponId)) c.weaponId = cls.weapons[0];
-  const unique = [...new Set(c.skillIds)].filter((s) => cls.skills.includes(s) && SKILLS[s]);
-  c.skillIds = unique.slice(0, skillSlots(c));
+  if (!WEAPONS[c.weaponId]) c.weaponId = 'sword_shield';
+  c.skillIds = [...new Set(c.skillIds)].filter((s) => TREE_SKILLS.includes(s)).slice(0, skillSlots(c));
 }
 
 /** Small deterministic RNG (mulberry32) so battles and tests can be seeded. */

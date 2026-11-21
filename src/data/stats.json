@@ -1,0 +1,27 @@
+{
+  "_readme": "Unit stat tuning. Edit numbers here; the game reloads them on the next build (npm run dev hot-reloads). Keys starting with _ are comments and are ignored.",
+
+  "base": {
+    "_comment": "Stats every Adventurer (and enemy) has at level 1, before weapon bonuses.",
+    "health": 1000,
+    "pAtk": 100,
+    "mAtk": 100,
+    "defense": 0,
+    "movement": 4
+  },
+
+  "growthPerLevel": {
+    "_comment": "Added automatically for every level above 1.",
+    "health": 100,
+    "pAtk": 10,
+    "mAtk": 10,
+    "defense": 2,
+    "movement": 0
+  },
+
+  "defenseScale": 100,
+  "_defenseScale": "Damage taken is multiplied by defenseScale / (defenseScale + Defense). With 100: 100 Defense = 2x effective HP, 200 = 3x. Negative Defense increases damage taken.",
+
+  "forestDefense": 20,
+  "_forestDefense": "Extra Defense for a unit standing in forest."
+}

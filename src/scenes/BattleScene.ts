@@ -1,12 +1,13 @@
 import Phaser from 'phaser';
-import { CLASSES } from '../data/content';
-import { planTurn } from '../game/ai';
+import { SKILLS, WEAPONS, skillDetails } from '../data/content';
+import type { SkillDef } from '../data/types';
+import { bestAction, bestFreeAction, planTurn } from '../game/ai';
 import {
-  Battle, deploymentTiles, generateEnemies, getAction, makeUnit, victoryXp,
-  type ActionSpec, type BattleEvent, type Unit,
+  Battle, deploymentTiles, generateEnemies, makeUnit, victoryXp,
+  type BattleEvent, type MoveResult, type Unit,
 } from '../game/battle';
 import { grantXp, makeRng } from '../game/character';
-import { TERRAIN, generateMap, key, manhattan, type Point } from '../game/grid';
+import { TERRAIN, generateMap, key, type Point } from '../game/grid';
 import { markDirty, requireState } from '../game/session';
 import { COLORS, HEIGHT, WIDTH, button, confirmDialog, drawToken, panel, setupCamera, text } from '../ui/widgets';
 
@@ -17,9 +18,9 @@ const SIDE_X = 704;
 const SIDE_W = 240;
 
 /**
- * busy   – animating or enemy phase, no input
- * select – player phase: pick a unit, move it, or pick an action
- * target – player picked an action and is choosing a tile
+ * busy   – animating or enemy turn, no input
+ * select – player turn: pick a unit, move it, or pick a skill
+ * target – player picked a skill and is choosing a tile
  * over   – battle finished
  */
 type Mode = 'busy' | 'select' | 'target' | 'over';
@@ -27,6 +28,7 @@ type Mode = 'busy' | 'select' | 'target' | 'over';
 interface UnitView {
   container: Phaser.GameObjects.Container;
   hpBar: Phaser.GameObjects.Graphics;
+  statusText: Phaser.GameObjects.Text;
 }
 
 export class BattleScene extends Phaser.Scene {
@@ -42,13 +44,13 @@ export class BattleScene extends Phaser.Scene {
   private mode: Mode = 'busy';
   /** The player unit currently being commanded. */
   private selectedUid: string | null = null;
-  /** The unit whose action is being shown (player or enemy). */
+  /** The unit whose skill is being shown (player or enemy). */
   private casterUid: string | null = null;
   private reach = new Map<string, { cost: number; prev: string | null }>();
-  /** Action chosen for targeting. */
-  private action: ActionSpec | null = null;
-  /** Action whose range is previewed while hovering its button. */
-  private previewAction: ActionSpec | null = null;
+  /** Skill chosen for targeting. */
+  private action: SkillDef | null = null;
+  /** Skill whose range is previewed while hovering its button. */
+  private previewAction: SkillDef | null = null;
   private hoverTile: Point | null = null;
 
   constructor() {
@@ -86,8 +88,8 @@ export class BattleScene extends Phaser.Scene {
 
     this.topBar = this.add.container(0, 0);
     this.sidebar = this.add.container(0, 0);
-    panel(this, SIDE_X, 488, SIDE_W, 92);
-    this.hoverText = text(this, SIDE_X + 10, 496, '', { fontSize: '13px', wordWrap: { width: SIDE_W - 20 } });
+    panel(this, SIDE_X, 482, SIDE_W, 100);
+    this.hoverText = text(this, SIDE_X + 10, 489, '', { fontSize: '12px', wordWrap: { width: SIDE_W - 20 }, lineSpacing: 1 });
     panel(this, MAP_X, 584, TILE * map.width, 48);
     this.logText = text(this, MAP_X + 10, 588, '', { fontSize: '13px', color: COLORS.dim, lineSpacing: 2 });
 
@@ -128,6 +130,10 @@ export class BattleScene extends Phaser.Scene {
     return new Promise((resolve) => this.time.delayedCall(ms, resolve));
   }
 
+  private tween(config: Phaser.Types.Tweens.TweenBuilderConfig): Promise<void> {
+    return new Promise((resolve) => this.tweens.add({ ...config, onComplete: () => resolve() }));
+  }
+
   // ---- drawing ------------------------------------------------------------------------
 
   private drawMap(): void {
@@ -163,68 +169,93 @@ export class BattleScene extends Phaser.Scene {
     const c = this.tileCenter(u);
     const g = this.add.graphics();
     drawToken(g, 0, -4, 19, u.character.appearance.color, u.character.appearance.emblem, u.team === 'player' ? 0xffffff : 0x2a0a0a);
-    const cls = text(this, 13, -27, CLASSES[u.character.classId].name[0], {
-      fontSize: '12px', fontStyle: 'bold', color: '#ffffff', backgroundColor: u.team === 'player' ? '#2a3a66' : '#661a1a', padding: { x: 3, y: 0 },
+    const tag = text(this, 10, -28, WEAPONS[u.character.weaponId].tag, {
+      fontSize: '10px', fontStyle: 'bold', color: '#ffffff', backgroundColor: u.team === 'player' ? '#2a3a66' : '#661a1a', padding: { x: 2, y: 0 },
     });
+    const statusText = text(this, -26, -28, '', { fontSize: '10px', fontStyle: 'bold', color: '#ffb35c', stroke: '#000000', strokeThickness: 3 });
     const hpBar = this.add.graphics();
-    const container = this.add.container(c.x, c.y, [g, cls, hpBar]);
-    this.views.set(u.uid, { container, hpBar });
+    const container = this.add.container(c.x, c.y, [g, tag, statusText, hpBar]);
+    this.views.set(u.uid, { container, hpBar, statusText });
     this.drawHp(u);
   }
 
+  /** HP bar (green/yellow/red) with the shield as a light-blue extension, plus status tags. */
   private drawHp(u: Unit): void {
     const view = this.views.get(u.uid);
     if (!view) return;
-    const pct = u.hp / u.base.maxHp;
+    const max = u.stats.health;
+    const pct = u.hp / max;
+    const shield = Math.min(1 - pct, this.battle.shieldOf(u) / max);
     view.hpBar.clear();
     view.hpBar.fillStyle(0x000000, 0.7).fillRect(-21, 18, 42, 6);
     view.hpBar.fillStyle(pct > 0.5 ? 0x6fdc8c : pct > 0.25 ? 0xe0b44c : 0xff6b6b).fillRect(-20, 19, 40 * pct, 4);
+    if (this.battle.shieldOf(u) > 0) {
+      view.hpBar.fillStyle(0x8ecbff).fillRect(-20 + 40 * pct, 19, Math.max(2, 40 * shield), 4);
+      view.hpBar.lineStyle(1, 0x8ecbff).strokeRect(-21, 18, 42, 6);
+    }
+    const tags: string[] = [];
+    const burn = u.statuses.find((s) => s.id === 'burn');
+    if (burn) tags.push(`B${burn.stacks}`);
+    if (u.overwatch) tags.push(SKILLS[u.overwatch.skillId].cone?.interrupt ? 'IC' : 'OW');
+    view.statusText.setText(tags.join(' '));
   }
 
-  /** Dim units that have already acted this phase. */
-  private refreshUnitTint(): void {
+  /** Dim units that have already acted this turn. */
+  private refreshUnits(): void {
     for (const u of this.battle.units) {
       if (!u.alive) continue;
       const done = u.team === this.battle.phase && u.acted;
       this.views.get(u.uid)?.container.setAlpha(done ? 0.5 : 1);
+      this.drawHp(u);
     }
   }
 
   private drawOverlay(): void {
     const g = this.overlay;
     g.clear();
+    const b = this.battle;
     const fill = (p: Point, color: number, alpha: number) => {
       g.fillStyle(color, alpha).fillRect(MAP_X + p.x * TILE + 1, MAP_Y + p.y * TILE + 1, TILE - 2, TILE - 2);
     };
-    const outline = (p: Point, color: number, alpha: number) => {
-      g.lineStyle(2, color, alpha).strokeRect(MAP_X + p.x * TILE + 3, MAP_Y + p.y * TILE + 3, TILE - 6, TILE - 6);
+    const outline = (p: Point, color: number, alpha: number, inset = 3) => {
+      g.lineStyle(2, color, alpha).strokeRect(MAP_X + p.x * TILE + inset, MAP_Y + p.y * TILE + inset, TILE - inset * 2, TILE - inset * 2);
     };
     const sel = this.selected;
 
+    // Standing overwatch / intercept cones.
+    for (const u of b.living()) {
+      if (!u.overwatch) continue;
+      const color = u.team === 'player' ? 0x8ecbff : 0xff8a8a;
+      for (const k of u.overwatch.tiles) {
+        const [x, y] = k.split(',').map(Number);
+        fill({ x, y }, color, 0.1);
+        outline({ x, y }, color, 0.35, 8);
+      }
+    }
+
     // Movement range for the selected unit.
-    if (this.mode === 'select' && sel && this.battle.canMove(sel) && !this.previewAction) {
+    if (this.mode === 'select' && sel && b.canMove(sel) && !this.previewAction) {
       for (const k of this.reach.keys()) {
         const [x, y] = k.split(',').map(Number);
         fill({ x, y }, 0x4aa3ff, 0.32);
       }
     }
 
-    // Action range ("attack box"): while targeting, or while hovering an action button.
+    // Skill range ("attack box"): while targeting, or while hovering a skill button.
     const shown = this.mode === 'target' ? this.action : this.mode === 'select' ? this.previewAction : null;
-    const caster = this.casterUid ? this.battle.unit(this.casterUid) : sel;
+    const caster = this.casterUid ? b.unit(this.casterUid) : sel;
     if (shown && caster) {
-      const color = shown.target === 'ally' ? 0x6fdc8c : 0xff6b6b;
-      for (const p of this.battle.rangeTiles(shown, caster)) {
-        fill(p, color, 0.22);
+      const color = shown.affects === 'ally' ? 0x6fdc8c : 0xff6b6b;
+      for (const p of b.rangeTiles(caster, shown)) {
+        fill(p, color, 0.2);
         outline(p, color, 0.55);
       }
-      // Area of effect under the cursor.
       const h = this.hoverTile;
-      if (this.mode === 'target' && h && this.battle.inRange(shown, caster, h)) {
-        for (let y = 0; y < this.battle.map.height; y++) {
-          for (let x = 0; x < this.battle.map.width; x++) {
-            if (manhattan({ x, y }, h) <= shown.radius) fill({ x, y }, 0xffd166, 0.5);
-          }
+      if (this.mode === 'target' && h && b.canTarget(caster, shown, h)) {
+        for (const p of b.areaTiles(caster, shown, h)) fill(p, 0xffd166, 0.5);
+        if (shown.charge) {
+          const land = b.chargeDestination(caster, h);
+          if (land) outline(land, 0x4aa3ff, 1, 6);
         }
       }
     }
@@ -235,14 +266,14 @@ export class BattleScene extends Phaser.Scene {
 
     // Selection rings: gold for the commanded unit, faint for other ready units.
     this.rings.clear();
-    if (this.battle.phase === 'player' && this.mode !== 'over') {
-      for (const u of this.battle.readyUnits()) {
+    if (b.phase === 'player' && this.mode !== 'over') {
+      for (const u of b.readyUnits()) {
         const c = this.tileCenter(u);
         const isSel = u === sel;
         this.rings.lineStyle(isSel ? 3 : 2, 0xffd166, isSel ? 1 : 0.35).strokeCircle(c.x, c.y - 4, 25);
       }
     } else if (this.casterUid && this.mode !== 'over') {
-      const c = this.tileCenter(this.battle.unit(this.casterUid));
+      const c = this.tileCenter(b.unit(this.casterUid));
       this.rings.lineStyle(3, 0xff6b6b, 1).strokeCircle(c.x, c.y - 4, 25);
     }
   }
@@ -255,7 +286,6 @@ export class BattleScene extends Phaser.Scene {
     this.topBar.add(text(this, MAP_X, 26, mine ? 'YOUR TURN' : 'ENEMY TURN', {
       fontSize: '22px', fontStyle: 'bold', color: mine ? '#8ecbff' : COLORS.bad,
     }));
-    // Party roster: click to select; dimmed once a hero has acted.
     const g = this.add.graphics();
     this.topBar.add(g);
     const heroes = b.living('player');
@@ -269,7 +299,7 @@ export class BattleScene extends Phaser.Scene {
       this.topBar.add(hit);
     });
     if (mine) {
-      this.topBar.add(text(this, MAP_X + 176 + heroes.length * 52, 30, 'Tab: next hero', { color: COLORS.dim, fontSize: '12px' }));
+      this.topBar.add(text(this, MAP_X + 176 + heroes.length * 52, 30, 'Tab: next', { color: COLORS.dim, fontSize: '12px' }));
     }
     this.topBar.add(button(this, MAP_X + TILE * b.map.width - 96, 16, 96, 40, 'Retreat', () => this.retreat(), {
       fontSize: 13, enabled: this.mode === 'select' || this.mode === 'target',
@@ -281,41 +311,42 @@ export class BattleScene extends Phaser.Scene {
     const S = this.sidebar;
     const b = this.battle;
     const u = this.selected ?? (this.casterUid ? b.unit(this.casterUid) : null);
-    S.add(panel(this, SIDE_X, 16, SIDE_W, 200));
+    S.add(panel(this, SIDE_X, 16, SIDE_W, 160));
     if (u) {
       const g = this.add.graphics();
-      drawToken(g, SIDE_X + 30, 46, 18, u.character.appearance.color, u.character.appearance.emblem);
+      drawToken(g, SIDE_X + 28, 44, 16, u.character.appearance.color, u.character.appearance.emblem);
       S.add(g);
-      S.add(text(this, SIDE_X + 58, 26, u.character.name, { fontSize: '18px' }));
-      S.add(text(this, SIDE_X + 58, 50, `Lv ${u.character.level} ${CLASSES[u.character.classId].name}${u.team === 'enemy' ? ' (enemy)' : ''}`, {
-        color: u.team === 'enemy' ? COLORS.bad : COLORS.dim, fontSize: '13px',
+      S.add(text(this, SIDE_X + 52, 24, u.character.name, { fontSize: '17px' }));
+      S.add(text(this, SIDE_X + 52, 46, `Lv ${u.character.level} · ${WEAPONS[u.character.weaponId].name}${u.team === 'enemy' ? ' (enemy)' : ''}`, {
+        color: u.team === 'enemy' ? COLORS.bad : COLORS.dim, fontSize: '12px',
       }));
-      S.add(text(this, SIDE_X + 12, 78, this.unitSummary(u), { fontSize: '13px', lineSpacing: 4 }));
+      S.add(text(this, SIDE_X + 10, 70, this.unitSummary(u), { fontSize: '12px', lineSpacing: 3, wordWrap: { width: SIDE_W - 20 } }));
       if (u.team === 'player' && b.phase === 'player') {
         const status = u.acted ? 'Done this turn' : u.moved ? 'Moved — can still act' : 'Ready to move and act';
-        S.add(text(this, SIDE_X + 12, 192, status, { fontSize: '12px', color: u.acted ? COLORS.dim : COLORS.good }));
+        S.add(text(this, SIDE_X + 10, 156, status, { fontSize: '12px', color: u.acted ? COLORS.dim : COLORS.good }));
       }
     }
 
     if (b.phase !== 'player' || this.mode === 'over') {
-      S.add(text(this, SIDE_X + SIDE_W / 2, 260, this.mode === 'over' ? '' : 'Enemy turn…', { color: COLORS.dim }).setOrigin(0.5));
+      S.add(text(this, SIDE_X + SIDE_W / 2, 230, this.mode === 'over' ? '' : 'Enemy turn…', { color: COLORS.dim }).setOrigin(0.5));
       return;
     }
     const interactive = this.mode === 'select' || this.mode === 'target';
+    let y = 184;
     if (u && u.team === 'player') {
       const canAct = interactive && b.canAct(u);
-      b.actionIds(u).forEach((id, i) => {
-        const a = getAction(u, id);
+      for (const id of b.skillIds(u)) {
+        const s = SKILLS[id];
         const cd = u.cooldowns[id] ?? 0;
-        const label = cd > 0 ? `${a.name} (${cd})` : a.name;
-        S.add(button(this, SIDE_X, 226 + i * 42, SIDE_W, 36, label, () => this.selectAction(id), {
+        const label = `${s.name}${s.free ? ' · free' : ''}${cd > 0 ? ` (${cd})` : ''}`;
+        S.add(button(this, SIDE_X, y, SIDE_W, 30, label, () => this.selectAction(id), {
           enabled: canAct && cd <= 0,
           selected: this.mode === 'target' && this.action?.id === id,
-          fontSize: 15,
+          fontSize: 14,
           onHover: () => {
-            this.hoverText.setText(`${a.name}: ${a.description}${a.cooldown ? ` Cooldown ${a.cooldown}.` : ''}`);
+            this.hoverText.setText(`${s.name}: ${s.description}\n${skillDetails(s)}${cd > 0 ? `\nReady ${cd === 1 ? 'next turn' : `in ${cd} turns`}.` : ''}`);
             if (this.mode === 'select') {
-              this.previewAction = a;
+              this.previewAction = s;
               this.drawOverlay();
             }
           },
@@ -326,11 +357,11 @@ export class BattleScene extends Phaser.Scene {
             }
           },
         }));
-      });
-      const y = 226 + b.actionIds(u).length * 42;
-      S.add(button(this, SIDE_X, y, 116, 36, 'Wait', () => this.waitUnit(), { enabled: canAct, fontSize: 15 }));
-      S.add(button(this, SIDE_X + 124, y, 116, 36, 'Undo move', () => this.undoMove(), {
-        enabled: interactive && b.canUndoMove(u), fontSize: 15,
+        y += 34;
+      }
+      S.add(button(this, SIDE_X, y + 2, 116, 30, 'Wait', () => this.waitUnit(), { enabled: canAct, fontSize: 14 }));
+      S.add(button(this, SIDE_X + 124, y + 2, 116, 30, 'Undo move', () => this.undoMove(), {
+        enabled: interactive && b.canUndoMove(u), fontSize: 14,
       }));
     }
     S.add(button(this, SIDE_X, 590, SIDE_W, 40, 'End Turn', () => this.endPlayerPhase(), {
@@ -340,17 +371,19 @@ export class BattleScene extends Phaser.Scene {
 
   private unitSummary(u: Unit): string {
     const b = this.battle;
-    const statuses = u.statuses.map((s) => `${s.name} (${s.amount > 0 ? '+' : ''}${s.amount} ${s.stat}, ${s.turns}t)`).join('\n');
+    const shield = b.shieldOf(u);
+    const terrainDef = TERRAIN[b.map.tiles[u.y][u.x]].defense;
+    const effects = u.statuses.map((s) => (s.id === 'burn' ? `Burn x${s.stacks} (${s.turns}t)` : `${s.name} ${s.amount} (${s.turns}t)`));
+    if (u.overwatch) effects.push(`Watching: ${SKILLS[u.overwatch.skillId].name}`);
     return [
-      `HP ${u.hp}/${u.base.maxHp}   Move ${b.stat(u, 'move')}   Spd ${b.stat(u, 'speed')}`,
-      `Phys ${b.stat(u, 'physPower')}   Mag ${b.stat(u, 'magPower')}`,
-      `Def ${b.stat(u, 'defense')}   Res ${b.stat(u, 'resistance')}`,
-      statuses,
+      `HP ${u.hp}/${u.stats.health}${shield ? ` +${shield} shield` : ''}   Move ${b.stat(u, 'movement')}`,
+      `P.Atk ${b.stat(u, 'pAtk')}  M.Atk ${b.stat(u, 'mAtk')}  Def ${b.stat(u, 'defense')}${terrainDef ? ' (forest)' : ''}`,
+      effects.join(', '),
     ].filter(Boolean).join('\n');
   }
 
   private refresh(): void {
-    this.refreshUnitTint();
+    this.refreshUnits();
     this.renderTopBar();
     this.renderSidebar();
     this.drawOverlay();
@@ -369,16 +402,34 @@ export class BattleScene extends Phaser.Scene {
     await this.wait(700);
   }
 
-  // ---- player phase ---------------------------------------------------------------------
+  // ---- player turn ---------------------------------------------------------------------
 
-  private async startPlayerPhase(): Promise<void> {
+  private async startPlayerPhase(events: BattleEvent[] = []): Promise<void> {
     this.mode = 'busy';
     this.casterUid = null;
     this.selectedUid = null;
     this.refresh();
     await this.banner('YOUR TURN', '#8ecbff');
+    if (await this.showTurnStartEvents(events)) return;
     this.mode = 'select';
     this.selectUnit(this.battle.readyUnits()[0]);
+  }
+
+  /** Show Burn ticks etc. Returns true if the battle ended. */
+  private async showTurnStartEvents(events: BattleEvent[]): Promise<boolean> {
+    if (events.length) {
+      const summary: string[] = [];
+      for (const e of events) this.showEvent(e, summary, 0);
+      this.addLog(`Burn: ${summary.join(', ')}`);
+      this.refresh();
+      await this.wait(800);
+    }
+    const outcome = this.battle.outcome();
+    if (outcome) {
+      this.endBattle(outcome);
+      return true;
+    }
+    return false;
   }
 
   private selectUnit(u: Unit | undefined): void {
@@ -403,12 +454,15 @@ export class BattleScene extends Phaser.Scene {
   private selectAction(id: string): void {
     const u = this.selected;
     if (!u || (this.mode !== 'select' && this.mode !== 'target') || !this.battle.canAct(u)) return;
-    this.action = getAction(u, id);
+    this.action = SKILLS[id];
     this.previewAction = null;
     this.mode = 'target';
     this.renderSidebar();
     this.drawOverlay();
-    this.hoverText.setText(`${this.action.name}: click any tile in range (right-click / Esc to cancel).`);
+    const how = this.action.target === 'cone' ? 'click to aim the cone'
+      : this.action.target === 'line' ? 'click a direction'
+        : this.action.target === 'self' ? 'click inside the box to use it' : 'click a tile in the box';
+    this.hoverText.setText(`${this.action.name}: ${how} (right-click / Esc to cancel).`);
   }
 
   private cancel(): void {
@@ -436,13 +490,14 @@ export class BattleScene extends Phaser.Scene {
     this.afterUnitDone();
   }
 
-  /** After a hero acts, jump to the next hero who still can; end the phase when nobody can. */
+  /** After a hero acts: keep them selected if they can still act (free skill), else go to the next ready hero. */
   private afterUnitDone(): void {
     const outcome = this.battle.outcome();
     if (outcome) return this.endBattle(outcome);
     this.mode = 'select';
     this.action = null;
-    const next = this.battle.readyUnits()[0];
+    const cur = this.selected;
+    const next = cur && this.battle.canAct(cur) ? cur : this.battle.readyUnits()[0];
     if (next) this.selectUnit(next);
     else this.endPlayerPhase();
   }
@@ -454,7 +509,7 @@ export class BattleScene extends Phaser.Scene {
     const clicked = b.unitAt(tile.x, tile.y);
 
     if (this.mode === 'target' && u && this.action) {
-      if (!b.inRange(this.action, u, tile)) return this.cancel();
+      if (!b.canTarget(u, this.action, tile)) return this.cancel();
       const action = this.action;
       this.mode = 'busy';
       this.action = null;
@@ -467,17 +522,21 @@ export class BattleScene extends Phaser.Scene {
     }
     if (this.mode !== 'select') return;
 
-    // Clicking another of your heroes switches to them.
     if (clicked && clicked.team === 'player' && clicked !== u) return this.selectUnit(clicked);
 
     const k = key(tile.x, tile.y);
     if (u && b.canMove(u) && this.reach.has(k) && (tile.x !== u.x || tile.y !== u.y)) {
       this.mode = 'busy';
-      const path = b.move(u, tile);
+      const result = b.move(u, tile);
       this.refresh();
-      await this.animatePath(u, path);
-      this.mode = 'select';
+      await this.animateMove(u, result);
       this.reach = new Map();
+      if (!u.alive) {
+        this.selectedUid = null;
+        this.afterUnitDone();
+        return;
+      }
+      this.mode = 'select';
       this.refresh();
     }
   }
@@ -491,27 +550,42 @@ export class BattleScene extends Phaser.Scene {
     const b = this.battle;
     const target = b.unitAt(tile.x, tile.y);
     const terrain = TERRAIN[b.map.tiles[tile.y][tile.x]];
-    let info = `${terrain.name}${terrain.moveCost === null ? ' (impassable)' : terrain.moveCost > 1 ? ` (move cost ${terrain.moveCost}, +${terrain.defense} def/res)` : ''}`;
-    if (target) {
-      info = `${target.character.name} — Lv ${target.character.level} ${CLASSES[target.character.classId].name}\n${this.unitSummary(target)}`;
-    }
+    let info = `${terrain.name}${terrain.moveCost === null ? ' (impassable)' : ''}${terrain.defense ? ` (+${terrain.defense} Def, move cost ${terrain.moveCost})` : ''}${terrain.blocksSight ? ', blocks sight' : ''}`;
+    if (target) info = `${target.character.name} — Lv ${target.character.level}\n${this.unitSummary(target)}`;
     const u = this.selected;
     if (this.mode === 'target' && this.action && u) {
-      info = b.inRange(this.action, u, tile)
+      info = b.canTarget(u, this.action, tile)
         ? `${this.preview(u, this.action, tile)}\n${info}`
-        : `Out of range — click to cancel.\n${info}`;
+        : `Can't aim there — click to cancel.\n${info}`;
     }
     this.hoverText.setText(info);
   }
 
-  private preview(u: Unit, action: ActionSpec, tile: Point): string {
-    const hits = this.battle.affected(u, action, tile);
-    if (hits.length === 0) return '→ Nobody in the area (action will be spent)';
-    return hits.map((t) => {
-      if (action.kind === 'damage') return `→ ${t.character.name}: ${this.battle.damage(u, t, action)} dmg, ${this.battle.hitChance(u, t, action)}% hit`;
-      if (action.kind === 'heal') return `→ ${t.character.name}: +${Math.min(this.battle.healAmount(u, action), t.base.maxHp - t.hp)} HP`;
-      return `→ ${t.character.name}: ${action.status?.name}`;
-    }).join('\n');
+  private preview(u: Unit, s: SkillDef, tile: Point): string {
+    const b = this.battle;
+    if (s.cone) return '→ Watch this cone until your next turn';
+    if (s.teleport) return '→ Teleport here';
+    const lines: string[] = [];
+    if (s.charge) {
+      const land = b.chargeDestination(u, tile);
+      if (land && (land.x !== u.x || land.y !== u.y)) lines.push('→ Dash in, then strike');
+    }
+    const targets = b.targetsOf(u, s, tile);
+    if (targets.length === 0 && lines.length === 0) return '→ Nobody affected (action will be spent)';
+    for (const t of targets) {
+      const who = `${t.character.name}${t.team === u.team && s.hits ? ' (ALLY!)' : ''}`;
+      if (s.hits?.length) {
+        const hits = b.previewHits(u, s, t);
+        const total = hits.reduce((a, c) => a + c, 0);
+        const kills = total >= t.hp + b.shieldOf(t);
+        lines.push(`→ ${who}: ${hits.join(' + ')} dmg${kills ? ' (defeats!)' : ''}`);
+      }
+      if (s.heal) lines.push(`→ ${who}: +${Math.min(b.healAmount(u, s), t.stats.health - t.hp)} HP`);
+      if (s.shield) lines.push(`→ ${who}: +${Math.round(t.stats.health * s.shield.maxHpPct)} shield`);
+      if (s.cleanse) lines.push(`→ ${who}: cleanse ${t.statuses.filter((x) => x.debuff).length} debuff(s)`);
+      if (s.knockback) lines.push('   knocked back 1 tile');
+    }
+    return lines.join('\n');
   }
 
   private endPlayerPhase(): void {
@@ -519,132 +593,167 @@ export class BattleScene extends Phaser.Scene {
     this.mode = 'busy';
     this.action = null;
     this.selectedUid = null;
-    this.battle.endPhase();
-    void this.runEnemyPhase();
+    const events = this.battle.endPhase();
+    void this.runEnemyPhase(events);
   }
 
-  // ---- enemy phase ----------------------------------------------------------------------
+  // ---- enemy turn ----------------------------------------------------------------------
 
-  private async runEnemyPhase(): Promise<void> {
+  private async runEnemyPhase(startEvents: BattleEvent[]): Promise<void> {
     const b = this.battle;
     this.refresh();
     await this.banner('ENEMY TURN', COLORS.bad);
-    // Fastest enemies act first.
-    const order = b.readyUnits().sort((x, y) => b.stat(y, 'speed') - b.stat(x, 'speed'));
-    for (const u of order) {
+    if (await this.showTurnStartEvents(startEvents)) return;
+    for (const u of [...b.readyUnits()]) {
       if (!u.alive || b.outcome()) continue;
       this.casterUid = u.uid;
       this.refresh();
       await this.wait(250);
       const plan = planTurn(b, u);
-      if (plan.moveTo.x !== u.x || plan.moveTo.y !== u.y) {
-        const path = b.move(u, plan.moveTo);
-        await this.animatePath(u, path);
+      if (b.canMove(u) && (plan.moveTo.x !== u.x || plan.moveTo.y !== u.y)) {
+        const result = b.move(u, plan.moveTo);
+        await this.animateMove(u, result);
       }
-      if (plan.action) {
-        const action = getAction(u, plan.action.id);
-        this.action = action;
-        this.mode = 'target';
-        this.hoverTile = plan.action.target;
-        this.drawOverlay();
-        await this.wait(450);
-        this.mode = 'busy';
-        this.action = null;
-        this.hoverTile = null;
-        await this.resolve(u, action, plan.action.target);
-      } else {
+      if (!u.alive || b.outcome()) continue;
+      const free = bestFreeAction(b, u);
+      if (free) await this.enemyUse(u, free.id, free.target);
+      if (!u.alive || b.outcome() || !b.canAct(u)) continue;
+      const action = bestAction(b, u);
+      if (action) await this.enemyUse(u, action.id, action.target);
+      else {
         b.wait(u);
         this.addLog(`${u.character.name} advances.`);
       }
-      this.refreshUnitTint();
+      this.refreshUnits();
     }
     this.casterUid = null;
     const outcome = b.outcome();
     if (outcome) return this.endBattle(outcome);
-    b.endPhase();
-    void this.startPlayerPhase();
+    void this.startPlayerPhase(b.endPhase());
+  }
+
+  private async enemyUse(u: Unit, id: string, target: Point): Promise<void> {
+    this.action = SKILLS[id];
+    this.mode = 'target';
+    this.hoverTile = target;
+    this.drawOverlay();
+    await this.wait(450);
+    this.mode = 'busy';
+    this.action = null;
+    this.hoverTile = null;
+    await this.resolve(u, SKILLS[id], target);
   }
 
   // ---- animation --------------------------------------------------------------------------
 
-  private async animatePath(u: Unit, path: Point[]): Promise<void> {
+  private async animateMove(u: Unit, result: MoveResult): Promise<void> {
     const view = this.views.get(u.uid)!;
-    for (const step of path) {
-      const c = this.tileCenter(step);
-      await new Promise<void>((resolve) => {
-        this.tweens.add({ targets: view.container, x: c.x, y: c.y, duration: 110, onComplete: () => resolve() });
-      });
+    for (let i = 0; i < result.path.length; i++) {
+      const c = this.tileCenter(result.path[i]);
+      await this.tween({ targets: view.container, x: c.x, y: c.y, duration: 110 });
+      const trigger = result.triggers.find((t) => t.index === i);
+      if (trigger) {
+        const summary: string[] = [];
+        trigger.events.forEach((e, n) => this.showEvent(e, summary, n));
+        const shooter = trigger.events[0]?.type === 'damage' && trigger.events[0].source ? this.battle.unit(trigger.events[0].source).character.name : 'Overwatch';
+        this.addLog(`${shooter} reacts! ${summary.join(', ')}${result.interrupted && i === result.path.length - 1 ? ' — movement stopped' : ''}`);
+        this.refresh();
+        await this.wait(700);
+      }
     }
     this.drawOverlay();
   }
 
-  private floatText(u: Unit, value: string, color: string): void {
+  private floatText(u: Unit, value: string, color: string, delay = 0): void {
     const c = this.tileCenter(u);
-    const t = text(this, c.x, c.y - 20, value, { fontSize: '20px', fontStyle: 'bold', color, stroke: '#000000', strokeThickness: 4 })
-      .setOrigin(0.5).setDepth(500);
-    this.tweens.add({ targets: t, y: c.y - 56, alpha: 0, duration: 1000, ease: 'Cubic.easeOut', onComplete: () => t.destroy() });
+    const t = text(this, c.x, c.y - 20, value, { fontSize: '18px', fontStyle: 'bold', color, stroke: '#000000', strokeThickness: 4 })
+      .setOrigin(0.5).setDepth(500).setAlpha(delay ? 0 : 1);
+    this.tweens.add({ targets: t, y: c.y - 58, alpha: { from: 1, to: 0 }, delay, duration: 1100, ease: 'Cubic.easeOut', onComplete: () => t.destroy() });
   }
 
-  private async resolve(u: Unit, action: ActionSpec, target: Point): Promise<void> {
-    const events = this.battle.perform(u, action.id, target);
-    const name = (uid: string) => this.battle.unit(uid).character.name;
+  private async resolve(u: Unit, s: SkillDef, target: Point): Promise<void> {
+    const before = { x: u.x, y: u.y };
+    const events = this.battle.perform(u, s.id, target);
     const view = this.views.get(u.uid)!;
-    const from = this.tileCenter(u);
-    const to = this.tileCenter(target);
-    if (action.kind === 'damage' && (target.x !== u.x || target.y !== u.y)) {
-      await new Promise<void>((resolve) => this.tweens.add({
-        targets: view.container, x: from.x + (to.x - from.x) * 0.2, y: from.y + (to.y - from.y) * 0.2,
-        duration: 90, yoyo: true, onComplete: () => resolve(),
-      }));
+    // Small lunge toward the target for attacks that don't move the caster.
+    if (s.hits?.length && !s.charge && (target.x !== before.x || target.y !== before.y)) {
+      const from = this.tileCenter(before);
+      const to = this.tileCenter(target);
+      await this.tween({ targets: view.container, x: from.x + (to.x - from.x) * 0.2, y: from.y + (to.y - from.y) * 0.2, duration: 90, yoyo: true });
     }
-    this.flashArea(action, target);
     const summary: string[] = [];
-    for (const e of events) this.showEvent(e, summary, name);
-    this.addLog(`${u.character.name} uses ${action.name}${summary.length ? ': ' + summary.join(', ') : ' — it hits nothing.'}`);
-    this.refreshUnitTint();
-    this.renderTopBar();
-    await this.wait(events.length ? 750 : 400);
+    let n = 0;
+    for (const e of events) {
+      if (e.type === 'move') {
+        await this.animateDisplacement(e);
+        continue;
+      }
+      this.showEvent(e, summary, n++);
+    }
+    this.flashArea(s, u, target);
+    const detail = summary.length ? `: ${summary.join(', ')}` : s.cone ? ' and watches the area.' : s.teleport ? '.' : ' — it hits nothing.';
+    this.addLog(`${u.character.name} uses ${s.name}${detail}`);
+    this.refresh();
+    await this.wait(events.length ? 800 : 400);
   }
 
-  /** Brief flash on the tiles the action struck (also shows when it hits empty ground). */
-  private flashArea(action: ActionSpec, target: Point): void {
-    const g = this.add.graphics().setDepth(400);
-    const color = action.target === 'ally' ? 0x6fdc8c : 0xffd166;
-    for (let y = 0; y < this.battle.map.height; y++) {
-      for (let x = 0; x < this.battle.map.width; x++) {
-        if (manhattan({ x, y }, target) <= action.radius) {
-          g.fillStyle(color, 0.55).fillRect(MAP_X + x * TILE + 1, MAP_Y + y * TILE + 1, TILE - 2, TILE - 2);
-        }
-      }
+  private async animateDisplacement(e: Extract<BattleEvent, { type: 'move' }>): Promise<void> {
+    const t = this.battle.unit(e.target);
+    const view = this.views.get(t.uid)!;
+    const to = this.tileCenter(e.to);
+    if (e.kind === 'teleport') {
+      await this.tween({ targets: view.container, alpha: 0, scale: 0.4, duration: 150 });
+      view.container.setPosition(to.x, to.y);
+      await this.tween({ targets: view.container, alpha: 1, scale: 1, duration: 150 });
+    } else {
+      await this.tween({ targets: view.container, x: to.x, y: to.y, duration: e.kind === 'charge' ? 220 : 140, ease: 'Quad.easeOut' });
     }
+  }
+
+  /** Brief flash over the tiles the skill covered (also shows when it hits empty ground). */
+  private flashArea(s: SkillDef, caster: Unit, target: Point): void {
+    if (s.cone) return;
+    const g = this.add.graphics().setDepth(400);
+    const color = s.affects === 'ally' ? 0x6fdc8c : 0xffd166;
+    const tiles = s.target === 'self' && !s.aoeRadius ? [{ x: caster.x, y: caster.y }] : this.battle.areaTiles(caster, s, target);
+    for (const p of tiles) g.fillStyle(color, 0.5).fillRect(MAP_X + p.x * TILE + 1, MAP_Y + p.y * TILE + 1, TILE - 2, TILE - 2);
     this.tweens.add({ targets: g, alpha: 0, duration: 500, onComplete: () => g.destroy() });
   }
 
-  private showEvent(e: BattleEvent, summary: string[], name: (uid: string) => string): void {
+  private showEvent(e: BattleEvent, summary: string[], index: number): void {
+    if (e.type === 'move' || e.type === 'overwatch') return;
     const t = this.battle.unit(e.target);
+    const name = t.character.name;
+    const delay = index * 180;
     switch (e.type) {
-      case 'damage':
-        this.floatText(t, `${e.crit ? 'CRIT ' : ''}-${e.amount}`, e.crit ? '#ffd166' : '#ff6b6b');
+      case 'damage': {
+        const color = e.cause === 'burn' ? '#ffb35c' : '#ff6b6b';
+        if (e.amount > 0) this.floatText(t, `-${e.amount}`, color, delay);
+        if (e.absorbed > 0) this.floatText(t, `(${e.absorbed} blocked)`, '#8ecbff', delay + 90);
         this.drawHp(t);
-        this.cameras.main.shake(80, 0.003);
-        summary.push(`${name(e.target)} -${e.amount}${e.crit ? ' (crit)' : ''}${e.killed ? ' ☠' : ''}`);
+        if (e.cause !== 'burn') this.cameras.main.shake(70, 0.002);
+        summary.push(`${name} -${e.amount}${e.absorbed ? ` (${e.absorbed} shielded)` : ''}${e.killed ? ' ☠' : ''}`);
         if (e.killed) {
           const v = this.views.get(t.uid)!;
-          this.tweens.add({ targets: v.container, alpha: 0, scale: 0.5, duration: 500, onComplete: () => v.container.setVisible(false) });
+          this.tweens.add({ targets: v.container, alpha: 0, scale: 0.5, delay: delay + 200, duration: 500, onComplete: () => v.container.setVisible(false) });
         }
         break;
-      case 'miss':
-        this.floatText(t, 'MISS', '#c9ced8');
-        summary.push(`${name(e.target)} dodged`);
-        break;
+      }
       case 'heal':
-        this.floatText(t, `+${e.amount}`, '#6fdc8c');
-        this.drawHp(t);
-        summary.push(`${name(e.target)} +${e.amount} HP`);
+        this.floatText(t, `+${e.amount}`, '#6fdc8c', delay);
+        summary.push(`${name} +${e.amount} HP`);
+        break;
+      case 'shield':
+        this.floatText(t, `Shield ${e.amount}`, '#8ecbff', delay);
+        summary.push(`${name} shielded (${e.amount})`);
         break;
       case 'status':
-        this.time.delayedCall(250, () => this.floatText(t, e.status.name, '#8ecbff'));
-        summary.push(`${name(e.target)} ${e.status.name}`);
+        this.floatText(t, e.name, '#ffb35c', delay + 200);
+        summary.push(`${name} ${e.name}`);
+        break;
+      case 'cleanse':
+        this.floatText(t, 'Cleansed', '#6fdc8c', delay);
+        summary.push(`${name} cleansed${e.removed.length ? ` (${e.removed.join(', ')})` : ''}`);
         break;
     }
   }
@@ -671,15 +780,15 @@ export class BattleScene extends Phaser.Scene {
       const xp = victoryXp(state.progress.stage);
       state.progress.victories += 1;
       state.progress.stage += 1;
-      lines.push(`Each hero gains ${xp} XP.`);
+      lines.push(`Each adventurer gains ${xp} XP.`);
       for (const c of state.party) {
         const levels = grantXp(c, xp);
-        if (levels > 0) lines.push(`${c.name} reached level ${c.level}! (+${levels * 3} attribute points)`);
+        if (levels > 0) lines.push(`${c.name} reached level ${c.level}! Stats grew automatically.`);
       }
       lines.push('', `Next up: stage ${state.progress.stage}.`);
     } else {
       state.progress.defeats += 1;
-      lines.push('Your party falls back to camp to recover.', 'Rebuild, re-equip and try again.');
+      lines.push('Your party falls back to camp to recover.', 'Rethink your loadouts and try again.');
     }
     markDirty();
 

@@ -1,9 +1,10 @@
 // Save / load. Saves are pretty-printed JSON so players can read (and edit!) them.
-import { CLASSES, MAX_ATTRIBUTE, MAX_PARTY_SIZE, NAME_MAX_LENGTH, SKILLS, WEAPONS, EMBLEMS, skillSlotsForLevel } from '../data/content';
-import { ATTRIBUTE_KEYS, type Character, type GameState } from '../data/types';
+import { EMBLEMS, MAX_PARTY_SIZE, NAME_MAX_LENGTH, SKILLS, TREE_SKILLS, WEAPONS, skillSlotsForLevel } from '../data/content';
+import type { Character, GameState } from '../data/types';
 
 export const SAVE_FORMAT = 'lazyrpg-save';
-export const SAVE_VERSION = 1;
+/** v1: class + attribute points. v2: classless Adventurers with weapon + skill-tree picks. */
+export const SAVE_VERSION = 2;
 export const SLOT_COUNT = 3;
 const SLOT_KEY_PREFIX = 'lazyrpg.save.slot';
 
@@ -38,31 +39,38 @@ function isInt(v: unknown, min: number, max = Number.MAX_SAFE_INTEGER): v is num
   return typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max;
 }
 
+/** Convert a version-1 character (fixed classes) to the classless format. */
+const V1_CLASS_LOADOUT: Record<string, { weaponId: string; skillIds: string[] }> = {
+  knight: { weaponId: 'sword_shield', skillIds: ['charge', 'kick'] },
+  ranger: { weaponId: 'bow', skillIds: ['execute', 'kick'] },
+  mage: { weaponId: 'staff', skillIds: ['fireball', 'arcane_bolt'] },
+  cleric: { weaponId: 'staff', skillIds: ['heal', 'cleanse'] },
+};
+
+function migrateV1Character(raw: unknown): unknown {
+  if (!isObj(raw)) return raw;
+  const loadout = V1_CLASS_LOADOUT[String(raw.classId)] ?? V1_CLASS_LOADOUT.knight;
+  const { classId: _c, attributes: _a, unspentPoints: _u, ...rest } = raw;
+  return { ...rest, weaponId: loadout.weaponId, skillIds: loadout.skillIds };
+}
+
 function validateCharacter(raw: unknown, path: string): string | Character {
   if (!isObj(raw)) return `${path} must be an object`;
-  const { id, name, classId, level, xp, attributes, unspentPoints, weaponId, skillIds, appearance } = raw;
+  const { id, name, level, xp, weaponId, skillIds, appearance } = raw;
   if (typeof id !== 'string' || !id) return `${path}.id must be a non-empty string`;
   if (typeof name !== 'string' || !name.trim()) return `${path}.name must be a non-empty string`;
   if (name.length > NAME_MAX_LENGTH) return `${path}.name must be at most ${NAME_MAX_LENGTH} characters`;
-  if (typeof classId !== 'string' || !(classId in CLASSES)) {
-    return `${path}.classId must be one of: ${Object.keys(CLASSES).join(', ')}`;
-  }
-  const cls = CLASSES[classId as keyof typeof CLASSES];
   if (!isInt(level, 1, 99)) return `${path}.level must be a whole number from 1 to 99`;
   if (!isInt(xp, 0)) return `${path}.xp must be a whole number >= 0`;
-  if (!isInt(unspentPoints, 0, 999)) return `${path}.unspentPoints must be a whole number >= 0`;
-  if (!isObj(attributes)) return `${path}.attributes must be an object`;
-  for (const key of ATTRIBUTE_KEYS) {
-    if (!isInt(attributes[key], 1, MAX_ATTRIBUTE)) {
-      return `${path}.attributes.${key} must be a whole number from 1 to ${MAX_ATTRIBUTE}`;
-    }
+  if (typeof weaponId !== 'string' || !WEAPONS[weaponId]) {
+    return `${path}.weaponId "${String(weaponId)}" is not a known weapon (allowed: ${Object.keys(WEAPONS).join(', ')})`;
   }
-  if (typeof weaponId !== 'string' || !WEAPONS[weaponId]) return `${path}.weaponId "${String(weaponId)}" is not a known weapon`;
-  if (!cls.weapons.includes(weaponId)) return `${path}.weaponId "${weaponId}" cannot be used by a ${cls.name} (allowed: ${cls.weapons.join(', ')})`;
   if (!Array.isArray(skillIds)) return `${path}.skillIds must be an array`;
   for (const s of skillIds) {
     if (typeof s !== 'string' || !SKILLS[s]) return `${path}.skillIds contains unknown skill "${String(s)}"`;
-    if (!cls.skills.includes(s)) return `${path}.skillIds: "${s}" is not a ${cls.name} skill (allowed: ${cls.skills.join(', ')})`;
+    if (!TREE_SKILLS.includes(s)) {
+      return `${path}.skillIds: "${s}" is a weapon skill, not a skill-tree skill (allowed: ${TREE_SKILLS.join(', ')})`;
+    }
   }
   if (new Set(skillIds).size !== skillIds.length) return `${path}.skillIds contains duplicates`;
   const slots = skillSlotsForLevel(level);
@@ -77,11 +85,8 @@ function validateCharacter(raw: unknown, path: string): string | Character {
   return {
     id,
     name: name.trim(),
-    classId: cls.id,
     level,
     xp,
-    attributes: Object.fromEntries(ATTRIBUTE_KEYS.map((k) => [k, attributes[k] as number])) as Character['attributes'],
-    unspentPoints,
     weaponId,
     skillIds: [...(skillIds as string[])],
     appearance: { color: appearance.color.toLowerCase(), emblem: appearance.emblem as Character['appearance']['emblem'] },
@@ -112,7 +117,8 @@ export function parseSave(text: string): ParseResult {
   const party: Character[] = [];
   const ids = new Set<string>();
   for (let i = 0; i < raw.party.length; i++) {
-    const result = validateCharacter(raw.party[i], `party[${i}]`);
+    const member = raw.version === 1 ? migrateV1Character(raw.party[i]) : raw.party[i];
+    const result = validateCharacter(member, `party[${i}]`);
     if (typeof result === 'string') return { ok: false, error: result };
     if (ids.has(result.id)) return { ok: false, error: `party[${i}].id "${result.id}" is used twice` };
     ids.add(result.id);

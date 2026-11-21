@@ -4,52 +4,66 @@ A small turn-based tactical RPG that runs in the browser, built with [Phaser 4](
 
 ## How the game works
 
-1. **Main menu**: New Game, Continue, Save Game and Load Game.
-2. **Character creation**: name, class (Knight, Ranger, Mage, Cleric), color and emblem. You also spend attribute points, pick a weapon and equip skills. Up to 4 heroes per party.
-3. **Camp**: the hub between battles. Recruit, customize (spend level-up points, swap weapons and skills) or dismiss heroes, then start the next battle.
-4. **Tactical battle**: XCOM-style alternating turns. In **your turn**, every hero can move once and act once, in any order. Click a hero or press Tab to switch between them, so you can set up combos (e.g. Rally first, then strike). Press **End Turn** when you're done; then every enemy acts. Hover over an ability to see its range box. Any tile in range can be targeted, even an empty one. Terrain matters: forest gives +2 defense and costs 2 move; rock and water block movement. Right-click or Esc cancels targeting. Winning gives XP and moves you up a stage; enemies get stronger each stage.
+1. **Main menu**: New Game, Continue, Save Game, Load Game.
+2. **Adventurers**: There are no fixed classes. Every party member is an Adventurer, and you build them by mixing a weapon with picks from the skill trees (up to 4 in the party).
+3. **Camp**: the hub between battles. Recruit, customize or dismiss Adventurers, then start the next battle.
+4. **Tactical battle**: XCOM-style alternating turns. On your turn, every Adventurer can move once and act once, in any order (click a unit or press Tab). Hover a skill to see its range box; any tile in range can be targeted. Forest gives +20 Defense and costs 2 movement; rock and water block movement, and rock blocks line of sight.
 
-### Build system
-| Attribute | Effect |
-|---|---|
-| Strength | Physical damage |
-| Dexterity | Hit chance and critical chance |
-| Intellect | Magic damage, healing, resistance |
-| Vitality | Max HP, defense, resistance |
-| Speed | Evasion. 9+ gives +1 move |
+### Stats
 
-- New heroes get 8 points to spend. Each level gives 3 more (100 XP per level).
-- Weapons change range and damage type, and some change attributes (e.g. the Greataxe hits hard but gives -2 Speed).
-- Skill slots: 2 at level 1, 3 at level 3, 4 at level 6.
+Base stats and per-level growth are in **`src/data/stats.json`**. Edit that file to rebalance.
+
+| Stat | Default | Meaning |
+|---|---|---|
+| Health | 1000 | Max health |
+| P.Atk | 100 | Physical power; skills deal a % of it |
+| M.Atk | 100 | Magic power and healing |
+| Defense | 0 | Damage taken × 100 / (100 + Defense): 100 Defense = 2× effective health |
+| Movement | 4 | Movement points per turn |
+
+Stats grow automatically on level up (100 XP per level). Range is Euclidean: 1 = the 4 neighbours, 1.5 includes diagonals.
+
+### Weapons (each grants its skills; the first is the basic attack)
+
+| Weapon | Stats | Skills |
+|---|---|---|
+| Sword & Shield | +40 P.Atk, +20 Def | Sword Slash, Slash and Smash, Shield Up |
+| Spear | +50 P.Atk | Spear Thrust, Circle Swing, Intercept |
+| Bow | +40 P.Atk | Direct Shot, Indirect Shot, Overwatch |
+| Staff | +10 P.Atk, +50 M.Atk | Empowered Strike, Magic Bolt |
+
+### Skill trees (pick freely across trees; 2 slots, 3 at Lv 3, 4 at Lv 6)
+
+- **Mage**: Arcanist (Arcane Bolt, Arcane Shift), Elementalist (Fireball), Cleric (Heal, Cleanse)
+- **Warrior**: Vanguard (Charge), Infighter (Kick, a free action), Assassin (Execute)
+
+A cooldown of N means the skill can't be used during your next N turns.
+
+Weapons, skills and trees are defined in `src/data/content.ts`.
 
 ## Save files
 
-Saves are **pretty-printed JSON**. You can save to 3 browser slots (localStorage), or **Export** a `.json` file and **Import** it later or on another device. You can open a save and edit it by hand. The game checks it on load and tells you exactly which field is wrong (e.g. `party[0].weaponId "longbow" cannot be used by a Cleric`).
+Saves are **pretty-printed JSON**. You can save to 3 browser slots, or Export a `.json` file and Import it later. Hand edits are validated, with errors that name the exact field. Saves from the old class-based version (v1) are upgraded automatically.
 
 ```json
 {
   "format": "lazyrpg-save",
-  "version": 1,
-  "savedAt": "2026-11-20T21:15:44.230Z",
+  "version": 2,
+  "savedAt": "2026-11-21T10:00:00.000Z",
   "progress": { "stage": 2, "victories": 1, "defeats": 0 },
   "party": [
     {
       "id": "c_3268ddub",
       "name": "Brienne",
-      "classId": "cleric",
       "level": 2,
       "xp": 75,
-      "attributes": { "str": 4, "dex": 3, "int": 11, "vit": 8, "spd": 3 },
-      "unspentPoints": 3,
-      "weaponId": "mace",
-      "skillIds": ["heal", "smite"],
+      "weaponId": "staff",
+      "skillIds": ["fireball", "heal"],
       "appearance": { "color": "#3d7be0", "emblem": "circle" }
     }
   ]
 }
 ```
-
-IDs for classes, weapons and skills are listed in `src/data/content.ts`.
 
 ## Development
 
@@ -64,7 +78,7 @@ npm run build    # type-check + production build into dist/
 
 ```
 src/
-  data/       types.ts (save-file shapes), content.ts (classes, weapons, skills, balance numbers)
+  data/       stats.json (base stats + growth), content.ts (weapons, skills, skill trees), types.ts
   game/       pure game logic, no Phaser: character stats, battle rules, AI, map generation, save/load
   scenes/     Phaser scenes: MainMenu, SaveLoad, CharacterCreator, Camp, Battle
   ui/         small UI helpers (buttons, panels, tokens, dialogs)
