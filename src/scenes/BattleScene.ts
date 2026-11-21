@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { SKILLS, WEAPONS, isFree, skillDetails, skillFormula, tagNames } from '../data/content';
+import { SKILLS, WEAPONS, isFree, isSupport, skillDetails, skillFormula, tagNames } from '../data/content';
 import type { SkillDef } from '../data/types';
 import { bestAction, bestFreeAction, planTurn, shouldDisengage } from '../game/ai';
 import {
@@ -9,14 +9,17 @@ import {
 import { grantXp, makeRng } from '../game/character';
 import { TERRAIN, generateMap, key, type Point } from '../game/grid';
 import { markDirty, requireState } from '../game/session';
-import { COLORS, HEIGHT, WIDTH, button, confirmDialog, figure, panel, setupCamera, text } from '../ui/widgets';
+import { COLORS, HEIGHT, ScrollList, WIDTH, button, confirmDialog, figure, panel, setupCamera, text } from '../ui/widgets';
 
 /** Tile size in layout pixels; set per battle so the map fits the 672x500 board area. */
 let TILE = 56;
 /** Scale factor relative to the original 56px tiles (for sizes drawn inside a tile). */
 let K = 1;
 const BOARD_W = 672;
-const BOARD_H = 500;
+const BOARD_H = 488;
+/** Battle log panel (below the board). */
+const LOG_Y = 566;
+const LOG_H = 66;
 const MAP_X = 16;
 const MAP_Y = 72;
 const SIDE_X = 704;
@@ -47,7 +50,7 @@ export class BattleScene extends Phaser.Scene {
   private sidebar!: Phaser.GameObjects.Container;
   private topBar!: Phaser.GameObjects.Container;
   private hoverText!: Phaser.GameObjects.Text;
-  private logText!: Phaser.GameObjects.Text;
+  private logList!: ScrollList;
   private log: string[] = [];
   private mode: Mode = 'busy';
   /** The player unit currently being commanded. */
@@ -60,6 +63,8 @@ export class BattleScene extends Phaser.Scene {
   /** Skill whose range is previewed while hovering its button. */
   private previewAction: SkillDef | null = null;
   private hoverTile: Point | null = null;
+  /** A confirm dialog is open: ignore clicks on the board behind it. */
+  private dialogOpen = false;
 
   constructor() {
     super('Battle');
@@ -74,6 +79,7 @@ export class BattleScene extends Phaser.Scene {
     this.action = null;
     this.previewAction = null;
     this.hoverTile = null;
+    this.dialogOpen = false;
     setupCamera(this);
 
     const state = requireState();
@@ -102,8 +108,8 @@ export class BattleScene extends Phaser.Scene {
     this.sidebar = this.add.container(0, 0);
     panel(this, SIDE_X, 482, SIDE_W, 100);
     this.hoverText = text(this, SIDE_X + 10, 489, '', { fontSize: '12px', wordWrap: { width: SIDE_W - 20 }, lineSpacing: 1 });
-    panel(this, MAP_X, 584, TILE * map.width, 48);
-    this.logText = text(this, MAP_X + 10, 588, '', { fontSize: '13px', color: COLORS.dim, lineSpacing: 2 });
+    panel(this, MAP_X, LOG_Y, BOARD_W, LOG_H);
+    this.logList = new ScrollList(this, MAP_X + 10, LOG_Y + 6, BOARD_W - 16, LOG_H - 12, 1);
 
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => this.onHover(this.tileAt(p)));
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
@@ -169,6 +175,18 @@ export class BattleScene extends Phaser.Scene {
           g.lineStyle(2, 0x5b8fcf, 0.8);
           g.lineBetween(px + 10 * K, py + 22 * K, px + 26 * K, py + 22 * K);
           g.lineBetween(px + 28 * K, py + 36 * K, px + 46 * K, py + 36 * K);
+        } else if (t === 'river') {
+          // Shallow, fordable water: lighter, with ripples and sandy edges.
+          g.lineStyle(2, 0xa9d4f5, 0.7);
+          for (const ry of [16, 30, 44]) {
+            g.beginPath();
+            g.moveTo(px + 8 * K, py + ry * K);
+            g.lineTo(px + 18 * K, py + (ry - 4) * K);
+            g.lineTo(px + 28 * K, py + ry * K);
+            g.lineTo(px + 38 * K, py + (ry - 4) * K);
+            g.lineTo(px + 48 * K, py + ry * K);
+            g.strokePath();
+          }
         }
       }
     }
@@ -277,7 +295,7 @@ export class BattleScene extends Phaser.Scene {
     const shown = this.mode === 'target' ? this.action : this.mode === 'select' ? this.previewAction : null;
     const caster = this.casterUid ? b.unit(this.casterUid) : sel;
     if (shown && caster) {
-      const color = shown.affects === 'ally' ? 0x6fdc8c : 0xff6b6b;
+      const color = isSupport(shown) ? 0x6fdc8c : 0xff6b6b;
       for (const p of b.rangeTiles(caster, shown)) {
         fill(p, color, 0.2);
         outline(p, color, 0.55);
@@ -438,9 +456,17 @@ export class BattleScene extends Phaser.Scene {
     this.drawOverlay();
   }
 
+  /** Add a line to the battle log. The log keeps the whole battle; scroll it with the wheel or the bar. */
   private addLog(line: string): void {
     this.log.push(line);
-    this.logText.setText(this.log.slice(-2).join('\n'));
+    const atEnd = this.logList.atEnd();
+    const items = this.log.map((l, i) => {
+      const t = text(this, 0, 0, l, {
+        fontSize: '13px', color: i === this.log.length - 1 ? COLORS.text : COLORS.dim, wordWrap: { width: BOARD_W - 34 },
+      });
+      return { obj: this.add.container(0, 0, [t]), height: t.height };
+    });
+    this.logList.setItems(items, atEnd ? 'end' : 'keep');
   }
 
   private async banner(label: string, color: string): Promise<void> {
@@ -493,7 +519,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private cycleUnit(): void {
-    if (this.mode !== 'select' && this.mode !== 'target') return;
+    if ((this.mode !== 'select' && this.mode !== 'target') || this.dialogOpen) return;
     const ready = this.battle.readyUnits();
     if (ready.length === 0) return;
     const i = ready.findIndex((u) => u.uid === this.selectedUid);
@@ -515,7 +541,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private cancel(): void {
-    if (this.mode !== 'target') return;
+    if (this.mode !== 'target' || this.dialogOpen) return;
     this.action = null;
     this.mode = 'select';
     this.renderSidebar();
@@ -576,7 +602,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private async onClick(tile: Point | null): Promise<void> {
-    if (!tile || this.battle.phase !== 'player') return;
+    if (!tile || this.battle.phase !== 'player' || this.dialogOpen) return;
     const b = this.battle;
     const u = this.selected;
     const clicked = b.unitAt(tile.x, tile.y);
@@ -584,17 +610,66 @@ export class BattleScene extends Phaser.Scene {
     if (this.mode === 'target' && u && this.action) {
       if (!b.canTarget(u, this.action, tile)) return this.cancel();
       const action = this.action;
-      this.mode = 'busy';
-      this.action = null;
-      this.casterUid = u.uid;
-      this.refresh();
-      await this.resolve(u, action, tile);
-      this.casterUid = null;
-      this.afterUnitDone();
+      const warning = this.targetWarning(u, action, tile);
+      if (warning) {
+        this.ask(warning, () => void this.useSkill(u, action, tile), 'Use anyway');
+        return;
+      }
+      await this.useSkill(u, action, tile);
       return;
     }
     if (this.mode !== 'select') return;
+    await this.onSelectClick(tile, u, clicked);
+  }
 
+  /** Open a confirm dialog that blocks board input while it's up. */
+  private ask(message: string, onYes: () => void, yesLabel: string): void {
+    this.dialogOpen = true;
+    confirmDialog(this, message, () => {
+      this.dialogOpen = false;
+      onYes();
+    }, yesLabel, () => {
+      this.dialogOpen = false;
+    });
+  }
+
+  /**
+   * Why the player might not mean this: attacking empty ground or an ally,
+   * or healing / cleansing an enemy. Null when the target makes sense.
+   */
+  private targetWarning(u: Unit, s: SkillDef, tile: Point): string | null {
+    const b = this.battle;
+    const occupant = b.unitAt(tile.x, tile.y);
+    const targets = b.targetsOf(u, s, tile);
+    const offensive = s.affects !== 'ally' && !s.cone && (!!s.hits?.length || !!s.applyStatus?.length);
+    if (offensive) {
+      const allies = targets.filter((t) => t.team === u.team);
+      if (allies.length) return `${s.name} will also hit your own ${allies.length > 1 ? 'allies' : 'ally'} ${allies.map((a) => a.character.name).join(', ')}.\nUse it anyway?`;
+      if (targets.length === 0) {
+        if (occupant && occupant.team === u.team && occupant !== u) return `${occupant.character.name} is your ally: ${s.name} won't affect them and will be wasted.\nUse it anyway?`;
+        return `No enemy there: ${s.name} will hit nothing${s.charge ? ' (you will only dash)' : ''}.\nUse it anyway?`;
+      }
+    }
+    if ((s.heal || s.cleanse) && occupant && occupant.team !== u.team) {
+      const effect = s.heal ? 'restore their Health' : 'remove their debuffs';
+      return `${occupant.character.name} is an enemy: ${s.name} will ${effect}.\nUse it anyway?`;
+    }
+    return null;
+  }
+
+  private async useSkill(u: Unit, action: SkillDef, tile: Point): Promise<void> {
+    if (this.mode !== 'target') return;
+    this.mode = 'busy';
+    this.action = null;
+    this.casterUid = u.uid;
+    this.refresh();
+    await this.resolve(u, action, tile);
+    this.casterUid = null;
+    this.afterUnitDone();
+  }
+
+  private async onSelectClick(tile: Point, u: Unit | null, clicked: Unit | undefined): Promise<void> {
+    const b = this.battle;
     if (clicked && clicked.team === 'player' && clicked !== u) return this.selectUnit(clicked);
 
     const k = key(tile.x, tile.y);
@@ -623,7 +698,7 @@ export class BattleScene extends Phaser.Scene {
     const b = this.battle;
     const target = b.unitAt(tile.x, tile.y);
     const terrain = TERRAIN[b.map.tiles[tile.y][tile.x]];
-    let info = `${terrain.name}${terrain.moveCost === null ? ' (impassable)' : ''}${terrain.defense ? ` (+${terrain.defense} Def, move cost ${terrain.moveCost})` : ''}${terrain.blocksSight ? ', blocks sight' : ''}`;
+    let info = `${terrain.name}${terrain.moveCost === null ? ' (impassable)' : ` (move cost ${terrain.moveCost}${terrain.defense ? `, +${terrain.defense} Def` : ''})`}${terrain.blocksSight ? ', blocks sight' : ''}`;
     if (target && b.canSee('player', target)) info = `${target.character.name} — Lv ${target.character.level}\n${this.unitSummary(target)}`;
     const u = this.selected;
     if (this.mode === 'target' && this.action && u) {
@@ -774,7 +849,8 @@ export class BattleScene extends Phaser.Scene {
       this.showEvent(e, summary, n++);
     }
     this.flashArea(s, u, target);
-    const detail = summary.length ? `: ${summary.join(', ')}` : s.cone ? ' and watches the area.' : s.teleport ? '.' : ' — it hits nothing.';
+    const detail = summary.length ? `: ${summary.join(', ')}`
+      : s.cone ? ' and watches the area.' : s.teleport ? '.' : s.hits?.length ? ' — it hits nothing.' : ' — it has no effect.';
     this.addLog(`${u.character.name} uses ${s.name}${detail}`);
     this.refresh();
     await this.wait(events.length ? 800 : 400);
@@ -797,7 +873,7 @@ export class BattleScene extends Phaser.Scene {
   private flashArea(s: SkillDef, caster: Unit, target: Point): void {
     if (s.cone) return;
     const g = this.add.graphics().setDepth(400);
-    const color = s.affects === 'ally' ? 0x6fdc8c : 0xffd166;
+    const color = isSupport(s) ? 0x6fdc8c : 0xffd166;
     const tiles = s.target === 'self' && !s.aoeRadius ? [{ x: caster.x, y: caster.y }] : this.battle.areaTiles(caster, s, target);
     for (const p of tiles) g.fillStyle(color, 0.5).fillRect(MAP_X + p.x * TILE + 1, MAP_Y + p.y * TILE + 1, TILE - 2, TILE - 2);
     this.tweens.add({ targets: g, alpha: 0, duration: 500, onComplete: () => g.destroy() });
@@ -859,7 +935,8 @@ export class BattleScene extends Phaser.Scene {
 
   private retreat(): void {
     if (this.mode !== 'select' && this.mode !== 'target') return;
-    confirmDialog(this, 'Retreat to camp?\nThis counts as a defeat (no XP).', () => this.endBattle('defeat'), 'Retreat');
+    if (this.dialogOpen) return;
+    this.ask('Retreat to camp?\nThis counts as a defeat (no XP).', () => this.endBattle('defeat'), 'Retreat');
   }
 
   private endBattle(outcome: 'victory' | 'defeat'): void {

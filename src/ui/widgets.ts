@@ -95,7 +95,7 @@ export function button(
 }
 
 /** Modal yes/no dialog drawn on top of the scene. */
-export function confirmDialog(scene: Phaser.Scene, message: string, onYes: () => void, yesLabel = 'Yes'): void {
+export function confirmDialog(scene: Phaser.Scene, message: string, onYes: () => void, yesLabel = 'Yes', onNo?: () => void): void {
   const layer = scene.add.container(0, 0).setDepth(1000);
   const shade = scene.add.rectangle(0, 0, WIDTH, HEIGHT, 0x000000, 0.6).setOrigin(0).setInteractive();
   const box = panel(scene, WIDTH / 2 - 220, HEIGHT / 2 - 90, 440, 180);
@@ -104,7 +104,10 @@ export function confirmDialog(scene: Phaser.Scene, message: string, onYes: () =>
     layer.destroy();
     onYes();
   });
-  const no = button(scene, WIDTH / 2 + 20, HEIGHT / 2 + 20, 150, 44, 'Cancel', () => layer.destroy());
+  const no = button(scene, WIDTH / 2 + 20, HEIGHT / 2 + 20, 150, 44, 'Cancel', () => {
+    layer.destroy();
+    onNo?.();
+  });
   layer.add([shade, box, msg, yes, no]);
 }
 
@@ -282,4 +285,136 @@ export function reachDiagram(
     }
   }
   return { container: scene.add.container(0, 0, [g]), size };
+}
+
+// ---- scroll list ------------------------------------------------------------------
+
+export interface ScrollItem {
+  obj: Phaser.GameObjects.Container;
+  height: number;
+}
+
+/**
+ * A vertical list that shows as many whole items as fit in (x, y, w, h) and scrolls
+ * one item at a time with the mouse wheel or by dragging the scroll bar on the right.
+ * Items are containers laid out at their top-left; the list owns and destroys them.
+ */
+export class ScrollList {
+  readonly root: Phaser.GameObjects.Container;
+  private items: ScrollItem[] = [];
+  private offset = 0;
+  private readonly bar: Phaser.GameObjects.Graphics;
+  private readonly track: Phaser.GameObjects.Rectangle;
+  private dragging = false;
+  /** Called whenever the scroll position changes. */
+  onChange: ((offset: number) => void) | null = null;
+  private readonly onWheel: (p: Phaser.Input.Pointer, over: unknown, dx: number, dy: number) => void;
+  private readonly onMove: (p: Phaser.Input.Pointer) => void;
+  private readonly onUp: () => void;
+
+  constructor(
+    private readonly scene: Phaser.Scene,
+    readonly x: number, readonly y: number, readonly w: number, readonly h: number,
+    private readonly gap = 4,
+  ) {
+    this.root = scene.add.container(x, y);
+    this.track = scene.add.rectangle(w - 6, 0, 6, h, 0xffffff, 0.06).setOrigin(0).setInteractive({ useHandCursor: true });
+    this.bar = scene.add.graphics();
+    this.root.add([this.track, this.bar]);
+    this.onWheel = (p, _over, _dx, dy) => {
+      if (this.contains(p) && dy !== 0) this.scrollBy(Math.sign(dy));
+    };
+    this.onMove = (p) => {
+      if (this.dragging) this.scrollToY(p.worldY);
+    };
+    this.onUp = () => {
+      this.dragging = false;
+    };
+    this.track.on('pointerdown', (p: Phaser.Input.Pointer) => {
+      this.dragging = true;
+      this.scrollToY(p.worldY);
+    });
+    scene.input.on('wheel', this.onWheel);
+    scene.input.on('pointermove', this.onMove);
+    scene.input.on('pointerup', this.onUp);
+    scene.events.once('shutdown', () => this.destroy());
+  }
+
+  private contains(p: Phaser.Input.Pointer): boolean {
+    return p.worldX >= this.x && p.worldX <= this.x + this.w && p.worldY >= this.y && p.worldY <= this.y + this.h;
+  }
+
+  /** Replace the items. `at` = which end to show: keep the current offset, the top, or the end. */
+  setItems(items: ScrollItem[], at: 'keep' | 'top' | 'end' = 'keep'): void {
+    for (const it of this.items) it.obj.destroy();
+    this.items = items;
+    for (const it of items) this.root.add(it.obj);
+    if (at === 'top') this.offset = 0;
+    if (at === 'end') this.offset = this.maxOffset();
+    this.layout();
+  }
+
+  /** First item index that still lets the list end exactly at the last item. */
+  private maxOffset(): number {
+    let used = 0;
+    for (let i = this.items.length - 1; i >= 0; i--) {
+      used += this.items[i].height + (used ? this.gap : 0);
+      if (used > this.h) return i + 1;
+    }
+    return 0;
+  }
+
+  scrollBy(n: number): void {
+    this.offset = Math.max(0, Math.min(this.maxOffset(), this.offset + n));
+    this.layout();
+  }
+
+  getOffset(): number {
+    return this.offset;
+  }
+
+  /** Is the list scrolled all the way down? */
+  atEnd(): boolean {
+    return this.offset >= this.maxOffset();
+  }
+
+  private scrollToY(worldY: number): void {
+    const max = this.maxOffset();
+    const f = Math.max(0, Math.min(1, (worldY - this.y) / this.h));
+    this.offset = Math.round(f * max);
+    this.layout();
+  }
+
+  private layout(): void {
+    this.offset = Math.max(0, Math.min(this.maxOffset(), this.offset));
+    let yy = 0;
+    this.items.forEach((it, i) => {
+      const visible = i >= this.offset && yy + it.height <= this.h;
+      it.obj.setVisible(visible);
+      if (visible) {
+        it.obj.setPosition(0, yy);
+        yy += it.height + this.gap;
+      }
+    });
+    // Scroll bar: only when there is more than fits.
+    const max = this.maxOffset();
+    this.bar.clear();
+    this.track.setVisible(max > 0);
+    if (max > 0) {
+      const shown = this.items.length - max;
+      const thumbH = Math.max(14, (this.h * shown) / this.items.length);
+      const thumbY = ((this.h - thumbH) * this.offset) / max;
+      this.bar.fillStyle(COLORS.accent, 0.8).fillRoundedRect(this.w - 6, thumbY, 6, thumbH, 3);
+    }
+    this.onChange?.(this.offset);
+  }
+
+  destroy(): void {
+    this.scene.input.off('wheel', this.onWheel);
+    this.scene.input.off('pointermove', this.onMove);
+    this.scene.input.off('pointerup', this.onUp);
+    for (const it of this.items) it.obj.destroy();
+    this.items = [];
+    this.root.destroy();
+  }
 }

@@ -206,6 +206,8 @@ export const TREE_SKILLS: string[] = SKILL_TREES.flatMap((t) => t.skills);
 
 export const hasTag = (s: SkillDef, tag: string) => s.tags.includes(tag);
 export const isFree = (s: SkillDef) => hasTag(s, 'free');
+/** Helpful skills (heals, cleanses, shields, buffs) are drawn green; attacks red. */
+export const isSupport = (s: SkillDef) => s.affects === 'ally' || !!(s.heal || s.cleanse || s.shield);
 
 // ---- descriptions generated from the data (always match the numbers) ---------------
 

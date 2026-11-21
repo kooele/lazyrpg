@@ -1,12 +1,12 @@
 import Phaser from 'phaser';
 import {
-  NAME_MAX_LENGTH, PALETTE, SKILLS, SKILL_TABS, SKILL_TREES, WEAPONS, XP_PER_LEVEL, skillDetails, skillFormula, tagNames,
+  NAME_MAX_LENGTH, PALETTE, isSupport, SKILLS, SKILL_TABS, SKILL_TREES, WEAPONS, XP_PER_LEVEL, skillDetails, skillFormula, tagNames,
 } from '../data/content';
 import { STAT_CONFIG, visibleStatKeys } from '../data/stats';
 import { BODY_MODELS, STAT_INFO, STAT_KEYS, type Character, type SkillDef, type SkillTab, type StatKey } from '../data/types';
 import { cloneCharacter, createCharacter, deriveStats, levelStats, skillSlots } from '../game/character';
 import { markDirty, requireState } from '../game/session';
-import { COLORS, Tooltip, button, figure, hex, overlayInput, panel, reachDiagram, setupCamera, text, toast } from '../ui/widgets';
+import { COLORS, ScrollList, Tooltip, button, figure, hex, overlayInput, panel, reachDiagram, setupCamera, text, toast, type ScrollItem } from '../ui/widgets';
 import { skillShape, type ReachContext } from '../game/reach';
 
 interface CreatorData {
@@ -27,6 +27,9 @@ export class CharacterCreatorScene extends Phaser.Scene {
   private layer!: Phaser.GameObjects.Container;
   private nameInput!: HTMLInputElement;
   private tooltip!: Tooltip;
+  private weaponList: ScrollList | null = null;
+  /** Remember the weapon panel's scroll position across re-renders. */
+  private weaponScroll = { weaponId: '', offset: 0 };
 
   constructor() {
     super('CharacterCreator');
@@ -50,6 +53,7 @@ export class CharacterCreatorScene extends Phaser.Scene {
   }
 
   create(): void {
+    this.weaponList = null;
     setupCamera(this, 0x111522);
     const title = this.mode === 'create' ? 'New Adventurer' : `Customize ${this.draft.name}`;
     text(this, 480, 30, title, { fontSize: '30px', color: COLORS.gold }).setOrigin(0.5);
@@ -75,7 +79,7 @@ export class CharacterCreatorScene extends Phaser.Scene {
   }
 
   private isSupport(s: SkillDef): boolean {
-    return s.affects === 'ally';
+    return isSupport(s);
   }
 
   /** Tile diagram for a skill (user in gold, covered tiles in red/green). */
@@ -169,36 +173,50 @@ export class CharacterCreatorScene extends Phaser.Scene {
         this.render();
       }, { selected: d.weaponId === w.id, fontSize: 14, ...hover(() => `${w.name}\n${w.description}`) }));
     });
+    // Weapon details scroll (wheel or drag the bar) so descriptions can be as long as needed.
     const w = WEAPONS[d.weaponId];
     L.add(panel(this, 330, 172, 290, 376));
-    L.add(text(this, 342, 180, w.name, { fontSize: '18px', color: COLORS.gold }));
-    const wdesc = text(this, 342, 204, w.description, { fontSize: '13px', color: COLORS.dim, wordWrap: { width: 266 } });
-    L.add(wdesc);
-    const my = 204 + wdesc.height + 6;
-    const changed = STAT_KEYS.filter((k) => (w.statMultipliers[k] ?? 1) !== 1);
-    if (changed.length === 0) L.add(text(this, 342, my, 'No stat changes', { fontSize: '14px', color: COLORS.dim }));
-    let mx = 342;
-    for (const k of changed) {
-      const m = w.statMultipliers[k]!;
-      const t = text(this, mx, my, `${mult(m)} ${STAT_INFO[k].short}`, { fontSize: '14px', color: m > 1 ? COLORS.good : COLORS.bad });
-      L.add(t);
-      mx += t.width + 16;
+    const items: ScrollItem[] = [];
+    {
+      const c = this.add.container(0, 0);
+      c.add(text(this, 0, 0, w.name, { fontSize: '18px', color: COLORS.gold }));
+      const wdesc = text(this, 0, 24, w.description, { fontSize: '13px', color: COLORS.dim, wordWrap: { width: 258 } });
+      c.add(wdesc);
+      const my = 24 + wdesc.height + 6;
+      const changed = STAT_KEYS.filter((k) => (w.statMultipliers[k] ?? 1) !== 1);
+      if (changed.length === 0) c.add(text(this, 0, my, 'No stat changes', { fontSize: '14px', color: COLORS.dim }));
+      let mx = 0;
+      for (const k of changed) {
+        const m = w.statMultipliers[k]!;
+        const t = text(this, mx, my, `${mult(m)} ${STAT_INFO[k].short}`, { fontSize: '14px', color: m > 1 ? COLORS.good : COLORS.bad });
+        c.add(t);
+        mx += t.width + 16;
+      }
+      c.add(text(this, 0, my + 26, 'Weapon skills (always equipped)', { fontSize: '12px', color: COLORS.dim }));
+      items.push({ obj: c, height: my + 42 });
     }
-    L.add(text(this, 342, my + 24, 'Weapon skills (always equipped)', { fontSize: '12px', color: COLORS.dim }));
-    let sy = my + 42;
     w.skills.forEach((sid, i) => {
       const s = SKILLS[sid];
-      const name = text(this, 342, sy, `${s.name}${i === 0 ? '  (basic)' : ''}`, { fontSize: '15px' }).setInteractive();
+      const c = this.add.container(0, 0);
+      const name = text(this, 0, 0, `${s.name}${i === 0 ? '  (basic)' : ''}`, { fontSize: '15px' }).setInteractive();
       name.on('pointerover', () => this.showSkill(s)).on('pointerout', () => this.tooltip.hide());
-      L.add(name);
-      L.add(text(this, 342, sy + 19, skillDetails(s), { fontSize: '11px', color: COLORS.gold }));
-      const desc = text(this, 342, sy + 33, s.description, { fontSize: '12px', color: COLORS.dim, wordWrap: { width: 194 }, lineSpacing: -1 });
-      L.add(desc);
+      c.add(name);
+      c.add(text(this, 0, 19, skillDetails(s), { fontSize: '11px', color: COLORS.gold }));
+      const desc = text(this, 0, 34, s.description, { fontSize: '12px', color: COLORS.dim, wordWrap: { width: 190 } });
+      c.add(desc);
       const mini = this.diagram(s, 56);
-      mini.container.setPosition(608 - mini.size, sy + 2);
-      L.add(mini.container);
-      sy += Math.max(38 + desc.height, mini.size + 8);
+      mini.container.setPosition(266 - mini.size, 2);
+      c.add(mini.container);
+      items.push({ obj: c, height: Math.max(40 + desc.height, mini.size + 6) });
     });
+    this.weaponList?.destroy();
+    this.weaponList = new ScrollList(this, 342, 182, 272, 358, 10);
+    this.weaponList.setItems(items, 'top');
+    if (this.weaponScroll.weaponId === w.id) this.weaponList.scrollBy(this.weaponScroll.offset);
+    this.weaponScroll = { weaponId: w.id, offset: this.weaponList.getOffset() };
+    this.weaponList.onChange = (offset) => {
+      this.weaponScroll = { weaponId: w.id, offset };
+    };
 
     // ---- Right: skill trees (hover a skill for details) --------------------------------
     const slots = skillSlots(d);

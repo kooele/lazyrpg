@@ -7,7 +7,7 @@
     "pAtk": 100,
     "mAtk": 100,
     "defense": 50,
-    "movement": 4,
+    "movement": 16,
     "accuracy": 0,
     "evasion": 0,
     "vision": 8
@@ -31,9 +31,11 @@
   "forestDefense": 20,
   "_forestDefense": "Extra Defense for a unit standing in forest.",
 
-  "engagement": {
-    "_comment": "Engaged units (see the Engage tag in skills.json) have their Defense multiplied by defenseMultiplier.",
-    "defenseMultiplier": 0.5
+  "movementCosts": {
+    "_comment": "Movement points to enter one tile. Movement 16 = 4 grass tiles. The grass cost also converts Movement into tiles for Movement-scaled skills (Charge).",
+    "grass": 4,
+    "forest": 6,
+    "river": 8
   },
 
   "rangeRounding": {

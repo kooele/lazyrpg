@@ -18,14 +18,15 @@ export interface VisionRules {
   enabled: boolean;
 }
 
-export interface EngagementRules {
-  /** Defense multiplier while engaged (0.5 = half Defense). */
-  defenseMultiplier: number;
-}
-
 export interface RangeRoundingRules {
   /** Ranges >= this use distance rounded to the nearest tile; smaller ranges are exact. */
   fromRange: number;
+}
+
+export interface MovementCosts {
+  grass: number;
+  forest: number;
+  river: number;
 }
 
 export interface MapRules {
@@ -38,8 +39,8 @@ export interface StatConfig {
   growthPerLevel: Stats;
   defenseScale: number;
   forestDefense: number;
-  engagement: EngagementRules;
   map: MapRules;
+  movementCosts: MovementCosts;
   rangeRounding: RangeRoundingRules;
   hitChance: HitChanceRules;
   vision: VisionRules;
@@ -66,18 +67,20 @@ export function parseStatConfig(data: unknown): StatConfig {
   const rec = obj(data, '(root)');
   const hit = obj(rec.hitChance ?? { enabled: false, base: 100, min: 0, max: 100, reactionModifier: 0 }, 'hitChance');
   const vision = obj(rec.vision ?? { enabled: false }, 'vision');
-  const eng = obj(rec.engagement ?? { defenseMultiplier: 0.5 }, 'engagement');
   const map = obj(rec.map ?? { width: 18, height: 13 }, 'map');
+  const costs = obj(rec.movementCosts ?? { grass: 4, forest: 6, river: 8 }, 'movementCosts');
   const rounding = obj(rec.rangeRounding ?? { fromRange: 2 }, 'rangeRounding');
   const cfg: StatConfig = {
     base: readStats(rec.base, 'base'),
     growthPerLevel: readStats(rec.growthPerLevel, 'growthPerLevel'),
     defenseScale: num(rec.defenseScale, 'defenseScale'),
     forestDefense: num(rec.forestDefense ?? 0, 'forestDefense'),
-    engagement: {
-      defenseMultiplier: num(eng.defenseMultiplier, 'engagement.defenseMultiplier'),
-    },
     map: { width: Math.round(num(map.width, 'map.width')), height: Math.round(num(map.height, 'map.height')) },
+    movementCosts: {
+      grass: num(costs.grass, 'movementCosts.grass'),
+      forest: num(costs.forest, 'movementCosts.forest'),
+      river: num(costs.river, 'movementCosts.river'),
+    },
     rangeRounding: { fromRange: num(rounding.fromRange, 'rangeRounding.fromRange') },
     hitChance: {
       enabled: hit.enabled === true,
@@ -91,6 +94,7 @@ export function parseStatConfig(data: unknown): StatConfig {
   if (!(cfg.defenseScale > 0)) throw new Error('stats.json: "defenseScale" must be a positive number');
   if (cfg.base.health <= 0) throw new Error('stats.json: "base.health" must be positive');
   if (cfg.base.movement < 1) throw new Error('stats.json: "base.movement" must be at least 1');
+  if (!(cfg.movementCosts.grass > 0)) throw new Error('stats.json: "movementCosts.grass" must be positive');
   if (cfg.map.width < 8 || cfg.map.height < 6) throw new Error('stats.json: "map" must be at least 8 x 6 tiles');
   if (cfg.hitChance.min > cfg.hitChance.max) throw new Error('stats.json: "hitChance.min" must not exceed "hitChance.max"');
   return cfg;

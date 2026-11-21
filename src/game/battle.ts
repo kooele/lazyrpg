@@ -67,7 +67,7 @@ export type BattleEvent =
   | { type: 'damage'; source?: string; target: string; amount: number; absorbed: number; killed: boolean; cause: DamageCause }
   | { type: 'miss'; source: string; target: string; chance: number; cause: DamageCause }
   | { type: 'engage'; source: string; target: string }
-  | { type: 'disengage'; source: string; target: string; reason: 'disengage' | 'separated' }
+  | { type: 'disengage'; source: string; target: string; reason: 'disengage' | 'separated' | 'displaced' }
   | { type: 'heal'; source: string; target: string; amount: number }
   | { type: 'shield'; source: string; target: string; amount: number }
   | { type: 'status'; source: string; target: string; name: string }
@@ -151,7 +151,7 @@ export class Battle {
     return this.units.find((u) => u.alive && u.x === x && u.y === y);
   }
 
-  /** Current stat including status effects, terrain (forest adds Defense) and engagement (halves Defense). */
+  /** Current stat including status effects and terrain (forest adds Defense). */
   stat(u: Unit, stat: StatKey): number {
     let value = u.stats[stat];
     for (const s of u.statuses) {
@@ -160,7 +160,6 @@ export class Battle {
     }
     if (stat === 'defense') {
       value += TERRAIN[this.map.tiles[u.y][u.x]].defense;
-      if (u.engagedWith) value *= this.rules.engagement.defenseMultiplier;
     }
     if (stat === 'movement') value = Math.max(0, value);
     return Math.round(value);
@@ -250,6 +249,20 @@ export class Battle {
     return onlyOpponent ? null : `Engaged with ${opp.character.name}: you can only attack them until you disengage.`;
   }
 
+  /** The opponent's free basic attack when someone breaks away from an engagement (ignores range). */
+  private opportunityAttack(attacker: Unit, victim: Unit): BattleEvent[] {
+    if (!attacker.alive || !victim.alive) return [];
+    const basic = this.basicAttack(attacker);
+    const chance = this.hitChance(attacker, victim, basic, true);
+    if (!this.rollHit(chance)) return [{ type: 'miss', source: attacker.uid, target: victim.uid, chance, cause: 'opportunity' }];
+    const events: BattleEvent[] = [];
+    for (const part of basic.hits ?? []) {
+      if (!victim.alive) break;
+      events.push(this.dealDamage(victim, this.hitDamage(attacker, victim, part), attacker.uid, 'opportunity'));
+    }
+    return events;
+  }
+
   /**
    * Break off an engagement. The opponent gets a free basic attack (opportunity attack).
    * Doesn't use the unit's action; it can then move and act normally.
@@ -261,16 +274,7 @@ export class Battle {
     const events: BattleEvent[] = [];
     this.breakEngagement(u);
     events.push({ type: 'disengage', source: u.uid, target: opp.uid, reason: 'disengage' });
-    const basic = this.basicAttack(opp);
-    const chance = this.hitChance(opp, u, basic, true);
-    if (!this.rollHit(chance)) {
-      events.push({ type: 'miss', source: opp.uid, target: u.uid, chance, cause: 'opportunity' });
-    } else {
-      for (const part of basic.hits ?? []) {
-        if (!u.alive) break;
-        events.push(this.dealDamage(u, this.hitDamage(opp, u, part), opp.uid, 'opportunity'));
-      }
-    }
+    events.push(...this.opportunityAttack(opp, u));
     u.locked = true;
     u.startPos = { x: u.x, y: u.y };
     if (!u.alive) u.acted = true;
@@ -540,7 +544,8 @@ export class Battle {
   }
 
   private matches(caster: Unit, skill: SkillDef, t: Unit): boolean {
-    if (skill.affects === 'any') return t !== caster;
+    // 'any' = friend or foe. Single-target skills may also be used on yourself; area skills never hit you.
+    if (skill.affects === 'any') return t !== caster || skill.target === 'unit';
     return skill.affects === 'enemy' ? t.team !== caster.team : t.team === caster.team;
   }
 
@@ -779,17 +784,27 @@ export class Battle {
       }
     }
 
-    // Knockback: push each surviving target one tile away from the attacker, if there is room.
+    // Knockback: push each surviving target away from the attacker, if there is room.
+    // A unit that actually gets pushed breaks free of its engagement.
     if (skill.knockback) {
       for (const t of targets) {
         if (!t.alive) continue;
         const dir = { x: Math.sign(t.x - u.x), y: Math.sign(t.y - u.y) };
+        let moved = false;
         for (let i = 0; i < skill.knockback; i++) {
           const to = { x: t.x + dir.x, y: t.y + dir.y };
           if (!passable(this.map, to.x, to.y) || this.unitAt(to.x, to.y)) break;
           events.push({ type: 'move', target: t.uid, from: { x: t.x, y: t.y }, to, kind: 'knockback' });
           t.x = to.x;
           t.y = to.y;
+          moved = true;
+        }
+        // Being pushed out of an engagement counts as breaking away: the old opponent gets a free hit.
+        const partner = moved ? this.opponentOf(t) : null;
+        if (partner) {
+          this.breakEngagement(t);
+          events.push({ type: 'disengage', source: t.uid, target: partner.uid, reason: 'displaced' });
+          events.push(...this.opportunityAttack(partner, t));
         }
       }
     }
