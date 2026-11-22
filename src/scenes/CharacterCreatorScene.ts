@@ -11,6 +11,7 @@ import { cloneCharacter, createCharacter, deriveStats, levelStats, skillSlots } 
 import { newCampaign } from '../game/city';
 import { PARTY_NAME_MAX_LENGTH } from '../game/save';
 import { FACE_NAMES, HAIR_COLOR_NAMES, HAIR_NAMES, SEX_NAMES, SKIN_NAMES, fixLook, randomLook, randomName, randomPartyName } from '../game/people';
+import { requireDemo } from '../game/demo';
 import { markDirty, requireState, session } from '../game/session';
 import { COLORS, ScrollList, Tooltip, button, figure, hex, overlayInput, panel, reachDiagram, setupCamera, text, toast, type ScrollItem } from '../ui/widgets';
 import { GUILD } from '../data/guild';
@@ -18,7 +19,7 @@ import { skillShape, type ReachContext } from '../game/reach';
 
 interface CreatorData {
   /** main: create the main character for a new game. edit: change a party member's loadout (and the main character's look). */
-  mode: 'main' | 'edit';
+  mode: 'main' | 'edit' | 'demo' | 'demoEdit';
   characterId?: string;
 }
 
@@ -27,7 +28,7 @@ const mult = (m: number) => `x${Number(m.toFixed(2))}`;
 
 /** Create the main character (name, look, party name) or customize a member's weapon and skill picks. */
 export class CharacterCreatorScene extends Phaser.Scene {
-  private mode: 'main' | 'edit' = 'main';
+  private mode: CreatorData['mode'] = 'main';
   private partyName = '';
   private partyInput: HTMLInputElement | null = null;
   private draft!: Character;
@@ -45,27 +46,29 @@ export class CharacterCreatorScene extends Phaser.Scene {
 
   init(data: CreatorData): void {
     this.mode = data.mode ?? 'main';
-    if (this.mode === 'edit') {
-      const existing = requireState().party.find((c) => c.id === data.characterId);
+    if (this.mode === 'edit' || this.mode === 'demoEdit') {
+      const list = this.mode === 'edit' ? requireState().party : requireDemo().party;
+      const existing = list.find((c) => c.id === data.characterId);
       if (!existing) throw new Error('Adventurer not found');
       this.draft = cloneCharacter(existing);
     } else {
       const look = randomLook(Math.random);
       const weapons = Object.keys(WEAPONS);
-      this.draft = createCharacter(randomName(look.sex, Math.random), PALETTE[Math.floor(Math.random() * PALETTE.length)], weapons[0], look);
+      const n = this.mode === 'demo' ? requireDemo().party.length : 0;
+      this.draft = createCharacter(randomName(look.sex, Math.random), PALETTE[Math.floor(Math.random() * PALETTE.length)], weapons[n % weapons.length], look);
       this.partyName = randomPartyName(Math.random);
     }
   }
 
   /** Only your own character's look can change. */
   private get lookEditable(): boolean {
-    return this.mode === 'main' || (session.state?.mainId === this.draft.id);
+    return this.mode !== 'edit' || (session.state?.mainId === this.draft.id);
   }
 
   create(): void {
     this.weaponList = null;
     setupCamera(this, 0x111522);
-    const title = this.mode === 'main' ? 'Your Character' : `Customize ${this.draft.name}`;
+    const title = this.mode === 'main' ? 'Your Character' : this.mode === 'demo' ? 'New Adventurer' : `Customize ${this.draft.name}`;
     text(this, 480, 30, title, { fontSize: '30px', color: COLORS.gold }).setOrigin(0.5);
 
     // Name field is a real HTML input so typing works everywhere (incl. mobile keyboards).
@@ -224,7 +227,7 @@ export class CharacterCreatorScene extends Phaser.Scene {
 
     // ---- Bottom buttons -------------------------------------------------------------
     L.add(button(this, 330, 560, 290, 50, 'Cancel', () => this.leave()));
-    L.add(button(this, 636, 560, 300, 50, this.mode === 'main' ? `Begin in ${GUILD.city}` : 'Save changes', () => this.confirm(), { fill: 0x2c4a2f, fontSize: 18 }));
+    L.add(button(this, 636, 560, 300, 50, this.mode === 'main' ? `Begin in ${GUILD.city}` : this.mode === 'demo' ? 'Recruit' : 'Save changes', () => this.confirm(), { fill: 0x2c4a2f, fontSize: 18 }));
   }
 
   /** Sex, skin, face, hair and colours, then a preview with the stats beside it. */
@@ -327,6 +330,7 @@ export class CharacterCreatorScene extends Phaser.Scene {
 
   private leave(): void {
     if (this.mode === 'main') this.scene.start('MainMenu');
+    else if (this.mode === 'demo' || this.mode === 'demoEdit') this.scene.start('DemoCamp');
     else this.scene.start('Party', { selected: this.draft.id });
   }
 
@@ -340,6 +344,13 @@ export class CharacterCreatorScene extends Phaser.Scene {
       session.state = newCampaign(d, partyName, Math.random);
       session.dirty = true;
       this.scene.start('City');
+      return;
+    }
+    if (this.mode === 'demo' || this.mode === 'demoEdit') {
+      const party = requireDemo().party;
+      if (this.mode === 'demo') party.push(d);
+      else party[party.findIndex((c) => c.id === d.id)] = d;
+      this.scene.start('DemoCamp');
       return;
     }
     const party = requireState().party;

@@ -10,6 +10,7 @@ import {
 import {
   companionContract, companionDemand, evaluateOffer, joinParty, mercenaryRates, offerValue, openingTerms,
 } from '../src/game/contracts';
+import { DEMO_STAGES, newDemo, resolveDemoBattle } from '../src/game/demo';
 import { adventurerCount, leaderboard, rankCounts, simulateGuildDay } from '../src/game/guild';
 
 const start = (seed = 1): GameState => newCampaign(createCharacter('Main', '#3d7be0', 'sword_shield'), 'Testers', makeRng(seed));
@@ -211,5 +212,19 @@ describe('contracts', () => {
     const s = start();
     expect(toggleLineup(s, s.mainId)).toMatch(/always goes/);
     expect(lineupMembers(s)[0].id).toBe(s.mainId);
+  });
+});
+
+describe('quick battle (demo)', () => {
+  it('runs 5 stages: each victory is worth a level, and stage 5 completes the demo', () => {
+    const d = newDemo();
+    d.party.push(createCharacter('A'));
+    resolveDemoBattle(d, 'defeat');
+    expect(d.stage).toBe(1);
+    for (let i = 0; i < DEMO_STAGES; i++) resolveDemoBattle(d, 'victory');
+    expect(d.complete).toBe(true);
+    expect(d.stage).toBe(DEMO_STAGES);
+    expect(d.party[0].level).toBe(1 + DEMO_STAGES);
+    expect(d).toMatchObject({ victories: DEMO_STAGES, defeats: 1 });
   });
 });

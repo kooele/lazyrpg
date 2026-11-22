@@ -10,6 +10,7 @@ import { makeRng } from '../game/character';
 import { TERRAIN, generateMap, key, type Point } from '../game/grid';
 import { GUILD } from '../data/guild';
 import { lineupMembers, resolveQuest } from '../game/city';
+import { DEMO_STAGES, requireDemo, resolveDemoBattle } from '../game/demo';
 import { markDirty, requireState } from '../game/session';
 import { COLORS, HEIGHT, ScrollList, WIDTH, button, confirmDialog, figure, monsterFigure, panel, setupCamera, text } from '../ui/widgets';
 import { ENEMIES } from '../data/enemies';
@@ -69,8 +70,15 @@ export class BattleScene extends Phaser.Scene {
   /** A confirm dialog is open: ignore clicks on the board behind it. */
   private dialogOpen = false;
 
+  /** Quick Battle (demo) instead of a campaign quest. */
+  private demo = false;
+
   constructor() {
     super('Battle');
+  }
+
+  init(data: { demo?: boolean }): void {
+    this.demo = !!data?.demo;
   }
 
   create(): void {
@@ -85,20 +93,22 @@ export class BattleScene extends Phaser.Scene {
     this.dialogOpen = false;
     setupCamera(this);
 
-    const state = requireState();
-    const quest = state.quest;
-    if (!quest) {
+    // Quick Battle (demo) fights the demo party at its stage; the campaign fights the accepted quest.
+    const d = this.demo ? requireDemo() : null;
+    const quest = d ? null : requireState().quest;
+    if (!d && !quest) {
       this.scene.start('City');
       return;
     }
+    const stage = d ? d.stage : quest!.stage;
     const rng = makeRng(Date.now() & 0xffffffff);
     const map = generateMap(rng);
     TILE = Math.floor(Math.min(BOARD_W / map.width, BOARD_H / map.height));
     K = TILE / 56;
     FEET_Y = Math.round(14 * K);
     HP_Y = Math.round(21 * K);
-    const party = lineupMembers(state);
-    const foes = generateEnemies(quest.stage, party.length, rng);
+    const party = d ? d.party : lineupMembers(requireState());
+    const foes = generateEnemies(stage, party.length, rng);
     const pSpots = deploymentTiles(map, 'player', party.length);
     const eSpots = deploymentTiles(map, 'enemy', foes.length);
     const units = [
@@ -131,7 +141,8 @@ export class BattleScene extends Phaser.Scene {
       this.cycleUnit();
     });
 
-    this.addLog(`${quest.title} (${quest.rank} rank): ${foes.length} foe${foes.length > 1 ? 's' : ''} approach!`);
+    const what = quest ? `${quest.title} (${quest.rank} rank)` : `Stage ${stage} of ${DEMO_STAGES}`;
+    this.addLog(`${what}: ${foes.length} foe${foes.length > 1 ? 's' : ''} approach!`);
     void this.startPlayerPhase();
   }
 
@@ -973,7 +984,7 @@ export class BattleScene extends Phaser.Scene {
   private retreat(): void {
     if (this.mode !== 'select' && this.mode !== 'target') return;
     if (this.dialogOpen) return;
-    this.ask('Retreat to the city?\nThe quest fails (no reward, no XP).', () => this.endBattle('defeat'), 'Retreat');
+    this.ask(this.demo ? 'Retreat to camp?\nThis counts as a defeat (no XP).' : 'Retreat to the city?\nThe quest fails (no reward, no XP).', () => this.endBattle('defeat'), 'Retreat');
   }
 
   private endBattle(outcome: 'victory' | 'defeat'): void {
@@ -985,14 +996,19 @@ export class BattleScene extends Phaser.Scene {
     this.rings.clear();
     this.renderSidebar();
     this.renderTopBar();
-    const state = requireState();
-    const lines = resolveQuest(state, outcome, makeRng(Date.now() & 0xffffffff));
-    markDirty();
+    let lines: string[];
+    if (this.demo) {
+      lines = resolveDemoBattle(requireDemo(), outcome);
+    } else {
+      lines = resolveQuest(requireState(), outcome, makeRng(Date.now() & 0xffffffff));
+      markDirty();
+    }
+    const title = this.demo ? (outcome === 'victory' ? 'Victory!' : 'Defeat') : (outcome === 'victory' ? 'Quest complete!' : 'Quest failed');
 
     const layer = this.add.container(0, 0).setDepth(1000);
     layer.add(this.add.rectangle(0, 0, WIDTH, HEIGHT, 0x000000, 0.65).setOrigin(0).setInteractive());
     layer.add(panel(this, WIDTH / 2 - 300, 60, 600, 520));
-    layer.add(text(this, WIDTH / 2, 100, outcome === 'victory' ? 'Quest complete!' : 'Quest failed', {
+    layer.add(text(this, WIDTH / 2, 100, title, {
       fontSize: '36px', color: outcome === 'victory' ? COLORS.gold : COLORS.bad,
     }).setOrigin(0.5));
     // The report can be long (days pass on the way home): show it in a scrolling list.
@@ -1002,6 +1018,8 @@ export class BattleScene extends Phaser.Scene {
       const t = text(this, 0, 0, line, { fontSize: '14px', wordWrap: { width: 540 }, lineSpacing: 2 });
       return { obj: this.add.container(0, 0, [t]), height: t.height };
     }), 'top');
-    layer.add(button(this, WIDTH / 2 - 120, 510, 240, 50, `Return to ${GUILD.city}`, () => this.scene.start('City'), { fontSize: 18 }));
+    layer.add(this.demo
+      ? button(this, WIDTH / 2 - 120, 510, 240, 50, 'Return to camp', () => this.scene.start('DemoCamp'), { fontSize: 18 })
+      : button(this, WIDTH / 2 - 120, 510, 240, 50, `Return to ${GUILD.city}`, () => this.scene.start('City'), { fontSize: 18 }));
   }
 }

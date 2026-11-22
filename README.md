@@ -4,7 +4,7 @@ A small turn-based tactical RPG that runs in the browser, built with [Phaser 4](
 
 ## How the game works
 
-1. **Main menu**: New Game, Continue, Save Game, Load Game.
+1. **Main menu**: New Game, Continue, Save Game, Load Game, and **Quick Battle (Demo)**: the original game on its own. Recruit up to 4 Adventurers for free at a camp (any look, weapon and skills), then fight stages 1 to 5; every victory is worth a level, and clearing stage 5 completes the demo. The demo is separate from your Arch City campaign and isn't saved.
 2. **Your character**: a new game starts by creating your main character (name, sex, skin, face, hair, hair colour, clothes colour, weapon, skills) and naming your party. The main character is permanent: they can't be dismissed and always lead the party on quests.
 3. **Arch City**: the hub is a map of the walled city (`public/art/city/arch-city.webp`) with three tabs: **Outer Ring** (Adventurer Guild, Docks, Marketplace, Slave Market, Slums, Customs Office, Sleeping Griffin Inn), **Middle Ring** (Tailor, Auction House, Library, Church) and **Inner Ring** (Lord's Manor, Central Government Office, Central Church, Gilded Crown Inn). Click a pin on the map or a button below it. Open so far: the **Adventurer Guild**, the **Slave Market** and the two **inns**; the rest are greyed out. **Manage Party** (bottom bar) handles your members, and the side panel sets out on an accepted quest. See [Arch City and the guild](#arch-city-and-the-adventurer-guild).
 4. **Adventurers**: There are no fixed classes. Every party member is an Adventurer, and you build them by mixing a weapon with picks from the skill trees. Up to 4 go on each quest (the lineup); the party can have up to 8 members.
@@ -201,7 +201,7 @@ public/art/   unit SVGs (one per body model and weapon) and monster SVGs (tools/
   art/        unitArt.js: draws units as SVG (used by the game for custom looks and by tools/generate-art.mjs)
   game/       pure game logic, no Phaser: character stats, battle rules, AI, map generation, save/load,
               Arch City (city.ts), the guild simulation (guild.ts), contracts (contracts.ts), random people (people.ts)
-  scenes/     Phaser scenes: MainMenu, SaveLoad, CharacterCreator, City, Guild, Negotiate, Market, Party, Battle
+  scenes/     Phaser scenes: MainMenu, SaveLoad, CharacterCreator, City, Guild, Negotiate, Market, Inn, Party, DemoCamp, Battle
   ui/         small UI helpers (buttons, panels, tokens, dialogs)
 tests/        Vitest tests for the game logic and the city simulation
 ```
