@@ -28,6 +28,8 @@ export interface GuildConfig {
   quests: Record<Rank, QuestTier>;
   upkeep: { foodLodgingPerDay: number };
   inns: Record<InnTier, InnConfig>;
+  /** Price multiplier from talent: max(min, 1 + weight x (average growth rate - 1)). */
+  talentPrice: { weight: number; min: number };
   mercenary: { feePerLevel: number; cutBase: number; cutPerLevel: number };
   companion: {
     wageBase: number;
@@ -143,6 +145,7 @@ export function parseGuildConfig(data: unknown): GuildConfig {
     quests,
     upkeep: numbers(d.upkeep, 'upkeep', ['foodLodgingPerDay']),
     inns: parseInns(d.inns),
+    talentPrice: numbers(d.talentPrice ?? { weight: 2, min: 0.4 }, 'talentPrice', ['weight', 'min']),
     mercenary: numbers(d.mercenary, 'mercenary', ['feePerLevel', 'cutBase', 'cutPerLevel']),
     companion: {
       ...numbers<Omit<GuildConfig['companion'], 'terms' | 'termDemand' | 'expectedWeeklyLoot' | 'relationshipUnpaid'>>(c, 'companion',

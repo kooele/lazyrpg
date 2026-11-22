@@ -7,7 +7,7 @@ import { lineupMembers, sellSlave, toggleLineup } from '../game/city';
 import { daysLeft, isCompanion, leaveParty, weeklyCost } from '../game/contracts';
 import { markDirty, requireState, session } from '../game/session';
 import { MEMBER_COLOR, MEMBER_LABEL, cityHeader, memberStatus } from '../ui/hud';
-import { COLORS, HEIGHT, ScrollList, WIDTH, button, confirmDialog, figure, panel, setupCamera, text, toast } from '../ui/widgets';
+import { COLORS, HEIGHT, ScrollList, WIDTH, button, confirmDialog, figure, panel, setupCamera, talentTag, text, toast } from '../ui/widgets';
 
 /** Manage Party: everyone in the party, the lineup for the next quest, loadouts and contracts. */
 export class PartyScene extends Phaser.Scene {
@@ -83,6 +83,7 @@ export class PartyScene extends Phaser.Scene {
     const st = deriveStats(c);
     text(this, X + 150, 172, `HP ${st.health}   P.Atk ${st.pAtk}   M.Atk ${st.mAtk}\nDef ${st.defense}   Move ${st.movement}`, { fontSize: '14px', lineSpacing: 6 });
     const w = WEAPONS[c.weaponId];
+    talentTag(this, X + 290, 196, c, { fontSize: 11 });
     text(this, X + 150, 222, `${w.name}: ${w.skills.map((s) => SKILLS[s].name).join(', ')}`, { fontSize: '12px', color: COLORS.dim, wordWrap: { width: W - 170 } });
     const free = skillSlots(c) - c.skillIds.length;
     text(this, X + 150, 244, `Skills ${c.skillIds.length}/${skillSlots(c)}: ${c.skillIds.map((s) => SKILLS[s].name).join(', ') || '—'}`, {

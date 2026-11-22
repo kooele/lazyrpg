@@ -3,11 +3,11 @@ import { MAX_PARTY_SIZE, SKILLS, WEAPONS } from '../data/content';
 import { GUILD } from '../data/guild';
 import type { FreeAdventurer, Quest } from '../data/types';
 import { acceptQuest, canTakeQuest, lineupMembers, toggleLineup } from '../game/city';
-import { joinParty, mercenaryRates, rosterFull } from '../game/contracts';
+import { joinParty, mercenaryRates, rosterFull, talentPriceFactor } from '../game/contracts';
 import { adventurerCount, leaderboard } from '../game/guild';
 import { markDirty, requireState, session } from '../game/session';
 import { cityHeader, rankBadge } from '../ui/hud';
-import { COLORS, HEIGHT, ScrollList, WIDTH, button, confirmDialog, figure, panel, setupCamera, text, toast, type ScrollItem } from '../ui/widgets';
+import { COLORS, HEIGHT, ScrollList, WIDTH, button, confirmDialog, figure, panel, setupCamera, talentTag, text, toast, type ScrollItem } from '../ui/widgets';
 
 type Tab = 'board' | 'hall' | 'ranks' | 'news';
 const TABS: [Tab, string][] = [['board', 'Quest Board'], ['hall', 'Guild Hall'], ['ranks', 'Leaderboard'], ['news', 'Guild News']];
@@ -114,8 +114,10 @@ export class GuildScene extends Phaser.Scene {
     row.add(figure(this, 30, 64, 60, c.appearance, c.weaponId, { base: false }));
     row.add(text(this, 64, 6, `${c.name}`, { fontSize: '17px' }));
     row.add(text(this, 64, 28, `Level ${c.level} · ${WEAPONS[c.weaponId].name}`, { fontSize: '13px', color: COLORS.gold }));
+    // Talent: a talented adventurer asks more.
+    row.add(talentTag(this, 160, 10, c, { fontSize: 11 }));
     row.add(text(this, 64, 46, c.skillIds.map((s) => SKILLS[s].name).join(', ') || 'No tree skills yet', { fontSize: '12px', color: COLORS.dim, wordWrap: { width: 300 } }));
-    const rates = mercenaryRates(c.level, a.greed);
+    const rates = mercenaryRates(c.level, a.greed, talentPriceFactor(c));
     row.add(text(this, 392, 8, 'Mercenary (next quest only)', { fontSize: '12px', color: COLORS.dim }));
     row.add(button(this, 392, 28, 120, 32, `${rates.fee} gold`, () => this.hireMerc(a, 'fixed', rates.fee), {
       fontSize: 14, enabled: state.gold >= rates.fee,

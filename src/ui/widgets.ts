@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
 import { figureSvg, lookModel } from '../art/unitArt';
 import { DEFAULT_WEAPON, WEAPONS } from '../data/content';
-import type { Appearance, Look } from '../data/types';
+import { STAT_INFO, type Appearance, type Character, type Look } from '../data/types';
+import { TALENT_COLORS, overallTalent, talentOf, talentStats } from '../game/talent';
 
 export const WIDTH = 960;
 export const HEIGHT = 640;
@@ -493,4 +494,34 @@ export function monsterFigure(scene: Phaser.Scene, x: number, feetY: number, hei
     parts.push(scene.add.image(0, 0, key).setOrigin(0.5, FEET / ART_H).setDisplaySize(MONSTER_W * (h / ART_H), h).setFlipX(true));
   }
   return scene.add.container(x, feetY, parts);
+}
+
+/**
+ * "Talent B  HP A · P.Atk C · M.Atk B · Def C" with each grade in its color. (x, y) is the top-left.
+ * compact: only the overall grade and the per-stat letters ("Talent B  A C B C").
+ */
+export function talentTag(
+  scene: Phaser.Scene, x: number, y: number, c: Pick<Character, 'talents'>, opts: { fontSize?: number; detail?: boolean } = {},
+): Phaser.GameObjects.Container {
+  const size = opts.fontSize ?? 12;
+  const box = scene.add.container(x, y);
+  let cx = 0;
+  const put = (s: string, color: string, bold = false, gap = 0) => {
+    const t = text(scene, cx, 0, s, { fontSize: `${size}px`, color, fontStyle: bold ? 'bold' : 'normal' });
+    box.add(t);
+    cx += t.width + gap;
+  };
+  const overall = overallTalent(c);
+  put('Talent ', COLORS.dim);
+  put(overall, TALENT_COLORS[overall], true, size * 0.8);
+  if (opts.detail ?? true) {
+    talentStats().forEach((k, i) => {
+      if (i > 0) put(' · ', COLORS.dim);
+      put(`${STAT_INFO[k].short} `, COLORS.dim);
+      const g = talentOf(c, k);
+      put(g, TALENT_COLORS[g], true);
+    });
+  }
+  box.setSize(cx, size + 4);
+  return box;
 }

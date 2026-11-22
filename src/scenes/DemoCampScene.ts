@@ -3,7 +3,7 @@ import { MAX_PARTY_SIZE, SKILLS, WEAPONS, XP_PER_LEVEL } from '../data/content';
 import type { Character } from '../data/types';
 import { deriveStats, skillSlots } from '../game/character';
 import { DEMO_STAGES, newDemo, requireDemo } from '../game/demo';
-import { COLORS, HEIGHT, WIDTH, button, confirmDialog, figure, panel, text, setupCamera } from '../ui/widgets';
+import { COLORS, HEIGHT, WIDTH, button, confirmDialog, figure, panel, talentTag, text, setupCamera } from '../ui/widgets';
 
 /** Quick Battle (demo) camp: recruit, customize and dismiss up to 4 Adventurers, then fight stages 1 to 5. */
 export class DemoCampScene extends Phaser.Scene {
@@ -58,6 +58,7 @@ export class DemoCampScene extends Phaser.Scene {
     figure(this, x + 40, y + 70, 62, c.appearance, c.weaponId);
     text(this, x + 76, y + 18, c.name, { fontSize: '18px', wordWrap: { width: 134 } });
     text(this, x + 76, y + 44, `Lv ${c.level} Adventurer`, { color: COLORS.dim, fontSize: '14px' });
+    talentTag(this, x + 76, y + 62, c, { fontSize: 12, detail: false });
 
     // XP bar
     g.fillStyle(0x0b0d14).fillRect(x + 14, y + 80, 188, 8);

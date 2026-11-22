@@ -2,8 +2,8 @@
 import { MAX_PARTY_SIZE, NAME_MAX_LENGTH, SKILLS, TREE_SKILLS, WEAPONS, skillSlotsForLevel } from '../data/content';
 import { GUILD } from '../data/guild';
 import {
-  BODY_MODELS, ENEMY_MODELS, FACE_COUNT, HAIR_COLORS, HAIR_STYLES, RANKS, SEXES, SKIN_TONES,
-  type Character, type Contract, type GameState, type Look, type NewsItem, type Offer, type Quest, type Rank, type RivalParty,
+  BODY_MODELS, ENEMY_MODELS, FACE_COUNT, HAIR_COLORS, HAIR_STYLES, RANKS, SEXES, SKIN_TONES, STAT_KEYS, TALENT_GRADES,
+  type Character, type Talents, type Contract, type GameState, type Look, type NewsItem, type Offer, type Quest, type Rank, type RivalParty,
 } from '../data/types';
 import { makeRng, modelFor } from './character';
 import { newCampaign, tidyLineup } from './city';
@@ -108,6 +108,17 @@ function validateContract(raw: unknown, path: string): Contract {
   };
 }
 
+/** Talent grades per stat (optional: a missing stat is C). */
+function validateTalents(raw: unknown, path: string): Talents {
+  const o = obj(raw, path);
+  const out: Talents = {};
+  for (const [k, v] of Object.entries(o)) {
+    if (!(STAT_KEYS as readonly string[]).includes(k)) bad(`${path}.${k}`, `is not a stat (allowed: ${STAT_KEYS.join(', ')})`);
+    out[k as keyof Talents] = oneOf(v, TALENT_GRADES, `${path}.${k}`);
+  }
+  return out;
+}
+
 function validateCharacter(raw: unknown, path: string, opts: { member?: boolean } = {}): Character {
   const r = obj(raw, path);
   const { id, name, level, xp, weaponId, skillIds, appearance } = r;
@@ -144,6 +155,7 @@ function validateCharacter(raw: unknown, path: string, opts: { member?: boolean 
     skillIds: [...(skills as string[])],
     appearance: { color: (a.color as string).toLowerCase(), look },
   };
+  if (r.talents !== undefined) out.talents = validateTalents(r.talents, `${path}.talents`);
   if (opts.member) out.contract = validateContract(r.contract, `${path}.contract`);
   return out;
 }

@@ -5,7 +5,7 @@ import type { Offer } from '../data/types';
 import { buySlave, registerPrisoner, turnInPrisoner } from '../game/city';
 import { markDirty, requireState, session } from '../game/session';
 import { cityHeader } from '../ui/hud';
-import { COLORS, HEIGHT, ScrollList, WIDTH, button, confirmDialog, figure, panel, setupCamera, text, toast, type ScrollItem } from '../ui/widgets';
+import { COLORS, HEIGHT, ScrollList, WIDTH, button, confirmDialog, figure, panel, setupCamera, talentTag, text, toast, type ScrollItem } from '../ui/widgets';
 
 /** The slave market, and the magistrate who judges captured prisoners. */
 export class MarketScene extends Phaser.Scene {
@@ -62,6 +62,7 @@ export class MarketScene extends Phaser.Scene {
     row.add(figure(this, 30, 66, 60, c.appearance, c.weaponId, { base: false }));
     row.add(text(this, 64, 6, c.name, { fontSize: '16px' }));
     row.add(text(this, 64, 26, `Level ${c.level} · ${WEAPONS[c.weaponId].name}`, { fontSize: '13px', color: COLORS.gold }));
+    row.add(talentTag(this, compact ? 160 : 170, 9, c, { fontSize: 11, detail: !compact }));
     row.add(text(this, 64, 46, c.skillIds.map((s) => SKILLS[s].name).join(', ') || 'No tree skills yet', {
       fontSize: '12px', color: COLORS.dim, wordWrap: { width: compact ? 260 : 270 },
     }));

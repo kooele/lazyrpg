@@ -16,6 +16,11 @@ export const STAT_INFO: Record<StatKey, { name: string; short: string; descripti
   vision: { name: 'Vision', short: 'Vis', description: 'How far the unit can see (when fog of war is enabled).' },
 };
 
+/** Talent grades, worst to best. A stat's talent sets how fast it grows with level. */
+export const TALENT_GRADES = ['F', 'D', 'C', 'B', 'A', 'S'] as const;
+export type Talent = (typeof TALENT_GRADES)[number];
+export type Talents = Partial<Record<StatKey, Talent>>;
+
 /**
  * What must be clear between attacker and target:
  *  sight – no sight-blocking terrain (rock). Used by spells and arcing projectiles.
@@ -215,6 +220,8 @@ export interface Character {
   /** Skills picked from the skill trees (weapon skills are always available). */
   skillIds: string[];
   appearance: Appearance;
+  /** Adventurers: talent grade per growing stat (rolled at creation). Missing = C (100% growth). */
+  talents?: Talents;
   /** Party members only: how they are bound to the party. */
   contract?: Contract;
 }

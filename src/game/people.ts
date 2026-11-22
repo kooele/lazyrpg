@@ -5,6 +5,7 @@ import {
   type BodyModel, type Character, type HairColor, type HairStyle, type Look, type Sex, type SkinTone,
 } from '../data/types';
 import { newId, type Rng } from './character';
+import { rollTalents } from './talent';
 
 export const SEX_NAMES: Record<Sex, string> = { male: 'Male', female: 'Female' };
 export const SKIN_NAMES: Record<SkinTone, string> = {
@@ -106,6 +107,7 @@ export function randomAdventurer(level: number, rng: Rng, opts: { name?: string;
     weaponId,
     skillIds: pool.slice(0, skillSlotsForLevel(level)),
     appearance: { color: pick(PALETTE, rng), look },
+    talents: rollTalents(rng),
   };
 }
 

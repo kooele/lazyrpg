@@ -1,7 +1,7 @@
 // Loads and validates the stat tuning file (stats.json). Validation runs at
 // startup and in the tests, so a typo in the file fails loudly with a clear message.
 import raw from './stats.json';
-import { STAT_KEYS, type Stats } from './types';
+import { STAT_KEYS, TALENT_GRADES, type Stats, type Talent } from './types';
 
 export interface HitChanceRules {
   /** Off = every attack hits. */
@@ -34,9 +34,17 @@ export interface MapRules {
   height: number;
 }
 
+export interface TalentRules {
+  /** Growth multiplier per grade (1 = 100%). */
+  growthRate: Record<Talent, number>;
+  /** Chance of each grade when a stat's talent is rolled (adds up to 1). */
+  chance: Record<Talent, number>;
+}
+
 export interface StatConfig {
   base: Stats;
   growthPerLevel: Stats;
+  talent: TalentRules;
   defenseScale: number;
   forestDefense: number;
   /** XP per Adventurer for winning a battle. */
@@ -65,6 +73,27 @@ function readStats(v: unknown, path: string): Stats {
   return out;
 }
 
+const DEFAULT_TALENT = {
+  growthRate: { S: 1.6, A: 1.4, B: 1.2, C: 1, D: 0.8, F: 0.6 },
+  chance: { S: 0.05, A: 0.1, B: 0.2, C: 0.4, D: 0.2, F: 0.05 },
+};
+
+function readTalent(v: unknown): TalentRules {
+  const t = obj(v ?? DEFAULT_TALENT, 'talent');
+  const rate = obj(t.growthRate, 'talent.growthRate');
+  const chance = obj(t.chance, 'talent.chance');
+  const out: TalentRules = { growthRate: {} as Record<Talent, number>, chance: {} as Record<Talent, number> };
+  for (const g of TALENT_GRADES) {
+    out.growthRate[g] = num(rate[g], `talent.growthRate.${g}`);
+    out.chance[g] = num(chance[g], `talent.chance.${g}`);
+    if (out.growthRate[g] < 0) throw new Error(`stats.json: "talent.growthRate.${g}" must not be negative`);
+    if (out.chance[g] < 0) throw new Error(`stats.json: "talent.chance.${g}" must not be negative`);
+  }
+  const total = TALENT_GRADES.reduce((s, g) => s + out.chance[g], 0);
+  if (Math.abs(total - 1) > 0.001) throw new Error(`stats.json: "talent.chance" must add up to 1 (it adds up to ${total})`);
+  return out;
+}
+
 export function parseStatConfig(data: unknown): StatConfig {
   const rec = obj(data, '(root)');
   const hit = obj(rec.hitChance ?? { enabled: false, base: 100, min: 0, max: 100, reactionModifier: 0 }, 'hitChance');
@@ -75,6 +104,7 @@ export function parseStatConfig(data: unknown): StatConfig {
   const cfg: StatConfig = {
     base: readStats(rec.base, 'base'),
     growthPerLevel: readStats(rec.growthPerLevel, 'growthPerLevel'),
+    talent: readTalent(rec.talent),
     defenseScale: num(rec.defenseScale, 'defenseScale'),
     xpPerVictory: num(rec.xpPerVictory ?? 100, 'xpPerVictory'),
     forestDefense: num(rec.forestDefense ?? 0, 'forestDefense'),

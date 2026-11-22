@@ -1,18 +1,19 @@
 import { DEFAULT_WEAPON, PALETTE, TREE_SKILLS, WEAPONS, XP_PER_LEVEL, skillSlotsForLevel } from '../data/content';
 import { ENEMIES } from '../data/enemies';
 import { STAT_CONFIG } from '../data/stats';
-import { BODY_MODELS, STAT_KEYS, type BodyModel, type Character, type Look, type Stats, type UnitModel } from '../data/types';
+import { BODY_MODELS, STAT_KEYS, type BodyModel, type Character, type Look, type Stats, type Talents, type UnitModel } from '../data/types';
 import { lookFromModel } from './people';
+import { talentGrowth } from './talent';
 
 export function newId(prefix = 'c'): string {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
-/** Base stats + automatic level growth (no weapon). */
-export function levelStats(level: number): Stats {
-  const { base, growthPerLevel } = STAT_CONFIG;
+/** Base stats + automatic level growth (no weapon). Each stat grows at growthPerLevel x its talent's growth rate. */
+export function levelStats(level: number, talents?: Talents): Stats {
+  const { base } = STAT_CONFIG;
   const out = {} as Stats;
-  for (const k of STAT_KEYS) out[k] = base[k] + growthPerLevel[k] * (level - 1);
+  for (const k of STAT_KEYS) out[k] = base[k] + Math.round(talentGrowth({ talents }, k) * (level - 1));
   return out;
 }
 
@@ -27,7 +28,7 @@ export function enemyLevelStats(type: string, level: number): Stats {
 
 /** Final stats: level stats (or the enemy type's stats) x weapon multipliers (rounded). */
 export function deriveStats(c: Character): Stats {
-  const out = c.enemyType ? enemyLevelStats(c.enemyType, c.level) : levelStats(c.level);
+  const out = c.enemyType ? enemyLevelStats(c.enemyType, c.level) : levelStats(c.level, c.talents);
   const mult = WEAPONS[c.weaponId]?.statMultipliers ?? {};
   for (const k of STAT_KEYS) out[k] = Math.round(out[k] * (mult[k] ?? 1));
   out.movement = Math.max(1, out.movement);
@@ -65,7 +66,8 @@ export function allSkills(c: Character): string[] {
   return [...weaponSkills, ...c.skillIds.slice(0, skillSlots(c))];
 }
 
-export function createCharacter(name: string, color = PALETTE[0], weaponId = DEFAULT_WEAPON, look?: Look): Character {
+/** A new level-1 Adventurer. Without talents every stat grows at 100% (grade C). */
+export function createCharacter(name: string, color = PALETTE[0], weaponId = DEFAULT_WEAPON, look?: Look, talents?: Talents): Character {
   const id = newId();
   return {
     id,
@@ -75,6 +77,7 @@ export function createCharacter(name: string, color = PALETTE[0], weaponId = DEF
     weaponId,
     skillIds: [],
     appearance: { color, look: look ?? lookFromModel(modelFor(id)) },
+    ...(talents ? { talents: { ...talents } } : {}),
   };
 }
 

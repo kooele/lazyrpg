@@ -64,7 +64,7 @@ Everything gameplay-related lives in plain JSON files in `src/data/`. Each file 
 
 | File | What's in it |
 |---|---|
-| `stats.json` | Base stats and per-level growth, Defense scaling, terrain movement costs, forest bonus, map size, hit-chance and vision switches |
+| `stats.json` | Base stats and per-level growth, talent grades (growth rates and roll chances), Defense scaling, terrain movement costs, forest bonus, map size, hit-chance and vision switches |
 | `skills.json` | Every skill (numbers and descriptions), tags, status effects (Burn, Slow), skill trees |
 | `weapons.json` | Weapons: stat multipliers and granted skills |
 | `enemies.json` | Enemy types: level range, stats, skills, art, and how big encounters are |
@@ -82,7 +82,16 @@ Tooltips show a formula line generated from the numbers (e.g. "80% P.Atk, then 4
 | Defense | 50 (+5) | Damage taken × 100 / (100 + Defense) |
 | Movement | 16 | Movement points per turn: grass costs 4, forest 6, river 8 (so 16 = 4 grass tiles) |
 
-Stats grow automatically on level up (100 XP per level). A won quest gives each member in the lineup `xpPerVictory` (100, in `stats.json`) when their level equals the quest's stage, more when they're below it and less when above, so a party that keeps winning stays close to the level of the quests it takes.
+Stats grow automatically on level up (100 XP per level), at a speed set by the Adventurer's **talent**. Every growing stat (Health, P.Atk, M.Atk, Defense) has its own talent grade, rolled when the Adventurer is created; the grade multiplies that stat's growth per level (the numbers in brackets above):
+
+| Talent | S | A | B | C | D | F |
+|---|---|---|---|---|---|---|
+| Growth | 160% | 140% | 120% | 100% | 80% | 60% |
+| Chance | 5% | 10% | 20% | 40% | 20% | 5% |
+
+An S-talent P.Atk grows +16 a level instead of +10. Talent doesn't change level-1 stats. An Adventurer's overall talent is the grade nearest the average of their four. When you create your main character (or a Quick Battle recruit), **Reroll talent** rolls new grades. Talented Adventurers cost more: mercenary fees and cuts, companion wages and slave prices are multiplied by `1 + 2 × (average growth rate − 1)` (at least ×0.4; `talentPrice` in `guild.json`), so all-S costs ×2.2 and all-F ×0.4. Grades and chances are in `stats.json` (`talent`). Enemies always grow at 100%.
+
+A won quest gives each member in the lineup `xpPerVictory` (100, in `stats.json`) when their level equals the quest's stage, more when they're below it and less when above, so a party that keeps winning stays close to the level of the quests it takes.
 
 Weapons **multiply** these stats:
 
@@ -169,6 +178,7 @@ A version-3 save holds the whole city: the day, gold, renown and rank, your part
     "color": "#3d7be0",
     "look": { "sex": "female", "skin": "fair", "face": 2, "hair": "crownBraid", "hairColor": "auburn" }
   },
+  "talents": { "health": "B", "pAtk": "D", "mAtk": "A", "defense": "C" },
   "contract": {
     "type": "companion",
     "basePay": 60,

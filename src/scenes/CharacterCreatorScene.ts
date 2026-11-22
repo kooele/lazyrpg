@@ -4,7 +4,7 @@ import {
 } from '../data/content';
 import { STAT_CONFIG, visibleStatKeys } from '../data/stats';
 import {
-  FACE_COUNT, HAIR_COLORS, HAIR_STYLES, SEXES, SKIN_TONES, STAT_INFO, STAT_KEYS, type Character, type Look, type SkillDef, type SkillTab, type StatKey,
+  FACE_COUNT, HAIR_COLORS, HAIR_STYLES, SEXES, SKIN_TONES, STAT_INFO, STAT_KEYS, TALENT_GRADES, type Character, type Look, type SkillDef, type SkillTab, type StatKey,
 } from '../data/types';
 import { HAIR_COLORS as HAIR_HEX, SKIN_TONES as SKIN_HEX } from '../art/unitArt';
 import { cloneCharacter, createCharacter, deriveStats, levelStats, skillSlots } from '../game/character';
@@ -16,6 +16,7 @@ import { markDirty, requireState, session } from '../game/session';
 import { COLORS, ScrollList, Tooltip, button, figure, hex, overlayInput, panel, reachDiagram, setupCamera, text, toast, type ScrollItem } from '../ui/widgets';
 import { GUILD } from '../data/guild';
 import { skillShape, type ReachContext } from '../game/reach';
+import { TALENT_COLORS, growthRate, overallTalent, rollTalents, talentGrowth, talentOf, talentStats } from '../game/talent';
 
 interface CreatorData {
   /** main: create the main character for a new game. edit: change a party member's loadout (and the main character's look). */
@@ -55,9 +56,54 @@ export class CharacterCreatorScene extends Phaser.Scene {
       const look = randomLook(Math.random);
       const weapons = Object.keys(WEAPONS);
       const n = this.mode === 'demo' ? requireDemo().party.length : 0;
-      this.draft = createCharacter(randomName(look.sex, Math.random), PALETTE[Math.floor(Math.random() * PALETTE.length)], weapons[n % weapons.length], look);
+      this.draft = createCharacter(randomName(look.sex, Math.random), PALETTE[Math.floor(Math.random() * PALETTE.length)], weapons[n % weapons.length], look, rollTalents(Math.random));
       this.partyName = randomPartyName(Math.random);
     }
+  }
+
+  /** Talents can be rerolled while making a new character (main character or Quick Battle recruit). */
+  private get canReroll(): boolean {
+    return this.mode === 'main' || this.mode === 'demo';
+  }
+
+  /** Tooltip text for a stat row: what it does, where the number comes from, and how its talent grows it. */
+  private statInfo(k: StatKey): string {
+    const d = this.draft;
+    const info = STAT_INFO[k];
+    const total = deriveStats(d);
+    const fromLevel = levelStats(d.level, d.talents);
+    const m = WEAPONS[d.weaponId].statMultipliers[k] ?? 1;
+    const lines = [`${info.name} (${info.short})`, info.description, '', `Level ${d.level}: ${fromLevel[k]}${m !== 1 ? ` ${mult(m)} weapon = ${total[k]}` : ''}`];
+    if (talentStats().includes(k)) {
+      const g = talentOf(d, k);
+      const per = talentGrowth(d, k);
+      lines.push(`Talent ${g}: ${Math.round(growthRate(g) * 100)}% growth = +${Number(per.toFixed(1))} per level`);
+    } else {
+      lines.push("Doesn't grow with level.");
+    }
+    return lines.join('\n');
+  }
+
+  /** The talent grade drawn next to a stat (nothing for stats that don't grow). */
+  private grade(L: Phaser.GameObjects.Container, k: StatKey, x: number, y: number, size: number): void {
+    if (!talentStats().includes(k)) return;
+    const g = talentOf(this.draft, k);
+    L.add(text(this, x, y, g, { fontSize: `${size}px`, color: TALENT_COLORS[g], fontStyle: 'bold' }).setOrigin(0.5, 0));
+  }
+
+  private hoverTip(info: () => string) {
+    return { onHover: () => this.tooltip.show(info()), onOut: () => this.tooltip.hide() };
+  }
+
+  /** "S 160% (5%) · A 140% (10%) ..." one grade per line. */
+  private gradeTable(): string {
+    const t = STAT_CONFIG.talent;
+    return [...TALENT_GRADES].reverse().map((g) => `${g}: ${Math.round(t.growthRate[g] * 100)}% growth (${Math.round(t.chance[g] * 100)}% chance)`).join('\n');
+  }
+
+  private reroll(): void {
+    this.draft.talents = rollTalents(Math.random);
+    this.render();
   }
 
   /** Only your own character's look can change. */
@@ -275,13 +321,19 @@ export class CharacterCreatorScene extends Phaser.Scene {
     L.add(figure(this, 78, 538, 160, d.appearance, d.weaponId));
     L.add(text(this, 140, 366, d.name.trim() || '(no name)', { fontSize: '16px', wordWrap: { width: 168 } }));
     L.add(text(this, 140, 388, `Level ${d.level} · ${WEAPONS[d.weaponId].name}`, { color: COLORS.dim, fontSize: '12px', wordWrap: { width: 168 } }));
+    if (this.canReroll) {
+      L.add(button(this, 30, 362, 100, 22, 'Reroll talent', () => this.reroll(), {
+        fontSize: 12, ...this.hoverTip(() => `Roll new talent grades (F to S) for every growing stat.\nTalent sets how fast a stat grows with level:\n${this.gradeTable()}\n\nOverall talent now: ${overallTalent(d)}`),
+      }));
+    }
     const total = deriveStats(d);
     visibleStatKeys().forEach((k: StatKey, i) => {
       const y = 418 + i * 24;
       const m = WEAPONS[d.weaponId].statMultipliers[k] ?? 1;
       const row = this.add.rectangle(136, y - 3, 172, 22, 0xffffff, 0).setOrigin(0);
-      L.add(this.tip(row, () => `${STAT_INFO[k].name} (${STAT_INFO[k].short})\n${STAT_INFO[k].description}`));
+      L.add(this.tip(row, () => this.statInfo(k)));
       L.add(text(this, 142, y, STAT_INFO[k].short, { fontSize: '14px' }));
+      this.grade(L, k, 202, y, 14);
       L.add(text(this, 250, y, String(total[k]), { fontSize: '14px' }).setOrigin(1, 0));
       if (m !== 1) L.add(text(this, 258, y + 1, mult(m), { fontSize: '12px', color: m > 1 ? COLORS.good : COLORS.bad }));
     });
@@ -299,17 +351,18 @@ export class CharacterCreatorScene extends Phaser.Scene {
     const y0 = top + 132;
     L.add(panel(this, 24, y0, 290, 548 - y0));
     L.add(text(this, 36, y0 + 8, 'Stats', { color: COLORS.dim, fontSize: '14px' }));
-    const total = deriveStats(d);
-    const fromLevel = levelStats(d.level);
+    L.add(text(this, 300, y0 + 8, `Talent ${overallTalent(d)}`, { color: TALENT_COLORS[overallTalent(d)], fontSize: '14px' }).setOrigin(1, 0));
     const shown = visibleStatKeys();
     const rowH = Math.min(36, Math.floor((548 - y0 - 50) / shown.length));
     shown.forEach((k: StatKey, i) => {
       const y = y0 + 36 + i * rowH;
       const info = STAT_INFO[k];
       const m = WEAPONS[d.weaponId].statMultipliers[k] ?? 1;
+      const total = deriveStats(d);
       const row = this.add.rectangle(30, y - 4, 278, rowH - 2, 0xffffff, 0).setOrigin(0);
-      L.add(this.tip(row, () => `${info.name} (${info.short})\n${info.description}\n\nLevel ${d.level}: ${fromLevel[k]}${m !== 1 ? ` ${mult(m)} weapon = ${total[k]}` : ''}\n+${STAT_CONFIG.growthPerLevel[k]} per level`));
+      L.add(this.tip(row, () => this.statInfo(k)));
       L.add(text(this, 40, y, info.name, { fontSize: '15px' }));
+      this.grade(L, k, 166, y, 15);
       L.add(text(this, 220, y, String(total[k]), { fontSize: '16px' }).setOrigin(1, 0));
       if (m !== 1) L.add(text(this, 232, y + 2, mult(m), { fontSize: '13px', color: m > 1 ? COLORS.good : COLORS.bad }));
     });
