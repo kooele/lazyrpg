@@ -1,7 +1,8 @@
 import { DEFAULT_WEAPON, PALETTE, TREE_SKILLS, WEAPONS, XP_PER_LEVEL, skillSlotsForLevel } from '../data/content';
 import { ENEMIES } from '../data/enemies';
 import { STAT_CONFIG } from '../data/stats';
-import { BODY_MODELS, STAT_KEYS, type BodyModel, type Character, type Stats, type UnitModel } from '../data/types';
+import { BODY_MODELS, STAT_KEYS, type BodyModel, type Character, type Look, type Stats, type UnitModel } from '../data/types';
+import { lookFromModel } from './people';
 
 export function newId(prefix = 'c'): string {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
@@ -64,7 +65,7 @@ export function allSkills(c: Character): string[] {
   return [...weaponSkills, ...c.skillIds.slice(0, skillSlots(c))];
 }
 
-export function createCharacter(name: string, color = PALETTE[0], weaponId = DEFAULT_WEAPON, model?: BodyModel): Character {
+export function createCharacter(name: string, color = PALETTE[0], weaponId = DEFAULT_WEAPON, look?: Look): Character {
   const id = newId();
   return {
     id,
@@ -73,7 +74,7 @@ export function createCharacter(name: string, color = PALETTE[0], weaponId = DEF
     xp: 0,
     weaponId,
     skillIds: [],
-    appearance: { color, model: model ?? modelFor(id) },
+    appearance: { color, look: look ?? lookFromModel(modelFor(id)) },
   };
 }
 

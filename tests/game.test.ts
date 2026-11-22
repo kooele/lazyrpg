@@ -10,7 +10,8 @@ import { planTurn, runAiTurn, shouldDisengage, threatAt } from '../src/game/ai';
 import { Battle, defenseMultiplier, deploymentTiles, enemyTypesForStage, generateEnemies, makeEnemy, makeUnit, victoryXp, type Team } from '../src/game/battle';
 import { allSkills, createCharacter, deriveStats, grantXp, makeRng } from '../src/game/character';
 import { generateMap, hasLineOfSight, passable, withinRange, type BattleMap, type Point, type Terrain } from '../src/game/grid';
-import { newGameState, parseSave, serializeSave } from '../src/game/save';
+import { parseSave, serializeSave } from '../src/game/save';
+import { advanceDays, newCampaign } from '../src/game/city';
 
 function openMap(w = 10, h = 7): BattleMap {
   return { width: w, height: h, tiles: Array.from({ length: h }, () => Array<Terrain>(w).fill('grass')) };
@@ -78,21 +79,26 @@ describe('stats and content files', () => {
 });
 
 describe('save files', () => {
+  const campaign = () => newCampaign(hero('bow', ['fireball', 'kick'], 'Main'), 'Testers', makeRng(5));
+
   it('round-trips through human-readable JSON', () => {
-    const state = newGameState();
-    state.party.push(hero('bow', ['fireball', 'kick']));
+    const state = campaign();
+    advanceDays(state, 10, makeRng(2));
     const parsed = parseSave(serializeSave(state));
     expect(parsed.ok).toBe(true);
     if (parsed.ok) expect(parsed.state).toEqual(state);
   });
 
-  it('assigns a body model to saves made before unit art existed', () => {
-    const state = newGameState();
-    state.party.push(hero('bow'));
-    const file = JSON.parse(serializeSave(state));
-    delete file.party[0].appearance.model;
+  it('points at the exact field when a hand edit is wrong', () => {
+    const file = JSON.parse(serializeSave(campaign()));
+    file.party[0].appearance.look.hair = 'mohawk';
     const r = parseSave(JSON.stringify(file));
-    expect(r.ok && r.state.party[0].appearance.model).toMatch(/^[mf][1-4]$/);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/party\[0\]\.appearance\.look\.hair must be one of: /);
+    const file2 = JSON.parse(serializeSave(campaign()));
+    file2.mainId = 'nobody';
+    const r2 = parseSave(JSON.stringify(file2));
+    expect(!r2.ok && r2.error).toMatch(/mainId "nobody" is not in the party/);
   });
 
   it('upgrades version-1 saves (old classes) automatically', () => {
@@ -107,6 +113,25 @@ describe('save files', () => {
     const r = parseSave(JSON.stringify(v1));
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.state.party[0]).toMatchObject({ name: 'Old Cleric', weaponId: 'staff', skillIds: ['heal', 'cleanse'] });
+  });
+
+  it('moves version-2 parties to Arch City: first member is the main character, the rest companions', () => {
+    const v2 = {
+      format: 'lazyrpg-save', version: 2, savedAt: '', progress: { stage: 3, victories: 2, defeats: 1 },
+      party: [
+        { id: 'c_a', name: 'Ada', level: 3, xp: 0, weaponId: 'bow', skillIds: ['kick'], appearance: { color: '#3d7be0', model: 'f2' } },
+        { id: 'c_b', name: 'Bo', level: 3, xp: 0, weaponId: 'spear', skillIds: [], appearance: { color: '#36b37e', model: 'm3' } },
+      ],
+    };
+    const r = parseSave(JSON.stringify(v2));
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.state.mainId).toBe('c_a');
+    expect(r.state.party[0].contract).toEqual({ type: 'main' });
+    expect(r.state.party[0].appearance.look).toMatchObject({ sex: 'female', hair: 'ponytail' });
+    expect(r.state.party[1].contract?.type).toBe('companion');
+    expect(r.state.lineup).toEqual(['c_a', 'c_b']);
+    expect(r.state.progress).toEqual({ victories: 2, defeats: 1 });
   });
 });
 

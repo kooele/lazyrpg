@@ -1,0 +1,56 @@
+{
+  "_readme": "Management and simulation numbers for Arch City and its Adventurer Guild. Gold amounts are whole numbers. Ranks come from the leaderboard: parties are sorted by renown and the top rankShares.A share are A rank, the next rankShares.B are B, and so on (renown fades by renownDecayPerDay so ranks follow recent success). Quests: stages is the enemy strength range (the same stages battles always used), reward a gold range, days how long the trip takes. companion.expectedWeeklyLoot is how much gold a candidate thinks a party of that rank earns per week; they use it to value a loot cut. simulation tunes the rival parties: the chance a party goes on a quest each day, its chance of success (0.55 + successPerLevel x (average level - rankDifficulty), clamped), and what can go wrong. New adventurers arrive at about the rate adventurers are lost, nudged toward targetAdventurers.",
+  "city": "Arch City",
+  "startingGold": 500,
+  "startingRenown": 0,
+  "maxRoster": 8,
+  "rankShares": { "A": 0.05, "B": 0.2, "C": 0.6, "D": 0.15 },
+  "renownDecayPerDay": 0.015,
+  "boardSize": 6,
+  "quests": {
+    "D": { "stages": [1, 2], "reward": [70, 110], "renown": 14, "days": [1, 2] },
+    "C": { "stages": [2, 4], "reward": [170, 280], "renown": 32, "days": [1, 3] },
+    "B": { "stages": [4, 6], "reward": [380, 600], "renown": 75, "days": [2, 3] },
+    "A": { "stages": [6, 8], "reward": [850, 1300], "renown": 170, "days": [2, 4] }
+  },
+  "upkeep": { "foodLodgingPerDay": 4 },
+  "mercenary": { "feePerLevel": 30, "cutBase": 8, "cutPerLevel": 2 },
+  "companion": {
+    "wageBase": 25,
+    "wagePerLevel": 20,
+    "terms": [2, 4, 8, 12],
+    "termDemand": { "2": 1.1, "4": 1.0, "8": 0.95, "12": 0.9 },
+    "expectedWeeklyLoot": { "D": 150, "C": 400, "B": 900, "A": 2000 },
+    "patience": 3,
+    "startingRelationship": 10,
+    "relationshipPerQuest": 6,
+    "relationshipUnpaid": -20,
+    "renewalDiscountAtMax": 0.3,
+    "graceDays": 3
+  },
+  "slave": {
+    "priceBase": 120,
+    "pricePerLevel": 70,
+    "marketSize": 5,
+    "restockDays": 7,
+    "sellBackShare": 0.4,
+    "registrationFee": 60,
+    "bountyPerLevel": 35,
+    "captureChance": 0.6
+  },
+  "simulation": {
+    "targetAdventurers": 100,
+    "targetParties": 20,
+    "poolTarget": 10,
+    "partySize": [3, 6],
+    "questChancePerDay": 0.25,
+    "rankDifficulty": { "D": 1.5, "C": 3.5, "B": 5.5, "A": 7.5 },
+    "successPerLevel": 0.18,
+    "lossChanceOnSuccess": 0.015,
+    "lossChanceOnFailure": 0.12,
+    "wipeChanceOnFailure": 0.1,
+    "levelUpChanceOnSuccess": 0.07,
+    "retireChancePerDay": 0.0005,
+    "maxLevel": 12
+  }
+}

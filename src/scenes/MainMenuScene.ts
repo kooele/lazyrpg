@@ -1,5 +1,4 @@
 import Phaser from 'phaser';
-import { newGameState } from '../game/save';
 import { session } from '../game/session';
 import { COLORS, HEIGHT, WIDTH, button, confirmDialog, figure, text, setupCamera } from '../ui/widgets';
 
@@ -16,7 +15,7 @@ export class MainMenuScene extends Phaser.Scene {
 
     const inGame = session.state !== null;
     const items: [string, () => void, boolean][] = [
-      ['Continue', () => this.scene.start('Camp'), inGame],
+      ['Continue', () => this.scene.start('City'), inGame],
       ['New Game', () => this.newGame(), true],
       ['Save Game', () => this.scene.start('SaveLoad', { mode: 'save' }), inGame],
       ['Load Game', () => this.scene.start('SaveLoad', { mode: 'load' }), true],
@@ -36,11 +35,7 @@ export class MainMenuScene extends Phaser.Scene {
   }
 
   private newGame(): void {
-    const start = () => {
-      session.state = newGameState();
-      session.dirty = true;
-      this.scene.start('CharacterCreator', { mode: 'create', firstCharacter: true });
-    };
+    const start = () => this.scene.start('CharacterCreator', { mode: 'main' });
     if (session.state && session.dirty) {
       confirmDialog(this, 'Start a new game?\nUnsaved progress will be lost.', start, 'New Game');
     } else {
@@ -54,8 +49,8 @@ export class MainMenuScene extends Phaser.Scene {
     for (let x = 0; x <= WIDTH; x += 48) g.lineBetween(x, 0, x, HEIGHT);
     for (let y = 0; y <= HEIGHT; y += 48) g.lineBetween(0, y, WIDTH, y);
     // A little standoff: two adventurers facing two bandits.
-    figure(this, 140, 470, 120, { color: '#3d7be0', model: 'm1' }, 'sword_shield');
-    figure(this, 230, 560, 110, { color: '#36b37e', model: 'f2' }, 'staff');
+    figure(this, 140, 470, 120, { color: '#3d7be0', look: { sex: 'male', skin: 'light', face: 1, hair: 'crewCut', hairColor: 'brown' } }, 'sword_shield');
+    figure(this, 230, 560, 110, { color: '#36b37e', look: { sex: 'female', skin: 'fair', face: 2, hair: 'braided', hairColor: 'red' } }, 'staff');
     figure(this, 820, 470, 120, { color: '#c0392b', model: 'm3' }, 'spear', { enemy: true });
     figure(this, 730, 560, 110, { color: '#c0392b', model: 'f3' }, 'bow', { enemy: true });
   }
