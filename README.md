@@ -6,13 +6,21 @@ A small turn-based tactical RPG that runs in the browser, built with [Phaser 4](
 
 1. **Main menu**: New Game, Continue, Save Game, Load Game.
 2. **Your character**: a new game starts by creating your main character (name, sex, skin, face, hair, hair colour, clothes colour, weapon, skills) and naming your party. The main character is permanent: they can't be dismissed and always lead the party on quests.
-3. **Arch City**: the hub is a map of the walled city (`public/art/city/arch-city.webp`) with three tabs: **Outer Ring** (Adventurer Guild, Docks, Marketplace, Slave Market, Slums, Customs Office), **Middle Ring** (Tailor, Auction House, Library, Church) and **Inner Ring** (Lord's Manor, Central Government Office, Central Church). Click a pin on the map or a button below it. Only the **Adventurer Guild** and the **Slave Market** are open so far; the others are greyed out. Rest until tomorrow, open **Party Quarters**, or set out on an accepted quest from the side panel. See [Arch City and the guild](#arch-city-and-the-adventurer-guild).
+3. **Arch City**: the hub is a map of the walled city (`public/art/city/arch-city.webp`) with three tabs: **Outer Ring** (Adventurer Guild, Docks, Marketplace, Slave Market, Slums, Customs Office, Sleeping Griffin Inn), **Middle Ring** (Tailor, Auction House, Library, Church) and **Inner Ring** (Lord's Manor, Central Government Office, Central Church, Gilded Crown Inn). Click a pin on the map or a button below it. Open so far: the **Adventurer Guild**, the **Slave Market** and the two **inns**; the rest are greyed out. **Manage Party** (bottom bar) handles your members, and the side panel sets out on an accepted quest. See [Arch City and the guild](#arch-city-and-the-adventurer-guild).
 4. **Adventurers**: There are no fixed classes. Every party member is an Adventurer, and you build them by mixing a weapon with picks from the skill trees. Up to 4 go on each quest (the lineup); the party can have up to 8 members.
 5. **Tactical battle**: XCOM-style alternating turns. On your turn, every Adventurer can move once and act once, in any order (click a unit or press Tab). Hover a skill to see its range box; any tile in range can be targeted. The map is 18×13 tiles (set in `stats.json`). Terrain: grass costs 4 Movement, forest 6 (and gives +20 Defense), river 8. Rock and deep water block movement, and rock blocks line of sight.
 
 ## Arch City and the Adventurer Guild
 
-Time passes in days. Resting moves on one day, and a quest takes its listed number of days. Every day the party pays **food and lodging** (4 gold each) for the main character, slaves, and companions whose contract includes it. Every 7th day is **payday** for companions.
+Time passes in days. To pass time in the city, the party stays at an **inn** (1 night, 3 nights or a week), and a quest takes its listed number of days. The party pays food and lodging for the main character, slaves, and companions whose contract includes it:
+
+| Where | Per person per day | Extra |
+|---|---|---|
+| Sleeping Griffin Inn (Outer Ring) | 4 gold | |
+| Gilded Crown Inn (Inner Ring) | 15 gold | Companions the party houses gain +2 relationship each night |
+| Away on a quest | 4 gold | |
+
+Every 7th day is **payday** for companions.
 
 ### Ranks, the leaderboard and quests
 
@@ -44,7 +52,7 @@ The rival parties are simulated day by day. Each day a party has a 25% chance of
 
 **Companion contracts** have four terms: **base pay**, **loot cut** (% of each quest reward), **food and lodging included** (worth 28 gold a week to them), and **term length** (2, 4, 8 or 12 weeks). Candidates ask more the higher their level and the greedier they are, a little more for short terms and less for long ones. They value a loot cut by what a party of your rank usually earns (150 gold a week at D, 2000 at A). An offer close to what they want gets a counter-offer; a low one offends them. Each rejected offer uses up patience, and once it runs out they won't talk to you for a week.
 
-Companions have a **relationship** score (0–100). It goes up by 6 for every quest completed together, drops if you can't pay them, and lowers their demands when you renew: by up to 30% at 100. When a contract ends, they sit out of quests and you have 3 days to **renew** it (Party Quarters) before they leave. Walking out of a renewal ends the contract on the spot. Unpaid companions lose 20 relationship each payday, and quit when it reaches 0.
+Companions have a **relationship** score (0–100). It goes up by 6 for every quest completed together, drops if you can't pay them, and lowers their demands when you renew: by up to 30% at 100. When a contract ends, they sit out of quests and you have 3 days to **renew** it (Manage Party) before they leave. Walking out of a renewal ends the contract on the spot. Unpaid companions lose 20 relationship each payday, and quit when it reaches 0.
 
 **Prisoners**: a won bandit quest sometimes ends with a captured bandit. Take them to the magistrate at the Slave Market to turn them in for a bounty (35 gold per level), or pay a 60 gold fee to register them as your slave.
 

@@ -4,6 +4,7 @@ import { BootScene } from './scenes/BootScene';
 import { CharacterCreatorScene } from './scenes/CharacterCreatorScene';
 import { CityScene } from './scenes/CityScene';
 import { GuildScene } from './scenes/GuildScene';
+import { InnScene } from './scenes/InnScene';
 import { MarketScene } from './scenes/MarketScene';
 import { NegotiateScene } from './scenes/NegotiateScene';
 import { PartyScene } from './scenes/PartyScene';
@@ -21,7 +22,7 @@ const game = new Phaser.Game({
   backgroundColor: COLORS.bg,
   antialias: true,
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-  scene: [BootScene, MainMenuScene, CityScene, GuildScene, MarketScene, NegotiateScene, PartyScene, CharacterCreatorScene, SaveLoadScene, BattleScene],
+  scene: [BootScene, MainMenuScene, CityScene, GuildScene, MarketScene, InnScene, NegotiateScene, PartyScene, CharacterCreatorScene, SaveLoadScene, BattleScene],
 });
 
 // Handy for debugging from the browser console: `lazyrpg.scene.getScenes(true)`,

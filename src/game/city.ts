@@ -2,7 +2,7 @@
 // Pure logic (no Phaser): scenes call these and show the messages they return.
 import { MAX_PARTY_SIZE } from '../data/content';
 import { ENEMIES } from '../data/enemies';
-import { GUILD } from '../data/guild';
+import { GUILD, type InnTier } from '../data/guild';
 import { STAT_CONFIG } from '../data/stats';
 import { RANKS, type Character, type GameState, type Quest, type Rank } from '../data/types';
 import { enemyTypesForStage } from './battle';
@@ -195,8 +195,16 @@ export function boarders(state: GameState): Character[] {
   return state.party.filter((c) => c.contract?.type === 'main' || c.contract?.type === 'slave' || (isCompanion(c) && c.contract.foodLodging));
 }
 
-export function dailyUpkeep(state: GameState): number {
-  return boarders(state).length * GUILD.upkeep.foodLodgingPerDay;
+/** Food and lodging for one day: on the road (quests), or a night at an inn. */
+export function dailyUpkeep(state: GameState, inn?: InnTier): number {
+  return boarders(state).length * (inn ? GUILD.inns[inn].pricePerPerson : GUILD.upkeep.foodLodgingPerDay);
+}
+
+/** Stay `nights` nights at an inn: the inn's price replaces the day's food and lodging. Returns the messages. */
+export function stayAtInn(state: GameState, inn: InnTier, nights: number, rng: Rng): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < nights; i++) out.push(...advanceDay(state, rng, inn));
+  return out;
 }
 
 export function weeklyWages(state: GameState): number {
@@ -212,21 +220,24 @@ export function advanceDays(state: GameState, days: number, rng: Rng): string[] 
   return out;
 }
 
-/** One day: upkeep, payday, contracts, the rest of the guild, the board and the market. */
-export function advanceDay(state: GameState, rng: Rng): string[] {
+/** One day: upkeep (on the road, or at an inn), payday, contracts, the rest of the guild, the board and the market. */
+export function advanceDay(state: GameState, rng: Rng, inn?: InnTier): string[] {
   state.day += 1;
   const out: string[] = [];
   const say = (t: string) => out.push(note(state, t));
   state.renown *= 1 - GUILD.renownDecayPerDay;
 
   // Food and lodging.
-  const upkeep = dailyUpkeep(state);
+  const upkeep = dailyUpkeep(state, inn);
   if (upkeep > state.gold) {
     say(`Not enough gold for food and lodging (${upkeep} needed). Your companions are unhappy.`);
     state.gold = 0;
     for (const c of state.party) if (isCompanion(c) && c.contract.foodLodging) c.contract.relationship = Math.max(0, c.contract.relationship - 5);
   } else {
     state.gold -= upkeep;
+    // A comfortable night pleases the companions the party houses.
+    const bonus = inn ? GUILD.inns[inn].relationshipPerNight : 0;
+    for (const c of state.party) if (bonus && isCompanion(c) && c.contract.foodLodging) c.contract.relationship = Math.min(100, c.contract.relationship + bonus);
   }
 
   // Payday every 7th day.

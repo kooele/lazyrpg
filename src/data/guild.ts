@@ -9,6 +9,14 @@ export interface QuestTier {
   days: [number, number];
 }
 
+export type InnTier = 'standard' | 'luxury';
+export const INN_TIERS: readonly InnTier[] = ['standard', 'luxury'];
+export interface InnConfig {
+  name: string;
+  pricePerPerson: number;
+  relationshipPerNight: number;
+}
+
 export interface GuildConfig {
   city: string;
   startingGold: number;
@@ -19,6 +27,7 @@ export interface GuildConfig {
   boardSize: number;
   quests: Record<Rank, QuestTier>;
   upkeep: { foodLodgingPerDay: number };
+  inns: Record<InnTier, InnConfig>;
   mercenary: { feePerLevel: number; cutBase: number; cutPerLevel: number };
   companion: {
     wageBase: number;
@@ -86,6 +95,21 @@ function numbers<T>(v: unknown, path: string, keys: string[], max = Number.MAX_S
 }
 const perRank = (v: unknown, path: string, max?: number) => numbers<Record<Rank, number>>(v, path, [...RANKS], max);
 
+function parseInns(v: unknown): Record<InnTier, InnConfig> {
+  const o = obj(v, 'inns');
+  const out = {} as Record<InnTier, InnConfig>;
+  for (const t of INN_TIERS) {
+    const inn = obj(o[t], `inns.${t}`);
+    if (typeof inn.name !== 'string' || !inn.name) fail(`inns.${t}.name`, 'must be a name');
+    out[t] = {
+      name: inn.name as string,
+      pricePerPerson: num(inn.pricePerPerson, `inns.${t}.pricePerPerson`),
+      relationshipPerNight: num(inn.relationshipPerNight, `inns.${t}.relationshipPerNight`, 0, 100),
+    };
+  }
+  return out;
+}
+
 export function parseGuildConfig(data: unknown): GuildConfig {
   const d = obj(data, '(root)');
   const rankShares = perRank(d.rankShares, 'rankShares', 1);
@@ -118,6 +142,7 @@ export function parseGuildConfig(data: unknown): GuildConfig {
     boardSize: num(d.boardSize, 'boardSize', 1, 20),
     quests,
     upkeep: numbers(d.upkeep, 'upkeep', ['foodLodgingPerDay']),
+    inns: parseInns(d.inns),
     mercenary: numbers(d.mercenary, 'mercenary', ['feePerLevel', 'cutBase', 'cutPerLevel']),
     companion: {
       ...numbers<Omit<GuildConfig['companion'], 'terms' | 'termDemand' | 'expectedWeeklyLoot' | 'relationshipUnpaid'>>(c, 'companion',

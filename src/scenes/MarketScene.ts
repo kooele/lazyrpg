@@ -80,7 +80,7 @@ export class MarketScene extends Phaser.Scene {
       if (err) return toast(this, err, COLORS.bad);
       markDirty();
       this.render();
-      toast(this, `${o.character.name} joined your party. Set their lineup and loadout in Party Quarters.`);
+      toast(this, `${o.character.name} joined your party. Set their lineup and loadout in Manage Party.`);
     }, 'Buy');
   }
 

@@ -58,7 +58,7 @@ export class GuildScene extends Phaser.Scene {
       ? `Accepted: ${state.quest.title}. Set out from the city screen.`
       : `Your party is ${state.rank} rank: it can take ${state.rank}-rank quests and below.`;
     text(this, 20, 118, status, { fontSize: '14px', color: state.quest ? COLORS.gold : COLORS.text });
-    text(this, 20, 138, `Lineup (${lineup.length}/${MAX_PARTY_SIZE}): ${lineup.map((c) => `${c.name} Lv${c.level}`).join(', ')}   (change it in Party Quarters)`, {
+    text(this, 20, 138, `Lineup (${lineup.length}/${MAX_PARTY_SIZE}): ${lineup.map((c) => `${c.name} Lv${c.level}`).join(', ')}   (change it in Manage Party)`, {
       fontSize: '12px', color: COLORS.dim,
     });
     const quests = state.guild.board;
@@ -143,7 +143,7 @@ export class GuildScene extends Phaser.Scene {
       const err = toggleLineup(state, c.id);
       markDirty();
       this.render();
-      toast(this, err ? `${c.name} joined, but the lineup is full: swap someone out in Party Quarters.` : `${c.name} joined and will go on your next quest.`);
+      toast(this, err ? `${c.name} joined, but the lineup is full: swap someone out in Manage Party.` : `${c.name} joined and will go on your next quest.`);
     }, 'Hire');
   }
 
@@ -189,6 +189,6 @@ export class GuildScene extends Phaser.Scene {
       return { obj: this.add.container(0, 0, [t]), height: t.height };
     });
     list.setItems(items, 'top');
-    if (items.length === 0) text(this, WIDTH / 2, 300, 'Nothing yet. Rest a day or go on a quest and see what happens.', { color: COLORS.dim }).setOrigin(0.5);
+    if (items.length === 0) text(this, WIDTH / 2, 300, 'Nothing yet. Stay at an inn or go on a quest and see what happens.', { color: COLORS.dim }).setOrigin(0.5);
   }
 }

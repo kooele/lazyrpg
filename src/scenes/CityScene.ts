@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { GUILD } from '../data/guild';
-import { advanceDay, dailyUpkeep, lineupMembers } from '../game/city';
-import { markDirty, requireState, session } from '../game/session';
+import { lineupMembers } from '../game/city';
+import { requireState, session } from '../game/session';
 import { cityHeader, rankBadge } from '../ui/hud';
 import { COLORS, HEIGHT, ScrollList, button, confirmDialog, panel, setupCamera, text, toast } from '../ui/widgets';
 
@@ -15,8 +15,9 @@ interface Place {
   blurb: string;
   /** Pin position in the map image (1536x1024 pixels). */
   at: [number, number];
-  /** Scene to open; places without one aren't open yet. */
+  /** Scene to open (and its data); places without one aren't open yet. */
   scene?: string;
+  data?: object;
 }
 
 const PLACES: Record<Ring, Place[]> = {
@@ -27,6 +28,7 @@ const PLACES: Record<Ring, Place[]> = {
     { name: 'Slave Market', blurb: 'Buy slaves, and the magistrate: turn in or register captured prisoners.', at: [1266, 585], scene: 'Market' },
     { name: 'Slums', blurb: 'The poorest quarter, inside the outer wall.', at: [330, 650] },
     { name: 'Customs Office', blurb: 'Duties on everything that comes through the harbour.', at: [1352, 455] },
+    { name: GUILD.inns.standard.name, blurb: `Inn: lodging at ${GUILD.inns.standard.pricePerPerson} gold per person a night.`, at: [330, 330], scene: 'Inn', data: { tier: 'standard' } },
   ],
   middle: [
     { name: 'Tailor', blurb: 'Clothes and fittings.', at: [520, 380] },
@@ -38,17 +40,18 @@ const PLACES: Record<Ring, Place[]> = {
     { name: "Lord's Manor", blurb: 'Seat of the Lord of Arch City.', at: [765, 392] },
     { name: 'Central Government Office', blurb: 'Permits, taxes and the city\'s business.', at: [650, 470] },
     { name: 'Central Church', blurb: 'The great church at the heart of the city.', at: [885, 470] },
+    { name: GUILD.inns.luxury.name, blurb: `High-end inn: ${GUILD.inns.luxury.pricePerPerson} gold per person a night; companions love it.`, at: [765, 548], scene: 'Inn', data: { tier: 'luxury' } },
   ],
 };
 
-/** Part of the map image each tab shows (x, y, width; height follows the frame), and the ring's wall as an ellipse. */
-const VIEWS: Record<Ring, { x: number; y: number; w: number; ring: [number, number, number, number] }> = {
-  outer: { x: 0, y: 0, w: 1536, ring: [700, 470, 495, 415] },
-  middle: { x: 280, y: 150, w: 960, ring: [760, 472, 352, 300] },
-  inner: { x: 495, y: 252, w: 540, ring: [765, 432, 195, 152] },
+/** Part of the map image each tab shows (x, y, width; height follows the frame). */
+const VIEWS: Record<Ring, { x: number; y: number; w: number }> = {
+  outer: { x: 0, y: 0, w: 1536 },
+  middle: { x: 280, y: 150, w: 960 },
+  inner: { x: 495, y: 252, w: 540 },
 };
 
-/** Arch City: the hub. Pick a ring and a location, rest, or set out on an accepted quest. */
+/** Arch City: the hub. Pick a ring and a location (inns to rest), or set out on an accepted quest. */
 export class CityScene extends Phaser.Scene {
   private tip!: Phaser.GameObjects.Text;
   private ring: Ring = 'outer';
@@ -88,9 +91,6 @@ export class CityScene extends Phaser.Scene {
       this.add.image(MX - view.x * k, MY - view.y * k, CITY_MAP_KEY).setOrigin(0).setScale(k)
         .setCrop(view.x, view.y, view.w, view.w * (MH / MW));
     }
-    const [rx, ry, rw, rh] = view.ring;
-    const [cx, cy] = toMap(rx, ry);
-    this.add.graphics().lineStyle(3, COLORS.accent, 0.75).strokeEllipse(cx, cy, rw * 2 * k, rh * 2 * k);
     this.add.rectangle(MX, MY, MW, MH).setOrigin(0).setStrokeStyle(2, COLORS.border);
 
     const places = PLACES[this.ring];
@@ -100,8 +100,8 @@ export class CityScene extends Phaser.Scene {
     }).setDepth(10);
 
     // Every location in the ring as a button too (greyed out until it opens).
-    places.forEach((p, i) => button(this, MX + (i % 3) * 204, MY + MH + 6 + Math.floor(i / 3) * 28, 196, 24, p.name,
-      () => this.visit(p), { fontSize: 12, enabled: !!p.scene }));
+    places.forEach((p, i) => button(this, MX + (i % 4) * 152, MY + MH + 6 + Math.floor(i / 4) * 28, 146, 24, p.name,
+      () => this.visit(p), { fontSize: p.name.length > 20 ? 10 : 12, enabled: !!p.scene }));
 
     // ---- right: the quest at hand, and recent events -----------------------------------------
     const RX = 636;
@@ -119,9 +119,9 @@ export class CityScene extends Phaser.Scene {
       button(this, RX + 12, 196, 284, 32, 'Go to the Adventurer Guild', () => this.scene.start('Guild'), { fontSize: 14 });
     }
 
-    panel(this, RX, 246, 308, 318);
+    panel(this, RX, 246, 308, HEIGHT - 262);
     text(this, RX + 12, 254, 'Recent events', { fontSize: '13px', color: COLORS.dim });
-    const list = new ScrollList(this, RX + 10, 276, 292, 282, 6);
+    const list = new ScrollList(this, RX + 10, 276, 292, HEIGHT - 300, 6);
     const entries = [...state.log].reverse();
     list.setItems(entries.map((n) => {
       const t = text(this, 0, 0, `Day ${n.day}: ${n.text}`, { fontSize: '12px', wordWrap: { width: 278 }, lineSpacing: 1 });
@@ -131,8 +131,7 @@ export class CityScene extends Phaser.Scene {
     // ---- bottom ---------------------------------------------------------------------------------
     button(this, 16, HEIGHT - 60, 190, 46, 'Main Menu', () => this.scene.start('MainMenu'));
     button(this, 216, HEIGHT - 60, 190, 46, 'Save Game', () => this.scene.start('SaveLoad', { mode: 'save', returnTo: 'City' }));
-    button(this, 416, HEIGHT - 60, 204, 46, 'Rest until tomorrow', () => this.rest(), { fontSize: 15 });
-    button(this, 636, HEIGHT - 60, 308, 46, 'Party Quarters', () => this.scene.start('Party'), { fontSize: 16 });
+    button(this, 416, HEIGHT - 60, 204, 46, 'Manage Party', () => this.scene.start('Party'), { fontSize: 16 });
   }
 
   /** A map pin: gold for open locations, grey for ones that aren't open yet. */
@@ -165,18 +164,8 @@ export class CityScene extends Phaser.Scene {
   }
 
   private visit(p: Place): void {
-    if (p.scene) this.scene.start(p.scene);
+    if (p.scene) this.scene.start(p.scene, p.data);
     else toast(this, `${p.name} is not open yet.`, COLORS.dim);
-  }
-
-  private rest(): void {
-    const state = requireState();
-    confirmDialog(this, `Rest until tomorrow?\nFood and lodging costs ${dailyUpkeep(state)} gold.`, () => {
-      const msgs = advanceDay(state, Math.random);
-      markDirty();
-      this.render();
-      toast(this, msgs.length ? msgs[msgs.length - 1] : `Day ${state.day} begins.`);
-    }, 'Rest');
   }
 
   private depart(): void {

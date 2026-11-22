@@ -9,7 +9,7 @@ import { markDirty, requireState, session } from '../game/session';
 import { MEMBER_COLOR, MEMBER_LABEL, cityHeader, memberStatus } from '../ui/hud';
 import { COLORS, HEIGHT, ScrollList, WIDTH, button, confirmDialog, figure, panel, setupCamera, text, toast } from '../ui/widgets';
 
-/** Party Quarters: everyone in the party, the lineup for the next quest, loadouts and contracts. */
+/** Manage Party: everyone in the party, the lineup for the next quest, loadouts and contracts. */
 export class PartyScene extends Phaser.Scene {
   private selected = '';
 
@@ -34,7 +34,7 @@ export class PartyScene extends Phaser.Scene {
   private render(): void {
     this.children.removeAll(true);
     const state = requireState();
-    cityHeader(this, state, 'Party Quarters');
+    cityHeader(this, state, 'Manage Party');
     if (!state.party.some((c) => c.id === this.selected)) this.selected = state.mainId;
     const lineup = new Set(lineupMembers(state).map((c) => c.id));
 

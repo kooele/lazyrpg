@@ -2,7 +2,7 @@
 import Phaser from 'phaser';
 import { GUILD } from '../data/guild';
 import type { Character, GameState, Rank } from '../data/types';
-import { dailyUpkeep, isPayday, weeklyWages } from '../game/city';
+import { boarders, isPayday, weeklyWages } from '../game/city';
 import { daysLeft, isCompanion } from '../game/contracts';
 import { session } from '../game/session';
 import { COLORS, WIDTH, panel, text } from './widgets';
@@ -41,7 +41,7 @@ export function cityHeader(scene: Phaser.Scene, state: GameState, title: string)
   const toPay = (7 - (state.day % 7)) % 7;
   const right = [
     `${state.gold} gold`,
-    `Upkeep ${dailyUpkeep(state)}/day · Wages ${weeklyWages(state)}/week ${isPayday(state.day) ? '(paid today)' : `(payday in ${toPay}d)`}`,
+    `Housing ${boarders(state).length} · Wages ${weeklyWages(state)}/week ${isPayday(state.day) ? '(paid today)' : `(payday in ${toPay}d)`}`,
   ];
   text(scene, WIDTH - 20, 8, right[0], { fontSize: '20px', color: COLORS.gold }).setOrigin(1, 0);
   text(scene, WIDTH - 20, 36, right[1], { fontSize: '12px', color: COLORS.dim }).setOrigin(1, 0);

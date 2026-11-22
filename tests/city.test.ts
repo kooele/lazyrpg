@@ -4,7 +4,7 @@ import { GUILD, parseGuildConfig } from '../src/data/guild';
 import type { Character, GameState } from '../src/data/types';
 import { createCharacter, makeRng } from '../src/game/character';
 import {
-  acceptQuest, advanceDay, advanceDays, buySlave, canTakeQuest, dailyUpkeep, lineupMembers, newCampaign, registerPrisoner,
+  acceptQuest, advanceDay, advanceDays, buySlave, stayAtInn, canTakeQuest, dailyUpkeep, lineupMembers, newCampaign, registerPrisoner,
   resolveQuest, rewardShares, toggleLineup,
 } from '../src/game/city';
 import {
@@ -155,6 +155,23 @@ describe('contracts', () => {
     if (c.contract?.type !== 'companion') throw new Error('not a companion');
     c.contract.foodLodging = false;
     expect(dailyUpkeep(s)).toBe(2 * GUILD.upkeep.foodLodgingPerDay);
+  });
+
+  it('a night at an inn costs its price per person; the luxury inn also pleases housed companions', () => {
+    const s = start();
+    const c = companion(s);
+    if (c.contract?.type !== 'companion') throw new Error('not a companion');
+    c.contract.foodLodging = true;
+    c.contract.endDay = 100;
+    s.gold = 1000;
+    const rel = c.contract.relationship;
+    stayAtInn(s, 'standard', 1, makeRng(1));
+    expect(s.gold).toBe(1000 - 2 * GUILD.inns.standard.pricePerPerson);
+    expect(c.contract.relationship).toBe(rel);
+    stayAtInn(s, 'luxury', 2, makeRng(1));
+    expect(s.gold).toBe(1000 - 2 * GUILD.inns.standard.pricePerPerson - 4 * GUILD.inns.luxury.pricePerPerson);
+    expect(c.contract.relationship).toBe(rel + 2 * GUILD.inns.luxury.relationshipPerNight);
+    expect(s.day).toBe(4);
   });
 
   it('rewards are split with mercenaries on a cut and companions with a loot cut; mercenaries leave after the quest', () => {

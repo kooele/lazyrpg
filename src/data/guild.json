@@ -1,5 +1,5 @@
 {
-  "_readme": "Management and simulation numbers for Arch City and its Adventurer Guild. Gold amounts are whole numbers. Ranks come from the leaderboard: parties are sorted by renown and the top rankShares.A share are A rank, the next rankShares.B are B, and so on (renown fades by renownDecayPerDay so ranks follow recent success). Quests: stages is the enemy strength range (the same stages battles always used), reward a gold range, days how long the trip takes. companion.expectedWeeklyLoot is how much gold a candidate thinks a party of that rank earns per week; they use it to value a loot cut. simulation tunes the rival parties: the chance a party goes on a quest each day, its chance of success (0.55 + successPerLevel x (average level - rankDifficulty), clamped), and what can go wrong. New adventurers arrive at about the rate adventurers are lost, nudged toward targetAdventurers.",
+  "_readme": "Management and simulation numbers for Arch City and its Adventurer Guild. Gold amounts are whole numbers. upkeep.foodLodgingPerDay is what each person the party feeds and houses costs on days spent away (quests); resting in the city means a night at an inn, priced per person by inns (the luxury inn also raises companions' relationship each night). Ranks come from the leaderboard: parties are sorted by renown and the top rankShares.A share are A rank, the next rankShares.B are B, and so on (renown fades by renownDecayPerDay so ranks follow recent success). Quests: stages is the enemy strength range (the same stages battles always used), reward a gold range, days how long the trip takes. companion.expectedWeeklyLoot is how much gold a candidate thinks a party of that rank earns per week; they use it to value a loot cut. simulation tunes the rival parties: the chance a party goes on a quest each day, its chance of success (0.55 + successPerLevel x (average level - rankDifficulty), clamped), and what can go wrong. New adventurers arrive at about the rate adventurers are lost, nudged toward targetAdventurers.",
   "city": "Arch City",
   "startingGold": 500,
   "startingRenown": 0,
@@ -14,6 +14,10 @@
     "A": { "stages": [6, 8], "reward": [850, 1300], "renown": 170, "days": [2, 4] }
   },
   "upkeep": { "foodLodgingPerDay": 4 },
+  "inns": {
+    "standard": { "name": "Sleeping Griffin Inn", "pricePerPerson": 4, "relationshipPerNight": 0 },
+    "luxury": { "name": "Gilded Crown Inn", "pricePerPerson": 15, "relationshipPerNight": 2 }
+  },
   "mercenary": { "feePerLevel": 30, "cutBase": 8, "cutPerLevel": 2 },
   "companion": {
     "wageBase": 25,
