@@ -55,7 +55,7 @@ export class GuildScene extends Phaser.Scene {
     const state = requireState();
     const lineup = lineupMembers(state);
     const status = state.quest
-      ? `Accepted: ${state.quest.title}. Set out from the City Gate.`
+      ? `Accepted: ${state.quest.title}. Set out from the city screen.`
       : `Your party is ${state.rank} rank: it can take ${state.rank}-rank quests and below.`;
     text(this, 20, 118, status, { fontSize: '14px', color: state.quest ? COLORS.gold : COLORS.text });
     text(this, 20, 138, `Lineup (${lineup.length}/${MAX_PARTY_SIZE}): ${lineup.map((c) => `${c.name} Lv${c.level}`).join(', ')}   (change it in Party Quarters)`, {
@@ -87,7 +87,7 @@ export class GuildScene extends Phaser.Scene {
       if (err) return toast(this, err, COLORS.bad);
       markDirty();
       this.render();
-      toast(this, `Accepted "${q.title}". Set out from the City Gate when ready.`);
+      toast(this, `Accepted "${q.title}". Set out from the city screen when ready.`);
     }, { enabled: !state.quest, fontSize: 15 });
   }
 

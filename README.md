@@ -6,13 +6,13 @@ A small turn-based tactical RPG that runs in the browser, built with [Phaser 4](
 
 1. **Main menu**: New Game, Continue, Save Game, Load Game.
 2. **Your character**: a new game starts by creating your main character (name, sex, skin, face, hair, hair colour, clothes colour, weapon, skills) and naming your party. The main character is permanent: they can't be dismissed and always lead the party on quests.
-3. **Arch City**: the hub. Click a location: the **Adventurer Guild**, the **Slave Market**, **Party Quarters**, **The Sleeping Griffin** (rest until tomorrow) and the **City Gate** (set out on the quest you accepted). See [Arch City and the guild](#arch-city-and-the-adventurer-guild).
+3. **Arch City**: the hub is a map of the walled city (`public/art/city/arch-city.webp`) with three tabs: **Outer Ring** (Adventurer Guild, Docks, Marketplace, Slave Market, Slums, Customs Office), **Middle Ring** (Tailor, Auction House, Library, Church) and **Inner Ring** (Lord's Manor, Central Government Office, Central Church). Click a pin on the map or a button below it. Only the **Adventurer Guild** and the **Slave Market** are open so far; the others are greyed out. Rest until tomorrow, open **Party Quarters**, or set out on an accepted quest from the side panel. See [Arch City and the guild](#arch-city-and-the-adventurer-guild).
 4. **Adventurers**: There are no fixed classes. Every party member is an Adventurer, and you build them by mixing a weapon with picks from the skill trees. Up to 4 go on each quest (the lineup); the party can have up to 8 members.
 5. **Tactical battle**: XCOM-style alternating turns. On your turn, every Adventurer can move once and act once, in any order (click a unit or press Tab). Hover a skill to see its range box; any tile in range can be targeted. The map is 18×13 tiles (set in `stats.json`). Terrain: grass costs 4 Movement, forest 6 (and gives +20 Defense), river 8. Rock and deep water block movement, and rock blocks line of sight.
 
 ## Arch City and the Adventurer Guild
 
-Time passes in days. Resting at the inn moves on one day, and a quest takes its listed number of days. Every day the party pays **food and lodging** (4 gold each) for the main character, slaves, and companions whose contract includes it. Every 7th day is **payday** for companions.
+Time passes in days. Resting moves on one day, and a quest takes its listed number of days. Every day the party pays **food and lodging** (4 gold each) for the main character, slaves, and companions whose contract includes it. Every 7th day is **payday** for companions.
 
 ### Ranks, the leaderboard and quests
 
