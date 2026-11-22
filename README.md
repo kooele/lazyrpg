@@ -4,10 +4,59 @@ A small turn-based tactical RPG that runs in the browser, built with [Phaser 4](
 
 ## How the game works
 
-1. **Main menu**: New Game, Continue, Save Game, Load Game.
-2. **Adventurers**: There are no fixed classes. Every party member is an Adventurer, and you build them by mixing a weapon with picks from the skill trees (up to 4 in the party).
-3. **Camp**: the hub between battles. Recruit, customize or dismiss Adventurers, then start the next battle.
-4. **Tactical battle**: XCOM-style alternating turns. On your turn, every Adventurer can move once and act once, in any order (click a unit or press Tab). Hover a skill to see its range box; any tile in range can be targeted. The map is 18×13 tiles (set in `stats.json`). Terrain: grass costs 4 Movement, forest 6 (and gives +20 Defense), river 8. Rock and deep water block movement, and rock blocks line of sight.
+1. **Main menu**: New Game, Continue, Save Game, Load Game, and **Quick Battle (Demo)**: the original game on its own. Recruit up to 4 Adventurers for free at a camp (any look, weapon and skills), then fight stages 1 to 5; every victory is worth a level, and clearing stage 5 completes the demo. The demo is separate from your Arch City campaign and isn't saved.
+2. **Your character**: a new game starts by creating your main character (name, sex, skin, face, hair, hair colour, clothes colour, weapon, skills) and naming your party. The main character is permanent: they can't be dismissed and always lead the party on quests.
+3. **Arch City**: the hub is a map of the walled city (`public/art/city/arch-city.webp`) with three tabs: **Outer Ring** (Adventurer Guild, Docks, Marketplace, Slave Market, Slums, Customs Office, Sleeping Griffin Inn), **Middle Ring** (Tailor, Auction House, Library, Church) and **Inner Ring** (Lord's Manor, Central Government Office, Central Church, Gilded Crown Inn). Click a pin on the map or a button below it. Open so far: the **Adventurer Guild**, the **Slave Market** and the two **inns**; the rest are greyed out. **Manage Party** (bottom bar) handles your members, and the side panel sets out on an accepted quest. See [Arch City and the guild](#arch-city-and-the-adventurer-guild).
+4. **Adventurers**: There are no fixed classes. Every party member is an Adventurer, and you build them by mixing a weapon with picks from the skill trees. Up to 4 go on each quest (the lineup); the party can have up to 8 members.
+5. **Tactical battle**: XCOM-style alternating turns. On your turn, every Adventurer can move once and act once, in any order (click a unit or press Tab). Hover a skill to see its range box; any tile in range can be targeted. The map is 18×13 tiles (set in `stats.json`). Terrain: grass costs 4 Movement, forest 6 (and gives +20 Defense), river 8. Rock and deep water block movement, and rock blocks line of sight.
+
+## Arch City and the Adventurer Guild
+
+Time passes in days. To pass time in the city, the party stays at an **inn** (1 night, 3 nights or a week), and a quest takes its listed number of days. The party pays food and lodging for the main character, slaves, and companions whose contract includes it:
+
+| Where | Per person per day | Extra |
+|---|---|---|
+| Sleeping Griffin Inn (Outer Ring) | 4 gold | |
+| Gilded Crown Inn (Inner Ring) | 15 gold | Companions the party houses gain +2 relationship each night |
+| Away on a quest | 4 gold | |
+
+Every 7th day is **payday** for companions.
+
+### Ranks, the leaderboard and quests
+
+The guild typically has about **100 active adventurers in 20 parties**. The **Leaderboard** lists every party by renown, and your rank comes from your position: the top 5% are **A** rank, the next 20% **B**, the next 60% **C** and the bottom 15% **D**. Your party starts at D. Completing a quest earns renown, and renown fades a little each day (1.5%), so ranks reflect recent success.
+
+The **Quest Board** always has 6 quests, mostly at your rank, some below and some above. You can take quests at your rank or below; the ones above are shown locked so you can see what's coming. Each quest has an enemy strength (the stage), a gold reward, renown, and how many days it takes.
+
+| Rank | Stages | Reward | Renown |
+|---|---|---|---|
+| D | 1–2 | 70–110 | 14 |
+| C | 2–4 | 170–280 | 32 |
+| B | 4–6 | 380–600 | 75 |
+| A | 6–8 | 850–1300 | 170 |
+
+XP from a won quest depends on the stage against each member's level: 100 XP at an equal level, up to 200 for punching above it, and as little as 15 for easy work.
+
+### The other parties
+
+The rival parties are simulated day by day. Each day a party has a 25% chance of going on a quest: the hardest rank at or below its own that it's fairly sure of, and now and then one rank up. Success earns renown and sometimes a level. Failure can cost members (they die or quit), and a badly outmatched party can be **wiped out** and removed. Parties of one break up, and the survivor goes back to the guild hall. New adventurers arrive at about the rate adventurers are lost, nudged toward 100. When the hall gets crowded (or there are fewer than usual parties), they band together as a **new D-rank party**. **Guild News** reports all of this.
+
+### Party members
+
+| Type | How you get them | Cost | Notes |
+|---|---|---|---|
+| **Main character** | Created at the start | Food & lodging | Permanent; always goes on quests |
+| **Mercenary** | Guild Hall | A fixed fee up front, **or** a % of the next quest's reward | Leaves after the next quest, win or lose |
+| **Companion** | Guild Hall, after negotiating a contract | Base pay every 7th day, a % of each reward, food & lodging if included | Permanent while the contract runs |
+| **Slave** | Slave Market, or a captured prisoner registered at the magistrate | Food & lodging only | Permanent; can be sold back to the market |
+
+**Companion contracts** have four terms: **base pay**, **loot cut** (% of each quest reward), **food and lodging included** (worth 28 gold a week to them), and **term length** (2, 4, 8 or 12 weeks). Candidates ask more the higher their level and the greedier they are, a little more for short terms and less for long ones. They value a loot cut by what a party of your rank usually earns (150 gold a week at D, 2000 at A). An offer close to what they want gets a counter-offer; a low one offends them. Each rejected offer uses up patience, and once it runs out they won't talk to you for a week.
+
+Companions have a **relationship** score (0–100). It goes up by 6 for every quest completed together, drops if you can't pay them, and lowers their demands when you renew: by up to 30% at 100. When a contract ends, they sit out of quests and you have 3 days to **renew** it (Manage Party) before they leave. Walking out of a renewal ends the contract on the spot. Unpaid companions lose 20 relationship each payday, and quit when it reaches 0.
+
+**Prisoners**: a won bandit quest sometimes ends with a captured bandit. Take them to the magistrate at the Slave Market to turn them in for a bounty (35 gold per level), or pay a 60 gold fee to register them as your slave.
+
+All of these numbers are in `src/data/guild.json`.
 
 ### Editing the game data
 
@@ -19,6 +68,7 @@ Everything gameplay-related lives in plain JSON files in `src/data/`. Each file 
 | `skills.json` | Every skill (numbers and descriptions), tags, status effects (Burn, Slow), skill trees |
 | `weapons.json` | Weapons: stat multipliers and granted skills |
 | `enemies.json` | Enemy types: level range, stats, skills, art, and how big encounters are |
+| `guild.json` | Arch City: starting gold, rank shares, quest rewards, upkeep, mercenary and companion pay, slave prices, and the rival-party simulation |
 
 Tooltips show a formula line generated from the numbers (e.g. "80% P.Atk, then 40% P.Atk + 100% Def"), so it stays correct even if a description is out of date.
 
@@ -32,7 +82,7 @@ Tooltips show a formula line generated from the numbers (e.g. "80% P.Atk, then 4
 | Defense | 50 (+5) | Damage taken × 100 / (100 + Defense) |
 | Movement | 16 | Movement points per turn: grass costs 4, forest 6, river 8 (so 16 = 4 grass tiles) |
 
-Stats grow automatically on level up (100 XP per level). Each won battle gives every Adventurer 100 XP (`xpPerVictory` in `stats.json`), so a party that keeps winning is level N at stage N.
+Stats grow automatically on level up (100 XP per level). A won quest gives each member in the lineup `xpPerVictory` (100, in `stats.json`) when their level equals the quest's stage, more when they're below it and less when above, so a party that keeps winning stays close to the level of the quests it takes.
 
 Weapons **multiply** these stats:
 
@@ -97,29 +147,39 @@ Heal and Cleanse work on any unit, enemies included. An attack aimed straight at
 
 ### Art
 
-Adventurers are drawn in a storybook style (no outlines, simple dot eyes, muted watercolour colours, light paper texture, about 5 heads tall). There are 8 adventurer body models (4 male, 4 female) and 4 bandit models (`b1`–`b4`), each drawn holding each weapon since the pose depends on the weapon: `public/art/units/<model>_<weapon>.svg`, 48 SVGs that stay sharp at 4K. Monsters are `public/art/monsters/<kind>.svg` (rat, slime, wolf) on a wider 96×80 canvas, coloured from `art.color` in `enemies.json`; enemy types choose their body models with `art.models`. They're generated by `node tools/generate-art.mjs`: edit the colours, hair, outfits or proportions there and re-run it, or replace the SVGs with your own art (same 64×80 canvas, or 96×80 for monsters, feet at y = 76).
+Adventurers have a **custom look**: sex (male or female), skin (pale, light, fair, olive, light brown, brown), one of 4 faces per sex, a hairstyle (men: crew cut, bowl cut, permed, tied; women: bob cut, ponytail, crown braid, down with bangs, braided, bun) and a hair colour. Their outfit follows their weapon (armour, tunic or robe) in their chosen colour. Looks are drawn in the browser on first use by `src/art/unitArt.js`, so every combination stays sharp without hundreds of files.
+
+They're drawn in a storybook style (no outlines, simple dot eyes, muted watercolour colours, light paper texture, about 5 heads tall). The static sprites are 8 body models (`m1`–`f4`, available to human enemy types) and 4 bandit models (`b1`–`b4`), each drawn holding each weapon since the pose depends on the weapon: `public/art/units/<model>_<weapon>.svg`, 48 SVGs that stay sharp at 4K. Monsters are `public/art/monsters/<kind>.svg` (rat, slime, wolf) on a wider 96×80 canvas, coloured from `art.color` in `enemies.json`; enemy types choose their body models with `art.models`. They're generated by `node tools/generate-art.mjs` from the shared drawing code in `src/art/unitArt.js`: edit the colours, hair, outfits or proportions there and re-run it, or replace the SVGs with your own art (same 64×80 canvas, or 96×80 for monsters, feet at y = 76).
 
 ## Save files
 
-Saves are **pretty-printed JSON**. You can save to 3 browser slots, or Export a `.json` file and Import it later. Hand edits are validated, with errors that name the exact field. Saves from the old class-based version (v1) are upgraded automatically.
+Saves are **pretty-printed JSON**. You can save to 3 browser slots, or Export a `.json` file and Import it later. Hand edits are validated, with errors that name the exact field (e.g. `party[0].appearance.look.hair must be one of: bobCut, ponytail, ...`). Older saves are upgraded automatically: the first party member becomes your main character, the others companions on a 4-week contract, and the party joins the guild with renown and gold for the stages it had cleared.
+
+A version-3 save holds the whole city: the day, gold, renown and rank, your party with each member's contract, the lineup, the accepted quest, the guild (rival parties, free adventurers in the hall, the quest board, news), the slave market and any prisoners. A party member looks like this:
 
 ```json
 {
-  "format": "lazyrpg-save",
-  "version": 2,
-  "savedAt": "2026-11-21T10:00:00.000Z",
-  "progress": { "stage": 2, "victories": 1, "defeats": 0 },
-  "party": [
-    {
-      "id": "c_3268ddub",
-      "name": "Brienne",
-      "level": 2,
-      "xp": 75,
-      "weaponId": "staff",
-      "skillIds": ["fireball", "heal"],
-      "appearance": { "color": "#3d7be0", "emblem": "circle", "model": "f2" }
-    }
-  ]
+  "id": "c_3268ddub",
+  "name": "Brienne",
+  "level": 2,
+  "xp": 75,
+  "weaponId": "staff",
+  "skillIds": ["fireball", "heal"],
+  "appearance": {
+    "color": "#3d7be0",
+    "look": { "sex": "female", "skin": "fair", "face": 2, "hair": "crownBraid", "hairColor": "auburn" }
+  },
+  "contract": {
+    "type": "companion",
+    "basePay": 60,
+    "lootPct": 5,
+    "foodLodging": true,
+    "termWeeks": 4,
+    "startDay": 3,
+    "endDay": 31,
+    "relationship": 22,
+    "greed": 1.05
+  }
 }
 ```
 
@@ -136,12 +196,14 @@ npm run build    # type-check + production build into dist/
 
 ```
 src/
-  data/       stats.json, skills.json, weapons.json (editable game data) + loaders/validation
+  data/       stats.json, skills.json, weapons.json, enemies.json, guild.json (editable game data) + loaders/validation
 public/art/   unit SVGs (one per body model and weapon) and monster SVGs (tools/generate-art.mjs regenerates them)
-  game/       pure game logic, no Phaser: character stats, battle rules, AI, map generation, save/load
-  scenes/     Phaser scenes: MainMenu, SaveLoad, CharacterCreator, Camp, Battle
+  art/        unitArt.js: draws units as SVG (used by the game for custom looks and by tools/generate-art.mjs)
+  game/       pure game logic, no Phaser: character stats, battle rules, AI, map generation, save/load,
+              Arch City (city.ts), the guild simulation (guild.ts), contracts (contracts.ts), random people (people.ts)
+  scenes/     Phaser scenes: MainMenu, SaveLoad, CharacterCreator, City, Guild, Negotiate, Market, Inn, Party, DemoCamp, Battle
   ui/         small UI helpers (buttons, panels, tokens, dialogs)
-tests/        Vitest tests for the game logic
+tests/        Vitest tests for the game logic and the city simulation
 ```
 
 The rules in `src/game/` don't depend on Phaser. That keeps them easy to test, and the AI and balance can be simulated quickly.

@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
+import { figureSvg, lookModel } from '../art/unitArt';
 import { DEFAULT_WEAPON, WEAPONS } from '../data/content';
-import type { Appearance } from '../data/types';
+import type { Appearance, Look } from '../data/types';
 
 export const WIDTH = 960;
 export const HEIGHT = 640;
@@ -194,13 +195,60 @@ export function figure(
     g.lineStyle(Math.max(1.5, 2 * scale), opts.enemy ? 0x2a0a0a : 0xffffff, 0.9).strokeEllipse(0, 0, rx * 2, ry * 2);
     parts.push(g);
   }
-  const key = unitKey(appearance.model, weaponArt(weaponId));
-  if (scene.textures.exists(key)) {
-    const img = scene.add.image(0, 0, key).setOrigin(0.5, FEET / ART_H).setDisplaySize(ART_W * scale, height);
+  const art = weaponArt(weaponId);
+  const key = appearance.look ? lookKey(appearance.look, appearance.color, art) : unitKey(appearance.model ?? 'm1', art);
+  const place = (img: Phaser.GameObjects.Image) => {
+    img.setOrigin(0.5, FEET / ART_H).setDisplaySize(ART_W * scale, height);
     if (opts.enemy) img.setFlipX(true);
+  };
+  if (scene.textures.exists(key)) {
+    const img = scene.add.image(0, 0, key);
+    place(img);
     parts.push(img);
+  } else if (appearance.look) {
+    // Custom looks are drawn on first use; show the figure as soon as its texture is ready.
+    const img = scene.add.image(0, 0, '__DEFAULT').setVisible(false);
+    parts.push(img);
+    void lookTexture(scene, key, appearance.look, appearance.color, art).then((ok) => {
+      if (!ok || !img.active) return;
+      img.setTexture(key).setVisible(true);
+      place(img);
+    });
   }
   return scene.add.container(x, feetY, parts);
+}
+
+/** Texture key of a custom look holding a weapon. */
+export const lookKey = (l: Look, color: string, art: string) =>
+  `look-${l.sex}-${l.skin}-${l.face}-${l.hair}-${l.hairColor}-${color.replace('#', '')}-${art}`;
+
+const lookLoads = new Map<string, Promise<boolean>>();
+
+/** Draw a custom look (src/art/unitArt.js) into a texture, once per look, colour and weapon. */
+export function lookTexture(scene: Phaser.Scene, key: string, look: Look, color: string, art: string): Promise<boolean> {
+  if (scene.textures.exists(key)) return Promise.resolve(true);
+  let p = lookLoads.get(key);
+  if (!p) {
+    const textures = scene.textures;
+    const svg = figureSvg(key, lookModel(look, color, art), art, ART_TEXTURE_SCALE * UI_SCALE);
+    p = new Promise<boolean>((resolve) => {
+      const img = new Image();
+      const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }));
+      img.onload = () => {
+        if (!textures.exists(key)) textures.addImage(key, img);
+        URL.revokeObjectURL(url);
+        resolve(true);
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        lookLoads.delete(key);
+        resolve(false);
+      };
+      img.src = url;
+    });
+    lookLoads.set(key, p);
+  }
+  return p;
 }
 
 // ---- tooltip ------------------------------------------------------------------

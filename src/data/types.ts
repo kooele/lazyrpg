@@ -143,11 +143,36 @@ export const ENEMY_MODELS = ['b1', 'b2', 'b3', 'b4'] as const;
 export type EnemyModel = (typeof ENEMY_MODELS)[number];
 export type UnitModel = BodyModel | EnemyModel;
 
+export const SEXES = ['male', 'female'] as const;
+export type Sex = (typeof SEXES)[number];
+export const SKIN_TONES = ['pale', 'light', 'fair', 'olive', 'lightBrown', 'brown'] as const;
+export type SkinTone = (typeof SKIN_TONES)[number];
+export const HAIR_STYLES = {
+  male: ['crewCut', 'bowlCut', 'permed', 'tied'],
+  female: ['bobCut', 'ponytail', 'crownBraid', 'downWithBangs', 'braided', 'bun'],
+} as const;
+export type HairStyle = (typeof HAIR_STYLES)[Sex][number];
+export const HAIR_COLORS = ['black', 'darkBrown', 'brown', 'auburn', 'red', 'blonde', 'ash'] as const;
+export type HairColor = (typeof HAIR_COLORS)[number];
+export const FACE_COUNT = 4;
+
+/** A custom look, drawn at runtime by src/art/unitArt.js. */
+export interface Look {
+  sex: Sex;
+  skin: SkinTone;
+  /** 1-4 (each sex has its own four faces). */
+  face: number;
+  hair: HairStyle;
+  hairColor: HairColor;
+}
+
 export interface Appearance {
-  /** Color of the unit's base (the disc it stands on). */
+  /** Color of the unit's base (the disc it stands on) and of an adventurer's clothes. */
   color: string;
-  /** Body art: public/art/units/<model>_<weapon>.svg. Older saves without it get one assigned. */
-  model: UnitModel;
+  /** Static body art: public/art/units/<model>_<weapon>.svg (enemies). */
+  model?: UnitModel;
+  /** Custom look (adventurers). Used instead of `model` when present. */
+  look?: Look;
 }
 
 export type MonsterKind = 'rat' | 'slime' | 'wolf' | 'human';
@@ -190,15 +215,150 @@ export interface Character {
   /** Skills picked from the skill trees (weapon skills are always available). */
   skillIds: string[];
   appearance: Appearance;
+  /** Party members only: how they are bound to the party. */
+  contract?: Contract;
+}
+
+// ---- management: contracts, the guild, Arch City ----------------------------------------
+
+export type Rank = 'A' | 'B' | 'C' | 'D';
+export const RANKS: readonly Rank[] = ['A', 'B', 'C', 'D'];
+
+/**
+ * main      – the player's own character: permanent, can't be dismissed.
+ * mercenary – hired for the next quest only, for a fixed fee (paid up front) or a % of the reward.
+ * companion – permanent member under a negotiated contract (weekly pay, loot cut, food & lodging, term).
+ * slave     – permanent member bought at the market or registered from a prisoner: no pay, but needs food & lodging.
+ */
+export type Contract =
+  | { type: 'main' }
+  | { type: 'mercenary'; pay: 'fixed' | 'cut'; amount: number }
+  | {
+    type: 'companion';
+    /** Gold paid every 7th day. */
+    basePay: number;
+    /** % of each quest reward. */
+    lootPct: number;
+    /** The party pays their food and lodging every day. */
+    foodLodging: boolean;
+    termWeeks: number;
+    startDay: number;
+    /** The contract runs out on this day; renew it within the grace period or they leave. */
+    endDay: number;
+    /** 0-100. Grows with every quest completed together; lowers demands on renewal. */
+    relationship: number;
+    /** How demanding they are (1 = average). */
+    greed: number;
+  }
+  | { type: 'slave'; price: number; origin: 'market' | 'prisoner' };
+
+export type MemberType = Contract['type'];
+
+/** Terms of a companion contract while negotiating. */
+export interface CompanionTerms {
+  basePay: number;
+  lootPct: number;
+  foodLodging: boolean;
+  termWeeks: number;
+}
+
+/** An adventurer of a rival party (only what the simulation needs). */
+export interface RivalMember {
+  name: string;
+  level: number;
+  weaponId: string;
+}
+
+export interface RivalParty {
+  id: string;
+  name: string;
+  renown: number;
+  /** Rank at the last ranking update (ranks come from leaderboard position). */
+  rank: Rank;
+  members: RivalMember[];
+  founded: number;
+  wins: number;
+  losses: number;
+  /** Day of the last quest, and what happened. */
+  lastDay: number;
+  last: string;
+}
+
+/** An unaffiliated adventurer at the guild: can be hired as a mercenary or signed as a companion. */
+export interface FreeAdventurer {
+  character: Character;
+  /** How demanding they are (1 = average). */
+  greed: number;
+  /** Offers they'll still hear before walking away from the table. */
+  patience: number;
+  /** They won't negotiate again before this day. */
+  refusedUntil: number;
+}
+
+export interface Quest {
+  id: string;
+  title: string;
+  rank: Rank;
+  /** Enemy strength (the battle stage: enemy types and levels). */
+  stage: number;
+  reward: number;
+  renown: number;
+  /** Days the trip takes (time passes when it's done). */
+  days: number;
+  /** Last day it can be accepted. */
+  expires: number;
+  description: string;
+}
+
+export interface NewsItem {
+  day: number;
+  text: string;
+}
+
+export interface GuildState {
+  rivals: RivalParty[];
+  pool: FreeAdventurer[];
+  board: Quest[];
+  news: NewsItem[];
+}
+
+/** Someone for sale (slave market) or held for judgement (prisoners). */
+export interface Offer {
+  character: Character;
+  price: number;
+}
+
+export interface MarketState {
+  slaves: Offer[];
+  /** Next day the market gets new stock. */
+  restockDay: number;
 }
 
 export interface Progress {
-  stage: number;
   victories: number;
   defeats: number;
 }
 
 export interface GameState {
   progress: Progress;
+  /** Day 1 is the first day in Arch City. */
+  day: number;
+  gold: number;
+  partyName: string;
+  renown: number;
+  rank: Rank;
+  /** The player's main character (permanent). */
+  mainId: string;
+  /** Everyone in the party: main character, companions, slaves and hired mercenaries. */
   party: Character[];
+  /** Ids of the members who go on the next quest (at most MAX_PARTY_SIZE). */
+  lineup: string[];
+  guild: GuildState;
+  market: MarketState;
+  /** Captured bandits waiting for judgement: turn them in for a bounty or register them as slaves. */
+  prisoners: Offer[];
+  /** The quest the party has accepted and not yet fought. */
+  quest: Quest | null;
+  /** Messages for the player (newest last). */
+  log: NewsItem[];
 }

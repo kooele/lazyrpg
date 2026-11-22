@@ -2,20 +2,16 @@ import Phaser from 'phaser';
 import { MAX_PARTY_SIZE, SKILLS, WEAPONS, XP_PER_LEVEL } from '../data/content';
 import type { Character } from '../data/types';
 import { deriveStats, skillSlots } from '../game/character';
-import { markDirty, requireState, session } from '../game/session';
+import { DEMO_STAGES, newDemo, requireDemo } from '../game/demo';
 import { COLORS, HEIGHT, WIDTH, button, confirmDialog, figure, panel, text, setupCamera } from '../ui/widgets';
 
-/** Party hub between battles: view, recruit, edit and dismiss party members. */
-export class CampScene extends Phaser.Scene {
+/** Quick Battle (demo) camp: recruit, customize and dismiss up to 4 Adventurers, then fight stages 1 to 5. */
+export class DemoCampScene extends Phaser.Scene {
   constructor() {
-    super('Camp');
+    super('DemoCamp');
   }
 
   create(): void {
-    if (!session.state) {
-      this.scene.start('MainMenu');
-      return;
-    }
     setupCamera(this);
     this.input.keyboard?.on('keydown-ESC', () => this.scene.start('MainMenu'));
     this.render();
@@ -23,12 +19,12 @@ export class CampScene extends Phaser.Scene {
 
   private render(): void {
     this.children.removeAll(true);
-    const state = requireState();
-    const { progress, party } = state;
+    const d = requireDemo();
+    const { party } = d;
 
-    text(this, 24, 18, 'Camp', { fontSize: '32px', color: COLORS.gold });
-    text(this, 24, 58, `Stage ${progress.stage}   ·   Victories ${progress.victories}   ·   Defeats ${progress.defeats}`, { color: COLORS.dim });
-    if (session.dirty) text(this, WIDTH - 24, 28, 'Unsaved progress', { color: COLORS.dim, fontSize: '13px' }).setOrigin(1, 0);
+    text(this, 24, 18, 'Quick Battle: Camp', { fontSize: '32px', color: COLORS.gold });
+    text(this, 24, 58, `${d.complete ? 'Demo complete!' : `Stage ${d.stage} of ${DEMO_STAGES}`}   ·   Victories ${d.victories}   ·   Defeats ${d.defeats}`, { color: d.complete ? COLORS.gold : COLORS.dim });
+    text(this, WIDTH - 24, 28, 'Demo: progress is not saved', { color: COLORS.dim, fontSize: '13px' }).setOrigin(1, 0);
 
     for (let i = 0; i < MAX_PARTY_SIZE; i++) {
       const x = 24 + i * 232;
@@ -37,14 +33,17 @@ export class CampScene extends Phaser.Scene {
       if (c) this.card(c, x, y);
       else {
         panel(this, x, y, 216, 440, 0x131726);
-        button(this, x + 28, y + 196, 160, 48, '+ Recruit', () => this.scene.start('CharacterCreator', { mode: 'create' }), { fontSize: 18 });
+        button(this, x + 28, y + 196, 160, 48, '+ Recruit', () => this.scene.start('CharacterCreator', { mode: 'demo' }), { fontSize: 18 });
       }
     }
 
     button(this, 24, HEIGHT - 84, 220, 56, 'Main Menu', () => this.scene.start('MainMenu'));
-    button(this, 260, HEIGHT - 84, 220, 56, 'Save Game', () => this.scene.start('SaveLoad', { mode: 'save', returnTo: 'Camp' }));
-    button(this, WIDTH - 324, HEIGHT - 84, 300, 56, `Start Battle — Stage ${progress.stage}`, () => this.scene.start('Battle'), {
-      enabled: party.length > 0, fill: 0x4a2a22, fontSize: 18,
+    button(this, 260, HEIGHT - 84, 220, 56, 'Restart demo', () => confirmDialog(this, 'Start the demo over?\nThis party will be lost.', () => {
+      newDemo();
+      this.render();
+    }, 'Restart'));
+    button(this, WIDTH - 324, HEIGHT - 84, 300, 56, d.complete ? 'Demo complete' : `Start Battle — Stage ${d.stage}`, () => this.scene.start('Battle', { demo: true }), {
+      enabled: party.length > 0 && !d.complete, fill: 0x4a2a22, fontSize: 18,
     });
     if (party.length === 0) {
       text(this, WIDTH - 174, HEIGHT - 20, 'Recruit at least one hero.', { color: COLORS.dim, fontSize: '13px' }).setOrigin(0.5);
@@ -81,14 +80,13 @@ export class CampScene extends Phaser.Scene {
     if (freeSlots > 0) {
       text(this, x + 108, y + 356, `${freeSlots} empty skill slot${freeSlots > 1 ? 's' : ''}`, { color: COLORS.gold, fontSize: '13px' }).setOrigin(0.5);
     }
-    button(this, x + 14, y + 380, 110, 44, 'Customize', () => this.scene.start('CharacterCreator', { mode: 'edit', characterId: c.id }), {
+    button(this, x + 14, y + 380, 110, 44, 'Customize', () => this.scene.start('CharacterCreator', { mode: 'demoEdit', characterId: c.id }), {
       selected: freeSlots > 0, fontSize: 14,
     });
     button(this, x + 132, y + 380, 70, 44, 'Dismiss', () => {
       confirmDialog(this, `Dismiss ${c.name} from the party?\nThis cannot be undone.`, () => {
-        const party = requireState().party;
-        party.splice(party.indexOf(c), 1);
-        markDirty();
+        const p = requireDemo().party;
+        p.splice(p.indexOf(c), 1);
         this.render();
       }, 'Dismiss');
     }, { fontSize: 13 });

@@ -51,7 +51,7 @@ export class SaveLoadScene extends Phaser.Scene {
         add(text(this, 150, y + 42, `Unreadable save: ${s.error}`, { color: COLORS.bad, fontSize: '14px', wordWrap: { width: 480 } }));
       } else {
         const when = s.savedAt ? new Date(s.savedAt).toLocaleString() : '';
-        add(text(this, 240, y + 15, `Stage ${s.stage}   ·   ${when}`, { color: COLORS.dim, fontSize: '14px' }));
+        add(text(this, 240, y + 15, `Day ${s.day} · ${s.rank} rank · ${s.gold} gold   ·   ${when}`, { color: COLORS.dim, fontSize: '14px' }));
         add(text(this, 150, y + 46, s.party ?? '', { fontSize: '15px', wordWrap: { width: 500 } }));
       }
       const canClick = saving || (!s.empty && !s.error);
@@ -104,7 +104,7 @@ export class SaveLoadScene extends Phaser.Scene {
       }
       session.state = result.state;
       session.dirty = false;
-      this.scene.start('Camp');
+      this.scene.start('City');
     };
     if (session.state && session.dirty && result.ok) {
       confirmDialog(this, 'Load this save?\nUnsaved progress will be lost.', load, 'Load');
