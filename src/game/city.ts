@@ -301,7 +301,8 @@ export function boarders(state: GameState): Character[] {
 
 /** Lodging for one night: on the road (quests), at an inn, a residence (free), or outside. */
 export function lodgingCost(state: GameState, lodging: Lodging = 'road'): number {
-  const per = lodging === 'road' ? GUILD.upkeep.roadPerPerson
+  // Nights on the road cost nothing (food is still paid).
+  const per = lodging === 'road' ? 0
     : lodging === 'outside' ? GUILD.lodging.outsidePerPerson
       : isResidence(lodging) ? 0 : GUILD.inns[lodging].pricePerPerson;
   return boarders(state).length * per;

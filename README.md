@@ -23,7 +23,7 @@ Time passes in days, and **every day ends with a night somewhere**: an **inn** (
 | Silver Lantern Inn (Inner City, high-end) | 16 gold | 2 |
 | Gilded Crown Inn (Inner City, luxury) | 30 gold | 3 |
 | Your residence (Outer City House / Inner City Townhouse / Mansion) | free | 1 / 2 / 3 |
-| On the road (multi-day quests) | 2 gold | doesn't count |
+| On the road (multi-day quests) | free (food is still paid) | doesn't count |
 
 **Food** is paid every day (in the city and on the road) and set per member in **Manage Party** (`food` in `guild.json`):
 
@@ -101,7 +101,7 @@ The rival parties are simulated day by day. A new game starts them spread over t
 | **Companion** | Guild Hall, after negotiating a contract | Base pay every 7th day, a % of each reward, food & lodging if included | Permanent while the contract runs |
 | **Slave** | Slave Market, or a prisoner registered at the city gate | Food & lodging, plus a weekly property tax (5% of their market value) | Permanent; can be sold to the market; seized by the city if the tax goes unpaid |
 
-**Companion contracts** have four terms: **base pay**, **loot cut** (% of each quest reward), **food and lodging included** (worth 28 gold a week to them), and **term length** (2, 4, 8 or 12 weeks). Candidates ask more the higher their level and the greedier they are, a little more for short terms and less for long ones. They value a loot cut by what a party of your rank usually earns (150 gold a week at D, 2000 at A). An offer close to what they want gets a counter-offer; a low one offends them. Each rejected offer uses up patience, and once it runs out they won't talk to you for a week.
+**Companion contracts** have four terms: **base pay**, **loot cut** (% of each quest reward), **food and lodging included** (worth 56 gold a week to them), and **term length** (2, 4, 8 or 12 weeks). Candidates ask more the higher their level and the greedier they are, a little more for short terms and less for long ones. They value a loot cut by what a party of your rank usually earns (150 gold a week at D, 2000 at A). An offer close to what they want gets a counter-offer; a low one offends them. Each rejected offer uses up patience, and once it runs out they won't talk to you for a week.
 
 Companions (and slaves, see above) have a **relationship** score (0–100). It goes up by 6 for every quest completed together, drops if you can't pay them, and lowers their demands when you renew: by up to 30% at 100. When a contract ends, they sit out of quests and you have 3 days to **renew** it (Manage Party) before they leave. Walking out of a renewal ends the contract on the spot. Unpaid companions lose 20 relationship each payday, and quit when it reaches 0.
 

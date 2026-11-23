@@ -52,8 +52,8 @@ export interface GuildConfig {
   boardSize: number;
   board: { maxPostsPerDay: number; minAtPartyRank: number; postWeights: Record<Rank, number>; threat: [number, number]; pay: [number, number]; standardEncounter: number };
   quests: Record<Rank, QuestTier>;
-  /** foodLodgingPerDay: what food and lodging are worth to a companion (negotiations); roadPerPerson: a night on the road. */
-  upkeep: { foodLodgingPerDay: number; roadPerPerson: number };
+  /** foodLodgingPerDay: what food and lodging are worth to a companion (negotiations). Nights on the road are free (food is still paid). */
+  upkeep: { foodLodgingPerDay: number };
   food: Record<FoodTier, { name: string; pricePerPerson: number }> & { default: FoodTier; relationshipAbove: number; relationshipBelowPerStep: number };
   inns: Record<InnTier, InnConfig>;
   lodging: { expectedQuality: Record<'S' | Rank, number>; relationshipAbove: number; relationshipBelowPerStep: number; outsidePerPerson: number };
@@ -255,7 +255,7 @@ export function parseGuildConfig(data: unknown): GuildConfig {
       };
     })(),
     quests,
-    upkeep: numbers(d.upkeep, 'upkeep', ['foodLodgingPerDay', 'roadPerPerson']),
+    upkeep: numbers(d.upkeep, 'upkeep', ['foodLodgingPerDay']),
     food: parseFood(d.food),
     inns: parseInns(d.inns),
     lodging: {

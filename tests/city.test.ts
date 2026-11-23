@@ -292,15 +292,15 @@ describe('contracts', () => {
   it('food and lodging: the main character, slaves, and companions whose contract includes it', () => {
     const s = start();
     const meal = GUILD.food[GUILD.food.default].pricePerPerson;
-    expect(dailyUpkeep(s)).toBe(GUILD.upkeep.roadPerPerson + meal);
+    expect(dailyUpkeep(s)).toBe(meal); // a night on the road is free: food only
     s.gold = 10000;
     expect(buySlave(s, s.market.slaves[0].character.id)).toBeNull();
-    expect(dailyUpkeep(s)).toBe(2 * (GUILD.upkeep.roadPerPerson + meal));
+    expect(dailyUpkeep(s)).toBe(2 * meal);
     const c = companion(s);
     if (c.contract?.type !== 'companion') throw new Error('not a companion');
     c.contract.foodLodging = false;
     s.food[c.id] = 'luxury'; // not fed by the party: finds their own
-    expect(dailyUpkeep(s)).toBe(2 * (GUILD.upkeep.roadPerPerson + meal));
+    expect(dailyUpkeep(s)).toBe(2 * meal);
   });
 
   it('food: each fed member eats at their own quality, which costs gold and moves relationship like lodging', () => {
