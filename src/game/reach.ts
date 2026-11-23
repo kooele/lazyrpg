@@ -9,21 +9,28 @@ export interface ReachContext {
   movement: number;
   /** The user's weapon basic attack (for 'weapon' skills). */
   basic: SkillDef;
+  /** The weapon mode with a tag (Circle Swing always swings a bow in its 'melee' mode). */
+  basicMode?: (tag: string) => SkillDef | undefined;
+}
+
+/** The basic attack a 'weapon' skill uses: its forced mode ('basicMode') if it has one, else the current one. */
+function basicFor(s: SkillDef, ctx: ReachContext): SkillDef {
+  return (s.basicMode && ctx.basicMode?.(s.basicMode)) || ctx.basic;
 }
 
 export function rangeFor(s: SkillDef, ctx: ReachContext): number {
   // Movement is in points (grass = 4 per tile); convert to tiles.
   if (hasTag(s, 'movement')) return Math.floor(((s.rangeScale ?? 1) * ctx.movement) / MOVEMENT_PER_TILE);
-  if (hasTag(s, 'weapon')) return ctx.basic.range;
+  if (hasTag(s, 'weapon')) return basicFor(s, ctx).range;
   return s.range;
 }
 
 export function minRangeFor(s: SkillDef, ctx: ReachContext): number {
-  return hasTag(s, 'weapon') ? ctx.basic.minRange : s.minRange;
+  return hasTag(s, 'weapon') ? basicFor(s, ctx).minRange : s.minRange;
 }
 
 export function losFor(s: SkillDef, ctx: ReachContext): LosRule | undefined {
-  return hasTag(s, 'weapon') ? ctx.basic.los : s.los;
+  return hasTag(s, 'weapon') ? basicFor(s, ctx).los : s.los;
 }
 
 /**
@@ -45,7 +52,7 @@ export function skillShape(s: SkillDef, ctx: ReachContext): { kind: 'targets' | 
   switch (s.target) {
     case 'self': {
       // A 'weapon' area without its own radius (Circle Swing) reaches as far as the weapon.
-      const r = s.aoeRadius ?? (hasTag(s, 'weapon') ? ctx.basic.range : 0);
+      const r = s.aoeRadius ?? (hasTag(s, 'weapon') ? basicFor(s, ctx).range : 0);
       if (!r) return { kind: 'self', tiles };
       scan(r, (_p, d) => withinRange(d, r));
       return { kind: 'area', tiles };

@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import {
-  NAME_MAX_LENGTH, PALETTE, isSupport, SKILLS, SKILL_TABS, SKILL_TREES, WEAPONS, XP_PER_LEVEL, resolveWeaponSkill, skillStatText,
+  NAME_MAX_LENGTH, PALETTE, isSupport, SKILLS, SKILL_TABS, SKILL_TREES, WEAPONS, XP_PER_LEVEL, maxBodyRank, modeWithTag, resolveWeaponSkill, skillStatText,
 } from '../data/content';
 import { STAT_CONFIG, visibleStatKeys } from '../data/stats';
 import {
@@ -176,7 +176,12 @@ export class CharacterCreatorScene extends Phaser.Scene {
   /** What this adventurer's Movement / weapon-scaled skills reach. */
   private reachContext(): ReachContext {
     const weapon = WEAPONS[this.draft.weaponId];
-    return { movement: deriveStats(this.draft).movement, basic: resolveWeaponSkill(SKILLS[weapon.skills[0]], weapon) };
+    const raw = SKILLS[weapon.skills[0]];
+    const basicMode = (tag: string) => {
+      const m = modeWithTag(raw, tag);
+      return m && resolveWeaponSkill(m, weapon);
+    };
+    return { movement: deriveStats(this.draft).movement, basic: resolveWeaponSkill(raw, weapon), basicMode };
   }
 
   private isSupport(s: SkillDef): boolean {
@@ -333,7 +338,8 @@ export class CharacterCreatorScene extends Phaser.Scene {
   /** The Body tab: put skill points into stats. Each point adds twice the stat's base growth per level. */
   private bodyTab(L: Phaser.GameObjects.Container): void {
     const d = this.draft;
-    L.add(text(this, 636, 128, 'Each point trains a stat by 2 levels of base growth.', { fontSize: '12px', color: COLORS.dim, wordWrap: { width: 300 } }));
+    const cap = maxBodyRank(d.level);
+    L.add(text(this, 636, 120, `Each point trains a stat by 2 levels of base growth. Max ${cap} per stat at level ${d.level} (level / 3, rounded up).`, { fontSize: '12px', color: COLORS.dim, wordWrap: { width: 300 } }));
     const free = freePoints(d);
     bodyStats().forEach((k, i) => {
       const y = 150 + i * 36;
@@ -341,12 +347,12 @@ export class CharacterCreatorScene extends Phaser.Scene {
       const gain = bodyGain(k);
       const info = STAT_INFO[k];
       const row = this.add.rectangle(636, y, 300, 32, COLORS.panelLight, n ? 0.9 : 0.4).setOrigin(0).setStrokeStyle(1, n ? COLORS.accent : COLORS.border);
-      L.add(this.tip(row, () => `${info.name} (${info.short})\n${info.description}\n\nEach point: +${gain} ${info.short} (2 x base growth ${STAT_CONFIG.growthPerLevel[k]}).\n${n ? `Invested ${n}: +${gain * n} ${info.short}.` : 'Not trained yet.'}`));
+      L.add(this.tip(row, () => `${info.name} (${info.short})\n${info.description}\n\nEach point: +${gain} ${info.short} (2 x base growth ${STAT_CONFIG.growthPerLevel[k]}).\n${n ? `Invested ${n}: +${gain * n} ${info.short}.` : 'Not trained yet.'}\nMax rank ${cap} at level ${d.level}.`));
       L.add(text(this, 646, y + 8, info.name, { fontSize: '14px' }));
       L.add(text(this, 766, y + 9, `+${gain} each`, { fontSize: '12px', color: COLORS.dim }));
       L.add(button(this, 836, y + 4, 26, 24, '−', () => this.invest(k, -1), { fontSize: 15, enabled: n > 0 }));
-      L.add(text(this, 880, y + 7, String(n), { fontSize: '15px', color: n ? COLORS.gold : COLORS.dim }).setOrigin(0.5, 0));
-      L.add(button(this, 900, y + 4, 26, 24, '+', () => this.invest(k, 1), { fontSize: 15, enabled: free > 0 }));
+      L.add(text(this, 880, y + 7, `${n}/${cap}`, { fontSize: '13px', color: n ? COLORS.gold : COLORS.dim }).setOrigin(0.5, 0));
+      L.add(button(this, 900, y + 4, 26, 24, '+', () => this.invest(k, 1), { fontSize: 15, enabled: free > 0 && n < cap }));
     });
   }
 
@@ -355,6 +361,7 @@ export class CharacterCreatorScene extends Phaser.Scene {
     const n = (d.body?.[k] ?? 0) + delta;
     if (delta > 0 && freePoints(d) <= 0) return toast(this, 'No skill points left. Unlearn a skill or a Body point first.', COLORS.bad);
     if (n < 0) return;
+    if (delta > 0 && n > maxBodyRank(d.level)) return toast(this, `${STAT_INFO[k].name} is at its max rank (${maxBodyRank(d.level)}) for level ${d.level}.`, COLORS.bad);
     d.body = { ...(d.body ?? {}), [k]: n };
     if (!n) delete d.body[k];
     if (!Object.keys(d.body).length) delete d.body;

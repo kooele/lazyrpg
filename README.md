@@ -178,7 +178,7 @@ Skills can cost **mana** (`mana` in `skills.json`), which doesn't come back duri
 
 ### Skill points, skill trees and the Body tab
 
-Adventurers have **skill points**: 2 at level 1 and 1 more every level. Each point either learns a skill-tree skill (mix trees freely) or goes into the **Body** tab, where it trains a stat by twice its base growth per level: +100 Health, +40 Mana, +20 P.Atk or M.Atk, +10 Defense or Resist per point (before weapon multipliers; talent doesn't change it). Points can be moved around freely in Customize / Loadout.
+Adventurers have **skill points**: 2 at level 1 and 1 more every level. Each point either learns a skill-tree skill (mix trees freely) or goes into the **Body** tab, where it trains a stat by twice its base growth per level: +100 Health, +40 Mana, +20 P.Atk or M.Atk, +10 Defense or Resist per point (before weapon multipliers; talent doesn't change it). Each stat takes at most **level / 3 (rounded up)** points: 1 up to level 3, 2 up to level 6, and so on; a loaded save over the cap gets the extra points back. Points can be moved around freely in Customize / Loadout.
 
 
 Some skills need a **minimum level** (`level` in `skills.json`; shown as "Lv 3" in the skill tree). Until then they're greyed out and can't be learned. A loaded save with a skill above the character's level unlearns it and refunds the point. Random adventurers only pick skills their level has unlocked.
@@ -193,7 +193,7 @@ Status effects: Burn, Slow, Corrode, Frenzy, **Blinded** (Pocket Sand: −30% P.
 Every skill has tags that explain how it behaves. These five change the rules:
 
 - **Movement**: range in tiles = rangeScale × Movement ÷ 4 (the grass cost), rounded down. Charge uses 100% (4 tiles at Movement 16), and Slow (−4 Movement) shortens it. Arcane Shift has a fixed range of 2.
-- **Weapon**: uses your weapon's basic-attack range and line rules (Execute with a Bow reaches 5 tiles). Double Strike hits with the basic attack twice, and Circle Swing hits every unit within the weapon's range with it, allies included (a bow uses its Melee mode for both the reach and the hit). Unusable while the weapon is disabled (nothing disables weapons yet).
+- **Weapon**: uses your weapon's basic-attack range and line rules (Execute with a Bow reaches 5 tiles). Double Strike hits with the basic attack twice (the second hit at 50% damage), and Circle Swing hits every unit within the weapon's range with it, allies included (a bow uses its Melee mode for both the reach and the hit). Unusable while the weapon is disabled (nothing disables weapons yet).
 - **Engage**: see below. Sword Slash, Bow Strike (bow in Melee mode), Empowered Strike, Engage, Kick, Charge, Flicker Strike, Life-Risking Strike.
 - **Disengage**: usable while engaged, on anyone, and it ends your engagement with no free attack for your opponent. Arcane Pulse, Arcane Shift, Shadow Step.
 - **Free Action**: costs 0 AP (Kick). Usable any time until the unit's turn ends, so after a move or a 1/2-AP skill, but not after a turn-ending one. The turn doesn't end automatically while a unit still has a free action with a target in reach; press **End Turn** when done.
@@ -235,7 +235,7 @@ Encounter size is a threat budget: 1 per Adventurer (rats cost 0.5, goblins 0.6,
 
 ### Engagement
 
-Hitting a unit with an **Engage** skill locks you both together, unless the target is already engaged with someone else. While engaged:
+Hitting a unit with an **Engage** skill (or **Spear Thrust** on an adjacent target, diagonals included) locks you both together, unless the target is already engaged with someone else. While engaged:
 - You can't move, you can only attack your opponent, and you can only heal or cleanse yourself.
   - Attacks are fine as long as they hit your opponent: Spear Thrust aimed through them (diagonals included), Circle Swing (even if it also catches others), and Charge on the opponent itself (no dash, just the strike).
 - **Disengage** (button in the battle sidebar) breaks free, but your opponent gets a free basic attack on you (an opportunity attack). You can then move and act normally.

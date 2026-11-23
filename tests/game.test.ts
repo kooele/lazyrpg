@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import skillsJson from '../src/data/skills.json';
 import weaponsJson from '../src/data/weapons.json';
-import { SKILLS, TREE_SKILLS, WEAPONS, parseContent, skillEffect, skillPointsForLevel, skillStatText, skillStats } from '../src/data/content';
+import { SKILLS, TREE_SKILLS, WEAPONS, maxBodyRank, modeWithTag, parseContent, resolveWeaponSkill, skillEffect, skillPointsForLevel, skillStatText, skillStats } from '../src/data/content';
 import enemiesJson from '../src/data/enemies.json';
 import { ENEMIES, parseEnemies } from '../src/data/enemies';
 import { STAT_CONFIG, parseStatConfig } from '../src/data/stats';
@@ -12,6 +12,7 @@ import { allSkills, bodyGain, skillBarLayout, swapBarSlots, bodyPoints as bodyPo
 import { randomAdventurer } from '../src/game/people';
 import { dist, generateMap, hasLineOfSight, passable, withinRange, type BattleMap, type Point, type Terrain } from '../src/game/grid';
 import { parseSave, serializeSave } from '../src/game/save';
+import { skillShape } from '../src/game/reach';
 import { advanceDays, newCampaign } from '../src/game/city';
 
 function openMap(w = 10, h = 7): BattleMap {
@@ -77,7 +78,7 @@ describe('stats and content files', () => {
   it('every weapon grants defined skills; formulas are generated from the data', () => {
     for (const w of Object.values(WEAPONS)) for (const s of w.skills) expect(SKILLS[s]).toBeDefined();
     expect(skillEffect(SKILLS.execute)).toBe("100% P.Atk + 15% of target's missing HP");
-    expect(skillEffect(SKILLS.double_strike)).toBe('Basic attack x2');
+    expect(skillEffect(SKILLS.double_strike)).toBe('Basic attack x2 (100%, then 50% damage)');
     expect(skillEffect(SKILLS.life_risking_strike)).toBe('250% P.Atk, You: Exposed (1 turn), 100% P.Atk recoil if the target survives');
   });
 
@@ -268,15 +269,15 @@ describe('skills', () => {
     expect(e.hp).toBe(500 - 57); // 100 x 100/175
   });
 
-  it('double strike hits with the weapon basic attack twice, at the weapon range', () => {
+  it('double strike hits with the weapon basic attack twice (second at 50%), at the weapon range', () => {
     const { battle, units: [a, e] } = setup(openMap(), [
       { c: hero('sword_shield', ['double_strike']), team: 'player', at: { x: 1, y: 1 } },
       { c: hero('bow'), team: 'enemy', at: { x: 2, y: 1 } },
     ]);
     const events = battle.perform(a, 'double_strike', { x: 2, y: 1 });
-    // Sword Slash: 100 x 2/3 = 67, twice
-    expect(events.filter((ev) => ev.type === 'damage').map((ev) => ev.type === 'damage' && ev.amount)).toEqual([67, 67]);
-    expect(e.hp).toBe(500 - 134);
+    // Sword Slash: 100 x 2/3 = 67, then half of that: 50 x 2/3 = 33
+    expect(events.filter((ev) => ev.type === 'damage').map((ev) => ev.type === 'damage' && ev.amount)).toEqual([67, 33]);
+    expect(e.hp).toBe(500 - 100);
     // With a bow it reaches as far as the bow.
     const archer = setup(openMap(), [{ c: hero('bow', ['double_strike']), team: 'player', at: { x: 1, y: 1 } }]);
     expect(archer.battle.skillRange(archer.units[0], SKILLS.double_strike)).toBe(5);
@@ -332,6 +333,35 @@ describe('skills', () => {
     battle.perform(s, 'spear_thrust', { x: 3, y: 3 });
     expect(e.hp).toBe(500 - 67);
     expect(e).toMatchObject({ x: 3, y: 3 });
+  });
+
+  it('spear thrust engages an adjacent target, but not one 2 tiles away', () => {
+    const far = setup(openMap(), [
+      { c: hero('spear'), team: 'player', at: { x: 1, y: 3 } },
+      { c: hero('bow'), team: 'enemy', at: { x: 3, y: 3 } },
+    ]);
+    far.battle.perform(far.units[0], 'spear_thrust', { x: 3, y: 3 });
+    expect(far.units[0].engagedWith).toBeNull();
+    for (const at of [{ x: 2, y: 3 }, { x: 2, y: 2 }]) {
+      const { battle, units: [s, e] } = setup(openMap(), [
+        { c: hero('spear'), team: 'player', at: { x: 1, y: 3 } },
+        { c: hero('bow'), team: 'enemy', at },
+      ]);
+      const events = battle.perform(s, 'spear_thrust', at);
+      expect(s.engagedWith).toBe(e.uid);
+      expect(e.engagedWith).toBe(s.uid);
+      expect(events.some((ev) => ev.type === 'engage')).toBe(true);
+    }
+    expect(skillEffect(SKILLS.spear_thrust)).toBe('100% P.Atk, Engages an adjacent target');
+  });
+
+  it('circle swing on a bow shows the melee reach in the skill diagram', () => {
+    const bow = WEAPONS.bow;
+    const raw = SKILLS[bow.skills[0]];
+    const ctx = { movement: 16, basic: resolveWeaponSkill(raw, bow), basicMode: (tag: string) => { const m = modeWithTag(raw, tag); return m && resolveWeaponSkill(m, bow); } };
+    const shape = skillShape(SKILLS.circle_swing, ctx);
+    expect(shape.kind).toBe('area');
+    expect(shape.tiles).toHaveLength(8); // the 8 tiles around you, not the bow's long range
   });
 
   it('arcane pulse knocks back 2 tiles', () => {
@@ -1166,7 +1196,7 @@ describe('skill points and the Body tab', () => {
 
   it('saves keep Body points and reject over-spending', () => {
     const c = createCharacter('Main', '#3d7be0', 'bow');
-    c.level = 3;
+    c.level = 4;
     c.skillIds = ['fireball'];
     c.body = { pAtk: 2, resist: 1 };
     const state = newCampaign(c, 'Testers', makeRng(2));
@@ -1179,6 +1209,25 @@ describe('skill points and the Body tab', () => {
     file.party[0].body = { movement: 1 };
     const bad2 = parseSave(JSON.stringify(file));
     expect(!bad2.ok && bad2.error).toMatch(/body.movement/);
+  });
+
+  it('Body ranks per stat are capped at level / 3, rounded up', () => {
+    expect([1, 2, 3, 4, 6, 7, 10].map(maxBodyRank)).toEqual([1, 1, 1, 2, 2, 3, 4]);
+    const c = createCharacter('B', '#3d7be0', 'sword_shield');
+    c.level = 4;
+    c.body = { health: 4 };
+    sanitizeLoadout(c);
+    expect(c.body).toEqual({ health: 2 });
+    // Saves with ranks over the cap get the extra points back.
+    const state = newCampaign(c, 'Testers', makeRng(2));
+    const file = JSON.parse(serializeSave(state));
+    file.party[0].body = { health: 4 };
+    const r = parseSave(JSON.stringify(file));
+    expect(r.ok && r.state.party[0].body).toEqual({ health: 2 });
+    for (let s = 1; s < 30; s++) {
+      const a = randomAdventurer(1 + (s % 9), makeRng(s));
+      for (const n of Object.values(a.body ?? {})) expect(n).toBeLessThanOrEqual(maxBodyRank(a.level));
+    }
   });
 
   it('random adventurers spend all their points', () => {

@@ -1,8 +1,8 @@
 // Random people for Arch City: names, looks, and ready-to-fight adventurers.
-import { PALETTE, SKILLS, SKILL_TREES, WEAPONS, skillPointsForLevel } from '../data/content';
+import { PALETTE, SKILLS, SKILL_TREES, WEAPONS, skillPointsForLevel, maxBodyRank } from '../data/content';
 import {
   FACE_COUNT, HAIR_COLORS, HAIR_STYLES, SEXES, SKIN_TONES,
-  type BodyInvestment, type BodyModel, type Character, type HairColor, type HairStyle, type Look, type Sex, type SkinTone,
+  type BodyInvestment, type StatKey, type BodyModel, type Character, type HairColor, type HairStyle, type Look, type Sex, type SkinTone,
 } from '../data/types';
 import { bodyStats, newId, type Rng } from './character';
 import { rollTalents } from './talent';
@@ -106,10 +106,15 @@ export function randomAdventurer(level: number, rng: Rng, opts: { name?: string;
   const skillIds: string[] = [];
   const body: BodyInvestment = {};
   const favored = bodyStats().filter((k) => (tab === 'mage' ? ['mAtk', 'mana', 'health'] : ['pAtk', 'health', 'defense']).includes(k));
+  // Each stat takes at most maxBodyRank points.
+  const cap = maxBodyRank(level);
+  const open_ = (ks: StatKey[]) => ks.filter((k) => (body[k] ?? 0) < cap);
   for (let i = 0; i < points; i++) {
-    if (pool.length > skillIds.length && (i < 2 || rng() < 0.6)) skillIds.push(pool[skillIds.length]);
-    else {
-      const k = pick(favored.length ? favored : bodyStats(), rng);
+    const canLearn = pool.length > skillIds.length;
+    const trainable = open_(favored).length ? open_(favored) : open_(bodyStats());
+    if (canLearn && (i < 2 || rng() < 0.6 || !trainable.length)) skillIds.push(pool[skillIds.length]);
+    else if (trainable.length) {
+      const k = pick(trainable, rng);
       body[k] = (body[k] ?? 0) + 1;
     }
   }
