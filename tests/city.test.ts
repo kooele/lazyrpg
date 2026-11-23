@@ -14,7 +14,7 @@ import {
   companionContract, companionDemand, evaluateOffer, joinParty, mercenaryRates, offerValue, openingTerms, punishSlave, slaveContract, bounty, registrationFee, slaveTax, slaveValue,
 } from '../src/game/contracts';
 import { DEMO_STAGES, newDemo, resolveDemoBattle } from '../src/game/demo';
-import { encounterBudget, fairReward, payRatio } from '../src/game/board';
+import { fairReward, payRatio, questRenown, strength, totalThreat, usualCount } from '../src/game/board';
 import { adventurerCount, adventurerRank, deathFactor, leaderboard, questDifficulty, rankDifficulty, rivalPickQuest, rivalQuestChance, rankCounts, simulateGuildDay } from '../src/game/guild';
 
 const start = (seed = 1): GameState => newCampaign(createCharacter('Main', '#3d7be0', 'sword_shield'), 'Testers', makeRng(seed));
@@ -26,8 +26,8 @@ const neutralFood = (s: GameState) => {
 describe('guild.json', () => {
   it('names the field when a number is wrong', () => {
     const bad = JSON.parse(JSON.stringify(guildJson));
-    bad.quests.C.reward = [300, 100];
-    expect(() => parseGuildConfig(bad)).toThrow(/quests\.C\.reward\[1\]/);
+    bad.quests.C.count = [6, 3];
+    expect(() => parseGuildConfig(bad)).toThrow(/quests\.C\.count\[1\]/);
     const shares = JSON.parse(JSON.stringify(guildJson));
     shares.startingRankShares.A = 0.5;
     expect(() => parseGuildConfig(shares)).toThrow(/startingRankShares.*add up to 1/);
@@ -151,26 +151,38 @@ describe('ranks and the leaderboard', () => {
     }
   });
 
-  it('quest gold and difficulty follow the encounter budget (its rank and threat), not just the enemy level', () => {
-    const q = (rank: 'D' | 'C' | 'B' | 'A', stage: number, threat: number) => ({ rank, stage, threat });
-    const std = GUILD.board.standardEncounter;
-    // Gold: the reward table's figure x encounter budget / the standard encounter.
-    expect(fairReward(q('C', 6, 1))).toBeCloseTo(GUILD.quests.C.reward[0] * encounterBudget('C') / std);
-    expect(fairReward(q('A', 16, 1.2))).toBeCloseTo(GUILD.quests.A.reward[0] * encounterBudget('A', 1.2) / std);
-    expect(fairReward(q('B', 11, 1.3))).toBeGreaterThan(fairReward(q('B', 11, 0.9)));
-    // Difficulty: enemy level - 1, plus a level per threat point over the standard encounter.
-    expect(questDifficulty(q('C', 8, 1))).toBeCloseTo(7 + encounterBudget('C') - std);
-    expect(questDifficulty(q('A', 18, 1.35))).toBeCloseTo(17 + encounterBudget('A', 1.35) - std);
-    expect(questDifficulty(q('B', 12, 1.3))).toBeGreaterThan(questDifficulty(q('B', 12, 0.9)));
+  it('a quest rolls its enemy level and group size; together they make its total threat, which sets gold, renown and difficulty', () => {
+    const t = GUILD.threat;
+    const q = (stage: number, count: number) => ({ stage, count });
+    // Strength grows by strengthGrowth per level; total threat = count x strength.
+    expect(strength(1)).toBeCloseTo(t.strengthAtLevel1);
+    expect(strength(11) / strength(10)).toBeCloseTo(t.strengthGrowth);
+    expect(totalThreat(q(8, 5))).toBeCloseTo(5 * strength(8));
+    // Gold and renown follow total threat.
+    expect(fairReward(q(8, 5))).toBeCloseTo(totalThreat(q(8, 5)) * t.goldPerThreat);
+    expect(questRenown(q(8, 5))).toBe(Math.round(totalThreat(q(8, 5)) * t.renownPerThreat));
+    // Difficulty: a standard-sized group at level L is about L - 1; more enemies or higher levels make it harder.
+    expect(questDifficulty(q(8, t.standardCount))).toBeCloseTo(7);
+    expect(questDifficulty(q(8, t.standardCount * t.strengthGrowth))).toBeCloseTo(8); // a level's worth of extra threat
+    expect(questDifficulty(q(8, 6))).toBeGreaterThan(questDifficulty(q(8, 3)));
+    expect(questDifficulty(q(9, 4))).toBeGreaterThan(questDifficulty(q(8, 4)));
     // Ranks get harder in order.
     expect(rankDifficulty('D')).toBeLessThan(rankDifficulty('C'));
     expect(rankDifficulty('C')).toBeLessThan(rankDifficulty('B'));
     expect(rankDifficulty('B')).toBeLessThan(rankDifficulty('A'));
-    // Posted quests pay fairly for their encounter (times the pay luck).
-    for (let seed = 0; seed < 30; seed++) {
-      const quest = makeQuest('A', 1, makeRng(seed));
-      expect(payRatio(quest)).toBeGreaterThan(GUILD.board.pay[0] - 0.05);
-      expect(payRatio(quest)).toBeLessThan(GUILD.board.pay[1] + 0.05);
+    // Posted quests: level and group size within their rank's ranges, rolled independently (both vary), fair pay x luck.
+    for (const r of ['D', 'C', 'B', 'A'] as const) {
+      const quests = Array.from({ length: 60 }, (_, seed) => makeQuest(r, 1, makeRng(seed)));
+      const tier = GUILD.quests[r];
+      for (const quest of quests) {
+        expect(quest.count).toBeGreaterThanOrEqual(tier.count[0]);
+        expect(quest.count).toBeLessThanOrEqual(tier.count[1]);
+        expect(quest.renown).toBe(questRenown(quest));
+        expect(payRatio(quest)).toBeGreaterThan(GUILD.board.pay[0] - 0.05);
+        expect(payRatio(quest)).toBeLessThan(GUILD.board.pay[1] + 0.05);
+      }
+      expect(new Set(quests.map((x) => x.count)).size).toBeGreaterThan(1);
+      expect(new Set(quests.map((x) => x.stage)).size).toBeGreaterThan(1);
     }
   });
 
@@ -180,8 +192,8 @@ describe('ranks and the leaderboard', () => {
     expect(s.guild.board.filter((q) => q.rank === s.rank).length).toBeGreaterThanOrEqual(GUILD.board.minAtPartyRank);
     expect(new Set(s.guild.board.map((q) => q.rank)).size).toBeGreaterThan(2);
     for (const q of s.guild.board) {
-      expect(q.threat).toBeGreaterThanOrEqual(GUILD.board.threat[0]);
-      expect(q.threat).toBeLessThanOrEqual(GUILD.board.threat[1]);
+      expect(q.count).toBeGreaterThanOrEqual(GUILD.quests[q.rank].count[0]);
+      expect(q.count).toBeLessThanOrEqual(GUILD.quests[q.rank].count[1]);
       const r = payRatio(q);
       expect(r).toBeGreaterThan(GUILD.board.pay[0] - 0.05);
       expect(r).toBeLessThan(GUILD.board.pay[1] + 0.05);
@@ -203,23 +215,23 @@ describe('ranks and the leaderboard', () => {
     const s = start();
     const p = s.guild.rivals.find((r) => r.rank === 'C')!;
     p.members.forEach((m) => (m.level = 8));
-    const q = (o: Partial<Quest>): Quest => ({ ...makeQuest('C', s.day, makeRng(1)), stage: 7, threat: 1, ...o });
+    const q = (o: Partial<Quest>): Quest => ({ ...makeQuest('C', s.day, makeRng(1)), stage: 7, count: 4, ...o });
     const cheap = q({ reward: 150 });
     const rich = q({ reward: 300 });
-    const tooHard = q({ stage: 10, threat: 1.35, reward: 900 });
+    const tooHard = q({ stage: 10, count: 6, reward: 900 });
     const aboveRank = { ...makeQuest('B', s.day, makeRng(1)), stage: 11, reward: 2000 };
     expect(rivalPickQuest(p, [cheap, rich, tooHard, aboveRank])).toBe(rich);
     expect(rivalQuestChance(p, tooHard)).toBeLessThan(0.55);
     expect(rivalPickQuest(p, [tooHard, aboveRank])).toBeNull();
     // A safer quest can beat a slightly richer risky one.
-    const safe = q({ stage: 6, threat: 0.8, reward: 250 });
-    const risky = q({ stage: 9, threat: 1.2, reward: 270 });
+    const safe = q({ stage: 6, count: 3, reward: 250 });
+    const risky = q({ stage: 9, count: 5, reward: 270 });
     expect(rivalPickQuest(p, [risky, safe])).toBe(safe);
   });
 
   it('quests above the party rank are locked', () => {
     const s = start();
-    s.guild.board.push({ id: 'q_hi', title: 'Hard', rank: 'B', stage: 5, reward: 400, renown: 70, days: 2, expires: 99, description: '' });
+    s.guild.board.push({ id: 'q_hi', title: 'Hard', rank: 'B', stage: 5, count: 4, reward: 400, renown: 70, days: 2, expires: 99, description: '' });
     expect(acceptQuest(s, 'q_hi')).toMatch(/must be B rank/);
   });
 });
@@ -597,6 +609,22 @@ describe('contracts', () => {
     expect(s.gold).toBe(gold - GUILD.inns.standard.pricePerPerson - foodCost(s));
     expect(c.xp).toBe(xp + 2 * GUILD.schedule.trainingXp);
     expect(activityOf(s, mainCharacter(s))).toBe('oddJobs');
+  });
+
+  it("quests keep their group size through a save; older saves' threat multiplier becomes a group size", () => {
+    const s = start();
+    const r = parseSave(serializeSave(s));
+    if (!r.ok) throw new Error(r.error);
+    expect(r.state.guild.board.map((q) => q.count)).toEqual(s.guild.board.map((q) => q.count));
+    // An old quest: no count, a threat multiplier on its rank's usual group.
+    const raw = JSON.parse(serializeSave(s));
+    const old = raw.state?.guild?.board?.[0] ?? raw.guild.board[0];
+    const rank = old.rank as 'D' | 'C' | 'B' | 'A';
+    delete old.count;
+    old.threat = 1.3;
+    const back = parseSave(JSON.stringify(raw));
+    if (!back.ok) throw new Error(back.error);
+    expect(back.state.guild.board[0].count).toBe(Math.round(usualCount(rank) * 1.3));
   });
 
   it('health, morale and the schedule survive a save', () => {

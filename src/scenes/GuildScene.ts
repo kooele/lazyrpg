@@ -4,7 +4,7 @@ import { GUILD } from '../data/guild';
 import type { FreeAdventurer, Quest } from '../data/types';
 import { acceptQuest, canTakeQuest, lineupMembers, toggleLineup } from '../game/city';
 import { joinParty, mercenaryRates, rosterFull, talentPriceFactor } from '../game/contracts';
-import { groupLabel, payRating } from '../game/board';
+import { groupLabel, payRating, totalThreat } from '../game/board';
 import { adventurerCount, adventurerRank, leaderboard, nextRank, rankThreshold } from '../game/guild';
 import { markDirty, requireState, session } from '../game/session';
 import { cityHeader, rankBadge } from '../ui/hud';
@@ -102,7 +102,8 @@ export class GuildScene extends Phaser.Scene {
     c.add(rankBadge(this, 10, 10, q.rank, 26));
     c.add(text(this, 44, 10, q.title, { fontSize: '16px', color: allowed ? COLORS.text : COLORS.dim, wordWrap: { width: W - 54 } }));
     const group = groupLabel(q);
-    c.add(text(this, 44, 32, `${q.promotion ? 'PROMOTION · ' : ''}Enemy level ${q.stage}${group ? ` · ${group}` : ''} · ${q.days} day${q.days > 1 ? 's' : ''} away${q.promotion ? '' : ` · until day ${q.expires}`}`, {
+    // Total threat: the group's size (in threat points) x the strength of an enemy at its level.
+    c.add(text(this, 44, 32, `${q.promotion ? 'PROMOTION · ' : ''}Lv ${q.stage} × group ${q.count}${group ? ` (${group.toLowerCase()})` : ''} = Threat ${Math.round(totalThreat(q))} · ${q.days} day${q.days > 1 ? 's' : ''} away${q.promotion ? '' : ` · until day ${q.expires}`}`, {
       fontSize: '12px', color: group === 'Large band' ? '#e08a5a' : COLORS.dim,
     }));
     c.add(text(this, 10, 52, q.description, { fontSize: '12px', wordWrap: { width: W - 20 }, color: allowed ? COLORS.text : COLORS.dim }));

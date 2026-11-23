@@ -17,36 +17,30 @@ export function rankForStage(stage: number): Rank {
   return (tiers.find(({ t }) => stage <= t.stages[1]) ?? tiers[tiers.length - 1]).r;
 }
 
-/** Enemy threat budget of a quest of `rank`: the rank's encounter size times the quest's threat. Never depends on the party. */
-export function encounterBudget(rank: Rank, threat = 1): number {
-  return GUILD.quests[rank].encounter * threat;
+const T = GUILD.threat;
+
+/** The middle of a rank's enemy count range (a usual group; promotion quests and Quick Battle use it). */
+export function usualCount(rank: Rank): number {
+  const [lo, hi] = GUILD.quests[rank].count;
+  return (lo + hi) / 2;
 }
+
+/** How strong one enemy (one threat point) is at `level`: strengthAtLevel1 x strengthGrowth^(level - 1). */
+export const strength = (level: number) => T.strengthAtLevel1 * T.strengthGrowth ** (Math.max(1, level) - 1);
+
+/** A quest's total threat: its enemy count (threat points) x the strength of one enemy at its level. */
+export const totalThreat = (q: Pick<Quest, 'stage' | 'count'>) => q.count * strength(q.stage);
+
+/** The usual gold for a quest: its total threat x goldPerThreat (before the board's pay roll). */
+export const fairReward = (q: Pick<Quest, 'stage' | 'count'>) => totalThreat(q) * T.goldPerThreat;
+
+/** Renown for completing a quest: its total threat x renownPerThreat. */
+export const questRenown = (q: Pick<Quest, 'stage' | 'count'>) => Math.max(1, Math.round(totalThreat(q) * T.renownPerThreat));
 
 const roll = ([lo, hi]: [number, number], rng: Rng) => lo + rng() * (hi - lo);
 const round5 = (v: number) => Math.max(5, Math.round(v / 5) * 5);
 
-/** The reward table's figure for a quest of `rank` at enemy level `stage` (for a standard encounter): up the rank's range with the level. */
-export function baseReward(rank: Rank, stage: number): number {
-  const t = GUILD.quests[rank];
-  const [s0, s1] = t.stages;
-  const f = s1 > s0 ? Math.max(0, Math.min(1, (stage - s0) / (s1 - s0))) : 0.5;
-  return t.reward[0] + (t.reward[1] - t.reward[0]) * f;
-}
-
-/**
- * How big a quest's encounter is next to the standard one the reward table is set for (board.standardEncounter):
- * its rank's encounter budget times its threat, over the standard. Rewards scale with it.
- */
-export function encounterScale(q: Pick<Quest, 'rank' | 'threat'>): number {
-  return encounterBudget(q.rank, q.threat ?? 1) / GUILD.board.standardEncounter;
-}
-
-/** The usual reward for a quest: its level's base reward, scaled by the size of its encounter. */
-export function fairReward(q: Pick<Quest, 'rank' | 'stage' | 'threat'>): number {
-  return baseReward(q.rank, q.stage) * encounterScale(q);
-}
-
-/** How well a quest pays for its danger: reward / the usual reward for its level and encounter size (1 = fair). */
+/** How well a quest pays for its danger: reward / the usual reward for its total threat (1 = fair). */
 export function payRatio(q: Quest): number {
   return q.reward / fairReward(q);
 }
@@ -57,37 +51,40 @@ export function payRating(q: Quest): 'generous' | 'fair' | 'poor' {
   return r >= 1.15 ? 'generous' : r <= 0.87 ? 'poor' : 'fair';
 }
 
-/** "Small group", "" (usual) or "Large band": how many foes to expect. */
-export function groupLabel(q: Quest): string {
-  const t = q.threat ?? 1;
-  return t <= 0.9 ? 'Small group' : t >= 1.15 ? 'Large band' : '';
+/** "Small group", "" (usual) or "Large band": the group size against its rank's range (bottom or top third). */
+export function groupLabel(q: Pick<Quest, 'rank' | 'count'>): string {
+  const [lo, hi] = GUILD.quests[q.rank].count;
+  const third = (hi - lo) / 3;
+  return q.count < lo + third - 1e-9 ? 'Small group' : q.count > hi - third + 1e-9 ? 'Large band' : '';
 }
 
 export function makeQuest(rank: Rank, day: number, rng: Rng, promotion = false): Quest {
   const tier = GUILD.quests[rank];
   // A promotion quest is a fair test: the easier half of its rank's levels, a usual-sized group, usual pay.
   const stage = promotion ? randInt(tier.stages[0], Math.ceil((tier.stages[0] + tier.stages[1]) / 2), rng) : randInt(tier.stages[0], tier.stages[1], rng);
-  const threat = promotion ? 1 : Math.round(roll(GUILD.board.threat, rng) * 100) / 100;
+  // Group size and level are rolled independently; together they make the quest's total threat.
+  const count = promotion ? Math.round(usualCount(rank)) : randInt(tier.count[0], tier.count[1], rng);
   const pay = promotion ? 1 : roll(GUILD.board.pay, rng);
   const foes = pickFoes(stage, rng);
   const levels = new Map(enemyTypesForStage(stage).map((t) => [t.type, t.level]));
   const place = PLACES[Math.floor(rng() * PLACES.length)];
   const title = `${ENEMIES[foes[0]].questTitle} at ${place}`;
   const names = foes.map((t) => `${ENEMIES[t].name}s (Lv ${levels.get(t)})`);
-  const size = threat <= 0.9 ? ' A small group.' : threat >= 1.15 ? ' A large band: expect many of them.' : '';
+  const group = groupLabel({ rank, count });
+  const size = group === 'Small group' ? ' A small group.' : group === 'Large band' ? ' A large band: expect many of them.' : '';
   return {
     id: newId('q'),
     title: promotion ? `Promotion: ${title}` : title,
     rank,
     stage,
-    reward: round5(fairReward({ rank, stage, threat }) * pay),
-    renown: Math.round(tier.renown * threat),
+    reward: round5(fairReward({ stage, count }) * pay),
+    renown: questRenown({ stage, count }),
     days: randInt(tier.days[0], tier.days[1], rng),
     expires: day + (promotion ? 365 : randInt(4, 8, rng)),
     description: `${promotion ? `The guild's ${rank}-rank trial. ` : ''}${names.join(' and ')} reported at ${place}.${size}`,
     ...(promotion ? { promotion: true } : {}),
     foes,
-    threat,
+    count,
   };
 }
 

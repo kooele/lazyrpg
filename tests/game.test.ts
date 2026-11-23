@@ -14,7 +14,7 @@ import { dist, generateMap, hasLineOfSight, passable, withinRange, type BattleMa
 import { parseSave, serializeSave } from '../src/game/save';
 import { skillShape } from '../src/game/reach';
 import { advanceDays, newCampaign } from '../src/game/city';
-import { encounterBudget, rankForStage } from '../src/game/board';
+import { makeQuest, rankForStage, usualCount } from '../src/game/board';
 import { GUILD } from '../src/data/guild';
 
 function openMap(w = 10, h = 7): BattleMap {
@@ -849,15 +849,17 @@ describe('enemies', () => {
   });
 
   it("the encounter comes from the quest's difficulty, not the party: an easy bandit quest still brings a gang", () => {
-    // The lowest quest threat (0.8) used to mean a single bandit for a solo adventurer.
-    expect(encounterBudget('D', 0.8)).toBeCloseTo(GUILD.quests.D.encounter * 0.8);
-    const bandits = generateEnemies(5, makeRng(3), encounterBudget('D', 0.8), ['bandit']);
-    expect(bandits.length).toBe(Math.ceil(GUILD.quests.D.encounter * 0.8)); // threat 1 each
-    // Harder ranks bring bigger groups, and threat scales them.
-    expect(encounterBudget('A')).toBeGreaterThan(encounterBudget('B'));
-    expect(encounterBudget('B')).toBeGreaterThan(encounterBudget('C'));
-    expect(encounterBudget('C')).toBeGreaterThan(encounterBudget('D'));
-    expect(encounterBudget('C', 1.35)).toBeCloseTo(GUILD.quests.C.encounter * 1.35);
+    // A party-sized budget used to mean a single bandit for a solo adventurer. Now the quest's group size decides.
+    const small = makeQuest('D', 1, makeRng(1));
+    const bandits = generateEnemies(5, makeRng(3), small.count, ['bandit']);
+    expect(bandits.length).toBe(Math.ceil(small.count)); // threat 1 each
+    expect(bandits.length).toBeGreaterThanOrEqual(GUILD.quests.D.count[0]);
+    // Rats (0.5 threat each) come twice as many for the same group size.
+    expect(generateEnemies(1, makeRng(3), 3)).toHaveLength(6);
+    // Harder ranks bring bigger groups.
+    expect(usualCount('A')).toBeGreaterThan(usualCount('B'));
+    expect(usualCount('B')).toBeGreaterThan(usualCount('C'));
+    expect(usualCount('C')).toBeGreaterThan(usualCount('D'));
     // Quick Battle stages use the rank they fall in.
     expect(rankForStage(1)).toBe('D');
     expect(rankForStage(5)).toBe('D');

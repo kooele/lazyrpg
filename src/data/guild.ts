@@ -3,12 +3,20 @@ import raw from './guild.json';
 import { RANKS, type Rank } from './types';
 
 export interface QuestTier {
+  /** Enemy level range. */
   stages: [number, number];
-  /** Enemy threat budget of this rank's encounters (times each quest's threat). */
-  encounter: number;
-  reward: [number, number];
-  renown: number;
+  /** Enemy group size range, in threat points (enemies.json threat per unit). */
+  count: [number, number];
   days: [number, number];
+}
+
+/** How a quest's total threat (count x strength at its level) turns into gold, renown and difficulty. */
+export interface ThreatConfig {
+  strengthAtLevel1: number;
+  strengthGrowth: number;
+  goldPerThreat: number;
+  renownPerThreat: number;
+  standardCount: number;
 }
 
 export type InnTier = 'standard' | 'highEnd' | 'luxury';
@@ -50,8 +58,9 @@ export interface GuildConfig {
   /** First level of each adventurer rank above D. */
   adventurerRanks: Record<'C' | 'B' | 'A' | 'S', number>;
   boardSize: number;
-  board: { maxPostsPerDay: number; minAtPartyRank: number; postWeights: Record<Rank, number>; threat: [number, number]; pay: [number, number]; standardEncounter: number };
+  board: { maxPostsPerDay: number; minAtPartyRank: number; postWeights: Record<Rank, number>; pay: [number, number] };
   quests: Record<Rank, QuestTier>;
+  threat: ThreatConfig;
   /** foodLodgingPerDay: what food and lodging are worth to a companion (negotiations). Nights on the road are free (food is still paid). */
   upkeep: { foodLodgingPerDay: number };
   food: Record<FoodTier, { name: string; pricePerPerson: number }> & { default: FoodTier; relationshipAbove: number; relationshipBelowPerStep: number };
@@ -217,10 +226,8 @@ export function parseGuildConfig(data: unknown): GuildConfig {
     const t = obj(q[r], `quests.${r}`);
     quests[r] = {
       stages: range(t.stages, `quests.${r}.stages`, 1),
-      reward: range(t.reward, `quests.${r}.reward`),
-      renown: num(t.renown, `quests.${r}.renown`),
+      count: range(t.count, `quests.${r}.count`, 0.5),
       days: range(t.days, `quests.${r}.days`, 1),
-      encounter: num(t.encounter, `quests.${r}.encounter`, 0.5),
     };
   }
   const c = obj(d.companion, 'companion');
@@ -249,12 +256,20 @@ export function parseGuildConfig(data: unknown): GuildConfig {
         maxPostsPerDay: num(b.maxPostsPerDay, 'board.maxPostsPerDay', 1, 60),
         minAtPartyRank: num(b.minAtPartyRank, 'board.minAtPartyRank', 0, 60),
         postWeights: perRank(b.postWeights, 'board.postWeights'),
-        threat: range(b.threat, 'board.threat', 0.1),
-        standardEncounter: num(b.standardEncounter, 'board.standardEncounter', 0.5),
         pay: range(b.pay, 'board.pay', 0.1),
       };
     })(),
     quests,
+    threat: (() => {
+      const t = obj(d.threat, 'threat');
+      return {
+        strengthAtLevel1: num(t.strengthAtLevel1, 'threat.strengthAtLevel1', 0.01),
+        strengthGrowth: num(t.strengthGrowth, 'threat.strengthGrowth', 1, 3),
+        goldPerThreat: num(t.goldPerThreat, 'threat.goldPerThreat', 0),
+        renownPerThreat: num(t.renownPerThreat, 'threat.renownPerThreat', 0),
+        standardCount: num(t.standardCount, 'threat.standardCount', 0.5),
+      };
+    })(),
     upkeep: numbers(d.upkeep, 'upkeep', ['foodLodgingPerDay']),
     food: parseFood(d.food),
     inns: parseInns(d.inns),

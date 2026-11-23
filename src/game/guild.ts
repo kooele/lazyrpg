@@ -3,7 +3,7 @@
 import { WEAPONS } from '../data/content';
 import { GUILD } from '../data/guild';
 import { RANKS, type AdventurerRank, type FreeAdventurer, type GameState, type GuildState, type Quest, type Rank, type RivalMember, type RivalParty } from '../data/types';
-import { encounterBudget, postQuests } from './board';
+import { postQuests, questRenown, strength, totalThreat, usualCount } from './board';
 import { newId, type Rng } from './character';
 import { randInt, randomAdventurer, randomName, randomPartyName } from './people';
 
@@ -188,17 +188,25 @@ export function rivalSuccessChance(p: RivalParty, rank: Rank): number {
 }
 
 /**
- * How hard a board quest is, as the average party level it calls for: its enemy level, plus a level for each
- * threat point its encounter has over board.standardEncounter (minus one for each it has fewer).
+ * How hard a board quest is, as the average party level it calls for: the level at which a group of
+ * threat.standardCount enemies would have the quest's total threat, minus 1. A usual-sized group at level L is
+ * about L - 1; every ~16.5% more total threat (a level's worth of strength) adds a level.
  */
-export function questDifficulty(q: Pick<Quest, 'rank' | 'stage' | 'threat'>): number {
-  return q.stage - 1 + (encounterBudget(q.rank, q.threat ?? 1) - GUILD.board.standardEncounter);
+export function questDifficulty(q: Pick<Quest, 'stage' | 'count'>): number {
+  const t = GUILD.threat;
+  const perEnemy = totalThreat(q) / t.standardCount;
+  return Math.log(perEnemy / strength(1)) / Math.log(t.strengthGrowth);
 }
 
-/** How hard a usual quest of `rank` is (mid-rank enemy level, threat 1): what rival parties weigh when picking a rank. */
-export function rankDifficulty(rank: Rank): number {
+/** A usual quest of `rank`: mid-rank enemy level and group size. */
+function usualQuest(rank: Rank): Pick<Quest, 'stage' | 'count'> {
   const [lo, hi] = GUILD.quests[rank].stages;
-  return questDifficulty({ rank, stage: Math.round((lo + hi) / 2), threat: 1 });
+  return { stage: Math.round((lo + hi) / 2), count: usualCount(rank) };
+}
+
+/** How hard a usual quest of `rank` is: what rival parties weigh when picking a rank. */
+export function rankDifficulty(rank: Rank): number {
+  return questDifficulty(usualQuest(rank));
 }
 
 /** A rival party's chance to complete a board quest. */
@@ -299,7 +307,7 @@ export function simulateGuildDay(state: GameState, rng: Rng): void {
         if (q) g.board = g.board.filter((x) => x !== q);
         const rank = q ? q.rank : up!;
         const chance = q ? rivalQuestChance(p, q) : rivalSuccessChance(p, rank);
-        const renown = q ? q.renown : GUILD.quests[rank].renown;
+        const renown = q ? q.renown : questRenown(usualQuest(rank));
         const what = q ? `"${q.title}"` : `${QUEST_WORDS[rank]} promotion quest`;
         const difficulty = q ? questDifficulty(q) : rankDifficulty(rank);
         p.lastDay = day;
