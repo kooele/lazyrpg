@@ -108,11 +108,15 @@ function validateContract(raw: unknown, path: string): Contract {
   };
 }
 
+/** Stats that no longer exist: older saves' talents and Body points for them are dropped (the points come back). */
+const REMOVED_STATS = ['accuracy', 'evasion'];
+
 /** Talent grades per stat (optional: a missing stat is C). */
 function validateTalents(raw: unknown, path: string): Talents {
   const o = obj(raw, path);
   const out: Talents = {};
   for (const [k, v] of Object.entries(o)) {
+    if (REMOVED_STATS.includes(k)) continue;
     if (!(STAT_KEYS as readonly string[]).includes(k)) bad(`${path}.${k}`, `is not a stat (allowed: ${STAT_KEYS.join(', ')})`);
     out[k as keyof Talents] = oneOf(v, TALENT_GRADES, `${path}.${k}`);
   }
@@ -124,6 +128,7 @@ function validateBody(raw: unknown, path: string): BodyInvestment {
   const o = obj(raw, path);
   const out: BodyInvestment = {};
   for (const [k, v] of Object.entries(o)) {
+    if (REMOVED_STATS.includes(k)) continue;
     if (!bodyStats().includes(k as StatKey)) bad(`${path}.${k}`, `can't be trained (allowed: ${bodyStats().join(', ')})`);
     const n = int(v, `${path}.${k}`);
     if (n > 0) out[k as StatKey] = n;

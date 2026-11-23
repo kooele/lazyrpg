@@ -81,7 +81,7 @@ export class PartyScene extends Phaser.Scene {
     text(this, X + 356, 146, `${c.xp}/${XP_PER_LEVEL} XP`, { fontSize: '11px', color: COLORS.dim });
 
     const st = deriveStats(c);
-    text(this, X + 150, 166, `HP ${st.health}   MP ${st.mana}   P.Atk ${st.pAtk}   M.Atk ${st.mAtk}\nDef ${st.defense}   Move ${st.movement}   Acc ${st.accuracy}   Eva ${st.evasion}`, { fontSize: '13px', lineSpacing: 4 });
+    text(this, X + 150, 166, `HP ${st.health}   MP ${st.mana}   P.Atk ${st.pAtk}   M.Atk ${st.mAtk}\nDef ${st.defense}   Resist ${st.resist}   Move ${st.movement}`, { fontSize: '13px', lineSpacing: 4 });
     const w = WEAPONS[c.weaponId];
     talentTag(this, X + 150, 207, c, { fontSize: 11 });
     text(this, X + 150, 226, `${w.name}: ${w.skills.map((s) => SKILLS[s].name).join(', ')}`, { fontSize: '12px', color: COLORS.dim, wordWrap: { width: W - 170 } });

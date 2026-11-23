@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { SKILLS, WEAPONS, isFree, isSupport, skillDetails, skillFormula, tagNames } from '../data/content';
+import { SKILLS, STATUSES, WEAPONS, isFree, isSupport, skillDetails, skillFormula, tagNames } from '../data/content';
 import type { SkillDef } from '../data/types';
 import { bestAction, bestFreeAction, planTurn, shouldDisengage, shouldEscape } from '../game/ai';
 import {
@@ -28,8 +28,6 @@ const MAP_X = 16;
 const MAP_Y = 72;
 const SIDE_X = 704;
 const SIDE_W = 240;
-/** "41" or "40.5": a dice average with at most one decimal. */
-const fmt = (n: number) => String(Math.round(n * 10) / 10);
 /** Where a unit's feet are, relative to its tile center; the HP bar sits just below. */
 let FEET_Y = 14;
 let HP_Y = 21;
@@ -498,8 +496,7 @@ export class BattleScene extends Phaser.Scene {
     if (u.team === 'enemy') effects.push(`Skills: ${b.skillIds(u).map((id) => SKILLS[id].name).join(', ')}`);
     return [
       `HP ${u.hp}/${u.stats.health}${shield ? ` +${shield} shield` : ''}${u.stats.mana > 0 ? `   MP ${u.stats.mana}` : ''}   Move ${b.stat(u, 'movement')}`,
-      `P.Atk ${b.stat(u, 'pAtk')}  M.Atk ${b.stat(u, 'mAtk')}  Def ${b.stat(u, 'defense')}${terrainDef ? ' (forest)' : ''}`,
-      b.rules.hitChance.enabled ? `Acc ${b.stat(u, 'accuracy')}  Eva ${b.stat(u, 'evasion')}` : '',
+      `P.Atk ${b.stat(u, 'pAtk')}  M.Atk ${b.stat(u, 'mAtk')}  Def ${b.stat(u, 'defense')}${terrainDef ? ' (forest)' : ''}  Res ${b.resistChance(u)}%`,
       effects.join(', '),
     ].filter(Boolean).join('\n');
   }
@@ -808,12 +805,13 @@ export class BattleScene extends Phaser.Scene {
         const hits = b.previewHits(u, s, t);
         const total = hits.reduce((a, c) => a + c, 0);
         const kills = total >= t.hp + b.shieldOf(t);
-        const hitText = b.rules.hitChance.enabled ? `, ${b.hitChance(u, t, s)}% hit` : '';
-        lines.push(`→ ${who}: ${hits.join(' + ')} dmg${hitText}${kills ? ' (defeats!)' : ''}`);
+        lines.push(`→ ${who}: ${hits.join(' + ')} dmg${kills ? ' (defeats!)' : ''}`);
       }
       if (s.heal) lines.push(`→ ${who}: +${Math.min(b.healAmount(u, s), t.stats.health - t.hp)} HP`);
       if (s.shield) lines.push(`→ ${who}: +${Math.round(t.stats.health * s.shield.maxHpPct)} shield`);
       if (s.cleanse) lines.push(`→ ${who}: cleanse ${t.statuses.filter((x) => x.debuff).length} debuff(s)`);
+      const debuffs = (s.applyStatus ?? []).filter((a) => STATUSES[a.status]?.debuff).map((a) => STATUSES[a.status].name);
+      if (debuffs.length) lines.push(`   ${debuffs.join(', ')}: ${b.resistChance(t)}% chance ${t.character.name} resists`);
       if (s.knockback) lines.push('   knocked back 1 tile');
     }
     return lines.join('\n');
@@ -906,7 +904,7 @@ export class BattleScene extends Phaser.Scene {
         const summary: string[] = [];
         trigger.events.forEach((e, n) => this.showEvent(e, summary, n));
         const first = trigger.events[0];
-        const shooter = first && (first.type === 'damage' || first.type === 'miss') && first.source ? this.battle.unit(first.source).character.name : 'Overwatch';
+        const shooter = first && first.type === 'damage' && first.source ? this.battle.unit(first.source).character.name : 'Overwatch';
         this.addLog(`${shooter} reacts! ${summary.join(', ')}${result.interrupted && i === result.path.length - 1 ? ' — movement stopped' : ''}`);
         this.refresh();
         await this.wait(700);
@@ -1002,12 +1000,6 @@ export class BattleScene extends Phaser.Scene {
         summary.push(`engaged ${name}`);
         break;
       }
-      case 'miss':
-        this.floatText(t, 'MISS', '#c9ced8', delay);
-        summary.push(e.roll
-          ? `${name} dodged (rolled ${e.roll.dice.join(' & ')} → ${fmt(e.roll.average)} ${e.roll.bonus >= 0 ? '+' : '−'} ${Math.abs(e.roll.bonus)} = ${fmt(e.roll.total)}, needed over ${e.roll.needed})`
-          : `${name} dodged (${e.chance}%)`);
-        break;
       case 'heal':
         this.floatText(t, `+${e.amount}`, '#6fdc8c', delay);
         summary.push(`${name} +${e.amount} HP`);
@@ -1019,6 +1011,10 @@ export class BattleScene extends Phaser.Scene {
       case 'status':
         this.floatText(t, e.name, '#ffb35c', delay + 200);
         summary.push(`${name} ${e.name}`);
+        break;
+      case 'resist':
+        this.floatText(t, 'Resisted', '#c9ced8', delay + 200);
+        summary.push(`${name} resisted ${e.name} (${e.chance}%)`);
         break;
       case 'cleanse':
         this.floatText(t, 'Cleansed', '#6fdc8c', delay);

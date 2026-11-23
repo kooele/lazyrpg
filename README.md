@@ -64,7 +64,7 @@ Everything gameplay-related lives in plain JSON files in `src/data/`. Each file 
 
 | File | What's in it |
 |---|---|
-| `stats.json` | Base stats and per-level growth, talent grades (growth rates and roll weights), Defense scaling, terrain movement costs, forest bonus, map size, hit-chance and vision switches |
+| `stats.json` | Base stats and per-level growth, talent grades (growth rates and roll weights), Defense scaling, terrain movement costs, forest bonus, map size, vision switch |
 | `skills.json` | Every skill (numbers and descriptions), tags, status effects (Burn, Slow), skill trees |
 | `weapons.json` | Weapons: stat multipliers and granted skills |
 | `enemies.json` | Enemy types: level range, stats, skills, art, and how big encounters are |
@@ -81,20 +81,19 @@ Tooltips show a formula line generated from the numbers (e.g. "80% P.Atk, then 4
 | P.Atk | 100 (+10) | Physical power; skills deal a % of it |
 | M.Atk | 100 (+10) | Magic power and healing |
 | Defense | 50 (+5) | Damage taken × 100 / (100 + Defense) |
+| Resist | 50 (+5) | Chance to shrug off a debuff: Resist ÷ (100 + Resist) |
 | Movement | 16 | Movement points per turn: grass costs 4, forest 6, river 8 (so 16 = 4 grass tiles) |
-| Accuracy | 20 (+2) | Added to the attack's dice roll |
-| Evasion | 10 (+1) | Subtracted from enemies' dice rolls against this unit |
 
-Attacks can miss. Each attack rolls **2 dice from 0 to 100** and takes their average; the attack hits if **average + attacker Accuracy − target Evasion is greater than 50**. Averaging two dice makes middling rolls common and extreme ones rare, so a small edge in Accuracy matters. Two level-1 Adventurers (+10) need an average over 40: 67% to hit. Overwatch, intercept shots and opportunity attacks get −10 on the roll. Heals, shields and cleanses never miss. Targeting shows the exact odds, and a miss lists the dice in the battle log. Enemies follow the same Accuracy and Evasion curve at their level (rats and wolves have +10 Evasion). The numbers (`dice`, `dieMax`, `hitAbove`, `reactionModifier`) are under `hitChance` in `stats.json`.
+Every attack hits. **Resist** gives a chance to shrug off debuffs (Burn, Slow, Corrode...): Resist ÷ (100 + Resist), the same curve as Defense, so 50 Resist = 33% and 100 = 50%. A resisted debuff shows "Resisted" and doesn't apply; the attack's damage still lands. Targeting shows the chance, and the enemy AI weighs it. Enemies' Resist matches their Defense.
 
-Stats grow automatically on level up (100 XP per level), at a speed set by the Adventurer's **talent**. Every growing stat (Health, Mana, P.Atk, M.Atk, Defense, Accuracy, Evasion) has its own talent grade, rolled when the Adventurer is created; the grade multiplies that stat's growth per level (the numbers in brackets above):
+Stats grow automatically on level up (100 XP per level), at a speed set by the Adventurer's **talent**. Every growing stat (Health, Mana, P.Atk, M.Atk, Defense, Resist) has its own talent grade, rolled when the Adventurer is created; the grade multiplies that stat's growth per level (the numbers in brackets above):
 
 | Talent | S | A | B | C | D | F |
 |---|---|---|---|---|---|---|
 | Growth | 160% | 140% | 120% | 100% | 80% | 60% |
 | Chance | 5% | 10% | 20% | 40% | 20% | 5% |
 
-An S-talent P.Atk grows +16 a level instead of +10. Talent doesn't change level-1 stats. An Adventurer's overall talent is the grade nearest the average of their seven. When you create your main character (or a Quick Battle recruit), **Reroll talent** rolls new grades. Talented Adventurers cost more: mercenary fees and cuts, companion wages and slave prices are multiplied by `1 + 2 × (average growth rate − 1)` (at least ×0.4; `talentPrice` in `guild.json`), so all-S costs ×2.2 and all-F ×0.4. Growth rates and roll weights are in `stats.json` (`talent`): a grade's chance is its weight divided by the total of all weights, so the weights can be any non-negative numbers (a grade with weight 0 never comes up). Enemies always grow at 100%.
+An S-talent P.Atk grows +16 a level instead of +10. Talent doesn't change level-1 stats. An Adventurer's overall talent is the grade nearest the average of their six. When you create your main character (or a Quick Battle recruit), **Reroll talent** rolls new grades. Talented Adventurers cost more: mercenary fees and cuts, companion wages and slave prices are multiplied by `1 + 2 × (average growth rate − 1)` (at least ×0.4; `talentPrice` in `guild.json`), so all-S costs ×2.2 and all-F ×0.4. Growth rates and roll weights are in `stats.json` (`talent`): a grade's chance is its weight divided by the total of all weights, so the weights can be any non-negative numbers (a grade with weight 0 never comes up). Enemies always grow at 100%.
 
 A won quest gives each member in the lineup `xpPerVictory` (100, in `stats.json`) when their level equals the quest's stage, more when they're below it and less when above, so a party that keeps winning stays close to the level of the quests it takes.
 
@@ -109,7 +108,7 @@ Weapons **multiply** these stats:
 
 ### Skill points, skill trees and the Body tab
 
-Adventurers have **skill points**: 2 at level 1 and 1 more every level. Each point either learns a skill-tree skill (mix trees freely) or goes into the **Body** tab, where it trains a stat by twice its base growth per level: +100 Health, +40 Mana, +20 P.Atk or M.Atk, +10 Defense, +4 Accuracy or +2 Evasion per point (before weapon multipliers; talent doesn't change it). Points can be moved around freely in Customize / Loadout.
+Adventurers have **skill points**: 2 at level 1 and 1 more every level. Each point either learns a skill-tree skill (mix trees freely) or goes into the **Body** tab, where it trains a stat by twice its base growth per level: +100 Health, +40 Mana, +20 P.Atk or M.Atk, +10 Defense or Resist per point (before weapon multipliers; talent doesn't change it). Points can be moved around freely in Customize / Loadout.
 
 
 - **Mage**: Arcanist (Arcane Bolt, Arcane Pulse, Arcane Shift), Elementalist (Fireball, Freeze), Cleric (Heal, Cleanse)
@@ -160,7 +159,7 @@ Heal and Cleanse work on any unit, enemies included. An attack aimed straight at
 - **Ranges** use Euclidean distance. Ranges of 2 or more round the distance to the nearest tile, so range 2 also reaches 2-over-1-up and shapes are rounder. Ranges 1 and 1.5 stay exact: 1 is the 4 neighbours, 1.5 adds the diagonals. Set `rangeRounding.fromRange` in `stats.json` to change the cut-off.
 - Skill tooltips and the weapon panel show a **tile diagram** of what each skill covers, with you in gold, rather than describing range in words.
 - A cooldown of N means the skill can't be used during your next N turns.
-- `vision` (fog of war) is built but switched off in `stats.json`. Set `hitChance.enabled` to false to make every attack hit.
+- `vision` (fog of war) is built but switched off in `stats.json`.
 
 ### Art
 
@@ -186,7 +185,7 @@ A version-3 save holds the whole city: the day, gold, renown and rank, your part
     "color": "#3d7be0",
     "look": { "sex": "female", "skin": "fair", "face": 2, "hair": "crownBraid", "hairColor": "auburn" }
   },
-  "talents": { "health": "B", "mana": "C", "pAtk": "D", "mAtk": "A", "defense": "C", "accuracy": "B", "evasion": "C" },
+  "talents": { "health": "B", "mana": "C", "pAtk": "D", "mAtk": "A", "defense": "C", "resist": "B" },
   "contract": {
     "type": "companion",
     "basePay": 60,

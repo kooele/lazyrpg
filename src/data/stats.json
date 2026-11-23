@@ -8,9 +8,8 @@
     "pAtk": 100,
     "mAtk": 100,
     "defense": 50,
+    "resist": 50,
     "movement": 16,
-    "accuracy": 20,
-    "evasion": 10,
     "vision": 8
   },
 
@@ -21,9 +20,8 @@
     "pAtk": 10,
     "mAtk": 10,
     "defense": 5,
+    "resist": 5,
     "movement": 0,
-    "accuracy": 2,
-    "evasion": 1,
     "vision": 0
   },
 
@@ -37,7 +35,7 @@
   "_xpPerVictory": "XP each Adventurer gets for winning a battle (100 XP = 1 level), so a party that keeps winning is about level N at stage N.",
 
   "defenseScale": 100,
-  "_defenseScale": "Damage taken is multiplied by defenseScale / (defenseScale + Defense). With 100: 100 Defense = 2x effective health, 200 = 3x. Negative Defense increases damage taken.",
+  "_defenseScale": "Damage taken is multiplied by defenseScale / (defenseScale + Defense). With 100: 100 Defense = 2x effective health, 200 = 3x. Negative Defense increases damage taken. Resist uses the same scale: the chance to shrug off a debuff is Resist / (defenseScale + Resist), so 50 Resist = 33%, 100 = 50%.",
 
   "forestDefense": 20,
   "_forestDefense": "Extra Defense for a unit standing in forest.",
@@ -58,15 +56,6 @@
     "_comment": "Battlefield size in tiles. Tiles shrink to fit the screen.",
     "width": 18,
     "height": 13
-  },
-
-  "hitChance": {
-    "_comment": "Each attack rolls dice dice, each a whole number from 0 to dieMax, and takes their average. roll + attacker Accuracy + skill accuracy - target Evasion (+ reactionModifier for overwatch, intercepts and opportunity attacks) must be greater than hitAbove to hit. Two dice make middling rolls likely and extremes rare. Heals, shields and cleanses never miss. enabled false = every attack hits.",
-    "enabled": true,
-    "dice": 2,
-    "dieMax": 100,
-    "hitAbove": 50,
-    "reactionModifier": -10
   },
 
   "vision": {

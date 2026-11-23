@@ -8,7 +8,7 @@
     "los": "sight = line of sight (rocks block) | fire = line of fire (rocks AND units block; kept for future skills). Omit for none.",
     "rangeScale": "for 'movement' skills: range in tiles = floor(rangeScale x Movement / movementCosts.grass)",
     "applyStatus": "list of { status, turns, stacks }",
-    "optional": "heal { mAtk }, shield { maxHpPct, turns }, knockback (tiles), cleanse, teleport, charge, aoeRadius, cone { angle, radius, interrupt, los }, accuracy"
+    "optional": "heal { mAtk }, shield { maxHpPct, turns }, knockback (tiles), cleanse, teleport, charge, aoeRadius, cone { angle, radius, interrupt, los }"
   },
 
   "tags": {

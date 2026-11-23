@@ -3,19 +3,6 @@
 import raw from './stats.json';
 import { STAT_KEYS, TALENT_GRADES, type Stats, type Talent } from './types';
 
-export interface HitChanceRules {
-  /** Off = every attack hits. */
-  enabled: boolean;
-  /** Dice rolled per attack; their average is the roll. */
-  dice: number;
-  /** Each die rolls a whole number from 0 to dieMax. */
-  dieMax: number;
-  /** Hit when roll + Accuracy - Evasion is greater than this. */
-  hitAbove: number;
-  /** Added to the roll of overwatch / intercept shots and opportunity attacks. */
-  reactionModifier: number;
-}
-
 export interface VisionRules {
   /** Off = the whole map is visible (no fog of war). */
   enabled: boolean;
@@ -57,7 +44,6 @@ export interface StatConfig {
   map: MapRules;
   movementCosts: MovementCosts;
   rangeRounding: RangeRoundingRules;
-  hitChance: HitChanceRules;
   vision: VisionRules;
 }
 
@@ -103,7 +89,6 @@ function readTalent(v: unknown): TalentRules {
 
 export function parseStatConfig(data: unknown): StatConfig {
   const rec = obj(data, '(root)');
-  const hit = obj(rec.hitChance ?? { enabled: false }, 'hitChance');
   const vision = obj(rec.vision ?? { enabled: false }, 'vision');
   const map = obj(rec.map ?? { width: 18, height: 13 }, 'map');
   const costs = obj(rec.movementCosts ?? { grass: 4, forest: 6, river: 8 }, 'movementCosts');
@@ -122,13 +107,6 @@ export function parseStatConfig(data: unknown): StatConfig {
       river: num(costs.river, 'movementCosts.river'),
     },
     rangeRounding: { fromRange: num(rounding.fromRange, 'rangeRounding.fromRange') },
-    hitChance: {
-      enabled: hit.enabled === true,
-      dice: Math.round(num(hit.dice ?? 2, 'hitChance.dice')),
-      dieMax: Math.round(num(hit.dieMax ?? 100, 'hitChance.dieMax')),
-      hitAbove: num(hit.hitAbove ?? 50, 'hitChance.hitAbove'),
-      reactionModifier: num(hit.reactionModifier ?? 0, 'hitChance.reactionModifier'),
-    },
     vision: { enabled: vision.enabled === true },
   };
   if (!(cfg.defenseScale > 0)) throw new Error('stats.json: "defenseScale" must be a positive number');
@@ -136,17 +114,14 @@ export function parseStatConfig(data: unknown): StatConfig {
   if (cfg.base.movement < 1) throw new Error('stats.json: "base.movement" must be at least 1');
   if (!(cfg.movementCosts.grass > 0)) throw new Error('stats.json: "movementCosts.grass" must be positive');
   if (cfg.map.width < 8 || cfg.map.height < 6) throw new Error('stats.json: "map" must be at least 8 x 6 tiles');
-  if (cfg.hitChance.dice < 1 || cfg.hitChance.dice > 10) throw new Error('stats.json: "hitChance.dice" must be from 1 to 10');
-  if (cfg.hitChance.dieMax < 1) throw new Error('stats.json: "hitChance.dieMax" must be at least 1');
   return cfg;
 }
 
 export const STAT_CONFIG: StatConfig = parseStatConfig(raw);
 
-/** Stats shown in the UI: the core five, plus hit/vision stats once those systems are enabled. */
+/** Stats shown in the UI: everything but Vision until fog of war is enabled. */
 export function visibleStatKeys(cfg: StatConfig = STAT_CONFIG): (typeof STAT_KEYS)[number][] {
   return STAT_KEYS.filter((k) => {
-    if (k === 'accuracy' || k === 'evasion') return cfg.hitChance.enabled;
     if (k === 'vision') return cfg.vision.enabled;
     return true;
   });

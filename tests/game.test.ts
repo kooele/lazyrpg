@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import skillsJson from '../src/data/skills.json';
 import weaponsJson from '../src/data/weapons.json';
 import { SKILLS, TREE_SKILLS, WEAPONS, parseContent, skillFormula, skillPointsForLevel } from '../src/data/content';
@@ -7,7 +7,7 @@ import { parseEnemies } from '../src/data/enemies';
 import { STAT_CONFIG, parseStatConfig } from '../src/data/stats';
 import type { Character } from '../src/data/types';
 import { planTurn, runAiTurn, shouldDisengage, threatAt } from '../src/game/ai';
-import { Battle, defenseMultiplier, diceHitOdds, deploymentTiles, enemyTypesForStage, generateEnemies, makeEnemy, makeUnit, victoryXp, type Team } from '../src/game/battle';
+import { Battle, defenseMultiplier, resistChance, deploymentTiles, enemyTypesForStage, generateEnemies, makeEnemy, makeUnit, victoryXp, type Team } from '../src/game/battle';
 import { allSkills, bodyGain, bodyPoints as bodyPointsOf, bodyStats, createCharacter, deriveStats, freePoints, grantXp, makeRng, pointsUsed, sanitizeLoadout } from '../src/game/character';
 import { randomAdventurer } from '../src/game/people';
 import { generateMap, hasLineOfSight, passable, withinRange, type BattleMap, type Point, type Terrain } from '../src/game/grid';
@@ -30,15 +30,6 @@ function setup(map: BattleMap, specs: { c: Character; team: Team; at: Point }[])
 }
 
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v));
-
-// Most tests check skill math, so attacks always hit here (hit chance gets its own test with explicit rules).
-const hitChanceOn = STAT_CONFIG.hitChance.enabled;
-beforeAll(() => {
-  STAT_CONFIG.hitChance.enabled = false;
-});
-afterAll(() => {
-  STAT_CONFIG.hitChance.enabled = hitChanceOn;
-});
 
 // Level-1 numbers used below: base Health 500, P.Atk 100, M.Atk 100, Defense 50.
 // Sword & Shield: P.Atk 100, M.Atk 80, Def 75 (x0.571 damage). Others: Def 50 (x0.667 damage).
@@ -626,77 +617,6 @@ describe('engagement', () => {
 describe('frameworks (switched off in stats.json)', () => {
   const withRules = (patch: Partial<typeof STAT_CONFIG>) => ({ ...STAT_CONFIG, ...patch });
 
-  it('hit chance is on: average of 2 dice (0-100) + Accuracy - Evasion must beat 50', () => {
-    expect(hitChanceOn).toBe(true);
-    expect(STAT_CONFIG.hitChance).toMatchObject({ dice: 2, dieMax: 100, hitAbove: 50 });
-    const a = makeUnit(hero('bow'), 'player', { x: 1, y: 1 });
-    const e = makeUnit(hero('sword_shield'), 'enemy', { x: 4, y: 1 });
-    expect(a.stats).toMatchObject({ accuracy: 20, evasion: 10 });
-    const battle = new Battle(openMap(), [a, e], makeRng(3), { ...STAT_CONFIG, hitChance: { ...STAT_CONFIG.hitChance, enabled: true } });
-    // +10: the dice must average over 40. 3321 of the 10201 rolls sum to 80 or less, so 67% hit.
-    expect(battle.hitBonus(a, e, SKILLS.direct_shot)).toBe(10);
-    expect(battle.hitChance(a, e, SKILLS.direct_shot)).toBe(67);
-    expect(battle.hitChance(a, e, SKILLS.direct_shot, true)).toBe(50); // reaction -10: average over 50 (5100 of 10201)
-  });
-
-  it('dice odds: two dice make extremes rare; certain and impossible hits show 100 / 0', () => {
-    const r = { dice: 2, dieMax: 100, hitAbove: 50 };
-    expect(diceHitOdds(r, 0)).toBeCloseTo(5100 / 10201);
-    expect(diceHitOdds(r, 30)).toBeCloseTo(1 - (41 * 42) / 2 / 10201); // sum must exceed 40
-    expect(diceHitOdds(r, 50)).toBeCloseTo(1 - 1 / 10201); // only 0 & 0 misses
-    expect(diceHitOdds(r, 51)).toBe(1);
-    expect(diceHitOdds(r, -50)).toBe(0);
-    expect(diceHitOdds({ dice: 1, dieMax: 100, hitAbove: 50 }, 0)).toBeCloseTo(50 / 101);
-    const { units: [a, e] } = setup(openMap(), [
-      { c: hero('bow'), team: 'player', at: { x: 1, y: 1 } },
-      { c: hero(), team: 'enemy', at: { x: 4, y: 1 } },
-    ]);
-    const on = new Battle(openMap(), [a, e], makeRng(3), withRules({ hitChance: { ...STAT_CONFIG.hitChance, enabled: true } }));
-    a.stats.accuracy = 49;
-    e.stats.evasion = 0;
-    expect(on.hitChance(a, e, SKILLS.direct_shot)).toBe(99); // not certain: 0 & 0 or 0 & 1 still miss
-    a.stats.accuracy = 60;
-    expect(on.hitChance(a, e, SKILLS.direct_shot)).toBe(100);
-    a.stats.accuracy = -60;
-    expect(on.hitChance(a, e, SKILLS.direct_shot)).toBe(0);
-  });
-
-  it('actual dice rolls hit about as often as the shown chance', () => {
-    const a = makeUnit(hero('bow'), 'player', { x: 1, y: 1 });
-    const e = makeUnit(hero(), 'enemy', { x: 4, y: 1 });
-    const battle = new Battle(openMap(), [a, e], makeRng(11), withRules({ hitChance: { ...STAT_CONFIG.hitChance, enabled: true } }));
-    const roll = (battle as unknown as { rollHit: (x: unknown, y: unknown, s: unknown) => { hit: boolean } }).rollHit.bind(battle);
-    let hits = 0;
-    for (let i = 0; i < 5000; i++) if (roll(a, e, SKILLS.direct_shot).hit) hits += 1;
-    expect(hits / 5000).toBeCloseTo(battle.hitChance(a, e, SKILLS.direct_shot) / 100, 1);
-  });
-
-  it('hit chance: disabled = always 100%; heals never miss', () => {
-    const { battle, units: [a, e] } = setup(openMap(), [
-      { c: hero('bow'), team: 'player', at: { x: 1, y: 1 } },
-      { c: hero(), team: 'enemy', at: { x: 4, y: 1 } },
-    ]);
-    expect(battle.hitChance(a, e, SKILLS.direct_shot)).toBe(100);
-    const b2 = new Battle(openMap(), [a, e], makeRng(3), withRules({ hitChance: { ...STAT_CONFIG.hitChance, enabled: true } }));
-    expect(b2.hitChance(a, e, SKILLS.heal)).toBe(100);
-  });
-
-  it('misses produce a miss event and deal no damage', () => {
-    // Nothing beats 1000, so every roll misses.
-    const rules = withRules({ hitChance: { ...STAT_CONFIG.hitChance, enabled: true, hitAbove: 1000 } });
-    const a = makeUnit(hero('bow'), 'player', { x: 1, y: 1 });
-    const e = makeUnit(hero(), 'enemy', { x: 4, y: 1 });
-    const battle = new Battle(openMap(), [a, e], makeRng(3), rules);
-    const events = battle.perform(a, 'direct_shot', { x: 4, y: 1 });
-    expect(events).toEqual([expect.objectContaining({ type: 'miss', chance: 0 })]);
-    const roll = (events[0] as Extract<(typeof events)[number], { type: 'miss' }>).roll!;
-    expect(roll.dice).toHaveLength(2);
-    expect(roll.average).toBe((roll.dice[0] + roll.dice[1]) / 2);
-    expect(roll.total).toBe(roll.average + 10);
-    expect(roll.needed).toBe(1000);
-    expect(e.hp).toBe(500);
-  });
-
   it('vision: disabled = see everything; enabled = vision range + line of sight', () => {
     const map = openMap(12, 3);
     map.tiles[1][6] = 'rock';
@@ -759,6 +679,7 @@ describe('enemies', () => {
     const b = makeUnit(hero('spear'), 'player', { x: 4, y: 4 });
     const battle = new Battle(openMap(), [a, b, slime], makeRng(1));
     battle.endPhase();
+    a.stats.resist = 0; // no chance to shrug it off
     const def = battle.stat(a, 'defense');
     battle.perform(slime, 'sticky_spit', { x: 3, y: 3 });
     expect(battle.stat(a, 'defense')).toBe(Math.round(def * 0.75));
@@ -954,6 +875,43 @@ describe('battles', () => {
   });
 });
 
+describe('resist', () => {
+  it('uses the Defense curve: 50 = 33%, 100 = 50%, 0 or less = never', () => {
+    expect(STAT_CONFIG.base.resist).toBe(50);
+    expect(STAT_CONFIG.growthPerLevel.resist).toBe(5);
+    expect(resistChance(50)).toBeCloseTo(1 / 3);
+    expect(resistChance(100)).toBe(0.5);
+    expect(resistChance(0)).toBe(0);
+    expect(resistChance(-20)).toBe(0);
+    expect(deriveStats(hero()).resist).toBe(50);
+  });
+
+  it('debuffs are sometimes shrugged off (a resist event, no status); buffs and damage are not', () => {
+    const a = makeUnit(hero('staff', ['fireball']), 'player', { x: 1, y: 3 });
+    const e = makeUnit(hero(), 'enemy', { x: 4, y: 3 });
+    const battle = new Battle(openMap(), [a, e], makeRng(5));
+    e.stats.resist = 100000; // ~100%
+    const events = battle.perform(a, 'fireball', { x: 4, y: 3 });
+    expect(events.some((ev) => ev.type === 'damage')).toBe(true);
+    expect(events).toContainEqual(expect.objectContaining({ type: 'resist', name: 'Burn', chance: 100 }));
+    expect(e.statuses).toHaveLength(0);
+    expect(battle.resistChance(e)).toBe(100);
+  });
+
+  it('resists about as often as the chance says', () => {
+    let resisted = 0;
+    const n = 3000;
+    for (let i = 0; i < n; i++) {
+      const a = makeUnit(hero('staff', ['fireball']), 'player', { x: 1, y: 3 });
+      const e = makeUnit(hero(), 'enemy', { x: 4, y: 3 });
+      e.hp = 1e9;
+      const battle = new Battle(openMap(), [a, e], makeRng(i + 1));
+      if (battle.perform(a, 'fireball', { x: 4, y: 3 }).some((ev) => ev.type === 'resist')) resisted += 1;
+    }
+    expect(resisted / n).toBeCloseTo(1 / 3, 1);
+  });
+});
+
 describe('enemy threat (click an enemy in battle)', () => {
   it("shows a rat's move tiles and where its bite reaches from them", () => {
     const rat = makeUnit(makeEnemy('rat', 1, makeRng(1)), 'enemy', { x: 9, y: 6 });
@@ -1016,10 +974,10 @@ describe('skill points and the Body tab', () => {
     const c = createCharacter('Main', '#3d7be0', 'bow');
     c.level = 3;
     c.skillIds = ['fireball'];
-    c.body = { pAtk: 2, accuracy: 1 };
+    c.body = { pAtk: 2, resist: 1 };
     const state = newCampaign(c, 'Testers', makeRng(2));
     const r = parseSave(serializeSave(state));
-    expect(r.ok && r.state.party[0].body).toEqual({ pAtk: 2, accuracy: 1 });
+    expect(r.ok && r.state.party[0].body).toEqual({ pAtk: 2, resist: 1 });
     const file = JSON.parse(serializeSave(state));
     file.party[0].body.pAtk = 5;
     const bad = parseSave(JSON.stringify(file));

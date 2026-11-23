@@ -38,15 +38,16 @@ function scoreSkill(battle: Battle, u: Unit, skill: SkillDef, from: Point, aim: 
       const total = battle.previewHits(u, skill, t).reduce((a, b) => a + b, 0);
       const pool = t.hp + battle.shieldOf(t);
       const dealt = Math.min(total, pool);
-      const hit = battle.hitChance(u, t, skill) / 100;
       if (friendly) score -= dealt * 1.5;
-      else score += hit * (dealt + (total >= pool ? 400 : 0));
+      else score += dealt + (total >= pool ? 400 : 0);
     }
     for (const a of skill.applyStatus ?? []) {
       const def = STATUSES[a.status];
       if (!friendly && def.debuff) {
-        score += t.stats.health * (def.damagePctMaxHpPerStack ?? 0) * (a.stacks ?? 1) * a.turns;
-        if (def.statMods || def.statPct) score += 15 * a.turns;
+        // Worth less against targets likely to resist it.
+        const lands = 1 - battle.resistChance(t) / 100;
+        score += lands * t.stats.health * (def.damagePctMaxHpPerStack ?? 0) * (a.stacks ?? 1) * a.turns;
+        if (def.statMods || def.statPct) score += lands * 15 * a.turns;
       } else if (friendly && !def.debuff && !t.statuses.some((x) => x.id === a.status)) {
         // Buffs (e.g. Howl's Frenzy) are worth it when a fight is close.
         const fightNear = battle.living().some((f) => f.team !== u.team && dist(f, t) <= 6);

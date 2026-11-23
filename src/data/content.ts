@@ -124,7 +124,6 @@ export function parseContent(skillsData: unknown, weaponsData: unknown): GameCon
       minRange: S.num(r.minRange ?? 0, `${p}.minRange`),
       rangeScale: S.optNum(r.rangeScale, `${p}.rangeScale`),
       los: r.los === undefined ? undefined : S.oneOf(r.los, `${p}.los`, LOS),
-      accuracy: S.optNum(r.accuracy, `${p}.accuracy`),
       cooldown: S.num(r.cooldown ?? 0, `${p}.cooldown`),
       hits,
       heal: r.heal === undefined ? undefined : { mAtk: S.num(S.obj(r.heal, `${p}.heal`).mAtk, `${p}.heal.mAtk`) },

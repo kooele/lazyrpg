@@ -1,7 +1,7 @@
 // Shared type definitions for game data. Everything here is plain data so it
 // can be written to and read from human-readable JSON save files.
 
-export const STAT_KEYS = ['health', 'mana', 'pAtk', 'mAtk', 'defense', 'movement', 'accuracy', 'evasion', 'vision'] as const;
+export const STAT_KEYS = ['health', 'mana', 'pAtk', 'mAtk', 'defense', 'resist', 'movement', 'vision'] as const;
 export type StatKey = (typeof STAT_KEYS)[number];
 export type Stats = Record<StatKey, number>;
 
@@ -11,9 +11,8 @@ export const STAT_INFO: Record<StatKey, { name: string; short: string; descripti
   pAtk: { name: 'Physical Attack', short: 'P.Atk', description: 'Power of physical skills. A skill deals a % of this as damage.' },
   mAtk: { name: 'Magic Attack', short: 'M.Atk', description: 'Power of magic skills and healing.' },
   defense: { name: 'Defense', short: 'Def', description: 'Reduces damage taken: every 100 Defense = +100% effective health.' },
+  resist: { name: 'Resist', short: 'Res', description: 'Chance to shrug off debuffs (Burn, Slow...): Resist / (100 + Resist), so 50 = 33%, 100 = 50%.' },
   movement: { name: 'Movement', short: 'Move', description: 'Movement points per turn (forest costs 2).' },
-  accuracy: { name: 'Accuracy', short: 'Acc', description: 'Adds to hit chance: hit % = 50 + Accuracy - target Evasion.' },
-  evasion: { name: 'Evasion', short: 'Eva', description: "Subtracts from enemies' hit chance against this unit." },
   vision: { name: 'Vision', short: 'Vis', description: 'How far the unit can see (when fog of war is enabled).' },
 };
 
@@ -111,8 +110,6 @@ export interface SkillDef {
   minRange: number;
   /** Line requirement for the target tile (omit for melee / no requirement). */
   los?: LosRule;
-  /** Added to hit chance (when hit chance is enabled). */
-  accuracy?: number;
   /** Turns the skill is unavailable after use (1 = can't be used next turn; 0 = every turn). */
   cooldown: number;
   /** Classification tags (see skills.json "tags"). engage / movement / weapon / free change behavior. */

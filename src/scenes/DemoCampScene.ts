@@ -69,7 +69,7 @@ export class DemoCampScene extends Phaser.Scene {
       `HP ${stats.health}   MP ${stats.mana}`,
       `P.Atk ${stats.pAtk}   M.Atk ${stats.mAtk}`,
       `Def ${stats.defense}   Move ${stats.movement}`,
-      `Acc ${stats.accuracy}   Eva ${stats.evasion}`,
+      `Resist ${stats.resist}`,
     ];
     text(this, x + 14, y + 108, lines.join('\n'), { fontSize: '13px', lineSpacing: 3 });
     const weapon = WEAPONS[c.weaponId];
