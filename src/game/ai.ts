@@ -63,7 +63,7 @@ function scoreSkill(battle: Battle, u: Unit, skill: SkillDef, from: Point, aim: 
     if (skill.shield) {
       // Only worth it if an enemy could walk up and hit us next turn.
       const threatened = battle.living().some((f) => f.team !== u.team && dist(f, from) <= f.stats.movement / MOVEMENT_PER_TILE + 1.5);
-      if (threatened && battle.shieldOf(t) === 0) score += t.stats.health * skill.shield.maxHpPct * 0.5;
+      if (threatened && battle.shieldOf(t) === 0) score += battle.shieldAmount(u, skill, t) * (friendly ? 0.5 : -1);
     }
     if (skill.cleanse) {
       if (!friendly) {

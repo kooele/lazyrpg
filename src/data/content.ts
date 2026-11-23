@@ -85,6 +85,10 @@ export function parseContent(skillsData: unknown, weaponsData: unknown): GameCon
       statMods: st.statMods === undefined ? undefined : S.stats(st.statMods, `${p}.statMods`),
       statPct: st.statPct === undefined ? undefined : S.stats(st.statPct, `${p}.statPct`),
       stealth: S.bool(st.stealth, `${p}.stealth`) || undefined,
+      casterScaled: st.casterScaled === undefined ? undefined : (() => {
+        const o = S.obj(st.casterScaled, `${p}.casterScaled`);
+        return { stat: S.oneOf(o.stat, `${p}.casterScaled.stat`, STAT_KEYS), pAtk: S.optNum(o.pAtk, `${p}.casterScaled.pAtk`), mAtk: S.optNum(o.mAtk, `${p}.casterScaled.mAtk`) };
+      })(),
     };
   }
 
@@ -150,7 +154,9 @@ export function parseContent(skillsData: unknown, weaponsData: unknown): GameCon
       heal: r.heal === undefined ? undefined : { mAtk: S.num(S.obj(r.heal, `${p}.heal`).mAtk, `${p}.heal.mAtk`) },
       shield: r.shield === undefined ? undefined : (() => {
         const o = S.obj(r.shield, `${p}.shield`);
-        return { maxHpPct: S.num(o.maxHpPct, `${p}.shield.maxHpPct`), turns: S.num(o.turns, `${p}.shield.turns`) };
+        const shield = { maxHpPct: S.optNum(o.maxHpPct, `${p}.shield.maxHpPct`), mAtk: S.optNum(o.mAtk, `${p}.shield.mAtk`), turns: S.num(o.turns, `${p}.shield.turns`) };
+        if (!shield.maxHpPct && !shield.mAtk) fail('skills.json', `${p}.shield`, 'needs maxHpPct and/or mAtk');
+        return shield;
       })(),
       applyStatus: r.applyStatus === undefined ? undefined : statusList(r.applyStatus, `${p}.applyStatus`),
       knockback: S.optNum(r.knockback, `${p}.knockback`),
@@ -285,7 +291,8 @@ export const isFree = (s: SkillDef) => s.ap === 0;
 /** "Free", "1 AP", "2 AP" or "Ends turn". */
 export const apLabel = (s: SkillDef) => (s.ap === 0 ? 'Free' : s.ap === 'end' ? 'Ends turn' : `${s.ap} AP`);
 /** Helpful skills (heals, cleanses, shields, buffs) are drawn green; attacks red. */
-export const isSupport = (s: SkillDef) => s.affects === 'ally' || !!(s.heal || s.cleanse || s.shield);
+export const isSupport = (s: SkillDef) =>
+  s.affects === 'ally' || !!(s.heal || s.cleanse || s.shield) || (s.applyStatus ?? []).some((a) => !STATUSES[a.status]?.debuff);
 
 // ---- descriptions generated from the data (always match the numbers) ---------------
 
@@ -296,7 +303,7 @@ const turns = (n: number) => `${n} turn${n === 1 ? '' : 's'}`;
 
 /** What a skill does, with its numbers: "100% M.Atk, Burn x1 (2 turns)". Falls back to the description. */
 export function skillEffect(s: SkillDef): string {
-  if (s.modes) return s.modes.map((id) => `${SKILLS[id].modeName ?? SKILLS[id].name}: ${skillEffect(SKILLS[id])}`).join(' / ');
+  if (s.modes) return s.description;
   const parts: string[] = [];
   if (s.hits?.length) {
     parts.push(s.hits.map((h) => [
@@ -308,8 +315,19 @@ export function skillEffect(s: SkillDef): string {
   }
   if (s.basicAttack) parts.push(s.basicAttack > 1 ? `Basic attack x${s.basicAttack}` : 'Basic attack');
   if (s.heal) parts.push(`Heal ${pct(s.heal.mAtk)} ${STAT_INFO.mAtk.short}`);
-  if (s.shield) parts.push(`Shield ${pct(s.shield.maxHpPct)} of max HP (${turns(s.shield.turns)})`);
-  for (const a of s.applyStatus ?? []) parts.push(`${STATUSES[a.status].name}${a.stacks ? ` x${a.stacks}` : ''} (${turns(a.turns)})`);
+  if (s.shield) {
+    const sh = s.shield;
+    const amount = [sh.maxHpPct ? `${pct(sh.maxHpPct)} of max HP` : '', sh.mAtk ? `${pct(sh.mAtk)} ${STAT_INFO.mAtk.short}` : ''].filter(Boolean).join(' + ');
+    parts.push(`Shield ${amount} (${turns(sh.turns)})`);
+  }
+  for (const a of s.applyStatus ?? []) {
+    const st = STATUSES[a.status];
+    const sc = st.casterScaled;
+    if (sc) {
+      const from = [sc.pAtk ? `${pct(sc.pAtk)} ${STAT_INFO.pAtk.short}` : '', sc.mAtk ? `${pct(sc.mAtk)} ${STAT_INFO.mAtk.short}` : ''].filter(Boolean).join(' + ');
+      parts.push(`${STAT_INFO[sc.stat].name} +${from} (${turns(a.turns)})`);
+    } else parts.push(`${st.name}${a.stacks ? ` x${a.stacks}` : ''} (${turns(a.turns)})`);
+  }
   for (const a of s.selfStatus ?? []) parts.push(`You: ${STATUSES[a.status].name} (${turns(a.turns)})`);
   if (s.recoilIfSurvives) {
     const r = s.recoilIfSurvives;

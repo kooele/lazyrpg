@@ -191,6 +191,7 @@ export class Battle {
     for (const s of u.statuses) {
       const mod = STATUSES[s.id]?.statMods?.[stat];
       if (mod) value += mod * Math.max(1, s.stacks);
+      if (STATUSES[s.id]?.casterScaled?.stat === stat) value += s.amount;
     }
     if (stat === 'defense') {
       value += TERRAIN[this.map.tiles[u.y][u.x]].defense;
@@ -343,12 +344,12 @@ export class Battle {
 
   /** Is this skill an attack on enemies (as opposed to healing/buffing)? */
   private isAttack(s: SkillDef): boolean {
-    return s.affects !== 'ally' && (!!s.hits?.length || !!s.basicAttack || !!s.cone || !!s.applyStatus?.length || hasTag(s, 'engage'));
+    return s.affects !== 'ally' && (!!s.hits?.length || !!s.basicAttack || !!s.cone || (s.applyStatus ?? []).some((a) => STATUSES[a.status]?.debuff) || hasTag(s, 'engage'));
   }
 
   /**
    * Why an engaged unit can't use `skill` on `tile` (null if it can): engaged units
-   * can't move (incl. Movement skills), attack anyone but their opponent, or heal/cleanse anyone but themselves.
+   * can't move (incl. Movement skills), attack anyone but their opponent, or heal/cleanse/shield/buff anyone but themselves.
    */
   engagementBlock(caster: Unit, skill: SkillDef, tile: Point, from: Point = caster): string | null {
     const opp = this.opponentOf(caster);
@@ -365,8 +366,9 @@ export class Battle {
       return targets.length ? busy : `Engaged with ${opp.character.name}: disengage before moving.`;
     }
     if (hasTag(skill, 'movement')) return `Engaged with ${opp.character.name}: disengage before moving.`;
-    // Heal and Cleanse only on yourself while engaged.
-    if ((skill.heal || skill.cleanse) && targets.some((t) => t !== caster)) return busy;
+    // Heal, Cleanse, shields and buffs only on yourself while engaged.
+    const helps = skill.heal || skill.cleanse || skill.shield || (skill.applyStatus ?? []).some((a) => !STATUSES[a.status]?.debuff);
+    if (skill.target === 'unit' && helps && targets.some((t) => t !== caster)) return busy;
     if (!this.isAttack(skill)) return null;
     if (skill.cone) return `Engaged with ${opp.character.name}: can't watch other enemies.`;
     // Area attacks around you (Circle Swing) are fine as long as they hit the opponent;
@@ -1033,6 +1035,20 @@ export class Battle {
     }
   }
 
+  /** The stat bonus a caster-scaled status (Protection) gives when `source` applies it. */
+  scaledStatusAmount(source: Unit, statusId: string): number {
+    const sc = STATUSES[statusId]?.casterScaled;
+    if (!sc) return 0;
+    return Math.round(this.stat(source, 'pAtk') * (sc.pAtk ?? 0) + this.stat(source, 'mAtk') * (sc.mAtk ?? 0));
+  }
+
+  /** Shield points `skill` gives `target` when `caster` uses it. */
+  shieldAmount(caster: Unit, skill: SkillDef, target: Unit): number {
+    const sh = skill.shield;
+    if (!sh) return 0;
+    return Math.round(target.stats.health * (sh.maxHpPct ?? 0) + this.stat(caster, 'mAtk') * (sh.mAtk ?? 0));
+  }
+
   healAmount(caster: Unit, skill: SkillDef): number {
     return Math.round((skill.heal?.mAtk ?? 0) * this.stat(caster, 'mAtk'));
   }
@@ -1137,7 +1153,7 @@ export class Battle {
         events.push({ type: 'heal', source: u.uid, target: t.uid, amount });
       }
       if (skill.shield) {
-        const amount = Math.round(t.stats.health * skill.shield.maxHpPct);
+        const amount = this.shieldAmount(u, skill, t);
         t.statuses = t.statuses.filter((s) => s.id !== 'shield');
         t.statuses.push({ id: 'shield', name: 'Shield', debuff: false, stacks: 0, amount, turns: skill.shield.turns, tick: 'start' });
         events.push({ type: 'shield', source: u.uid, target: t.uid, amount });
@@ -1194,6 +1210,12 @@ export class Battle {
       existing.turns = Math.max(existing.turns, turns);
     } else {
       t.statuses.push({ id, name: def.name, debuff: def.debuff, stacks: def.stacking ? stacks : 1, amount: 0, turns, tick: def.tick });
+    }
+    // Caster-scaled bonuses (Protection) use the caster's stat now; a recast keeps the bigger one.
+    const sc = def.casterScaled;
+    if (sc) {
+      const status = t.statuses.find((s) => s.id === id)!;
+      status.amount = Math.max(status.amount, this.scaledStatusAmount(source, id));
     }
     const now = t.statuses.find((s) => s.id === id)!;
     return { type: 'status', source: source.uid, target: t.uid, name: def.stacking ? `${def.name} x${now.stacks}` : def.name };

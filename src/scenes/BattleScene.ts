@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { SKILLS, STATUSES, WEAPONS, hasTag, isFree, isSupport, skillStatText } from '../data/content';
 import type { SkillDef } from '../data/types';
+import { STAT_INFO } from '../data/types';
 import { bestAction, bestFreeAction, planTurn, preferredMode, shouldDisengage, shouldEscape } from '../game/ai';
 import {
   AP_PER_TURN, Battle, deploymentTiles, generateEnemies, makeUnit,
@@ -998,7 +999,11 @@ export class BattleScene extends Phaser.Scene {
       }
       if (hasTag(s, 'engage') && t.team !== u.team && !u.engagedWith && !t.engagedWith && !s.hits?.length) lines.push(`→ ${who}: engaged`);
       if (s.heal) lines.push(`→ ${who}: +${Math.min(b.healAmount(u, s), t.stats.health - t.hp)} HP`);
-      if (s.shield) lines.push(`→ ${who}: +${Math.round(t.stats.health * s.shield.maxHpPct)} shield`);
+      if (s.shield) lines.push(`→ ${who}: +${b.shieldAmount(u, s, t)} shield`);
+      for (const a of s.applyStatus ?? []) {
+        const sc = STATUSES[a.status]?.casterScaled;
+        if (sc) lines.push(`→ ${who}: +${b.scaledStatusAmount(u, a.status)} ${STAT_INFO[sc.stat].name} (${a.turns} turns)`);
+      }
       if (s.cleanse) lines.push(`→ ${who}: cleanse ${t.statuses.filter((x) => x.debuff).length} debuff(s)`);
       const debuffs = (s.applyStatus ?? []).filter((a) => STATUSES[a.status]?.debuff).map((a) => STATUSES[a.status].name);
       if (debuffs.length) lines.push(`   ${debuffs.join(', ')}: ${b.resistChance(t)}% chance ${t.character.name} resists`);

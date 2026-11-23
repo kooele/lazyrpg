@@ -91,7 +91,10 @@ describe('stats and content files', () => {
       'Effect: 100% M.Atk, Burn x1 (2 turns)\nTags: Projectile, Debuff, Magical\nAP: Ends turn\nMana: 30\nCooldown: 2 turns');
     expect(skillStatText(SKILLS.sword_slash)).toBe('Effect: 100% P.Atk\nTags: Melee, Engage, Physical\nAP: Ends turn');
     expect(skillStats(SKILLS.engage)[0].value).toBe(SKILLS.engage.description);
-    expect(skillStats(SKILLS.bow_attack)[0].value).toBe('Direct: 100% P.Atk / Indirect: 70% P.Atk / Melee: 80% P.Atk');
+    expect(skillStats(SKILLS.bow_attack)[0].value).toBe("Attacks based on the bow's mode.");
+    expect(skillStats(SKILLS.protection)[0].value).toBe('Defense +25% M.Atk (2 turns)');
+    expect(skillStats(SKILLS.barrier)[0].value).toBe('Shield 100% M.Atk (1 turn)');
+    expect(skillStats(SKILLS.shield_up)[0].value).toBe('Shield 10% of max HP (1 turn)');
   });
 });
 
@@ -408,6 +411,27 @@ describe('skills', () => {
     h.statuses.push({ id: 'burn', name: 'Burn', debuff: true, stacks: 1, amount: 0, turns: 2, tick: 'start' });
     battle.perform(h, 'cleanse', { x: 1, y: 1 });
     expect(h.statuses).toEqual([]);
+  });
+
+  it("Protection adds Defense from the caster's M.Atk; Barrier shields for 100% M.Atk; neither has a cooldown", () => {
+    const { battle, units: [c, ally] } = setup(openMap(), [
+      { c: hero('staff', ['protection', 'barrier']), team: 'player', at: { x: 1, y: 1 } },
+      { c: hero('sword_shield', [], 'Ally'), team: 'player', at: { x: 3, y: 1 } },
+    ]);
+    const def = battle.stat(ally, 'defense');
+    battle.perform(c, 'protection', { x: 3, y: 1 });
+    expect(battle.stat(ally, 'defense')).toBe(def + 30); // 25% of 120 M.Atk
+    expect(battle.isReady(c, 'protection')).toBe(true);
+    battle.endPhase();
+    battle.endPhase();
+    battle.perform(c, 'barrier', { x: 3, y: 1 });
+    expect(battle.shieldOf(ally)).toBe(120);
+    expect(battle.isReady(c, 'barrier')).toBe(true);
+    // Protected lasts 2 of the ally's turns.
+    battle.endPhase();
+    battle.endPhase();
+    expect(battle.stat(ally, 'defense')).toBe(def);
+    expect(SKILLS.heal.cooldown).toBe(0);
   });
 
   it('fireball burns 1% max health per stack per turn; cleanse removes it', () => {

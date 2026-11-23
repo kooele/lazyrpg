@@ -68,6 +68,11 @@ export interface StatusDef {
   statMods?: Partial<Stats>;
   /** Percent stat changes while active (-0.25 = -25%), applied after flat changes and terrain. */
   statPct?: Partial<Stats>;
+  /**
+   * A flat stat bonus worked out from the caster's stats when applied (Protection:
+   * Defense + 25% of the caster's M.Atk). Kept on the unit's status as its `amount`.
+   */
+  casterScaled?: { stat: StatKey; pAtk?: number; mAtk?: number };
   /** Enemies can't target the unit directly or trigger overwatch on it (area attacks still hit). Ends when it attacks. */
   stealth?: boolean;
 }
@@ -146,7 +151,8 @@ export interface SkillDef {
   /** Damage hits, applied in order. */
   hits?: DamagePart[];
   heal?: { mAtk: number };
-  shield?: { maxHpPct: number; turns: number };
+  /** Shield points: a fraction of the target's max HP and/or of the caster's M.Atk. */
+  shield?: { maxHpPct?: number; mAtk?: number; turns: number };
   applyStatus?: { status: string; turns: number; stacks?: number }[];
   knockback?: number;
   cleanse?: boolean;

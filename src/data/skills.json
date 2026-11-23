@@ -21,7 +21,7 @@
     "basicAttack": "Hit with the user's weapon basic attack this many times (instead of 'hits'). Used by Double Strike and Circle Swing.",
     "selfStatus": "list of { status, turns } applied to the user before the skill resolves (never resisted)",
     "recoilIfSurvives": "{ pAtk, mAtk, ... } damage the user takes (after its own Defense) if the target survives the hits",
-    "optional": "heal { mAtk }, shield { maxHpPct, turns }, knockback (tiles), cleanse, teleport, charge (with teleport: appear next to the target instead of dashing), aoeRadius (a 'weapon' self skill without one uses the weapon's range), cone { angle, radius, interrupt, los } (radius defaults to the skill's range, so 'weapon' cones reach as far as the weapon; a cone skill without hits attacks with the user's basic attack)",
+    "optional": "heal { mAtk }, shield { maxHpPct and/or mAtk, turns }, knockback (tiles), cleanse, teleport, charge (with teleport: appear next to the target instead of dashing), aoeRadius (a 'weapon' self skill without one uses the weapon's range), cone { angle, radius, interrupt, los } (radius defaults to the skill's range, so 'weapon' cones reach as far as the weapon; a cone skill without hits attacks with the user's basic attack)",
     "basicSkills": "abilities every Adventurer has on top of weapon and tree skills"
   },
 
@@ -53,6 +53,7 @@
     "blind": { "name": "Blinded", "debuff": true, "stacking": false, "tick": "end", "statPct": { "pAtk": -0.3, "mAtk": -0.3 }, "description": "-30% P.Atk and M.Atk." },
     "exposed": { "name": "Exposed", "debuff": true, "stacking": false, "tick": "start", "statPct": { "defense": -1 }, "description": "No Defense (forest cover included)." },
     "stealth": { "name": "Stealthed", "debuff": false, "stacking": false, "tick": "start", "stealth": true, "description": "Enemies can't target you directly or trigger overwatch on you; area attacks still hit. Ends early if you attack." },
+    "protected": { "name": "Protected", "debuff": false, "stacking": false, "tick": "end", "casterScaled": { "stat": "defense", "mAtk": 0.25 }, "description": "+Defense equal to 25% of the caster's M.Atk." },
     "corrode": { "name": "Corrode", "debuff": true, "stacking": false, "tick": "end", "statPct": { "defense": -0.25 }, "description": "-25% Defense." }
   },
 
@@ -76,7 +77,7 @@
       "hits": [{ "pAtk": 1 }]
     },
     "bow_attack": {
-      "name": "Bow Attack", "description": "The bow's basic attack. It works according to the bow's current mode: use Switch Mode to change it.",
+      "name": "Bow Attack", "description": "Attacks based on the bow's mode.",
       "modes": ["direct_shot", "indirect_shot", "bow_strike"]
     },
     "direct_shot": {
@@ -162,14 +163,26 @@
     "heal": {
       "name": "Heal", "description": "Heal a unit. Works on enemies too.",
       "tags": ["support"],
-      "target": "unit", "affects": "any", "range": 5, "minRange": 0, "cooldown": 2, "mana": 40,
+      "target": "unit", "affects": "any", "range": 5, "minRange": 0, "cooldown": 0, "mana": 40,
       "heal": { "mAtk": 0.8 }
     },
     "cleanse": {
-      "name": "Cleanse", "description": "Remove all debuffs from a unit. Works on enemies too.",
+      "name": "Cleanse", "description": "Remove all debuffs from a unit.",
       "tags": ["support"],
       "target": "unit", "affects": "any", "range": 5, "minRange": 0, "cooldown": 0, "mana": 20,
       "cleanse": true
+    },
+    "protection": {
+      "name": "Protection", "description": "Grant a unit Defense equal to 25% of your M.Atk for 2 turns.",
+      "tags": ["support"],
+      "target": "unit", "affects": "any", "range": 5, "minRange": 0, "cooldown": 0, "mana": 40, "level": 3,
+      "applyStatus": [{ "status": "protected", "turns": 2 }]
+    },
+    "barrier": {
+      "name": "Barrier", "description": "Grant a unit a shield equal to 100% of your M.Atk for 1 turn.",
+      "tags": ["support"],
+      "target": "unit", "affects": "any", "range": 5, "minRange": 0, "cooldown": 0, "mana": 40, "level": 3,
+      "shield": { "mAtk": 1, "turns": 1 }
     },
     "engage": {
       "name": "Engage", "description": "Engage an adjacent enemy without attacking it.",
@@ -283,7 +296,7 @@
   "skillTrees": [
     { "id": "arcanist", "name": "Arcanist", "tab": "mage", "skills": ["arcane_bolt", "arcane_pulse", "arcane_shift"] },
     { "id": "elementalist", "name": "Elementalist", "tab": "mage", "skills": ["fireball", "freeze"] },
-    { "id": "cleric", "name": "Cleric", "tab": "mage", "skills": ["heal", "cleanse"] },
+    { "id": "cleric", "name": "Cleric", "tab": "mage", "skills": ["heal", "cleanse", "protection", "barrier"] },
     { "id": "vanguard", "name": "Vanguard", "tab": "warrior", "skills": ["engage", "charge"] },
     { "id": "infighter", "name": "Infighter", "tab": "warrior", "skills": ["kick", "pocket_sand"] },
     { "id": "assassin", "name": "Assassin", "tab": "warrior", "skills": ["shadow_step", "flicker_strike", "life_risking_strike"] },
