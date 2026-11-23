@@ -34,6 +34,8 @@ export class CharacterCreatorScene extends Phaser.Scene {
   private partyInput: HTMLInputElement | null = null;
   private draft!: Character;
   private tab: SkillTab = 'mage';
+  /** Selected subclass (skill tree id) under each class tab. */
+  private subTab: Partial<Record<string, string>> = {};
   private layer!: Phaser.GameObjects.Container;
   private nameInput!: HTMLInputElement;
   private tooltip!: Tooltip;
@@ -294,36 +296,43 @@ export class CharacterCreatorScene extends Phaser.Scene {
     L.add(button(this, 636, 560, 300, 50, this.mode === 'main' ? `Begin in ${GUILD.city}` : this.mode === 'demo' ? 'Recruit' : 'Save changes', () => this.confirm(), { fill: 0x2c4a2f, fontSize: 18 }));
   }
 
-  /** A skill tree tab: click a skill to learn it (1 point) or unlearn it. */
+  /** A class tab: a second row of subclass tabs, then the selected subclass's skills. Click a skill to learn it (1 point) or unlearn it. */
   private skillTab(L: Phaser.GameObjects.Container): void {
     const d = this.draft;
-    let ty = 130;
     const trees = SKILL_TREES.filter((t) => t.tab === this.tab);
-    // Squeeze the rows when a tab has many skills so everything fits above the bottom buttons.
-    const count = trees.reduce((n, t) => n + t.skills.length, 0);
+    const tree = trees.find((t) => t.id === this.subTab[this.tab]) ?? trees[0];
+    if (!tree) return;
+    // Subclass tabs, indented under the class tabs.
+    const subX = 648, subW = 288, gap = 4;
+    const w = (subW - gap * (trees.length - 1)) / trees.length;
+    trees.forEach((t, i) => {
+      const learned = t.skills.filter((sid) => d.skillIds.includes(sid)).length;
+      const label = w < 90 ? t.name.replace(' ', '\n') : t.name;
+      L.add(button(this, subX + i * (w + gap), 126, w, 34, `${label}${learned ? ` (${learned})` : ''}`, () => {
+        this.subTab[this.tab] = t.id;
+        this.render();
+      }, { selected: t.id === tree.id, fontSize: 12 }));
+    });
+    let ty = 168;
     // The main character's screen also has the party name field from y=478.
     const bottom = this.mode === 'main' ? 474 : 550;
-    const rowH = Math.max(22, Math.min(34, Math.floor((bottom - ty - trees.length * 18) / Math.max(1, count))));
-    for (const tree of trees) {
-      L.add(text(this, 636, ty, tree.name, { fontSize: '13px', color: COLORS.gold }));
-      ty += 18;
-      for (const sid of tree.skills) {
-        const s = SKILLS[sid];
-        const on = d.skillIds.includes(sid);
-        const locked = !isUnlocked(d, sid);
-        const label = locked ? `${s.name}  (needs Lv ${s.level})` : `${on ? '✔ ' : ''}${s.name}${s.level > 1 ? ` (Lv ${s.level})` : ''}`;
-        L.add(button(this, 636, ty, 300, rowH - 4, label, () => this.toggleSkill(sid), {
-          selected: on, enabled: !locked, fontSize: rowH < 30 ? 13 : 14, onHover: () => this.showSkill(s), onOut: () => this.tooltip.hide(),
-        }));
-        ty += rowH;
-      }
+    const rowH = Math.max(22, Math.min(34, Math.floor((bottom - ty - 40) / Math.max(1, tree.skills.length))));
+    for (const sid of tree.skills) {
+      const s = SKILLS[sid];
+      const on = d.skillIds.includes(sid);
+      const locked = !isUnlocked(d, sid);
+      const label = locked ? `${s.name}  (needs Lv ${s.level})` : `${on ? '✔ ' : ''}${s.name}${s.level > 1 ? ` (Lv ${s.level})` : ''}`;
+      L.add(button(this, subX, ty, subW, rowH - 4, label, () => this.toggleSkill(sid), {
+        selected: on, enabled: !locked, fontSize: rowH < 30 ? 13 : 14, onHover: () => this.showSkill(s), onOut: () => this.tooltip.hide(),
+      }));
+      ty += rowH;
     }
-    // Picks from the other tab, so mixing is visible.
-    const otherPicks = d.skillIds.filter((sid) => SKILL_TREES.find((t) => t.skills.includes(sid))?.tab !== this.tab);
+    // Picks from other subclasses, so mixing is visible.
+    const otherPicks = d.skillIds.filter((sid) => !tree.skills.includes(sid) && SKILL_TREES.some((t) => t.skills.includes(sid)));
     if (otherPicks.length) {
-      const other = SKILL_TABS.find((t) => t.id !== this.tab)!.name;
-      L.add(text(this, 636, ty + 4, `Also equipped (${other}): ${otherPicks.map((s) => SKILLS[s].name).join(', ')}`, {
-        fontSize: '12px', color: COLORS.dim, wordWrap: { width: 300 },
+      const where = (sid: string) => SKILL_TREES.find((t) => t.skills.includes(sid))!.name;
+      L.add(text(this, subX, ty + 4, `Also equipped: ${otherPicks.map((sid) => `${SKILLS[sid].name} (${where(sid)})`).join(', ')}`, {
+        fontSize: '12px', color: COLORS.dim, wordWrap: { width: subW },
       }));
     }
   }

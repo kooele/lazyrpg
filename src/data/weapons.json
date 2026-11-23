@@ -16,7 +16,7 @@
     },
     "bow": {
       "name": "Bow", "tag": "BW", "art": "bow",
-      "description": "Ranged weapon with three modes: Direct (weapon range, 100% P.Atk), Indirect (1.5x range over cover, 70%) and Melee (1.5 tiles, 80%). Switch Mode is a free action.",
+      "description": "Ranged weapon with three modes:\n• Direct: 100% P.Atk, weapon range\n• Indirect: 70% P.Atk, 1.5x range,\n   arcs over cover\n• Melee: 80% P.Atk, 1.5 tiles\nSwitch Mode is a free action.",
       "statMultipliers": { "pAtk": 0.8, "mAtk": 0.8 },
       "range": 5,
       "skills": ["bow_attack", "switch_mode"]
