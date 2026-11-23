@@ -1421,6 +1421,22 @@ export class Battle {
     return this.dealDamage(u, amount, source, 'status', !mitigated);
   }
 
+  /**
+   * Statuses that tick at the `when` of the unit's turn: damage over time first (Burn at the end, Poison at the start),
+   * then one turn less (or one stack less for decaying ones), dropping any that ran out.
+   */
+  private tickStatuses(u: Unit, when: 'start' | 'end'): BattleEvent[] {
+    const events: BattleEvent[] = [];
+    for (const s of u.statuses) {
+      if (s.tick !== when) continue;
+      const def = STATUSES[s.id];
+      if (def?.damagePctMaxHpPerStack && u.alive) events.push(this.statusDamage(u, def.damagePctMaxHpPerStack * s.stacks, def.mitigated));
+      this.tickStatus(s);
+    }
+    u.statuses = u.statuses.filter((s) => this.stillActive(s));
+    return events;
+  }
+
   /** A status ticks (start or end of the unit's turn): one turn less, or one stack less for decaying ones (Burn, Slow). */
   private tickStatus(s: Status): void {
     if (STATUSES[s.id]?.decay) s.stacks -= 1;
@@ -1511,12 +1527,7 @@ export class Battle {
       u.startPos = { x: u.x, y: u.y };
       u.overwatch = null;
       for (const k of Object.keys(u.cooldowns)) u.cooldowns[k] = Math.max(0, u.cooldowns[k] - 1);
-      for (const s of u.statuses) {
-        const def = STATUSES[s.id];
-        if (def?.damagePctMaxHpPerStack && u.alive) events.push(this.statusDamage(u, def.damagePctMaxHpPerStack * s.stacks, def.mitigated));
-        if (s.tick === 'start') this.tickStatus(s);
-      }
-      u.statuses = u.statuses.filter((s) => this.stillActive(s));
+      events.push(...this.tickStatuses(u, 'start'));
       // Toggles cost mana every turn to keep up; they switch off when the unit can't pay.
       for (const s of [...u.statuses]) {
         const upkeep = STATUSES[s.id]?.manaPerTurn;
@@ -1539,10 +1550,7 @@ export class Battle {
     // Effects that last "through" the unit's turn (Slow, Frozen) count down first, so the end-of-turn zone hits
     // below (and anything they freeze) carry over into the unit's next turn instead of wearing off at once.
     const events: BattleEvent[] = [];
-    for (const u of this.living(this.phase)) {
-      for (const s of u.statuses) if (s.tick === 'end') this.tickStatus(s);
-      u.statuses = u.statuses.filter((s) => this.stillActive(s));
-    }
+    for (const u of this.living(this.phase)) events.push(...this.tickStatuses(u, 'end'));
     // Units ending their turn inside a zone are hit (Firestorm: twice).
     for (const u of this.living(this.phase)) {
       for (const z of this.zonesAt(u)) events.push(...this.zoneHit(z, u, z.def.endTurnHits));

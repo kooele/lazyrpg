@@ -442,7 +442,7 @@ describe('skills', () => {
     expect(e.hp).toBe(300 + 96); // 80% of 120 M.Atk
     battle.endPhase();
     battle.endPhase();
-    h.statuses.push({ id: 'burn', name: 'Burn', debuff: true, stacks: 1, amount: 0, turns: 2, tick: 'start' });
+    h.statuses.push({ id: 'burn', name: 'Burn', debuff: true, stacks: 1, amount: 0, turns: Infinity, tick: 'end' });
     battle.perform(h, 'cleanse', { x: 1, y: 1 });
     expect(h.statuses).toEqual([]);
   });
@@ -468,17 +468,20 @@ describe('skills', () => {
     expect(SKILLS.heal.cooldown).toBe(0);
   });
 
-  it('Burn: 5% of max health per stack at the start of each turn, reduced by Defense and shields, then a stack drops off', () => {
+  it('Burn: 5% of max health per stack at the end of the burning unit\'s turn, reduced by Defense and shields, then a stack drops off', () => {
     const { battle, units: [m, e, cleric] } = setup(openMap(), [
       { c: hero('staff', ['ignite']), team: 'player', at: { x: 1, y: 1 } },
       { c: hero('bow'), team: 'enemy', at: { x: 4, y: 1 } },
       { c: hero('staff', ['cleanse']), team: 'enemy', at: { x: 6, y: 1 } },
     ]);
-    e.statuses.push({ id: 'burn', name: 'Burn', debuff: true, stacks: 2, amount: 0, turns: Infinity, tick: 'start' });
+    battle.perform(m, 'ignite', { x: 4, y: 1 });
+    e.statuses.find((st) => st.id === 'burn')!.stacks = 2;
     const hp = e.hp;
-    const events = battle.endPhase();
+    battle.endPhase(); // the enemy's turn starts: no damage yet, it gets to act first
+    expect(e.hp).toBe(hp);
+    const events = battle.endPhase(); // ...and burns as it ends
     // 2 stacks x 5% of 500 = 50, x 100/140 for Def 40 = 36.
-    expect(events[0]).toMatchObject({ type: 'damage', cause: 'status', amount: 36 });
+    expect(events[0]).toMatchObject({ type: 'damage', cause: 'status', amount: 36, target: e.uid });
     expect(e.hp).toBe(hp - 36);
     expect(e.statuses.find((st) => st.id === 'burn')?.stacks).toBe(1);
     // A shield soaks the next tick (1 stack: 25 x 100/140 = 18), then Burn is gone.
@@ -487,12 +490,12 @@ describe('skills', () => {
     const tick = battle.endPhase();
     expect(tick[0]).toMatchObject({ type: 'damage', cause: 'status', amount: 0, absorbed: 18 });
     expect(e.statuses.some((st) => st.id === 'burn')).toBe(false);
-    // Cleanse still removes it.
-    battle.endPhase();
+    // On its own turn, the burning team can Cleanse it before it ever ticks.
     battle.perform(m, 'ignite', { x: 4, y: 1 });
     battle.endPhase();
     battle.perform(cleric, 'cleanse', { x: 4, y: 1 });
     expect(e.statuses.some((st) => st.id === 'burn')).toBe(false);
+    expect(battle.endPhase().some((ev) => ev.type === 'damage' && ev.cause === 'status')).toBe(false);
   });
 
   it('freeze puts a stack of Slow on the target, which drops off at the end of its next turn', () => {
@@ -1882,18 +1885,18 @@ describe('Elementalist rework: Ignite, Freeze, Fireball, Iceblast and Burn explo
     expect(e.statuses.find((s) => s.id === 'slow')?.stacks).toBe(1);
   });
 
-  it('Burn stacks to 2; a 3rd stack Explodes: Burn is gone and the unit takes 15% of max Health, reduced by Defense', () => {
+  it('Burn stacks to 2; a 3rd stack Explodes: Burn is gone and the unit takes 20% of max Health, reduced by Defense', () => {
     const { battle, m, e } = duelOf(['ignite']);
-    e.statuses.push({ id: 'burn', name: 'Burn', debuff: true, stacks: 2, amount: 0, turns: Infinity, tick: 'start' });
+    e.statuses.push({ id: 'burn', name: 'Burn', debuff: true, stacks: 2, amount: 0, turns: Infinity, tick: 'end' });
     const events = battle.perform(m, 'ignite', { x: 4, y: 3 });
     expect(events).toContainEqual(expect.objectContaining({ type: 'status', name: 'Explosion' }));
-    // 15% of 500 = 75, x 100/140 for Def 40 = 54; plus Ignite's own 17.
-    expect(events).toContainEqual(expect.objectContaining({ type: 'damage', cause: 'status', amount: 54 }));
-    expect(e.hp).toBe(500 - 17 - 54);
+    // 20% of 500 = 100, x 100/140 for Def 40 = 71; plus Ignite's own 17.
+    expect(events).toContainEqual(expect.objectContaining({ type: 'damage', cause: 'status', amount: 71 }));
+    expect(e.hp).toBe(500 - 17 - 71);
     expect(e.statuses.some((s) => s.id === 'burn' || s.id === 'explosion')).toBe(false);
     // Shields absorb it too.
     const b = duelOf(['ignite']);
-    b.e.statuses.push({ id: 'burn', name: 'Burn', debuff: true, stacks: 2, amount: 0, turns: Infinity, tick: 'start' });
+    b.e.statuses.push({ id: 'burn', name: 'Burn', debuff: true, stacks: 2, amount: 0, turns: Infinity, tick: 'end' });
     b.e.statuses.push({ id: 'shield', name: 'Shield', debuff: false, stacks: 0, amount: 999, turns: 2, tick: 'start' });
     b.battle.perform(b.m, 'ignite', { x: 4, y: 3 });
     expect(b.e.hp).toBe(500);
