@@ -188,6 +188,12 @@ export function resistChance(resist: number, scale = STAT_CONFIG.defenseScale): 
  * Battle rules with XCOM-style alternating turns: every player unit may move
  * once and act once, in any order, then every enemy unit does the same.
  */
+/** Damage parts multiplied by `m` (Double Strike's weaker second swing). */
+function scaleHits(hits: DamagePart[], m: number): DamagePart[] {
+  if (m === 1) return hits;
+  return hits.map((h) => Object.fromEntries(Object.entries(h).filter(([, v]) => typeof v === 'number').map(([k, v]) => [k, v * m])) as DamagePart);
+}
+
 export class Battle {
   readonly units: Unit[];
   /** Ground effects in play (Firestorm, Blizzard). */
@@ -306,7 +312,7 @@ export class Battle {
         const basic = forced ? resolveWeaponSkill(forced, weapon) : this.basicAttack(u);
         out = {
           ...out,
-          hits: out.basicAttack ? Array.from({ length: out.basicAttack }, () => basic.hits ?? []).flat() : out.hits,
+          hits: out.basicAttack ? Array.from({ length: out.basicAttack }, (_, i) => scaleHits(basic.hits ?? [], out!.basicAttackDamage?.[i] ?? 1)).flat() : out.hits,
           aoeRadius: areaFromWeapon ? basic.range : out.aoeRadius,
         };
       }
@@ -317,7 +323,11 @@ export class Battle {
 
   /** What the unit's tag-dependent skills scale from (Movement, weapon). */
   reachContext(u: Unit): ReachContext {
-    return { movement: this.stat(u, 'movement'), basic: this.basicAttack(u) };
+    const basicMode = (tag: string) => {
+      const m = modeWithTag(this.rawBasic(u), tag);
+      return m && resolveWeaponSkill(m, WEAPONS[u.character.weaponId]);
+    };
+    return { movement: this.stat(u, 'movement'), basic: this.basicAttack(u), basicMode };
   }
 
   /** Effective range: 'movement' skills scale with Movement, 'weapon' skills use the weapon's range. */
@@ -1277,7 +1287,8 @@ export class Battle {
       }
       if (!t.alive) continue;
       // Engage: locks both units together, unless either is already engaged.
-      if (hasTag(used, 'engage') && t.team !== u.team && u.alive && !u.engagedWith && !t.engagedWith) {
+      const engages = hasTag(used, 'engage') || (used.engageWithin !== undefined && withinRange(dist(u, t), used.engageWithin));
+      if (engages && t.team !== u.team && u.alive && !u.engagedWith && !t.engagedWith) {
         this.engage(u, t);
         events.push({ type: 'engage', source: u.uid, target: t.uid });
       }

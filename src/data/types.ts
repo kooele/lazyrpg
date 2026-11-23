@@ -190,6 +190,10 @@ export interface SkillDef {
   level: number;
   /** Hit with the user's weapon basic attack this many times (in place of `hits`). */
   basicAttack?: number;
+  /** For `basicAttack` skills: damage multiplier for each swing in order (Double Strike: [1, 0.5]). Missing = 1. */
+  basicAttackDamage?: number[];
+  /** Engage the target (as the Engage tag does) only when it is within this many tiles (Spear Thrust: adjacent = 1.5). */
+  engageWithin?: number;
   /** Statuses put on the user before the skill resolves (never resisted). */
   selfStatus?: { status: string; turns: number }[];
   /** Damage the user takes (after its own Defense) when the target survives the hits. */

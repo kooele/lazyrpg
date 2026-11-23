@@ -1,4 +1,4 @@
-import { BASIC_SKILLS, DEFAULT_WEAPON, PALETTE, SKILLS, TREE_SKILLS, WEAPONS, XP_PER_LEVEL, skillPointsForLevel } from '../data/content';
+import { BASIC_SKILLS, DEFAULT_WEAPON, PALETTE, SKILLS, TREE_SKILLS, WEAPONS, XP_PER_LEVEL, skillPointsForLevel, maxBodyRank } from '../data/content';
 import { ENEMIES } from '../data/enemies';
 import { STAT_CONFIG } from '../data/stats';
 import { BODY_MODELS, STAT_KEYS, type BodyModel, type BodyInvestment, type Character, type Look, type StatKey, type Stats, type Talents, type UnitModel } from '../data/types';
@@ -173,6 +173,9 @@ export function cloneCharacter(c: Character): Character {
 export function sanitizeLoadout(c: Character): void {
   if (!WEAPONS[c.weaponId]) c.weaponId = DEFAULT_WEAPON;
   c.skillIds = [...new Set(c.skillIds)].filter((s) => TREE_SKILLS.includes(s) && isUnlocked(c, s)).slice(0, skillPoints(c));
+  // Body investments above the level's rank cap are refunded.
+  const cap = maxBodyRank(c.level);
+  for (const k of Object.keys(c.body ?? {}) as StatKey[]) if (c.body![k]! > cap) c.body![k] = cap;
   // Over budget: give back Body investments, last stat first.
   const keys = bodyStats();
   for (let i = keys.length - 1; i >= 0 && freePoints(c) < 0; i--) {

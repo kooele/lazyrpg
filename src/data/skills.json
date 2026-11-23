@@ -19,6 +19,8 @@
     "switchMode": "true = cycles the user's weapon to its next mode",
     "damageTypes": "Each hit is split by what it scales with: P.Atk, Def and missing HP are Physical damage, M.Atk is Magical damage. Tag skills 'physical' / 'magical' to match (a test checks it).",
     "basicAttack": "Hit with the user's weapon basic attack this many times (instead of 'hits'). Used by Double Strike and Circle Swing.",
+    "basicAttackDamage": "For 'basicAttack' skills: damage multiplier per swing, one per basic attack (Double Strike: [1, 0.5] = full, then half). Omit for full damage.",
+    "engageWithin": "Engage the target (as the Engage tag does) only if it is within this many tiles (Spear Thrust: 1.5 = adjacent, diagonals included). Don't combine with the engage tag.",
     "selfStatus": "list of { status, turns } applied to the user before the skill resolves (never resisted)",
     "recoilIfSurvives": "{ pAtk, mAtk, ... } damage the user takes (after its own Defense) if the target survives the hits",
     "optional": "heal { mAtk }, shield { maxHpPct and/or mAtk, turns }, knockback (tiles), cleanse, teleport, charge (with teleport: appear next to the target instead of dashing), aoeRadius (a 'weapon' self skill without one uses the weapon's range), cone { angle, radius, interrupt, los } (radius defaults to the skill's range, so 'weapon' cones reach as far as the weapon; a cone skill without hits attacks with the user's basic attack)",
@@ -74,10 +76,10 @@
       "shield": { "maxHpPct": 0.1, "turns": 1 }
     },
     "spear_thrust": {
-      "name": "Spear Thrust", "description": "Thrust toward a tile, hitting the first enemy in the way.",
+      "name": "Spear Thrust", "description": "Thrust toward a tile, hitting the first enemy in the way. An adjacent target becomes engaged.",
       "tags": ["melee", "physical"],
       "target": "line", "affects": "enemy", "range": 2, "minRange": 1, "cooldown": 0,
-      "hits": [{ "pAtk": 1 }]
+      "hits": [{ "pAtk": 1 }], "engageWithin": 1.5
     },
     "bow_attack": {
       "name": "Bow Attack", "description": "Attacks based on the bow's mode.",
@@ -242,10 +244,10 @@
       "hits": [{ "pAtk": 2.5 }], "recoilIfSurvives": { "pAtk": 1 }
     },
     "double_strike": {
-      "name": "Double Strike", "description": "Hit an enemy with your basic attack twice.",
+      "name": "Double Strike", "description": "Hit an enemy with your basic attack twice, the second time at half strength.",
       "tags": ["weapon"],
       "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 2, "mana": 20,
-      "basicAttack": 2
+      "basicAttack": 2, "basicAttackDamage": [1, 0.5]
     },
     "execute": {
       "name": "Execute", "description": "Strike an enemy, dealing more damage the more Health it has lost.",

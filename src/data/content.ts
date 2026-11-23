@@ -187,6 +187,8 @@ export function parseContent(skillsData: unknown, weaponsData: unknown): GameCon
       charge: S.bool(r.charge, `${p}.charge`) || undefined,
       level: S.num(r.level ?? 1, `${p}.level`),
       basicAttack: S.optNum(r.basicAttack, `${p}.basicAttack`),
+      basicAttackDamage: r.basicAttackDamage === undefined ? undefined : S.arr(r.basicAttackDamage, `${p}.basicAttackDamage`).map((v, i) => S.num(v, `${p}.basicAttackDamage[${i}]`)),
+      engageWithin: S.optNum(r.engageWithin, `${p}.engageWithin`),
       selfStatus: r.selfStatus === undefined ? undefined : statusList(r.selfStatus, `${p}.selfStatus`),
       recoilIfSurvives: r.recoilIfSurvives === undefined ? undefined : part(r.recoilIfSurvives, `${p}.recoilIfSurvives`),
       modeName: r.modeName === undefined ? undefined : S.str(r.modeName, `${p}.modeName`),
@@ -195,6 +197,9 @@ export function parseContent(skillsData: unknown, weaponsData: unknown): GameCon
       switchMode: S.bool(r.switchMode, `${p}.switchMode`) || undefined,
     };
     if (skill.basicAttack !== undefined && (skill.basicAttack < 1 || !Number.isInteger(skill.basicAttack))) fail('skills.json', `${p}.basicAttack`, 'must be a whole number of 1 or more');
+    if (skill.basicAttackDamage && skill.basicAttackDamage.length !== skill.basicAttack) fail('skills.json', `${p}.basicAttackDamage`, 'needs one multiplier per basic attack (and "basicAttack")');
+    if (skill.basicAttackDamage?.some((m) => m < 0)) fail('skills.json', `${p}.basicAttackDamage`, 'must not be negative');
+    if (skill.engageWithin !== undefined && (skillTags as string[]).includes('engage')) fail('skills.json', `${p}.engageWithin`, "can't be combined with the \"engage\" tag (that always engages)");
     if (skill.basicAttack !== undefined && skill.hits) fail('skills.json', `${p}.basicAttack`, "can't be combined with \"hits\"");
     if (skill.level < 1 || !Number.isInteger(skill.level)) fail('skills.json', `${p}.level`, 'must be a whole number of 1 or more');
     if (skill.target === 'cone' && !skill.cone) fail('skills.json', `${p}.cone`, 'is required when target is "cone"');
@@ -343,7 +348,11 @@ export function skillEffect(s: SkillDef): string {
   }
   const parts: string[] = [];
   if (s.hits?.length) parts.push(s.hits.map(damageText).join(', then '));
-  if (s.basicAttack) parts.push(s.basicAttack > 1 ? `Basic attack x${s.basicAttack}` : 'Basic attack');
+  if (s.basicAttack) {
+    const dmg = s.basicAttackDamage;
+    if (dmg && dmg.some((m) => m !== 1)) parts.push(`Basic attack x${s.basicAttack} (${dmg.map(pct).join(', then ')} damage)`);
+    else parts.push(s.basicAttack > 1 ? `Basic attack x${s.basicAttack}` : 'Basic attack');
+  }
   if (s.heal) parts.push(`Heal ${pct(s.heal.mAtk)} ${STAT_INFO.mAtk.short}`);
   if (s.shield) {
     const sh = s.shield;
@@ -364,6 +373,7 @@ export function skillEffect(s: SkillDef): string {
     parts.push(`${[r.pAtk ? `${pct(r.pAtk)} P.Atk` : '', r.mAtk ? `${pct(r.mAtk)} M.Atk` : ''].filter(Boolean).join(' + ')} recoil if the target survives`);
   }
   if (s.knockback) parts.push(`Knockback ${tiles(s.knockback)}`);
+  if (s.engageWithin !== undefined) parts.push(s.engageWithin <= 1.5 ? 'Engages an adjacent target' : `Engages a target within ${tiles(s.engageWithin)}`);
   if (s.cleanse) parts.push('Removes all debuffs');
   if (s.teleport) parts.push(s.charge ? 'Teleport next to the target' : 'Teleport');
   else if (s.charge) parts.push('Dash next to the target');
@@ -409,4 +419,9 @@ export const NAME_MAX_LENGTH = 16;
 /** Skill points: 2 at level 1 and 1 more every level. Each one learns a tree skill or buys a Body investment. */
 export function skillPointsForLevel(level: number): number {
   return level + 1;
+}
+
+/** Most skill points one stat can take in the Body tab: level / 3, rounded up. */
+export function maxBodyRank(level: number): number {
+  return Math.ceil(level / 3);
 }

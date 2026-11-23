@@ -1,5 +1,5 @@
 // Save / load. Saves are pretty-printed JSON so players can read (and edit!) them.
-import { MAX_PARTY_SIZE, NAME_MAX_LENGTH, SKILLS, TREE_SKILLS, WEAPONS, skillPointsForLevel } from '../data/content';
+import { MAX_PARTY_SIZE, NAME_MAX_LENGTH, SKILLS, TREE_SKILLS, WEAPONS, skillPointsForLevel, maxBodyRank } from '../data/content';
 import { ACTIVITIES, GUILD, type Activity } from '../data/guild';
 import { ENEMIES } from '../data/enemies';
 import {
@@ -170,6 +170,8 @@ function validateCharacter(raw: unknown, path: string, opts: { member?: boolean 
   const body = r.body === undefined ? undefined : validateBody(r.body, `${path}.body`);
   const spent = skills.length + Object.values(body ?? {}).reduce((a, n) => a + (n ?? 0), 0);
   if (spent > points) bad(`${path}.skillIds`, `${skills.length} skills + ${spent - skills.length} Body investments use ${spent} skill points, but level ${level} has ${points}`);
+  // Body ranks above the level's cap (a rule added later) are refunded.
+  for (const k of Object.keys(body ?? {}) as StatKey[]) body![k] = Math.min(body![k]!, maxBodyRank(level as number));
   const a = obj(appearance, `${path}.appearance`);
   if (typeof a.color !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(a.color)) bad(`${path}.appearance.color`, 'must be a hex color like "#3d7be0"');
   const models: readonly string[] = [...BODY_MODELS, ...ENEMY_MODELS];
