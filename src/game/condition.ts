@@ -1,6 +1,6 @@
 // Strategic Layer condition of party members: Health (0-100, separate from battle HP) and Morale (0-100).
 // Pure logic (no Phaser).
-import { GUILD, LODGING_QUALITY, isResidence, type Activity, type CityLodging, type Lodging } from '../data/guild';
+import { GUILD, LODGING_QUALITY, foodQuality, isResidence, type Activity, type CityLodging, type FoodTier, type Lodging } from '../data/guild';
 import type { Character, GameState } from '../data/types';
 import { adventurerRank } from './guild';
 
@@ -72,6 +72,19 @@ export function lodgingRelationship(c: Character, where: CityLodging): number {
   if (diff > 0) return GUILD.lodging.relationshipAbove;
   return diff < 0 ? -GUILD.lodging.relationshipBelowPerStep * -diff : 0;
 }
+
+/** The food a member gets each day: as set in Manage Party, else food.default. */
+export const foodOf = (state: GameState, c: Character): FoodTier => state.food[c.id] ?? GUILD.food.default;
+
+/** Relationship change for a day's food (better than they expect: up; worse: down per step). */
+export function foodRelationship(c: Character, tier: FoodTier): number {
+  const diff = foodQuality(tier) - expectedQuality(c);
+  if (diff > 0) return GUILD.food.relationshipAbove;
+  return diff < 0 ? -GUILD.food.relationshipBelowPerStep * -diff : 0;
+}
+
+/** What a food quality means for someone's expectations, for the UI. */
+export const FOOD_EXPECT_TEXT = ['poor food', 'common food', 'fine food', 'luxury food'];
 
 export const ACTIVITY_INFO: Record<Activity, { name: string; describe: () => string }> = {
   recover: {

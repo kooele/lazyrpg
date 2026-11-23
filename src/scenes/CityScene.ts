@@ -1,9 +1,11 @@
 import Phaser from 'phaser';
 import { GUILD } from '../data/guild';
-import { departBlock, lineupMembers, sleepOutside } from '../game/city';
+import { WEAPONS } from '../data/content';
+import { departBlock, lineupMembers, prisonersAtGate, registerPrisoner, sleepOutside, turnInPrisoner } from '../game/city';
+import { adventurerRank } from '../game/guild';
 import { markDirty, requireState, session } from '../game/session';
 import { cityHeader, rankBadge } from '../ui/hud';
-import { COLORS, HEIGHT, ScrollList, button, confirmDialog, panel, setupCamera, text, toast } from '../ui/widgets';
+import { COLORS, HEIGHT, ScrollList, WIDTH, button, confirmDialog, figure, panel, setupCamera, talentTag, text, toast } from '../ui/widgets';
 
 export const CITY_MAP_KEY = 'city-map';
 
@@ -25,7 +27,7 @@ const PLACES: Record<Ring, Place[]> = {
     { name: 'Adventurer Guild', blurb: 'Quest board, hire mercenaries and companions, the party leaderboard.', at: [1162, 378], scene: 'Guild' },
     { name: 'Docks', blurb: 'Ships from across the sea.', at: [1330, 760] },
     { name: 'Marketplace', blurb: 'Stalls and traders.', at: [1250, 270] },
-    { name: 'Slave Market', blurb: 'Buy slaves, and the magistrate: turn in or register captured prisoners.', at: [1266, 585], scene: 'Market' },
+    { name: 'Slave Market', blurb: 'Buy slaves, or sell your own.', at: [1266, 585], scene: 'Market' },
     { name: 'Slums', blurb: 'The poorest quarter, inside the outer wall.', at: [330, 650] },
     { name: 'Customs Office', blurb: 'Duties on everything that comes through the harbour.', at: [1352, 455] },
     { name: GUILD.inns.standard.name, blurb: `Inn: lodging at ${GUILD.inns.standard.pricePerPerson} gold per person a night, and drinks. What C-rank adventurers expect.`, at: [330, 330], scene: 'Inn', data: { tier: 'standard' } },
@@ -142,6 +144,62 @@ export class CityScene extends Phaser.Scene {
     button(this, 160, HEIGHT - 60, 136, 46, 'Save Game', () => this.scene.start('SaveLoad', { mode: 'save', returnTo: 'City' }), { fontSize: 15 });
     button(this, 304, HEIGHT - 60, 150, 46, 'Manage Party', () => this.scene.start('Party'), { fontSize: 15 });
     button(this, 462, HEIGHT - 60, 158, 46, 'Sleep outside\n(free)', () => this.sleepOut(), { fontSize: 13, fill: 0x2a3348 });
+
+    if (prisonersAtGate(state)) this.gate();
+  }
+
+  /**
+   * The city gate: prisoners brought back from a quest must each be registered before the party goes on,
+   * turned in for the bounty or registered as the party's slave for a fixed fee. The party never keeps prisoners.
+   */
+  private gate(): void {
+    const state = requireState();
+    const fee = GUILD.slave.registrationFee;
+    const full = state.party.length >= GUILD.maxRoster;
+    const layer = this.add.container(0, 0).setDepth(1000);
+    layer.add(this.add.rectangle(0, 0, WIDTH, HEIGHT, 0x000000, 0.7).setOrigin(0).setInteractive());
+    const X = WIDTH / 2 - 330;
+    layer.add(panel(this, X, 40, 660, HEIGHT - 80));
+    layer.add(text(this, WIDTH / 2, 54, 'City gate: register your prisoners', { fontSize: '22px', color: COLORS.gold }).setOrigin(0.5, 0));
+    layer.add(text(this, X + 20, 88, `The guards won't let prisoners into ${GUILD.city} unregistered. Turn each one in for the bounty, or register them as your slave (${fee} gold).${full ? ` Your party is full (${GUILD.maxRoster}), so you can only turn them in.` : ''}  Gold: ${state.gold}.`, {
+      fontSize: '13px', wordWrap: { width: 620 }, lineSpacing: 2,
+    }));
+    const list = new ScrollList(this, X + 14, 140, 632, HEIGHT - 252, 4);
+    list.root.setDepth(1001);
+    list.setItems(state.prisoners.map((o) => {
+      const c = o.character;
+      const row = this.add.container(0, 0);
+      row.add(this.add.rectangle(0, 0, 620, 80, COLORS.panelLight, 0.5).setOrigin(0));
+      row.add(figure(this, 30, 72, 60, c.appearance, c.weaponId, { base: false }));
+      const name = text(this, 64, 6, c.name, { fontSize: '16px' });
+      row.add(name);
+      row.add(talentTag(this, 64 + name.width + 12, 9, c, { fontSize: 12, detail: false }));
+      row.add(text(this, 64, 28, `Level ${c.level} (${adventurerRank(c.level)}-rank) · ${WEAPONS[c.weaponId].name}`, { fontSize: '13px', color: COLORS.gold }));
+      row.add(talentTag(this, 64, 48, c, { fontSize: 11, overall: false, sep: '   ' }));
+      row.add(button(this, 360, 22, 120, 36, `Bounty: ${o.price}g`, () => {
+        const gold = turnInPrisoner(state, c.id);
+        markDirty();
+        this.render();
+        toast(this, `${c.name} is taken away. Bounty: ${gold} gold.`);
+      }, { fontSize: 13 }));
+      row.add(button(this, 488, 22, 120, 36, `Slave: ${fee}g`, () => {
+        const err = registerPrisoner(state, c.id);
+        if (err) return toast(this, err, COLORS.bad);
+        markDirty();
+        this.render();
+        toast(this, `${c.name} is registered as your slave. Set their food and loadout in Manage Party.`);
+      }, { fontSize: 13, enabled: !full && state.gold >= fee }));
+      return { obj: row, height: 80 };
+    }), 'top');
+    const total = state.prisoners.reduce((sum, o) => sum + o.price, 0);
+    layer.add(button(this, WIDTH / 2 - 140, HEIGHT - 94, 280, 40, `Turn them all in: ${total} gold`, () => {
+      const names = state.prisoners.map((o) => o.character.id);
+      let gold = 0;
+      for (const id of names) gold += turnInPrisoner(state, id);
+      markDirty();
+      this.render();
+      toast(this, `Bounties: ${gold} gold.`);
+    }, { fontSize: 14 }));
   }
 
   /** End the day without an inn: free, but housed companions resent it. */

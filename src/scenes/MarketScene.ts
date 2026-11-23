@@ -1,14 +1,15 @@
 import Phaser from 'phaser';
 import { SKILLS, WEAPONS } from '../data/content';
 import { GUILD } from '../data/guild';
-import type { Offer } from '../data/types';
-import { askingPrice, buySlave, marketBuyPrice, nextShipmentDay, registerPrisoner, sellCaptive, turnInPrisoner } from '../game/city';
+import type { Character, Offer } from '../data/types';
+import { askingPrice, buySlave, marketBuyPrice, nextShipmentDay, sellSlave } from '../game/city';
+import { isSlave } from '../game/contracts';
 import { adventurerRank } from '../game/guild';
 import { markDirty, requireState, session } from '../game/session';
 import { cityHeader } from '../ui/hud';
 import { COLORS, HEIGHT, ScrollList, WIDTH, button, confirmDialog, figure, panel, setupCamera, talentTag, text, toast, type ScrollItem } from '../ui/widgets';
 
-/** The slave market, and the magistrate who judges captured prisoners. */
+/** The slave market: buy slaves, and sell your own back. It doesn't take prisoners (they're registered at the city gate). */
 export class MarketScene extends Phaser.Scene {
   constructor() {
     super('Market');
@@ -47,17 +48,16 @@ export class MarketScene extends Phaser.Scene {
     if (state.market.slaves.length === 0) text(this, 296, 300, 'Sold out until the next delivery.', { color: COLORS.dim }).setOrigin(0.5);
 
     panel(this, 588, 118, 356, HEIGHT - 134);
-    text(this, 600, 126, "Magistrate's office", { fontSize: '16px', color: COLORS.gold });
-    text(this, 600, 150, `Captives are judged here: turn them in for the bounty, register them as your slave (${GUILD.slave.registrationFee} gold fee), or sell them to the market.`, {
+    text(this, 600, 126, 'Sell your slaves', { fontSize: '16px', color: COLORS.gold });
+    text(this, 600, 150, `The market buys slaves for ${Math.round(GUILD.slave.sellBackShare * 100)}% of its current price. It doesn't buy prisoners: register them at the city gate when you come back from a quest.`, {
       fontSize: '12px', color: COLORS.dim, wordWrap: { width: 332 },
     });
-    const plist = new ScrollList(this, 596, 206, 340, HEIGHT - 230, 4);
-    plist.setItems(state.prisoners.map((o) => this.row(o, 340, [
-      { label: `Bounty ${o.price}g`, enabled: true, act: () => this.turnIn(o) },
-      { label: `Register ${GUILD.slave.registrationFee}g`, enabled: state.gold >= GUILD.slave.registrationFee, act: () => this.register(o) },
-      { label: `Sell ${marketBuyPrice(state, o.character, true)}g`, enabled: true, act: () => this.sellCaptive(o) },
+    const mine = state.party.filter(isSlave);
+    const slist = new ScrollList(this, 596, 206, 340, HEIGHT - 230, 4);
+    slist.setItems(mine.map((c) => this.row({ character: c, price: 0 }, 340, [
+      { label: `Sell ${marketBuyPrice(state, c)}g`, enabled: true, act: () => this.sell(c) },
     ], true)), 'top');
-    if (state.prisoners.length === 0) text(this, 766, 300, 'No prisoners.\nHuman foes who surrender\nare taken prisoner.', { color: COLORS.dim, align: 'center' }).setOrigin(0.5);
+    if (mine.length === 0) text(this, 766, 300, 'You have no slaves to sell.', { color: COLORS.dim, align: 'center' }).setOrigin(0.5);
   }
 
   private row(o: Offer, w: number, actions: { label: string; enabled: boolean; act: () => void }[], compact = false): ScrollItem {
@@ -95,32 +95,13 @@ export class MarketScene extends Phaser.Scene {
     }, 'Buy');
   }
 
-  private turnIn(o: Offer): void {
+  private sell(c: Character): void {
     const state = requireState();
-    const gold = turnInPrisoner(state, o.character.id);
-    markDirty();
-    this.render();
-    toast(this, `${o.character.name} is taken away. Bounty: ${gold} gold.`);
-  }
-
-  private sellCaptive(o: Offer): void {
-    const state = requireState();
-    confirmDialog(this, `Sell ${o.character.name} (Lv ${o.character.level}) to the slave market for ${marketBuyPrice(state, o.character, true)} gold?`, () => {
-      const gold = sellCaptive(state, o.character.id);
+    confirmDialog(this, `Sell ${c.name} (Lv ${c.level}) to the slave market for ${marketBuyPrice(state, c)} gold?`, () => {
+      const gold = sellSlave(state, c.id, Math.random);
       markDirty();
       this.render();
-      toast(this, `${o.character.name} goes on the market. You get ${gold} gold.`);
+      toast(this, `${c.name} goes on the market. You get ${gold} gold.`);
     }, 'Sell');
-  }
-
-  private register(o: Offer): void {
-    const state = requireState();
-    confirmDialog(this, `Register ${o.character.name} (Lv ${o.character.level}) as your slave for ${GUILD.slave.registrationFee} gold?`, () => {
-      const err = registerPrisoner(state, o.character.id);
-      if (err) return toast(this, err, COLORS.bad);
-      markDirty();
-      this.render();
-      toast(this, `${o.character.name} now serves your party.`);
-    }, 'Register');
   }
 }

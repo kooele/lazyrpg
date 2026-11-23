@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import guildJson from '../src/data/guild.json';
-import { GUILD, parseGuildConfig } from '../src/data/guild';
+import { FOOD_TIERS, GUILD, parseGuildConfig } from '../src/data/guild';
 import type { Character, GameState, Quest } from '../src/data/types';
 import { createCharacter, deriveStats, makeRng } from '../src/game/character';
 import { makeEnemy, makeUnit } from '../src/game/battle';
 import {
-  acceptQuest, advanceDay, advanceDays, askingPrice, buyDrinks, isShipmentDay, marketBuyPrice, marketDay, sellCaptive, buyResidence, buySlave, makeQuest, sellResidence, stayAtHome, stayAtInn, canTakeQuest, dailyUpkeep, departBlock, lineupMembers, mainCharacter,
+  acceptQuest, advanceDay, advanceDays, askingPrice, buyDrinks, isShipmentDay, marketBuyPrice, marketDay, sellSlave, turnInPrisoner, buyResidence, buySlave, makeQuest, sellResidence, stayAtHome, stayAtInn, canTakeQuest, dailyUpkeep, foodCost, departBlock, lineupMembers, mainCharacter,
   newCampaign, registerPrisoner, resolveQuest, rewardShares, sleepOutside, toggleLineup,
 } from '../src/game/city';
-import { activityOf, combatPenalty, expectedQuality, healthOf, isInjured, moraleOf, moralePenalty, obediencePenalty } from '../src/game/condition';
+import { activityOf, combatPenalty, expectedQuality, foodRelationship, healthOf, isInjured, moraleOf, moralePenalty, obediencePenalty } from '../src/game/condition';
 import { parseSave, serializeSave } from '../src/game/save';
 import {
   companionContract, companionDemand, evaluateOffer, joinParty, mercenaryRates, offerValue, openingTerms, punishSlave, slaveContract,
@@ -18,6 +18,10 @@ import { payRatio } from '../src/game/board';
 import { adventurerCount, adventurerRank, deathFactor, leaderboard, rivalPickQuest, rivalQuestChance, rankCounts, simulateGuildDay } from '../src/game/guild';
 
 const start = (seed = 1): GameState => newCampaign(createCharacter('Main', '#3d7be0', 'sword_shield'), 'Testers', makeRng(seed));
+/** Feed everyone exactly what their rank expects, so food doesn't move relationships (for tests about something else). */
+const neutralFood = (s: GameState) => {
+  for (const c of s.party) s.food[c.id] = FOOD_TIERS[expectedQuality(c)];
+};
 
 describe('guild.json', () => {
   it('names the field when a number is wrong', () => {
@@ -264,14 +268,44 @@ describe('contracts', () => {
 
   it('food and lodging: the main character, slaves, and companions whose contract includes it', () => {
     const s = start();
-    expect(dailyUpkeep(s)).toBe(GUILD.upkeep.foodLodgingPerDay);
+    const meal = GUILD.food[GUILD.food.default].pricePerPerson;
+    expect(dailyUpkeep(s)).toBe(GUILD.upkeep.roadPerPerson + meal);
     s.gold = 10000;
     expect(buySlave(s, s.market.slaves[0].character.id)).toBeNull();
-    expect(dailyUpkeep(s)).toBe(2 * GUILD.upkeep.foodLodgingPerDay);
+    expect(dailyUpkeep(s)).toBe(2 * (GUILD.upkeep.roadPerPerson + meal));
     const c = companion(s);
     if (c.contract?.type !== 'companion') throw new Error('not a companion');
     c.contract.foodLodging = false;
-    expect(dailyUpkeep(s)).toBe(2 * GUILD.upkeep.foodLodgingPerDay);
+    s.food[c.id] = 'luxury'; // not fed by the party: finds their own
+    expect(dailyUpkeep(s)).toBe(2 * (GUILD.upkeep.roadPerPerson + meal));
+  });
+
+  it('food: each fed member eats at their own quality, which costs gold and moves relationship like lodging', () => {
+    const s = start();
+    const c = companion(s);
+    if (c.contract?.type !== 'companion') throw new Error('not a companion');
+    c.contract.foodLodging = true;
+    c.contract.endDay = 100;
+    c.contract.relationship = 50;
+    c.level = 12; // B rank: expects fine food and a high-end inn
+    c.morale = 100;
+    s.gold = 1000;
+    s.food[s.mainId] = 'poor';
+    s.food[c.id] = 'luxury';
+    expect(foodCost(s)).toBe(GUILD.food.poor.pricePerPerson + GUILD.food.luxury.pricePerPerson);
+    expect(foodRelationship(c, 'luxury')).toBe(GUILD.food.relationshipAbove);
+    expect(foodRelationship(c, 'fine')).toBe(0);
+    expect(foodRelationship(c, 'poor')).toBe(-2 * GUILD.food.relationshipBelowPerStep);
+    stayAtInn(s, 'highEnd', 1, makeRng(1));
+    expect(s.gold).toBe(1000 - 2 * GUILD.inns.highEnd.pricePerPerson - foodCost(s));
+    expect(c.contract.relationship).toBe(50 + GUILD.food.relationshipAbove);
+    s.food[c.id] = 'poor';
+    stayAtInn(s, 'highEnd', 1, makeRng(1));
+    expect(c.contract.relationship).toBe(50 + GUILD.food.relationshipAbove - 2 * GUILD.food.relationshipBelowPerStep);
+    // Food choices survive a save; members who leave are forgotten.
+    const r = parseSave(serializeSave(s));
+    if (!r.ok) throw new Error(r.error);
+    expect(r.state.food).toEqual({ [s.mainId]: 'poor', [c.id]: 'poor' });
   });
 
   it('a night at an inn costs its price per person; housed companions compare it with what their rank expects', () => {
@@ -281,15 +315,17 @@ describe('contracts', () => {
     c.contract.foodLodging = true;
     c.contract.endDay = 100;
     c.level = 7; // C rank: expects an inn
+    neutralFood(s);
     s.schedule[c.id] = 'training';
     s.schedule[s.mainId] = 'training';
     s.gold = 1000;
+    const food = foodCost(s);
     const rel = c.contract.relationship;
     stayAtInn(s, 'standard', 1, makeRng(1));
-    expect(s.gold).toBe(1000 - 2 * GUILD.inns.standard.pricePerPerson);
+    expect(s.gold).toBe(1000 - 2 * GUILD.inns.standard.pricePerPerson - food);
     expect(c.contract.relationship).toBe(rel);
     stayAtInn(s, 'luxury', 2, makeRng(1));
-    expect(s.gold).toBe(1000 - 2 * GUILD.inns.standard.pricePerPerson - 4 * GUILD.inns.luxury.pricePerPerson);
+    expect(s.gold).toBe(1000 - 2 * GUILD.inns.standard.pricePerPerson - 4 * GUILD.inns.luxury.pricePerPerson - 3 * food);
     expect(c.contract.relationship).toBe(rel + 2 * GUILD.lodging.relationshipAbove);
     expect(s.day).toBe(4);
   });
@@ -306,6 +342,7 @@ describe('contracts', () => {
     expect([3, 8, 12, 18, 22].map((level) => expectedQuality({ ...c, level }))).toEqual([0, 1, 2, 3, 3]);
     const night = (level: number, go: () => void) => {
       c.level = level;
+      neutralFood(s);
       (c.contract as { relationship: number }).relationship = 50;
       go();
       return (c.contract as { relationship: number }).relationship - 50;
@@ -339,11 +376,13 @@ describe('contracts', () => {
     expect(s.gold).toBe(0);
     expect(() => stayAtHome(s, 'inner', 1, makeRng(1))).toThrow();
     c.level = 12; // B rank: a Middle Ring residence is as good as a high-end inn
+    neutralFood(s);
+    s.gold = 100;
     stayAtHome(s, 'middle', 1, makeRng(1));
     expect(c.contract.relationship).toBe(50);
     stayAtHome(s, 'outer', 1, makeRng(1));
     expect(c.contract.relationship).toBe(50 - GUILD.lodging.relationshipBelowPerStep);
-    expect(s.gold).toBe(0); // free
+    expect(s.gold).toBe(100 - 2 * foodCost(s)); // free nights, but food still costs
     const r = parseSave(serializeSave(s));
     expect(r.ok && r.state.residences).toEqual(['outer', 'middle']);
     // The Estate Office buys them back for part of the price.
@@ -492,6 +531,7 @@ describe('contracts', () => {
     if (c.contract?.type !== 'companion') throw new Error('not a companion');
     c.contract.endDay = 100;
     c.contract.relationship = 50;
+    neutralFood(s);
     s.gold = 1000;
     s.schedule[c.id] = 'training';
     c.morale = C.lowMorale - 1;
@@ -521,7 +561,7 @@ describe('contracts', () => {
     const xp = c.xp;
     stayAtInn(s, 'standard', 1, makeRng(1));
     expect(c.xp).toBe(xp + GUILD.schedule.trainingXp);
-    expect(s.gold).toBe(1000 + GUILD.schedule.oddJobsGold - GUILD.inns.standard.pricePerPerson);
+    expect(s.gold).toBe(1000 + GUILD.schedule.oddJobsGold - GUILD.inns.standard.pricePerPerson - foodCost(s));
     // The main character goes on a quest: no odd jobs for them that day, but the companion still trains.
     acceptQuest(s, s.guild.board.find((x) => canTakeQuest(s, x))!.id);
     s.quest!.days = 1;
@@ -529,7 +569,7 @@ describe('contracts', () => {
     resolveQuest(s, 'victory', makeRng(3));
     const gold = s.gold;
     stayAtInn(s, 'standard', 1, makeRng(1));
-    expect(s.gold).toBe(gold - GUILD.inns.standard.pricePerPerson);
+    expect(s.gold).toBe(gold - GUILD.inns.standard.pricePerPerson - foodCost(s));
     expect(c.xp).toBe(xp + 2 * GUILD.schedule.trainingXp);
     expect(activityOf(s, mainCharacter(s))).toBe('oddJobs');
   });
@@ -550,9 +590,23 @@ describe('contracts', () => {
     expect(r.state.lastQuestDay).toBe(s.day);
   });
 
+  it('mercenaries get the larger of their fee (up front) and their cut: they take what the cut is worth beyond the fee', () => {
+    const s = start();
+    const merc = joinParty(s, s.guild.pool[0], { type: 'mercenary', fee: 30, cutPct: 20 });
+    expect(rewardShares([merc], 100)).toEqual([]); // 20% of 100 = 20 < the 30 already paid
+    expect(rewardShares([merc], 150)).toEqual([]); // 30 = 30
+    expect(rewardShares([merc], 300)).toEqual([{ name: merc.name, amount: 30 }]); // 60 in all
+    // Older saves' fixed-fee or cut-only mercenaries load as one or the other.
+    merc.contract = { pay: 'cut', amount: 15 } as never;
+    (merc.contract as unknown as Record<string, unknown>).type = 'mercenary';
+    const r = parseSave(serializeSave(s));
+    if (!r.ok) throw new Error(r.error);
+    expect(r.state.party.find((m) => m.id === merc.id)!.contract).toEqual({ type: 'mercenary', fee: 0, cutPct: 15 });
+  });
+
   it('rewards are split with mercenaries on a cut and companions with a loot cut; mercenaries leave after the quest', () => {
     const s = start();
-    const merc = joinParty(s, s.guild.pool[0], { type: 'mercenary', pay: 'cut', amount: 20 });
+    const merc = joinParty(s, s.guild.pool[0], { type: 'mercenary', fee: 0, cutPct: 20 });
     const comp = companion(s);
     if (comp.contract?.type !== 'companion') throw new Error('not a companion');
     comp.contract.lootPct = 10;
@@ -581,6 +635,7 @@ describe('contracts', () => {
     const foe = makeEnemy('sellsword', 9, makeRng(3));
     const lines = resolveQuest(s, 'victory', makeRng(3), [], [foe]);
     expect(s.prisoners).toHaveLength(1);
+    expect(lines.some((l) => /city gate/.test(l))).toBe(true);
     expect(s.prisoners[0].character).toMatchObject({ level: 9, weaponId: foe.weaponId });
     expect(s.prisoners[0].character.enemyType).toBeUndefined();
     expect(lines.some((l) => /surrendered and was taken prisoner/.test(l))).toBe(true);
@@ -623,18 +678,33 @@ describe('contracts', () => {
     expect(askingPrice(s, o)).toBe(Math.max(5, Math.round((o.price * 1.2) / 5) * 5));
   });
 
-  it('captives can be sold to the slave market', () => {
+  it('there is no limit on prisoners; each is turned in for the bounty or registered as a slave', () => {
     const s = start();
-    s.prisoners.push({ character: s.guild.pool[0].character, price: 50 });
-    const id = s.prisoners[0].character.id;
+    acceptQuest(s, s.guild.board.find((x) => canTakeQuest(s, x))!.id);
+    s.quest!.days = 1;
+    const foes = Array.from({ length: 10 }, (_, i) => makeEnemy('bandit', 5, makeRng(10 + i)));
+    resolveQuest(s, 'victory', makeRng(3), [], foes);
+    expect(s.prisoners).toHaveLength(10);
     const gold = s.gold;
+    const p = s.prisoners[0];
+    expect(turnInPrisoner(s, p.character.id)).toBe(p.price);
+    expect(p.price).toBe(GUILD.slave.bountyPerLevel * 5);
+    expect(s.gold).toBe(gold + p.price);
+    expect(s.prisoners).toHaveLength(9);
+  });
+
+  it('the slave market buys your slaves for 80% of the current price', () => {
+    const s = start();
+    s.gold = 10000;
+    expect(buySlave(s, s.market.slaves[0].character.id)).toBeNull();
+    const slave = s.party.at(-1)!;
     const stock = s.market.slaves.length;
-    const pay = marketBuyPrice(s, s.prisoners[0].character, true);
-    expect(sellCaptive(s, id, makeRng(1))).toBe(pay);
+    const gold = s.gold;
+    const pay = marketBuyPrice(s, slave);
+    expect(GUILD.slave.sellBackShare).toBe(0.8);
+    expect(sellSlave(s, slave.id, makeRng(1))).toBe(pay);
     expect(s.gold).toBe(gold + pay);
-    expect(s.prisoners).toHaveLength(0);
     expect(s.market.slaves).toHaveLength(stock + 1);
-    expect(s.market.slaves.some((o) => o.character.id === id)).toBe(true);
   });
 
   it('prisoners can be registered as slaves for a fee', () => {
@@ -690,6 +760,7 @@ describe('contracts', () => {
     expect(buySlave(s, a.character.id, makeRng(1))).toBeNull();
     const slave = s.party.at(-1)!;
     if (slave.contract?.type !== 'slave') throw new Error('not a slave');
+    neutralFood(s);
     const k = slave.contract;
     slave.morale = 100;
     k.obedience = 50;
@@ -718,6 +789,7 @@ describe('contracts', () => {
     buySlave(s, a.character.id, makeRng(1));
     const slave = s.party.at(-1)!;
     if (slave.contract?.type !== 'slave') throw new Error('not a slave');
+    neutralFood(s);
     slave.morale = 100;
     const rel = slave.contract.relationship;
     sleepOutside(s, makeRng(1));

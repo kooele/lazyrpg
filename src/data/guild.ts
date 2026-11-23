@@ -30,6 +30,11 @@ export type CityLodging = Exclude<Lodging, 'road'>;
 export const LODGING_QUALITY: Record<CityLodging, number> = { outside: 0, standard: 1, outer: 1, highEnd: 2, middle: 2, luxury: 3, inner: 3 };
 export const isResidence = (l: Lodging): l is Ring => (RINGS as readonly string[]).includes(l);
 
+/** Food tiers, worst first: a tier's quality is its index (poor 0 ... luxury 3), compared like lodging quality. */
+export type FoodTier = 'poor' | 'common' | 'fine' | 'luxury';
+export const FOOD_TIERS: readonly FoodTier[] = ['poor', 'common', 'fine', 'luxury'];
+export const foodQuality = (t: FoodTier) => FOOD_TIERS.indexOf(t);
+
 export type Activity = 'recover' | 'training' | 'oddJobs' | 'dayOff';
 export const ACTIVITIES: readonly Activity[] = ['recover', 'training', 'oddJobs', 'dayOff'];
 
@@ -45,7 +50,9 @@ export interface GuildConfig {
   boardSize: number;
   board: { maxPostsPerDay: number; minAtPartyRank: number; postWeights: Record<Rank, number>; threat: [number, number]; pay: [number, number] };
   quests: Record<Rank, QuestTier>;
-  upkeep: { foodLodgingPerDay: number };
+  /** foodLodgingPerDay: what food and lodging are worth to a companion (negotiations); roadPerPerson: a night on the road. */
+  upkeep: { foodLodgingPerDay: number; roadPerPerson: number };
+  food: Record<FoodTier, { name: string; pricePerPerson: number }> & { default: FoodTier; relationshipAbove: number; relationshipBelowPerStep: number };
   inns: Record<InnTier, InnConfig>;
   lodging: { expectedQuality: Record<'S' | Rank, number>; relationshipAbove: number; relationshipBelowPerStep: number; outsidePerPerson: number };
   residences: Record<Ring, { name: string; price: number }> & { sellShare: number };
@@ -69,7 +76,6 @@ export interface GuildConfig {
     priceIndex: [number, number];
     drift: number;
     stockReference: number;
-    captiveSellShare: number;
   };
   schedule: { recoverMultiplier: number; trainingXp: number; oddJobsGold: number; dayOffMorale: number };
   /** Price multiplier from talent: max(min, 1 + weight x (average growth rate - 1)). */
@@ -166,6 +172,22 @@ function parseInns(v: unknown): Record<InnTier, InnConfig> {
   return out;
 }
 
+function parseFood(v: unknown): GuildConfig['food'] {
+  const o = obj(v, 'food');
+  const out = {
+    relationshipAbove: num(o.relationshipAbove, 'food.relationshipAbove', 0, 100),
+    relationshipBelowPerStep: num(o.relationshipBelowPerStep, 'food.relationshipBelowPerStep', 0, 100),
+  } as GuildConfig['food'];
+  for (const t of FOOD_TIERS) {
+    const f = obj(o[t], `food.${t}`);
+    if (typeof f.name !== 'string' || !f.name) fail(`food.${t}.name`, 'must be a name');
+    out[t] = { name: f.name as string, pricePerPerson: num(f.pricePerPerson, `food.${t}.pricePerPerson`) };
+  }
+  if (!(FOOD_TIERS as readonly unknown[]).includes(o.default)) fail('food.default', `must be one of: ${FOOD_TIERS.join(', ')}`);
+  out.default = o.default as FoodTier;
+  return out;
+}
+
 function parseResidences(v: unknown): GuildConfig['residences'] {
   const o = obj(v, 'residences');
   const out = { sellShare: num(o.sellShare, 'residences.sellShare', 0, 1) } as GuildConfig['residences'];
@@ -229,7 +251,8 @@ export function parseGuildConfig(data: unknown): GuildConfig {
       };
     })(),
     quests,
-    upkeep: numbers(d.upkeep, 'upkeep', ['foodLodgingPerDay']),
+    upkeep: numbers(d.upkeep, 'upkeep', ['foodLodgingPerDay', 'roadPerPerson']),
+    food: parseFood(d.food),
     inns: parseInns(d.inns),
     lodging: {
       ...numbers<Omit<GuildConfig['lodging'], 'expectedQuality'>>(d.lodging, 'lodging', ['relationshipAbove', 'relationshipBelowPerStep', 'outsidePerPerson']),
@@ -269,7 +292,6 @@ export function parseGuildConfig(data: unknown): GuildConfig {
         priceIndex: range(m.priceIndex, 'market.priceIndex', 0.01),
         drift: num(m.drift, 'market.drift', 0, 1),
         stockReference: num(m.stockReference, 'market.stockReference', 1),
-        captiveSellShare: num(m.captiveSellShare, 'market.captiveSellShare', 0, 2),
       };
     })(),
     simulation: {

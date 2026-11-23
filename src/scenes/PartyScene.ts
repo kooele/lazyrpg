@@ -1,11 +1,13 @@
 import Phaser from 'phaser';
 import { MAX_PARTY_SIZE, SKILLS, WEAPONS, XP_PER_LEVEL } from '../data/content';
-import { ACTIVITIES, GUILD } from '../data/guild';
+import { ACTIVITIES, FOOD_TIERS, GUILD } from '../data/guild';
 import type { Character } from '../data/types';
 import { bodyPoints, deriveStats, freePoints, skillPoints } from '../game/character';
 import { lineupMembers, marketBuyPrice, scheduledMembers, sellSlave, toggleLineup } from '../game/city';
-import { ACTIVITY_INFO, activityOf, combatPenalty, healthOf, injuryPenalty, isInjured, moraleOf, moralePenalty, obediencePenalty } from '../game/condition';
-import { daysLeft, isCompanion, isSlave, leaveParty, punishSlave, weeklyCost } from '../game/contracts';
+import {
+  ACTIVITY_INFO, activityOf, combatPenalty, expectedQuality, foodOf, healthOf, injuryPenalty, isInjured, moraleOf, moralePenalty, obediencePenalty,
+} from '../game/condition';
+import { daysLeft, isCompanion, isHoused, isSlave, leaveParty, punishSlave } from '../game/contracts';
 import { adventurerRank } from '../game/guild';
 import { markDirty, requireState, session } from '../game/session';
 import { MEMBER_COLOR, MEMBER_LABEL, cityHeader, memberStatus } from '../ui/hud';
@@ -122,16 +124,16 @@ export class PartyScene extends Phaser.Scene {
     const k = c.contract;
     const lines: string[] = [];
     if (!k || k.type === 'main') {
-      lines.push('Your own character: permanent, always leads the party on quests.', `Food & lodging: ${GUILD.upkeep.foodLodgingPerDay} gold a day.`);
+      lines.push('Your own character: permanent, always leads the party on quests.', 'The party pays your food (set below) and lodging.');
     } else if (k.type === 'mercenary') {
-      lines.push(k.pay === 'fixed' ? `Paid ${k.amount} gold up front.` : `Takes ${k.amount}% of the next quest's reward.`, 'Leaves after the next quest, win or lose.');
+      lines.push(`Paid ${k.fee} gold up front; takes more from the reward if ${k.cutPct}% of it is worth more.`, 'Leaves after the next quest, win or lose. Finds their own food.');
     } else if (k.type === 'slave') {
-      lines.push(`${k.origin === 'prisoner' ? 'A registered prisoner' : `Bought for ${k.price} gold`}. No wages.`, `Food & lodging: ${GUILD.upkeep.foodLodgingPerDay} gold a day.`);
+      lines.push(`${k.origin === 'prisoner' ? 'A registered prisoner' : `Bought for ${k.price} gold`}. No wages.`, 'The party pays their food (set below) and lodging.');
     } else if (isCompanion(c)) {
       const left = daysLeft(c.contract, state.day);
       lines.push(
         `Base pay ${k.basePay} gold a week (every 7th day) · ${k.lootPct}% of quest rewards`,
-        `Food & lodging ${k.foodLodging ? 'included' : 'not included'} · costs you ${weeklyCost(k)} gold a week`,
+        k.foodLodging ? 'Food & lodging included: the party pays their food (set below) and lodging' : 'Food & lodging not included: finds their own',
         `${k.termWeeks}-week term: day ${k.startDay} to day ${k.endDay} · ${left > 0 ? `${left} days left` : `ENDED: renew within ${GUILD.companion.graceDays + left} day(s) or they leave`}`,
       );
     }
@@ -172,6 +174,21 @@ export class PartyScene extends Phaser.Scene {
     }, { fontSize: 13, selected: a === now }));
     text(this, X + 16, sy + 56, ACTIVITY_INFO[now].describe(), { fontSize: '11px', color: COLORS.dim, wordWrap: { width: W - 32 } });
 
+    // ---- food: for members the party feeds; others find their own (greyed out) ----
+    const fy = sy + 74;
+    const fed = isHoused(c);
+    const food = foodOf(state, c);
+    const expects = FOOD_TIERS[expectedQuality(c)];
+    text(this, X + 16, fy, 'Food', { fontSize: '13px', color: fed ? COLORS.gold : COLORS.dim });
+    text(this, X + 16, fy + 16, fed ? (c.id === state.mainId ? 'no complaints' : `expects ${GUILD.food[expects].name}`) : 'finds their own', {
+      fontSize: '10px', color: COLORS.dim,
+    });
+    FOOD_TIERS.forEach((t, i) => button(this, X + 110 + i * 114, fy - 2, 108, 28, `${GUILD.food[t].name} ${GUILD.food[t].pricePerPerson}g`, () => {
+      state.food[c.id] = t;
+      markDirty();
+      this.render();
+    }, { fontSize: 12, selected: fed && t === food, enabled: fed }));
+
     // ---- actions ----
     const by = HEIGHT - 76;
     const isMain = c.id === state.mainId;
@@ -196,7 +213,7 @@ export class PartyScene extends Phaser.Scene {
       }, 'Release'), { fontSize: 14 });
       if (left > 7) text(this, X + 306, by - 18, 'Renewal opens in the last week.', { fontSize: '11px', color: COLORS.dim });
     } else if (k?.type === 'slave') {
-      button(this, X + 306, by, 140, 44, 'Sell', () => confirmDialog(this, `Sell ${c.name} to the slave market for ${marketBuyPrice(state, c, false)} gold?`, () => {
+      button(this, X + 306, by, 140, 44, 'Sell', () => confirmDialog(this, `Sell ${c.name} to the slave market for ${marketBuyPrice(state, c)} gold?`, () => {
         const gold = sellSlave(state, c.id, Math.random);
         markDirty();
         this.render();

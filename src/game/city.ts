@@ -1,4 +1,4 @@
-// Arch City: the calendar, the quest board, upkeep and pay, the slave market and prisoners.
+// Arch City: the calendar, the quest board, food, upkeep and pay, the slave market and prisoners.
 // Pure logic (no Phaser): scenes call these and show the messages they return.
 import { MAX_PARTY_SIZE } from '../data/content';
 import { GUILD, isResidence, type InnTier, type Lodging, type Ring } from '../data/guild';
@@ -10,7 +10,8 @@ import {
   bondOf, bounty, canFight, changeRelationship, isCompanion, isExpired, isHoused, isSlave, leaveParty, slaveContract, slavePrice, talentPriceFactor,
 } from './contracts';
 import {
-  ACTIVITY_INFO, QUALITY_TEXT, activityOf, changeHealth, changeMorale, expectedQuality, healthLoss, healthOf, lodgingName, lodgingRelationship, moraleOf,
+  ACTIVITY_INFO, FOOD_EXPECT_TEXT, QUALITY_TEXT, activityOf, changeHealth, changeMorale, expectedQuality, foodOf, foodRelationship, healthLoss, healthOf,
+  lodgingName, lodgingRelationship, moraleOf,
   type BattleCondition,
 } from './condition';
 import { createGuild, nextRank, promotionReady, rankThreshold, renownLoss, simulateGuildDay, updateRanks } from './guild';
@@ -37,6 +38,7 @@ export function newCampaign(main: Character, partyName: string, rng: Rng): GameS
     lastQuestDay: 0,
     questMembers: [],
     schedule: {},
+    food: {},
     drinksDay: 0,
     belowRankSince: 0,
     residences: [],
@@ -134,19 +136,20 @@ export function questXp(stage: number, level: number): number {
   return Math.round(STAT_CONFIG.xpPerVictory * Math.max(0.15, Math.min(2, 1 + (stage - level) * 0.5)));
 }
 
-/** Who takes a share of a reward: mercenaries on a cut and companions with a loot cut. */
+/**
+ * Who takes a share of a reward: companions with a loot cut, and mercenaries whose cut is worth more than the fee
+ * they were paid up front (they get the larger of the two, so they take the difference).
+ */
 export function rewardShares(members: Character[], reward: number): { name: string; amount: number }[] {
   const out: { name: string; amount: number }[] = [];
+  const cut = (pct: number) => Math.round((reward * pct) / 100);
   for (const c of members) {
     const k = c.contract;
-    const pct = k?.type === 'mercenary' && k.pay === 'cut' ? k.amount : k?.type === 'companion' ? k.lootPct : 0;
-    if (pct > 0) out.push({ name: c.name, amount: Math.round((reward * pct) / 100) });
+    const amount = k?.type === 'mercenary' ? Math.max(0, cut(k.cutPct) - k.fee) : k?.type === 'companion' ? cut(k.lootPct) : 0;
+    if (amount > 0) out.push({ name: c.name, amount });
   }
   return out;
 }
-
-/** Most prisoners the party can hold at once. */
-export const MAX_PRISONERS = 6;
 
 /**
  * Settle the accepted quest after its battle: injuries and deaths (from `conditions`, one per member who fought),
@@ -186,6 +189,7 @@ export function resolveQuest(
     state.party = state.party.filter((m) => m !== c);
     state.lineup = state.lineup.filter((id) => id !== c.id);
     delete state.schedule[c.id];
+    delete state.food[c.id];
     lines.push(`${c.name}'s wounds were fatal (Health 0). They did not survive.`);
     note(state, `${c.name} died on "${q.title}".`);
   }
@@ -218,16 +222,12 @@ export function resolveQuest(
       if (levels > 0) lines.push(`${c.name} reached level ${c.level}! +${levels} skill point${levels > 1 ? 's' : ''}.`);
       changeRelationship(c, GUILD.companion.relationshipPerQuest);
     }
-    // Enemies who surrendered (only humans do) are taken prisoner.
+    // Enemies who surrendered (only humans do) are taken prisoner, to be registered at the city gate.
     for (const foe of surrendered) {
-      if (state.prisoners.length >= MAX_PRISONERS) {
-        lines.push(`${foe.name} surrendered, but you can't hold any more prisoners and let them go.`);
-        continue;
-      }
-      const p = randomAdventurer(foe.level, rng);
+      const p = randomAdventurer(foe.level, rng, { avoidNames: new Set(state.party.map((m) => m.name)) });
       if (foe.weaponId) p.weaponId = foe.weaponId;
       state.prisoners.push({ character: p, price: bounty(p.level) });
-      lines.push(`${p.name} (Lv ${p.level}, ${foe.name}) surrendered and was taken prisoner. Take them to the market's magistrate.`);
+      lines.push(`${p.name} (Lv ${p.level}, ${foe.name}) surrendered and was taken prisoner. Register them at the city gate.`);
     }
   } else {
     state.progress.defeats += 1;
@@ -298,13 +298,21 @@ export function boarders(state: GameState): Character[] {
   return state.party.filter((c) => c.contract?.type === 'main' || c.contract?.type === 'slave' || (isCompanion(c) && c.contract.foodLodging));
 }
 
-/** Food and lodging for one night: on the road (quests), at an inn, or outside. */
-export function dailyUpkeep(state: GameState, lodging: Lodging = 'road'): number {
-  const per = lodging === 'road' ? GUILD.upkeep.foodLodgingPerDay
+/** Lodging for one night: on the road (quests), at an inn, a residence (free), or outside. */
+export function lodgingCost(state: GameState, lodging: Lodging = 'road'): number {
+  const per = lodging === 'road' ? GUILD.upkeep.roadPerPerson
     : lodging === 'outside' ? GUILD.lodging.outsidePerPerson
       : isResidence(lodging) ? 0 : GUILD.inns[lodging].pricePerPerson;
   return boarders(state).length * per;
 }
+
+/** A day's food for everyone the party feeds, each at their own quality. */
+export function foodCost(state: GameState): number {
+  return boarders(state).reduce((s, c) => s + GUILD.food[foodOf(state, c)].pricePerPerson, 0);
+}
+
+/** Food and lodging for one day and night. */
+export const dailyUpkeep = (state: GameState, lodging: Lodging = 'road') => lodgingCost(state, lodging) + foodCost(state);
 
 /** Stay `nights` nights at an inn: the inn's price replaces the day's food and lodging. Returns the messages. */
 export function stayAtInn(state: GameState, inn: InnTier, nights: number, rng: Rng): string[] {
@@ -426,6 +434,16 @@ export function advanceDay(state: GameState, rng: Rng, lodging: Lodging = 'road'
     for (const c of state.party) if (isHoused(c)) changeRelationship(c, -5);
   } else {
     state.gold -= upkeep;
+    // Fed companions and slaves compare the day's food with what someone of their rank expects.
+    const meals: string[] = [];
+    for (const c of state.party) {
+      if (!bondOf(c) || !isHoused(c)) continue;
+      const d = foodRelationship(c, foodOf(state, c));
+      if (!d) continue;
+      changeRelationship(c, d);
+      meals.push(`${c.name} ${d > 0 ? '+' : ''}${d} (expects ${FOOD_EXPECT_TEXT[expectedQuality(c)]})`);
+    }
+    if (meals.length) say(`Food. Relationship: ${meals.join(', ')}.`);
     // Housed companions and slaves compare the night with what someone of their rank expects.
     if (lodging !== 'road') {
       const moods: string[] = [];
@@ -489,7 +507,7 @@ export function advanceDay(state: GameState, rng: Rng, lodging: Lodging = 'road'
   return out;
 }
 
-// ---- the slave market and the magistrate --------------------------------------------------------------
+// ---- the slave market --------------------------------------------------------------------------------------
 
 /** Levels of slaves for sale: around the party's rank's adventurers. */
 const MARKET_LEVELS: Record<Rank, [number, number]> = { D: [1, 5], C: [4, 10], B: [9, 15], A: [14, 20] };
@@ -505,10 +523,10 @@ function marketSlave(state: GameState, rng: Rng) {
 /** Asking price of a slave for sale: its value x the market's price index. */
 export const askingPrice = (state: GameState, o: Offer) => round5(o.price * state.market.priceIndex);
 
-/** What the market pays for a party slave (sellBackShare) or a captive (captiveSellShare) right now. */
-export function marketBuyPrice(state: GameState, c: Character, captive: boolean): number {
+/** What the market pays for one of the party's slaves right now (sellBackShare of the current price). It doesn't buy prisoners. */
+export function marketBuyPrice(state: GameState, c: Character): number {
   const value = slavePrice(c.level, () => 0.5, talentPriceFactor(c));
-  return Math.round(value * state.market.priceIndex * (captive ? GUILD.market.captiveSellShare : GUILD.slave.sellBackShare));
+  return Math.round(value * state.market.priceIndex * GUILD.slave.sellBackShare);
 }
 
 /** Is a shipment due on `day` (market.shipmentWeekdays)? And the next shipment day from `day` on. */
@@ -569,27 +587,23 @@ export function buySlave(state: GameState, id: string, rng: Rng = Math.random): 
 export function sellSlave(state: GameState, id: string, rng: Rng): number {
   const c = state.party.find((m) => m.id === id);
   if (!c || c.contract?.type !== 'slave') return 0;
-  const gold = marketBuyPrice(state, c, false);
+  const gold = marketBuyPrice(state, c);
   state.gold += gold;
   state.party = state.party.filter((m) => m !== c);
   state.lineup = state.lineup.filter((x) => x !== c.id);
   delete state.schedule[c.id];
+  delete state.food[c.id];
   const { contract: _k, ...character } = c;
   state.market.slaves.push({ character, price: slavePrice(c.level, rng, talentPriceFactor(c)) });
   return gold;
 }
 
-/** Sell a captive to the slave market (captiveSellShare of the current price). Returns the gold received (0 if unknown). */
-export function sellCaptive(state: GameState, id: string, rng: Rng = Math.random): number {
-  const p = state.prisoners.find((o) => o.character.id === id);
-  if (!p) return 0;
-  const gold = marketBuyPrice(state, p.character, true);
-  state.prisoners = state.prisoners.filter((o) => o !== p);
-  state.gold += gold;
-  state.market.slaves.push({ character: p.character, price: slavePrice(p.character.level, rng, talentPriceFactor(p.character)) });
-  return gold;
-}
+// ---- prisoners: registered at the city gate --------------------------------------------------------
 
+/** Prisoners waiting at the city gate: the party can't do anything else in the city until each one is registered. */
+export const prisonersAtGate = (state: GameState) => state.prisoners.length > 0;
+
+/** Turn a prisoner in for the bounty. Returns the gold received (0 if unknown). */
 export function turnInPrisoner(state: GameState, id: string): number {
   const p = state.prisoners.find((o) => o.character.id === id);
   if (!p) return 0;
@@ -598,6 +612,7 @@ export function turnInPrisoner(state: GameState, id: string): number {
   return p.price;
 }
 
+/** Register a prisoner as the party's slave for the registration fee. Returns an error message, or null. */
 export function registerPrisoner(state: GameState, id: string, rng: Rng = Math.random): string | null {
   const p = state.prisoners.find((o) => o.character.id === id);
   if (!p) return 'No such prisoner.';
