@@ -90,6 +90,49 @@ export function allSkills(c: Character): string[] {
 }
 
 /** A new level-1 Adventurer. Without talents every stat grows at 100% (grade C). */
+// ---- the battle skill bar ------------------------------------------------------------
+
+/** Slots per skill-bar page (hotkeys 1-9, 0). */
+export const BAR_PAGE = 10;
+
+/** Default bar: basic attack, then the basic abilities (Overwatch, Dash), then everything else in order. */
+export function defaultSkillBar(c: Character): string[] {
+  const all = allSkills(c);
+  const front = [all[0], ...BASIC_SKILLS.filter((s) => all.includes(s))];
+  return [...front, ...all.filter((s) => !front.includes(s))];
+}
+
+/**
+ * The unit's skill bar, padded to whole pages. Keeps the player's layout; skills the unit no longer
+ * has leave an empty slot, and skills not on the bar yet are added after the last used slot.
+ */
+export function skillBarLayout(c: Character): (string | null)[] {
+  const owned = new Set(allSkills(c));
+  const seen = new Set<string>();
+  const bar = (c.skillBar ?? defaultSkillBar(c)).map((id) => {
+    if (!id || !owned.has(id) || seen.has(id)) return null;
+    seen.add(id);
+    return id;
+  });
+  let last = bar.length - 1;
+  while (last >= 0 && !bar[last]) last--;
+  const out = bar.slice(0, last + 1);
+  for (const id of allSkills(c)) if (!seen.has(id)) out.push(id);
+  const pages = Math.max(1, Math.ceil(out.length / BAR_PAGE));
+  while (out.length < pages * BAR_PAGE) out.push(null);
+  return out;
+}
+
+/** Swap two bar slots (either may be empty, or past the last page: that adds a page). Saved on the character. */
+export function swapBarSlots(c: Character, a: number, b: number): void {
+  const bar = skillBarLayout(c);
+  while (bar.length <= Math.max(a, b)) bar.push(null);
+  [bar[a], bar[b]] = [bar[b], bar[a]];
+  let last = bar.length - 1;
+  while (last >= 0 && !bar[last]) last--;
+  c.skillBar = bar.slice(0, last + 1);
+}
+
 export function createCharacter(name: string, color = PALETTE[0], weaponId = DEFAULT_WEAPON, look?: Look, talents?: Talents): Character {
   const id = newId();
   return {

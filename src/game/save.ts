@@ -175,6 +175,12 @@ function validateCharacter(raw: unknown, path: string, opts: { member?: boolean 
     appearance: { color: (a.color as string).toLowerCase(), look },
   };
   if (body && Object.keys(body).length) out.body = body;
+  if (r.skillBar !== undefined) {
+    // Unknown skills just become empty slots (skills change between versions; the bar shouldn't break a save).
+    const bar = arr(r.skillBar, `${path}.skillBar`);
+    if (bar.length > 100) bad(`${path}.skillBar`, 'can have at most 100 slots');
+    out.skillBar = bar.map((s) => (typeof s === 'string' && SKILLS[s] ? s : null));
+  }
   if (r.talents !== undefined) out.talents = validateTalents(r.talents, `${path}.talents`);
   if (opts.member) out.contract = validateContract(r.contract, `${path}.contract`);
   return out;

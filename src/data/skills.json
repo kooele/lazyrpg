@@ -209,7 +209,7 @@
 
   },
 
-  "basicSkills": ["dash", "overwatch"],
+  "basicSkills": ["overwatch", "dash"],
 
   "skillTabs": [
     { "id": "mage", "name": "Mage" },

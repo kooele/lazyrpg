@@ -8,7 +8,7 @@ import { STAT_CONFIG, parseStatConfig } from '../src/data/stats';
 import type { Character, SkillDef } from '../src/data/types';
 import { planTurn, runAiTurn, shouldDisengage, threatAt } from '../src/game/ai';
 import { Battle, defenseMultiplier, resistChance, deploymentTiles, enemyTypesForStage, generateEnemies, makeEnemy, makeUnit, victoryXp, type Team } from '../src/game/battle';
-import { allSkills, bodyGain, bodyPoints as bodyPointsOf, bodyStats, createCharacter, deriveStats, freePoints, grantXp, makeRng, pointsUsed, sanitizeLoadout } from '../src/game/character';
+import { allSkills, bodyGain, skillBarLayout, swapBarSlots, bodyPoints as bodyPointsOf, bodyStats, createCharacter, deriveStats, freePoints, grantXp, makeRng, pointsUsed, sanitizeLoadout } from '../src/game/character';
 import { randomAdventurer } from '../src/game/people';
 import { generateMap, hasLineOfSight, passable, withinRange, type BattleMap, type Point, type Terrain } from '../src/game/grid';
 import { parseSave, serializeSave } from '../src/game/save';
@@ -1087,5 +1087,47 @@ describe('action points, mana and Dash', () => {
     battle.endPhase();
     battle.move(a, { x: 9, y: 3 });
     expect(battle.canUseSkill(a, 'dash')).toBe(true);
+  });
+});
+
+describe('skill bar', () => {
+  it('defaults to basic attack, Overwatch, Dash, then the rest; padded to pages of 10', () => {
+    const c = hero('bow', ['kick', 'execute']);
+    expect(skillBarLayout(c).slice(0, 6)).toEqual(['direct_shot', 'overwatch', 'dash', 'indirect_shot', 'kick', 'execute']);
+    expect(skillBarLayout(c)).toHaveLength(10);
+  });
+
+  it('keeps the player layout; lost skills leave a gap and new ones go after the last used slot', () => {
+    const c = hero('bow', ['kick']);
+    swapBarSlots(c, 0, 7); // basic attack to slot 8
+    expect(skillBarLayout(c)[7]).toBe('direct_shot');
+    expect(skillBarLayout(c)[0]).toBeNull();
+    c.level = 3;
+    c.skillIds = ['execute']; // Kick unlearned, Execute learned
+    const bar = skillBarLayout(c);
+    expect(bar.indexOf('kick')).toBe(-1);
+    expect(bar.indexOf('execute')).toBe(8); // after the last used slot (8)
+    expect(bar.filter(Boolean)).toHaveLength(5);
+  });
+
+  it('more than 10 skills (or a drop past page 1) adds pages', () => {
+    const c = hero('staff', ['arcane_bolt', 'arcane_pulse', 'arcane_shift', 'fireball', 'freeze', 'heal', 'cleanse']);
+    c.level = 7;
+    expect(skillBarLayout(c)).toHaveLength(20); // 2 weapon + 7 tree + 2 basic = 11
+    const d = hero('bow');
+    swapBarSlots(d, 1, 23);
+    expect(skillBarLayout(d)).toHaveLength(30);
+    expect(skillBarLayout(d)[23]).toBe('overwatch');
+  });
+
+  it('the layout is saved; unknown skills in a save become empty slots', () => {
+    const c = createCharacter('Main', '#3d7be0', 'bow');
+    swapBarSlots(c, 0, 4);
+    const file = JSON.parse(serializeSave(newCampaign(c, 'Testers', makeRng(2))));
+    expect(file.party[0].skillBar[4]).toBe('direct_shot');
+    file.party[0].skillBar[1] = 'old_skill';
+    const r = parseSave(JSON.stringify(file));
+    expect(r.ok && r.state.party[0].skillBar![1]).toBeNull();
+    expect(r.ok && skillBarLayout(r.state.party[0])[4]).toBe('direct_shot');
   });
 });

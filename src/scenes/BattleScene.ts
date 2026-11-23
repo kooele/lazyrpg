@@ -6,13 +6,13 @@ import {
   AP_PER_TURN, Battle, deploymentTiles, generateEnemies, makeUnit,
   type BattleEvent, type MoveResult, type Unit,
 } from '../game/battle';
-import { makeRng } from '../game/character';
+import { BAR_PAGE, makeRng, skillBarLayout, swapBarSlots } from '../game/character';
 import { TERRAIN, generateMap, key, type Point } from '../game/grid';
 import { GUILD } from '../data/guild';
 import { lineupMembers, resolveQuest } from '../game/city';
 import { DEMO_STAGES, requireDemo, resolveDemoBattle } from '../game/demo';
 import { markDirty, requireState } from '../game/session';
-import { COLORS, HEIGHT, ScrollList, WIDTH, button, confirmDialog, figure, monsterFigure, panel, setupCamera, text } from '../ui/widgets';
+import { COLORS, HEIGHT, ScrollList, UI_SCALE, WIDTH, button, confirmDialog, figure, monsterFigure, panel, setupCamera, text } from '../ui/widgets';
 import { ENEMIES } from '../data/enemies';
 
 /** Tile size in layout pixels; set per battle so the map fits the 672x500 board area. */
@@ -21,13 +21,19 @@ let TILE = 56;
 let K = 1;
 const BOARD_W = 672;
 const BOARD_H = 488;
-/** Battle log panel (below the board). */
-const LOG_Y = 566;
-const LOG_H = 66;
 const MAP_X = 16;
 const MAP_Y = 72;
 const SIDE_X = 704;
 const SIDE_W = 240;
+/** Skill bar (below the board): 10 slots a page, hotkeys 1-0. */
+const BAR_Y = 566;
+const SLOT_W = 60;
+const SLOT_H = 66;
+const SLOT_GAP = 4;
+/** Battle log (sidebar, under the unit panel). */
+const LOG_Y = 222;
+const LOG_H = 252;
+const HOTKEYS = ['ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE', 'ZERO'];
 /** Where a unit's feet are, relative to its tile center; the HP bar sits just below. */
 let FEET_Y = 14;
 let HP_Y = 21;
@@ -52,6 +58,11 @@ export class BattleScene extends Phaser.Scene {
   private overlay!: Phaser.GameObjects.Graphics;
   private rings!: Phaser.GameObjects.Graphics;
   private sidebar!: Phaser.GameObjects.Container;
+  private bar!: Phaser.GameObjects.Container;
+  /** Skill-bar page shown (0-based). */
+  private barPage = 0;
+  /** A bar slot being dragged to a new place. */
+  private barDrag: { from: number; x: number; y: number; dragging: boolean; ghost?: Phaser.GameObjects.Text; flipped?: number } | null = null;
   private topBar!: Phaser.GameObjects.Container;
   private hoverText!: Phaser.GameObjects.Text;
   private logList!: ScrollList;
@@ -126,10 +137,13 @@ export class BattleScene extends Phaser.Scene {
 
     this.topBar = this.add.container(0, 0);
     this.sidebar = this.add.container(0, 0);
-    panel(this, SIDE_X, 482, SIDE_W, 100);
+    this.bar = this.add.container(0, 0);
+    this.barPage = 0;
+    this.barDrag = null;
+    panel(this, SIDE_X, 482, SIDE_W, 150);
     this.hoverText = text(this, SIDE_X + 10, 489, '', { fontSize: '12px', wordWrap: { width: SIDE_W - 20 }, lineSpacing: 1 });
-    panel(this, MAP_X, LOG_Y, BOARD_W, LOG_H);
-    this.logList = new ScrollList(this, MAP_X + 10, LOG_Y + 6, BOARD_W - 16, LOG_H - 12, 1);
+    panel(this, SIDE_X, LOG_Y, SIDE_W, LOG_H);
+    this.logList = new ScrollList(this, SIDE_X + 8, LOG_Y + 6, SIDE_W - 14, LOG_H - 12, 1);
 
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => this.onHover(this.tileAt(p)));
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
@@ -142,6 +156,12 @@ export class BattleScene extends Phaser.Scene {
       e.preventDefault();
       this.cycleUnit();
     });
+    // Skill bar: 1-0 use the slots on the current page; [ and ] flip pages.
+    HOTKEYS.forEach((k, i) => this.input.keyboard?.on(`keydown-${k}`, () => this.useSlot(this.barPage * BAR_PAGE + i)));
+    this.input.keyboard?.on('keydown-OPEN_BRACKET', () => this.flipPage(-1));
+    this.input.keyboard?.on('keydown-CLOSED_BRACKET', () => this.flipPage(1));
+    this.input.on('pointermove', (p: Phaser.Input.Pointer) => this.onBarDragMove(p));
+    this.input.on('pointerup', (p: Phaser.Input.Pointer) => this.onBarDragEnd(p));
 
     const what = quest ? `${quest.title} (${quest.rank} rank)` : `Stage ${stage} of ${DEMO_STAGES}`;
     this.addLog(`${what}: ${foes.length} foe${foes.length > 1 ? 's' : ''} approach!`);
@@ -408,6 +428,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private renderSidebar(): void {
+    this.renderSkillBar();
     this.sidebar.removeAll(true);
     const S = this.sidebar;
     const b = this.battle;
@@ -435,47 +456,12 @@ export class BattleScene extends Phaser.Scene {
       return;
     }
     const interactive = this.mode === 'select' || this.mode === 'target';
-    let y = 184;
+    const y = 184;
     if (u && u.team === 'player') {
       const canAct = interactive && b.canAct(u);
-      const ids = b.skillIds(u);
-      // Two columns once the list gets long (weapon + tree skills + Dash and Overwatch).
-      const cols = ids.length > 7 ? 2 : 1;
-      const bw = cols === 2 ? 118 : SIDE_W;
-      const bh = cols === 2 ? 28 : 30;
-      ids.forEach((id, i) => {
-        const usable = interactive && b.canUseSkill(u, id);
-        const s = SKILLS[id];
-        const cd = u.cooldowns[id] ?? 0;
-        const cost = [isFree(s) ? 'free' : s.ap === 1 || s.ap === 2 ? `${s.ap}AP` : '', s.mana ? `${s.mana}MP` : ''].filter(Boolean).join(' ');
-        const label = cols === 2 ? `${s.name}${cd > 0 ? ` (${cd})` : ''}` : `${s.name}${cost ? ` · ${cost}` : ''}${cd > 0 ? ` (${cd})` : ''}`;
-        const bx = SIDE_X + (i % cols) * (bw + 4);
-        const by = y + Math.floor(i / cols) * (bh + 4);
-        S.add(button(this, bx, by, bw, bh, label, () => this.selectAction(id), {
-          enabled: usable && cd <= 0,
-          selected: this.mode === 'target' && this.action?.id === id,
-          fontSize: cols === 2 ? 12 : 14,
-          onHover: () => {
-            const why = !interactive || usable ? '' : u.mp < s.mana ? `\nNot enough mana (${u.mp}/${s.mana}).`
-              : s.target === 'move' && !u.moved ? '\nUse your regular move first.' : !b.canPay(u, s) ? '\nNot enough AP.' : '';
-            this.hoverText.setText(`${s.name} [${tagNames(s).join(', ') || 'basic'}]\n${skillFormula(s) || s.description}\n${skillDetails(s)}${cd > 0 ? `\nReady ${cd === 1 ? 'next turn' : `in ${cd} turns`}.` : ''}${why}`);
-            if (this.mode === 'select') {
-              this.previewAction = s;
-              this.drawOverlay();
-            }
-          },
-          onOut: () => {
-            if (this.previewAction) {
-              this.previewAction = null;
-              this.drawOverlay();
-            }
-          },
-        }));
-      });
-      y += Math.ceil(ids.length / cols) * (bh + 4);
       const opp = b.opponentOf(u);
       if (opp) {
-        S.add(button(this, SIDE_X, y + 2, 116, 30, 'Disengage', () => void this.disengageUnit(), {
+        S.add(button(this, SIDE_X, y, 116, 30, 'Disengage', () => void this.disengageUnit(), {
           enabled: canAct, fontSize: 14, fill: 0x4a3418,
           onHover: () => {
             const dmg = b.previewHits(opp, b.basicAttack(opp), u).reduce((a, c) => a + c, 0);
@@ -483,11 +469,10 @@ export class BattleScene extends Phaser.Scene {
           },
         }));
       } else {
-        S.add(button(this, SIDE_X, y + 2, 116, 30, 'Undo move', () => this.undoMove(), {
+        S.add(button(this, SIDE_X, y, 116, 30, 'Undo move', () => this.undoMove(), {
           enabled: interactive && b.canUndoMove(u), fontSize: 14,
         }));
       }
-      y += 2;
     }
     // Ends the whole team's turn (there is no per-unit turn order to wait in).
     const endX = u && u.team === 'player' ? SIDE_X + 124 : SIDE_X;
@@ -496,6 +481,164 @@ export class BattleScene extends Phaser.Scene {
       enabled: interactive, fill: 0x4a2a22, fontSize: 14, selected: interactive && b.readyUnits().length === 0,
       onHover: () => this.hoverText.setText('End your turn. Units that have not acted give up their action, and the enemy moves next.'),
     }));
+  }
+
+  // ---- skill bar ----------------------------------------------------------------------
+
+  /** The player unit whose skills are on the bar. */
+  private get barUnit(): Unit | null {
+    const u = this.selected;
+    return u && u.team === 'player' && u.alive ? u : null;
+  }
+
+  private slotRect(i: number): { x: number; y: number } {
+    return { x: MAP_X + i * (SLOT_W + SLOT_GAP), y: BAR_Y };
+  }
+
+  /** Bar slots 1-0 for the selected unit (drag a slot onto another to swap them; ◀ ▶ or [ ] change page). */
+  private renderSkillBar(): void {
+    this.bar.removeAll(true);
+    const B = this.bar;
+    const b = this.battle;
+    const u = this.barUnit;
+    const layout = u ? skillBarLayout(u.character) : Array<string | null>(BAR_PAGE).fill(null);
+    // While dragging, an empty page past the end is available to drop onto.
+    if (this.barDrag?.dragging) layout.push(...Array<string | null>(BAR_PAGE).fill(null));
+    const pages = layout.length / BAR_PAGE;
+    this.barPage = Math.min(this.barPage, pages - 1);
+    const interactive = (this.mode === 'select' || this.mode === 'target') && b.phase === 'player';
+    for (let i = 0; i < BAR_PAGE; i++) {
+      const index = this.barPage * BAR_PAGE + i;
+      const id = layout[index];
+      const s = id ? SKILLS[id] : null;
+      const { x, y } = this.slotRect(i);
+      const cd = u && id ? u.cooldowns[id] ?? 0 : 0;
+      const usable = !!(u && id && interactive && b.canUseSkill(u, id) && cd <= 0);
+      const selected = !!(s && this.mode === 'target' && this.action?.id === id);
+      const bg = this.add.rectangle(x, y, SLOT_W, SLOT_H, selected ? 0x4a3d1c : s ? (usable ? COLORS.panelLight : 0x161a28) : 0x10131d)
+        .setOrigin(0).setStrokeStyle(2, selected ? COLORS.accent : usable ? COLORS.border : 0x262c40);
+      B.add(bg);
+      B.add(text(this, x + 4, y + 2, String((i + 1) % 10), { fontSize: '11px', color: COLORS.gold }));
+      if (s && u) {
+        B.add(text(this, x + SLOT_W / 2, y + 30, s.name, {
+          fontSize: '11px', color: usable ? COLORS.text : '#5d6480', align: 'center', wordWrap: { width: SLOT_W - 6 },
+        }).setOrigin(0.5));
+        const cost = [isFree(s) ? 'free' : s.ap === 'end' ? '' : `${s.ap}AP`, s.mana ? `${s.mana}MP` : ''].filter(Boolean).join(' ');
+        if (cost) B.add(text(this, x + SLOT_W / 2, y + SLOT_H - 4, cost, { fontSize: '10px', color: u.mp < s.mana ? COLORS.bad : COLORS.dim }).setOrigin(0.5, 1));
+        if (cd > 0) B.add(text(this, x + SLOT_W - 5, y + 2, String(cd), { fontSize: '13px', color: COLORS.bad, fontStyle: 'bold' }).setOrigin(1, 0));
+      }
+      bg.setInteractive({ useHandCursor: !!s });
+      bg.on('pointerdown', (p: Phaser.Input.Pointer) => {
+        if (p.rightButtonDown() || !u || !id) return;
+        this.barDrag = { from: index, x: p.x, y: p.y, dragging: false };
+      });
+      bg.on('pointerover', () => {
+        if (this.barDrag?.dragging || !s || !u) return;
+        this.showSkillInfo(u, id!);
+        if (this.mode === 'select' && usable) {
+          this.previewAction = s;
+          this.drawOverlay();
+        }
+      });
+      bg.on('pointerout', () => {
+        if (this.previewAction) {
+          this.previewAction = null;
+          this.drawOverlay();
+        }
+      });
+    }
+    // Page controls to the right of the slots.
+    const px = MAP_X + BAR_PAGE * (SLOT_W + SLOT_GAP);
+    const pw = BOARD_W - BAR_PAGE * (SLOT_W + SLOT_GAP);
+    B.add(button(this, px, BAR_Y, pw, 22, '▲', () => this.flipPage(-1), { fontSize: 11, enabled: !!u && this.barPage > 0 }));
+    B.add(text(this, px + pw / 2, BAR_Y + SLOT_H / 2, `${this.barPage + 1}/${pages}`, { fontSize: '11px', color: COLORS.dim }).setOrigin(0.5));
+    B.add(button(this, px, BAR_Y + SLOT_H - 22, pw, 22, '▼', () => this.flipPage(1), { fontSize: 11, enabled: !!u && this.barPage < pages - 1 }));
+  }
+
+  private showSkillInfo(u: Unit, id: string): void {
+    const b = this.battle;
+    const s = SKILLS[id];
+    const cd = u.cooldowns[id] ?? 0;
+    const interactive = (this.mode === 'select' || this.mode === 'target') && b.phase === 'player';
+    const usable = interactive && b.canUseSkill(u, id);
+    const why = !interactive || usable ? '' : u.mp < s.mana ? `\nNot enough mana (${u.mp}/${s.mana}).`
+      : s.target === 'move' && !u.moved ? '\nUse your regular move first.' : !b.canAct(u) ? '\nThis unit\'s turn is over.' : !b.canPay(u, s) ? '\nNot enough AP.' : '';
+    this.hoverText.setText(`${s.name} [${tagNames(s).join(', ') || 'basic'}]\n${skillFormula(s) || s.description}\n${skillDetails(s)}${cd > 0 ? `\nReady ${cd === 1 ? 'next turn' : `in ${cd} turns`}.` : ''}${why}\nDrag to another slot to move it.`);
+  }
+
+  /** Page up/down. While dragging a skill, ▼ past the last page opens an empty one to drop it on. */
+  private flipPage(delta: number): void {
+    const u = this.barUnit;
+    if (!u) return;
+    const pages = skillBarLayout(u.character).length / BAR_PAGE;
+    const last = this.barDrag?.dragging ? pages : pages - 1; // while dragging, one empty page past the end
+    this.barPage = Math.max(0, Math.min(last, this.barPage + delta));
+    this.renderSkillBar();
+  }
+
+  /** Hotkey or click: pick that slot's skill (pressing it again while aiming cancels). */
+  private useSlot(index: number): void {
+    const u = this.barUnit;
+    if (!u || this.dialogOpen) return;
+    const id = skillBarLayout(u.character)[index];
+    if (!id) return;
+    if (this.mode === 'target' && this.action?.id === id) return this.cancel();
+    if ((this.mode === 'select' || this.mode === 'target') && this.battle.canUseSkill(u, id) && (u.cooldowns[id] ?? 0) <= 0) this.selectAction(id);
+  }
+
+  private slotAt(p: Phaser.Input.Pointer): number | 'up' | 'down' | null {
+    const wp = this.cameras.main.getWorldPoint(p.x, p.y);
+    if (wp.y < BAR_Y || wp.y > BAR_Y + SLOT_H) return null;
+    const i = Math.floor((wp.x - MAP_X) / (SLOT_W + SLOT_GAP));
+    if (i >= 0 && i < BAR_PAGE && wp.x - MAP_X - i * (SLOT_W + SLOT_GAP) <= SLOT_W) return i;
+    if (i >= BAR_PAGE && wp.x <= MAP_X + BOARD_W) return wp.y < BAR_Y + SLOT_H / 2 ? 'up' : 'down';
+    return null;
+  }
+
+  private onBarDragMove(p: Phaser.Input.Pointer): void {
+    const d = this.barDrag;
+    if (!d) return;
+    if (!d.dragging && Math.hypot(p.x - d.x, p.y - d.y) > 6 * UI_SCALE) {
+      d.dragging = true;
+      const u = this.barUnit;
+      const id = u ? skillBarLayout(u.character)[d.from] : null;
+      d.ghost = text(this, 0, 0, id ? SKILLS[id].name : '', {
+        fontSize: '12px', backgroundColor: '#4a3d1c', padding: { x: 6, y: 4 },
+      }).setDepth(1000).setOrigin(0.5);
+    }
+    if (!d.dragging || !d.ghost) return;
+    const wp = this.cameras.main.getWorldPoint(p.x, p.y);
+    d.ghost.setPosition(wp.x, wp.y - 18);
+    // Hovering the page arrows while dragging flips the page (to move a skill to another page).
+    const over = this.slotAt(p);
+    const now = this.time.now;
+    if ((over === 'up' || over === 'down') && now - (d.flipped ?? 0) > 600) {
+      d.flipped = now;
+      this.flipPage(over === 'up' ? -1 : 1);
+    }
+  }
+
+  private onBarDragEnd(p: Phaser.Input.Pointer): void {
+    const d = this.barDrag;
+    if (!d) return;
+    this.barDrag = null;
+    d.ghost?.destroy();
+    const over = this.slotAt(p);
+    const u = this.barUnit;
+    if (!u) return;
+    if (!d.dragging) {
+      // A plain click on a slot uses it.
+      if (typeof over === 'number' && this.barPage * BAR_PAGE + over === d.from) this.useSlot(d.from);
+      return;
+    }
+    if (typeof over === 'number') {
+      const to = this.barPage * BAR_PAGE + over;
+      if (to !== d.from) {
+        swapBarSlots(u.character, d.from, to);
+        if (!this.demo) markDirty();
+      }
+    }
+    this.renderSkillBar();
   }
 
   private unitSummary(u: Unit): string {
@@ -527,7 +670,7 @@ export class BattleScene extends Phaser.Scene {
     const atEnd = this.logList.atEnd();
     const items = this.log.map((l, i) => {
       const t = text(this, 0, 0, l, {
-        fontSize: '13px', color: i === this.log.length - 1 ? COLORS.text : COLORS.dim, wordWrap: { width: BOARD_W - 34 },
+        fontSize: '12px', color: i === this.log.length - 1 ? COLORS.text : COLORS.dim, wordWrap: { width: SIDE_W - 30 },
       });
       return { obj: this.add.container(0, 0, [t]), height: t.height };
     });
@@ -578,6 +721,7 @@ export class BattleScene extends Phaser.Scene {
     this.mode = 'select';
     this.action = null;
     this.previewAction = null;
+    if (this.selectedUid !== u.uid) this.barPage = 0;
     this.selectedUid = u.uid;
     this.threat = null;
     this.reach = this.battle.canMove(u) ? this.battle.reachable(u) : new Map();

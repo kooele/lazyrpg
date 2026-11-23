@@ -238,6 +238,8 @@ export interface Character {
   talents?: Talents;
   /** Adventurers: skill points invested per stat (Body tab). Each adds 2x the stat's base growth per level. */
   body?: BodyInvestment;
+  /** Adventurers: the battle skill bar, slot by slot (10 per page, hotkeys 1-0; null = empty slot). */
+  skillBar?: (string | null)[];
   /** Party members only: how they are bound to the party. */
   contract?: Contract;
 }
