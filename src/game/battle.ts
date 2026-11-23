@@ -2,7 +2,7 @@
 import { DEFAULT_WEAPON, ENEMY_COLOR, SKILLS, STATUSES, WEAPONS, hasTag, isFree, modeWithTag, resolveWeaponSkill } from '../data/content';
 import { ENCOUNTER, ENEMIES } from '../data/enemies';
 import { STAT_CONFIG, type StatConfig } from '../data/stats';
-import { DAMAGE_TYPES, type Character, type DamagePart, type DamageType, type LosRule, type SkillDef, type StatKey, type Stats } from '../data/types';
+import { DAMAGE_TYPES, type Character, type DamagePart, type DamageType, type LosRule, type SkillDef, type StatKey, type Stats, type ZoneDef } from '../data/types';
 import { allSkills, deriveStats, modelFor, newId, type Rng } from './character';
 import { losFor, minRangeFor, rangeFor, type ReachContext } from './reach';
 import {
@@ -77,7 +77,7 @@ export interface Unit {
 }
 
 /** Why damage happened: a skill, a status tick (e.g. Burn), overwatch, or an opportunity attack on disengage. */
-export type DamageCause = 'skill' | 'status' | 'overwatch' | 'opportunity';
+export type DamageCause = 'skill' | 'status' | 'overwatch' | 'opportunity' | 'zone';
 
 export type BattleEvent =
   | { type: 'damage'; source?: string; target: string; amount: number; absorbed: number; killed: boolean; cause: DamageCause; damageType?: DamageType }
@@ -91,7 +91,24 @@ export type BattleEvent =
   | { type: 'move'; target: string; from: Point; to: Point; kind: 'knockback' | 'teleport' | 'charge' }
   | { type: 'overwatch'; source: string; skillId: string }
   | { type: 'escape'; target: string }
-  | { type: 'mode'; target: string; name: string };
+  | { type: 'mode'; target: string; name: string }
+  /** A zone (Firestorm) was placed on these tiles. */
+  | { type: 'zone'; source: string; name: string; tiles: Point[] }
+  /** A unit is caught by a zone (followed by its damage and status events). */
+  | { type: 'zoneHit'; source: string; target: string; name: string };
+
+/** A lasting ground effect from a 'ground' skill (Firestorm, Blizzard). */
+export interface Zone {
+  /** The skill that made it (its name and look). */
+  skillId: string;
+  name: string;
+  casterUid: string;
+  /** It counts down at the start of this team's turns. */
+  team: Team;
+  tiles: Set<string>;
+  turnsLeft: number;
+  def: ZoneDef;
+}
 
 export interface MoveResult {
   /** Tiles actually walked (may stop early if intercepted or killed). */
@@ -104,6 +121,8 @@ export interface MoveResult {
 export interface ReachInfo {
   cost: number;
   prev: string | null;
+  /** Zone tiles entered on the way here (paths avoid them when they can, at no extra cost). */
+  hazards?: number;
 }
 
 /** XP for winning a battle (stats.json xpPerVictory; the same at every stage). */
@@ -161,6 +180,8 @@ export function resistChance(resist: number, scale = STAT_CONFIG.defenseScale): 
  */
 export class Battle {
   readonly units: Unit[];
+  /** Ground effects in play (Firestorm, Blizzard). */
+  zones: Zone[] = [];
   phase: Team = 'player';
   round = 1;
 
@@ -305,7 +326,17 @@ export class Battle {
   /** Off cooldown, enough mana, and not blocked by a disabled weapon. */
   isUsable(u: Unit, skillId: string): boolean {
     const s = SKILLS[skillId];
-    return this.isReady(u, skillId) && u.mp >= s.mana && !(u.weaponDisabled && hasTag(s, 'weapon'));
+    return this.isReady(u, skillId) && u.mp >= s.mana && !(u.weaponDisabled && hasTag(s, 'weapon')) && !(this.isFrozen(u) && this.movesUser(s));
+  }
+
+  /** Frozen units can't move (see the Frozen status). */
+  isFrozen(u: Unit): boolean {
+    return u.statuses.some((s) => STATUSES[s.id]?.frozen);
+  }
+
+  /** Skills that move the user on its own feet (Dash, Charge, Movement skills); teleports don't count. */
+  private movesUser(s: SkillDef): boolean {
+    return s.target === 'move' || hasTag(s, 'movement') || (!!s.charge && !s.teleport);
   }
 
   // ---- engagement ------------------------------------------------------------------
@@ -447,7 +478,7 @@ export class Battle {
 
   /** Regular move: needs the movement AP (and not engaged). */
   canMove(u: Unit): boolean {
-    return this.canAct(u) && !u.moved && u.ap >= 1 && !u.engagedWith;
+    return this.canAct(u) && !u.moved && u.ap >= 1 && !u.engagedWith && !this.isFrozen(u);
   }
 
   /** Is the unit's turn still going (it may have AP or free actions left)? */
@@ -508,10 +539,10 @@ export class Battle {
   /** Tiles the unit can end its move on (including where it stands). Orthogonal steps only. */
   reachable(u: Unit): Map<string, ReachInfo> {
     const budget = this.stat(u, 'movement');
-    const result = new Map<string, ReachInfo>([[key(u.x, u.y), { cost: 0, prev: null }]]);
-    const frontier: { x: number; y: number; cost: number }[] = [{ x: u.x, y: u.y, cost: 0 }];
+    const result = new Map<string, ReachInfo>([[key(u.x, u.y), { cost: 0, prev: null, hazards: 0 }]]);
+    const frontier: { x: number; y: number; cost: number; hazards: number }[] = [{ x: u.x, y: u.y, cost: 0, hazards: 0 }];
     while (frontier.length) {
-      frontier.sort((a, b) => a.cost - b.cost);
+      frontier.sort((a, b) => a.cost - b.cost || a.hazards - b.hazards);
       const cur = frontier.shift()!;
       for (const d of DIRS) {
         const nx = cur.x + d.x;
@@ -522,10 +553,11 @@ export class Battle {
         const cost = cur.cost + (TERRAIN[this.map.tiles[ny][nx]].moveCost ?? 99);
         if (cost > budget) continue;
         const k = key(nx, ny);
+        const hazards = cur.hazards + this.zonesAt({ x: nx, y: ny }).length;
         const known = result.get(k);
-        if (known && known.cost <= cost) continue;
-        result.set(k, { cost, prev: key(cur.x, cur.y) });
-        frontier.push({ x: nx, y: ny, cost });
+        if (known && (known.cost < cost || (known.cost === cost && (known.hazards ?? 0) <= hazards))) continue;
+        result.set(k, { cost, prev: key(cur.x, cur.y), hazards });
+        frontier.push({ x: nx, y: ny, cost, hazards });
       }
     }
     // Can pass through allies but not stop on them.
@@ -644,18 +676,30 @@ export class Battle {
       u.x = step.x;
       u.y = step.y;
       result.path.push(step);
-      // Overwatch only fires on tiles the unit could stop on (not while passing through allies).
+      // Zones hit on every tile entered, even while passing through allies.
+      const caught = this.zoneHits(u, step, 1);
+      if (caught.length) {
+        result.triggers.push({ index: result.path.length - 1, events: caught });
+        u.locked = true;
+        if (!u.alive) {
+          u.acted = true;
+          break;
+        }
+      }
+      // Overwatch (and Frozen stopping the walk) only happen on tiles the unit could stop on (not while passing through allies).
       if (this.units.some((o) => o !== u && o.alive && o.x === step.x && o.y === step.y)) continue;
       const { events, interrupted } = this.triggerOverwatch(u);
       if (events.length) {
-        result.triggers.push({ index: result.path.length - 1, events });
+        const same = result.triggers.find((t) => t.index === result.path.length - 1);
+        if (same) same.events.push(...events);
+        else result.triggers.push({ index: result.path.length - 1, events });
         u.locked = true;
       }
       if (!u.alive) {
         u.acted = true;
         break;
       }
-      if (interrupted) {
+      if (interrupted || this.isFrozen(u)) {
         result.interrupted = true;
         break;
       }
@@ -737,6 +781,11 @@ export class Battle {
         const occupant = this.occupantFrom(caster, from, tile);
         return passable(this.map, tile.x, tile.y) && !occupant;
       }
+      case 'ground': {
+        if (d < minRange - EPS || !withinRange(d, range)) return false;
+        const los = this.skillLos(caster, skill);
+        return !los || this.clearLine(from, tile, los, caster);
+      }
       case 'unit': {
         if (d < minRange - EPS || !withinRange(d, range)) return false;
         const los = this.skillLos(caster, skill);
@@ -816,6 +865,8 @@ export class Battle {
         return [...tilesBetween(from, tile), tile].filter((p) => this.inMap(p));
       case 'cone':
         return coneTiles(this.map, from, tile, skill.cone!.angle, this.coneRadius(caster, skill));
+      case 'ground':
+        return this.zoneTiles(skill.zone!, tile);
       default:
         return [tile];
     }
@@ -860,6 +911,7 @@ export class Battle {
       case 'cone':
       case 'emptyTile':
       case 'move':
+      case 'ground':
         return [];
       case 'self': {
         if (!skill.aoeRadius) return [caster];
@@ -1035,6 +1087,54 @@ export class Battle {
     }
   }
 
+  // ---- zones ----------------------------------------------------------------------------
+
+  /** Tiles a zone aimed at `center` covers (walkable ones only: rocks and water can't burn or freeze anyone). */
+  zoneTiles(def: ZoneDef, center: Point): Point[] {
+    const out: Point[] = [];
+    const R = Math.ceil(def.radius);
+    for (let y = center.y - R; y <= center.y + R; y++) {
+      for (let x = center.x - R; x <= center.x + R; x++) {
+        if (passable(this.map, x, y) && withinRange(dist(center, { x, y }), def.radius)) out.push({ x, y });
+      }
+    }
+    return out;
+  }
+
+  /** Zones covering a tile. */
+  zonesAt(p: Point): Zone[] {
+    return this.zones.filter((z) => z.tiles.has(key(p.x, p.y)));
+  }
+
+  /** Every zone on `tile` hits `u` `times` times. */
+  private zoneHits(u: Unit, tile: Point, times: number): BattleEvent[] {
+    const events: BattleEvent[] = [];
+    for (const z of this.zonesAt(tile)) events.push(...this.zoneHit(z, u, times));
+    return events;
+  }
+
+  /** One zone hits `u` `times` times: its damage (from the caster's stats) and statuses each time. */
+  private zoneHit(z: Zone, u: Unit, times: number): BattleEvent[] {
+    const caster = this.unit(z.casterUid);
+    const events: BattleEvent[] = [];
+    for (let i = 0; i < times && u.alive; i++) {
+      events.push({ type: 'zoneHit', source: caster.uid, target: u.uid, name: z.name });
+      events.push(...this.dealHit(caster, u, z.def.hit, 'zone'));
+      if (!u.alive) break;
+      for (const a of z.def.applyStatus) events.push(this.applyStatus(caster, u, a.status, a.turns, a.stacks ?? 1));
+    }
+    return events;
+  }
+
+  /** Rough damage `u` takes from zones walking `path` (each tile entered) and standing at its end. */
+  zoneDanger(u: Unit, path: Point[]): number {
+    let total = 0;
+    const end = path[path.length - 1] ?? u;
+    for (const p of path) for (const z of this.zonesAt(p)) total += this.hitDamage(this.unit(z.casterUid), u, z.def.hit);
+    for (const z of this.zonesAt(end)) total += z.def.endTurnHits * this.hitDamage(this.unit(z.casterUid), u, z.def.hit);
+    return total;
+  }
+
   /** The stat bonus a caster-scaled status (Protection) gives when `source` applies it. */
   scaledStatusAmount(source: Unit, statusId: string): number {
     const sc = STATUSES[statusId]?.casterScaled;
@@ -1111,11 +1211,21 @@ export class Battle {
         u.x = dest.x;
         u.y = dest.y;
         events.push({ type: 'move', target: u.uid, from: origin, to: dest, kind: skill.teleport ? 'teleport' : 'charge' });
+        events.push(...this.zoneHits(u, dest, 1));
       }
     } else if (skill.teleport) {
       u.x = tile.x;
       u.y = tile.y;
       events.push({ type: 'move', target: u.uid, from: origin, to: { ...tile }, kind: 'teleport' });
+      events.push(...this.zoneHits(u, tile, 1));
+    }
+    if (skill.zone) {
+      const tiles = this.zoneTiles(skill.zone, tile);
+      this.zones.push({
+        skillId, name: skill.name, casterUid: u.uid, team: u.team,
+        tiles: new Set(tiles.map((p) => key(p.x, p.y))), turnsLeft: skill.zone.turns, def: skill.zone,
+      });
+      events.push({ type: 'zone', source: u.uid, name: skill.name, tiles });
     }
     if (skill.cone) {
       u.overwatch = {
@@ -1179,6 +1289,8 @@ export class Battle {
           t.x = to.x;
           t.y = to.y;
           moved = true;
+          events.push(...this.zoneHits(t, to, 1));
+          if (!t.alive) break;
         }
         // Being pushed out of an engagement counts as breaking away: the old opponent gets a free hit.
         const partner = moved ? this.opponentOf(t) : null;
@@ -1205,6 +1317,12 @@ export class Battle {
       if (chance > 0 && this.rng() < chance) return { type: 'resist', source: source.uid, target: t.uid, name: def.name, chance: Math.round(chance * 100) };
     }
     const existing = t.statuses.find((s) => s.id === id);
+    // Past its stack cap the status turns into its overflow (Slow x3 -> Frozen).
+    const have = existing?.stacks ?? 0;
+    if (def.stacking && def.overflow && def.maxStacks !== undefined && have + stacks > def.maxStacks) {
+      t.statuses = t.statuses.filter((s) => s.id !== id);
+      return this.applyStatus(source, t, def.overflow.status, def.overflow.turns, 1, true);
+    }
     if (existing) {
       if (def.stacking) existing.stacks += stacks;
       existing.turns = Math.max(existing.turns, turns);
@@ -1230,6 +1348,8 @@ export class Battle {
   private beginPhase(team: Team): BattleEvent[] {
     this.phase = team;
     const events: BattleEvent[] = [];
+    for (const z of this.zones) if (z.team === team) z.turnsLeft -= 1;
+    this.zones = this.zones.filter((z) => z.turnsLeft > 0);
     for (const u of this.living(team)) {
       u.ap = AP_PER_TURN;
       u.moved = false;
@@ -1248,6 +1368,11 @@ export class Battle {
         if (s.tick === 'start') s.turns -= 1;
       }
       u.statuses = u.statuses.filter((s) => s.turns > 0);
+      // Frozen: the movement AP is lost this turn.
+      if (this.isFrozen(u)) {
+        u.ap -= 1;
+        u.moved = true;
+      }
       if (!u.alive) u.acted = true;
     }
     return events;
@@ -1255,6 +1380,11 @@ export class Battle {
 
   /** End the current team's turn; returns events from the start of the next turn (e.g. Burn). */
   endPhase(): BattleEvent[] {
+    // Units ending their turn inside a zone are hit (Firestorm: twice).
+    const events: BattleEvent[] = [];
+    for (const u of this.living(this.phase)) {
+      for (const z of this.zonesAt(u)) events.push(...this.zoneHit(z, u, z.def.endTurnHits));
+    }
     // Effects that last "through" the unit's turn (e.g. Slow) count down now.
     for (const u of this.living(this.phase)) {
       for (const s of u.statuses) if (s.tick === 'end') s.turns -= 1;
@@ -1262,7 +1392,7 @@ export class Battle {
     }
     const next: Team = this.phase === 'player' ? 'enemy' : 'player';
     if (next === 'player') this.round += 1;
-    return this.beginPhase(next);
+    return [...events, ...this.beginPhase(next)];
   }
 }
 

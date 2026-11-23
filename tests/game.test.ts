@@ -434,7 +434,7 @@ describe('skills', () => {
     expect(SKILLS.heal.cooldown).toBe(0);
   });
 
-  it('fireball burns 1% max health per stack per turn; cleanse removes it', () => {
+  it('fireball burns 2% max health per stack per turn; cleanse removes it', () => {
     const { battle, units: [m, e, cleric] } = setup(openMap(), [
       { c: hero('staff', ['fireball']), team: 'player', at: { x: 1, y: 1 } },
       { c: hero('bow'), team: 'enemy', at: { x: 4, y: 1 } },
@@ -443,8 +443,8 @@ describe('skills', () => {
     battle.perform(m, 'fireball', { x: 4, y: 1 });
     const afterHit = e.hp;
     const events = battle.endPhase();
-    expect(events[0]).toMatchObject({ type: 'damage', cause: 'status', amount: 5 });
-    expect(e.hp).toBe(afterHit - 5);
+    expect(events[0]).toMatchObject({ type: 'damage', cause: 'status', amount: 10 });
+    expect(e.hp).toBe(afterHit - 10);
     battle.perform(cleric, 'cleanse', { x: 4, y: 1 });
     expect(e.statuses).toEqual([]);
   });
@@ -1386,12 +1386,83 @@ describe('bow modes and damage types', () => {
 
   it('skills are tagged Physical / Magical to match the damage their hits deal', () => {
     for (const s of Object.values(SKILLS)) {
-      const hits = [...(s.hits ?? []), ...(s.recoilIfSurvives ? [s.recoilIfSurvives] : [])];
+      const hits = [...(s.hits ?? []), ...(s.recoilIfSurvives ? [s.recoilIfSurvives] : []), ...(s.zone ? [s.zone.hit] : [])];
       const physical = hits.some((h) => h.pAtk || h.def || h.missingHp);
       const magical = hits.some((h) => h.mAtk);
       expect([s.id, s.tags.includes('physical')]).toEqual([s.id, physical]);
       expect([s.id, s.tags.includes('magical')]).toEqual([s.id, magical]);
     }
+  });
+});
+
+describe('zones (Firestorm, Blizzard), Slow stacks and Frozen', () => {
+  const zoned = (skill: string) => {
+    const { battle, units: [m, e] } = setup(openMap(), [
+      { c: hero('staff', [skill]), team: 'player', at: { x: 2, y: 3 } },
+      { c: hero('bow', [], 'Foe'), team: 'enemy', at: { x: 6, y: 0 } },
+    ]);
+    e.stats.resist = 0; // no lucky resists
+    return { battle, m, e };
+  };
+
+  it('Blizzard: each tile walked through hits and slows; the 3rd Slow stack Freezes and stops the walk', () => {
+    const { battle, m, e } = zoned('blizzard');
+    battle.perform(m, 'blizzard', { x: 6, y: 3 });
+    expect(battle.zonesAt({ x: 7, y: 4 })).toHaveLength(1);
+    expect(battle.zonesAt({ x: 8, y: 3 })).toHaveLength(0);
+    battle.endPhase();
+    const result = battle.move(e, { x: 6, y: 4 });
+    const zoneHits = result.triggers.flatMap((t) => t.events).filter((ev) => ev.type === 'zoneHit');
+    expect(zoneHits).toHaveLength(3);
+    expect(battle.isFrozen(e)).toBe(true);
+    expect(e.statuses.find((st) => st.id === 'slow')).toBeUndefined(); // the stacks became Frozen
+    expect(result.interrupted).toBe(true);
+    expect(battle.canMove(e)).toBe(false);
+    // Ending the turn inside: 2 more hits (2 new Slow stacks).
+    const end = battle.endPhase();
+    expect(end.filter((ev) => ev.type === 'zoneHit')).toHaveLength(2);
+    expect(e.statuses.find((st) => st.id === 'slow')?.stacks).toBe(2);
+    // Next own turn: still Frozen, movement AP gone.
+    battle.endPhase();
+    expect(battle.isFrozen(e)).toBe(true);
+    expect(e.ap).toBe(1);
+    expect(battle.canMove(e)).toBe(false);
+  });
+
+  it("Firestorm: ending a turn inside hits twice (2 Burn stacks, 2% each); it lasts 2 of the caster's turns", () => {
+    const { battle, m, e } = zoned('firestorm');
+    e.x = 6;
+    e.y = 3;
+    battle.perform(m, 'firestorm', { x: 6, y: 3 });
+    battle.endPhase();
+    const hp = e.hp;
+    const end = battle.endPhase(); // the enemy ends its turn standing in the fire
+    const dmg = end.filter((ev) => ev.type === 'damage' && ev.cause === 'zone');
+    expect(dmg).toHaveLength(2);
+    expect(e.statuses.find((st) => st.id === 'burn')?.stacks).toBe(2);
+    expect(hp - e.hp).toBe(dmg.reduce((a, ev) => a + (ev.type === 'damage' ? ev.amount : 0), 0));
+    expect(battle.zones).toHaveLength(1);
+    battle.endPhase();
+    battle.endPhase();
+    expect(battle.zones).toHaveLength(0);
+  });
+
+  it('paths go around zones when that costs no extra movement', () => {
+    const { battle, m } = zoned('firestorm');
+    battle.perform(m, 'firestorm', { x: 5, y: 3 }); // covers x 4-6, y 2-4
+    const u = makeUnit(hero('bow'), 'player', { x: 4, y: 1 });
+    battle.units.push(u);
+    expect(battle.pathTo(battle.reachable(u), { x: 5, y: 2 })).toEqual([{ x: 5, y: 1 }, { x: 5, y: 2 }]);
+  });
+
+  it('Slow stacks (2 max) and each takes a grass tile of Movement', () => {
+    const { battle, m, e } = zoned('freeze');
+    const base = battle.stat(e, 'movement');
+    e.x = 6;
+    e.y = 3;
+    battle.perform(m, 'freeze', { x: 6, y: 3 });
+    expect(battle.stat(e, 'movement')).toBe(base - 4);
+    expect(skillEffect(SKILLS.firestorm)).toBe('3x3 zone for 2 turns. Each tile entered: 50% M.Atk, Burn x1 (2 turns). Ending a turn inside: 2 hits');
   });
 });
 

@@ -75,6 +75,12 @@ export interface StatusDef {
   casterScaled?: { stat: StatKey; pAtk?: number; mAtk?: number };
   /** Enemies can't target the unit directly or trigger overwatch on it (area attacks still hit). Ends when it attacks. */
   stealth?: boolean;
+  /** Stacking statuses: the most stacks it can have. One more turns it into `overflow` instead. */
+  maxStacks?: number;
+  /** What a stack past `maxStacks` becomes (Slow -> Frozen), and for how many turns. */
+  overflow?: { status: string; turns: number };
+  /** Can't move (walk, Dash, Movement skills) and loses its movement AP at the start of its turn. */
+  frozen?: boolean;
 }
 
 /**
@@ -103,8 +109,24 @@ export interface DamagePart {
  *  cone      – pick a direction; sets up an overwatch cone
  *  emptyTile – an empty, walkable tile (e.g. teleport)
  *  move      – a tile the unit can walk to (Dash)
+ *  ground    – any tile in range; places a lasting zone there (see ZoneDef)
  */
-export type SkillTarget = 'unit' | 'self' | 'line' | 'cone' | 'emptyTile' | 'move';
+export type SkillTarget = 'unit' | 'self' | 'line' | 'cone' | 'emptyTile' | 'move' | 'ground';
+
+/**
+ * A lasting area on the ground (Firestorm, Blizzard). Every tile a unit enters inside it
+ * hits it once; a unit that ends its turn inside is hit `endTurnHits` times.
+ * A hit = `hit` damage (from the caster's stats) + `applyStatus`.
+ */
+export interface ZoneDef {
+  /** Tiles within this distance of the aimed tile (1.5 = a 3x3 square). */
+  radius: number;
+  /** How many of the caster's team's turns it lasts (it counts down at the start of each). */
+  turns: number;
+  hit: DamagePart;
+  applyStatus: { status: string; turns: number; stacks?: number }[];
+  endTurnHits: number;
+}
 
 /**
  * Action points a skill costs. Units have 2 AP a turn: a movement AP and an action AP.
@@ -159,6 +181,8 @@ export interface SkillDef {
   /** For target 'self': affect units within this distance of the caster. */
   aoeRadius?: number;
   cone?: ConeDef;
+  /** For target 'ground': the zone it places. */
+  zone?: ZoneDef;
   teleport?: boolean;
   /** Dash next to the target (path of at most `range` steps, diagonals allowed) before hitting it. With `teleport`: appear next to it instead. */
   charge?: boolean;

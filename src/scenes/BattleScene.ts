@@ -56,6 +56,13 @@ interface UnitView {
   statusText: Phaser.GameObjects.Text;
 }
 
+/** Map tint for a zone: fire orange for Burn zones, ice blue for Slow/Freeze ones. */
+function zoneColor(statuses: string[]): number {
+  if (statuses.includes('burn')) return 0xff7a2e;
+  if (statuses.includes('slow') || statuses.includes('frozen')) return 0x7fc8ff;
+  return 0xc18cff;
+}
+
 export class BattleScene extends Phaser.Scene {
   private battle!: Battle;
   private views = new Map<string, UnitView>();
@@ -313,6 +320,16 @@ export class BattleScene extends Phaser.Scene {
       const seen = b.visibleTiles('player');
       for (let y = 0; y < b.map.height; y++) {
         for (let x = 0; x < b.map.width; x++) if (!seen.has(key(x, y))) fill({ x, y }, 0x05060a, 0.55);
+      }
+    }
+
+    // Ground zones (Firestorm, Blizzard): tinted by their status (fire orange, ice blue).
+    for (const z of b.zones) {
+      const color = zoneColor(z.def.applyStatus.map((a) => a.status));
+      for (const k of z.tiles) {
+        const [x, y] = k.split(',').map(Number);
+        fill({ x, y }, color, 0.32);
+        outline({ x, y }, color, 0.7, 2);
       }
     }
 
@@ -712,7 +729,7 @@ export class BattleScene extends Phaser.Scene {
     if (events.length) {
       const summary: string[] = [];
       for (const e of events) this.showEvent(e, summary, 0);
-      this.addLog(`Burn: ${summary.join(', ')}`);
+      this.addLog(`Turn effects: ${summary.join(', ')}`);
       this.refresh();
       await this.wait(800);
     }
@@ -969,6 +986,13 @@ export class BattleScene extends Phaser.Scene {
         : "Can't aim there — click to cancel.");
       info = b.canTarget(u, this.action, tile) ? `${this.preview(u, this.action, tile)}\n${info}` : `${why}\n${info}`;
     }
+    for (const z of b.zonesAt(tile)) info = `${z.name} (${z.turnsLeft} turn${z.turnsLeft === 1 ? '' : 's'} left): hits anyone entering; ${z.def.endTurnHits}x if a turn ends here\n${info}`;
+    // Walking through zones: warn before the move.
+    if (this.mode === 'select' && u && this.reach.has(key(tile.x, tile.y)) && (tile.x !== u.x || tile.y !== u.y)) {
+      const path = b.pathTo(this.reach, tile);
+      const hits = path.reduce((n, p) => n + b.zonesAt(p).length, 0);
+      if (hits) info = `⚠ Path crosses ${hits} zone tile${hits === 1 ? '' : 's'} (~${b.zoneDanger(u, path)} dmg incl. ending here)\n${info}`;
+    }
     if (this.threat && this.mode === 'select') info = `${this.threat.label}\n${info}`;
     this.hoverText.setText(info);
   }
@@ -977,6 +1001,7 @@ export class BattleScene extends Phaser.Scene {
     const b = this.battle;
     if (s.target === 'move') return `→ Dash here (${s.mana} MP, uses your last AP)`;
     if (s.cone) return '→ Watch this cone until your next turn';
+    if (s.zone) return `→ Place a ${s.name} here for ${s.zone.turns} turns`;
     s = b.skillFor(u, s);
     const lines: string[] = [];
     if (hasTag(s, 'disengage') && b.opponentOf(u)) lines.push(`→ Breaks away from ${b.opponentOf(u)!.character.name} (no free attack)`);
@@ -1105,8 +1130,12 @@ export class BattleScene extends Phaser.Scene {
         const summary: string[] = [];
         trigger.events.forEach((e, n) => this.showEvent(e, summary, n));
         const first = trigger.events[0];
-        const shooter = first && first.type === 'damage' && first.source ? this.battle.unit(first.source).character.name : 'Overwatch';
-        this.addLog(`${shooter} reacts! ${summary.join(', ')}${result.interrupted && i === result.path.length - 1 ? ' — movement stopped' : ''}`);
+        const stopped = result.interrupted && i === result.path.length - 1 ? ' — movement stopped' : '';
+        if (first?.type === 'zoneHit') this.addLog(`${u.character.name} is caught in the ${first.name}: ${summary.join(', ')}${stopped}`);
+        else {
+          const shooter = first && first.type === 'damage' && first.source ? this.battle.unit(first.source).character.name : 'Overwatch';
+          this.addLog(`${shooter} reacts! ${summary.join(', ')}${stopped}`);
+        }
         this.refresh();
         await this.wait(700);
       }
@@ -1175,6 +1204,14 @@ export class BattleScene extends Phaser.Scene {
 
   private showEvent(e: BattleEvent, summary: string[], index: number): void {
     if (e.type === 'move' || e.type === 'overwatch' || e.type === 'escape') return;
+    if (e.type === 'zone') {
+      summary.push(`${e.tiles.length}-tile ${e.name} placed`);
+      return;
+    }
+    if (e.type === 'zoneHit') {
+      this.floatText(this.battle.unit(e.target), e.name, '#ffb35c', index * 180);
+      return;
+    }
     if (e.type === 'mode') {
       summary.push(`switches to ${e.name} mode`);
       this.floatText(this.battle.unit(e.target), e.name, '#e0b44c', index * 120);
@@ -1191,7 +1228,7 @@ export class BattleScene extends Phaser.Scene {
     switch (e.type) {
       case 'damage': {
         // Damage colors: Physical red, Magical violet, status ticks (Burn) orange.
-        const color = e.cause === 'status' ? '#ffb35c' : e.damageType === 'magical' ? '#c18cff' : '#ff6b6b';
+        const color = e.cause === 'status' || e.cause === 'zone' ? '#ffb35c' : e.damageType === 'magical' ? '#c18cff' : '#ff6b6b';
         if (e.cause === 'opportunity') this.floatText(t, 'Opportunity!', '#ff9f43', delay);
         if (e.amount > 0) this.floatText(t, `-${e.amount}`, color, delay);
         if (e.absorbed > 0) this.floatText(t, `(${e.absorbed} blocked)`, '#8ecbff', delay + 90);
