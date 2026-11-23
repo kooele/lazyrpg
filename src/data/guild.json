@@ -1,5 +1,5 @@
 {
-  "_readme": "Management and simulation numbers for Arch City and its Adventurer Guild. Gold amounts are whole numbers. upkeep.foodLodgingPerDay is what each person the party feeds and houses costs on days spent away (quests); each day in the city ends with a night at an inn (priced per person by inns) or sleeping outside (see lodging). Party ranks come from renown (see ranks). Quests: stages is the enemy level range (an adventurer rank's levels; see adventurerRanks), reward a gold range, days how long the trip takes. companion.expectedWeeklyLoot is how much gold a candidate thinks a party of that rank earns per week; they use it to value a loot cut. simulation tunes the rival parties: the chance a party goes on a quest each day, its chance of success (0.55 + successPerLevel x (average level - rankDifficulty), clamped), and what can go wrong. Each member levels up after a success with levelUpChanceOnSuccess x levelUpFalloff^(level - 1), so high levels come slowly. A party tries its promotion quest once it has the renown and at least a 50% chance. New adventurers arrive at about the rate adventurers are lost, nudged toward targetAdventurers.",
+  "_readme": "Management and simulation numbers for Arch City and its Adventurer Guild. Gold amounts are whole numbers. upkeep.foodLodgingPerDay is what each person the party feeds and houses costs on days spent away (quests); each day in the city ends with a night at an inn (priced per person by inns) or sleeping outside (see lodging). Party ranks come from renown (see ranks). Quests: stages is the enemy level range (an adventurer rank's levels; see adventurerRanks), reward a gold range, days how long the trip takes. companion.expectedWeeklyLoot is how much gold a candidate thinks a party of that rank earns per week; they use it to value a loot cut. simulation tunes the rival parties: the chance a party goes on a quest each day, its chance of success (0.55 + successPerLevel x (average level - rankDifficulty), clamped), and what can go wrong. Each member levels up after a success with levelUpChanceOnSuccess x levelUpFalloff^(level - 1), so high levels come slowly. A party tries its promotion quest once it has the renown and at least a 50% chance. Experienced adventurers die less: each member's chance to be lost on a quest is multiplied by deathLevelFalloff^(level - 1) (at least minDeathFactor), and a party's wipe chance by the same factor for its average level. Parties recruit from the guild hall only adventurers within recruitLevelGap levels of their average (or anyone, when down to 2 members). New adventurers arrive at about the rate adventurers are lost, nudged toward targetAdventurers.",
   "city": "Arch City",
   "startingGold": 500,
   "startingRenown": 0,
@@ -39,7 +39,8 @@
     "outsidePerPerson": 0
   },
   "residences": {
-    "_comment": "Homes the party can buy, one per ring. Nights there are free and count as that ring's quality (see lodging).",
+    "_comment": "Homes the party can buy and sell at the Estate Office (Middle Ring), one per ring. Nights there are free and count as that ring's quality (see lodging). The office buys a residence back for sellShare of its price.",
+    "sellShare": 0.7,
     "outer": { "name": "Outer Ring Residence", "price": 2000 },
     "middle": { "name": "Middle Ring Residence", "price": 10000 },
     "inner": { "name": "Inner Ring Residence", "price": 50000 }
@@ -100,6 +101,9 @@
     "lossChanceOnSuccess": 0.004,
     "lossChanceOnFailure": 0.06,
     "wipeChanceOnFailure": 0.04,
+    "deathLevelFalloff": 0.88,
+    "minDeathFactor": 0.1,
+    "recruitLevelGap": 4,
     "levelUpChanceOnSuccess": 0.1,
     "levelUpFalloff": 0.95,
     "retireChancePerDay": 0.001,

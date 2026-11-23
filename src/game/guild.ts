@@ -175,6 +175,11 @@ export function adventurerCount(state: GameState): number {
     + state.party.filter((c) => c.contract?.type !== 'mercenary').length;
 }
 
+/** How much less likely an adventurer of this level is to die on a quest than a fresh recruit (1 at level 1). */
+export function deathFactor(level: number): number {
+  return Math.max(SIM.minDeathFactor, SIM.deathLevelFalloff ** (Math.max(1, level) - 1));
+}
+
 /** A rival party's chance to complete a quest of a rank. */
 export function rivalSuccessChance(p: RivalParty, rank: Rank): number {
   const power = avg(p.members.map((m) => m.level)) + 0.25 * (p.members.length - 4);
@@ -196,8 +201,10 @@ export function expectedDailyLosses(state: GameState): number {
     const size = p.members.length;
     const rank = p.rank;
     const ps = rivalSuccessChance(p, rank);
-    const fail = (1 - ps) * (SIM.wipeChanceOnFailure * size + (1 - SIM.wipeChanceOnFailure) * SIM.lossChanceOnFailure * size);
-    e += SIM.questChancePerDay * (ps * SIM.lossChanceOnSuccess * size + fail) + SIM.retireChancePerDay * size;
+    const k = deathFactor(avg(p.members.map((m) => m.level)));
+    const wipe = SIM.wipeChanceOnFailure * k;
+    const fail = (1 - ps) * (wipe * size + (1 - wipe) * SIM.lossChanceOnFailure * k * size);
+    e += SIM.questChancePerDay * (ps * SIM.lossChanceOnSuccess * k * size + fail) + SIM.retireChancePerDay * size;
   }
   return e;
 }
@@ -254,7 +261,7 @@ export function simulateGuildDay(state: GameState, rng: Rng): void {
           if (rank === 'A' || rank === 'B') news(`${p.name} passed their promotion quest and rose to ${rank} rank.`);
         }
         for (const m of p.members) if (m.level < SIM.maxLevel && rng() < SIM.levelUpChanceOnSuccess * SIM.levelUpFalloff ** (m.level - 1)) m.level += 1;
-        const lost = p.members.filter(() => rng() < SIM.lossChanceOnSuccess);
+        const lost = p.members.filter((m) => rng() < SIM.lossChanceOnSuccess * deathFactor(m.level));
         if (lost.length) {
           p.members = p.members.filter((m) => !lost.includes(m));
           p.renown = Math.max(0, p.renown - renownLoss(tier.renown, false, lost.length));
@@ -263,11 +270,11 @@ export function simulateGuildDay(state: GameState, rng: Rng): void {
       } else {
         p.losses += 1;
         const outmatched = Math.max(0, SIM.rankDifficulty[rank] - avg(p.members.map((m) => m.level)));
-        if (rng() < SIM.wipeChanceOnFailure * (1 + outmatched * 0.5)) {
+        if (rng() < SIM.wipeChanceOnFailure * deathFactor(avg(p.members.map((m) => m.level))) * (1 + outmatched * 0.5)) {
           news(`${p.name} were wiped out on ${QUEST_WORDS[rank]} quest. (${p.members.map((m) => m.name).join(', ')})`);
           p.members = [];
         } else {
-          const lost = p.members.filter(() => rng() < SIM.lossChanceOnFailure * (1 + outmatched * 0.5));
+          const lost = p.members.filter((m) => rng() < SIM.lossChanceOnFailure * deathFactor(m.level) * (1 + outmatched * 0.5));
           p.members = p.members.filter((m) => !lost.includes(m));
           p.renown = Math.max(0, p.renown - renownLoss(tier.renown, true, lost.length));
           p.last = `Day ${day}: failed ${QUEST_WORDS[rank]} quest`;
@@ -292,8 +299,10 @@ export function simulateGuildDay(state: GameState, rng: Rng): void {
     }
     // Short-handed parties recruit from the hall (leaving some for the player); most like to be 4-5 strong.
     const want = p.members.length < 4 ? 0.3 : p.members.length < 5 ? 0.06 : 0;
-    if (g.pool.length > 4 && rng() < want) {
-      const avgLevel = avg(p.members.map((m) => m.level));
+    const avgLevel = avg(p.members.map((m) => m.level));
+    // Only someone near the party's level, unless it's down to the last two.
+    const fits = (a: FreeAdventurer) => p.members.length <= 2 || Math.abs(a.character.level - avgLevel) <= SIM.recruitLevelGap;
+    if (g.pool.length > 4 && rng() < want && g.pool.some(fits)) {
       g.pool.sort((a, b) => Math.abs(a.character.level - avgLevel) - Math.abs(b.character.level - avgLevel));
       const a = g.pool.shift()!;
       p.members.push({ name: a.character.name, level: a.character.level, weaponId: a.character.weaponId });

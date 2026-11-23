@@ -1,11 +1,11 @@
 import Phaser from 'phaser';
 import { GUILD, LODGING_QUALITY, isResidence, type InnTier, type Ring } from '../data/guild';
-import { boarders, buyDrinks, buyResidence, dailyUpkeep, drinksCost, isPayday, stayAtHome, stayAtInn, weeklyWages } from '../game/city';
+import { boarders, buyDrinks, dailyUpkeep, drinksCost, isPayday, stayAtHome, stayAtInn, weeklyWages } from '../game/city';
 import { QUALITY_TEXT, lodgingName, lodgingRelationship, moraleOf } from '../game/condition';
 import { isCompanion } from '../game/contracts';
 import { markDirty, requireState, session } from '../game/session';
 import { cityHeader } from '../ui/hud';
-import { COLORS, HEIGHT, ScrollList, WIDTH, button, confirmDialog, figure, panel, setupCamera, text, toast } from '../ui/widgets';
+import { COLORS, HEIGHT, ScrollList, WIDTH, button, figure, panel, setupCamera, text } from '../ui/widgets';
 
 type Place = InnTier | Ring;
 
@@ -71,15 +71,7 @@ export class InnScene extends Phaser.Scene {
       fontSize: '13px', lineSpacing: 4,
     });
     if (home && !owned) {
-      const cost = GUILD.residences[home].price;
-      button(this, 30, 452, 530, 46, `Buy the ${GUILD.residences[home].name}: ${cost} gold`, () => confirmDialog(this, `Buy the ${GUILD.residences[home].name} for ${cost} gold?`, () => {
-        const err = buyResidence(state, home);
-        if (err) return toast(this, err, COLORS.bad);
-        markDirty();
-        this.render();
-        toast(this, 'The keys are yours. Nights here are free.');
-      }, 'Buy'), { fontSize: 15, enabled: state.gold >= cost, fill: 0x2c4a2f });
-      if (state.gold < cost) text(this, 30, 502, `You need ${cost - state.gold} more gold.`, { fontSize: '13px', color: COLORS.bad });
+      button(this, 30, 452, 530, 46, `For sale at the Estate Office (Middle Ring): ${GUILD.residences[home].price} gold`, () => this.scene.start('Estate'), { fontSize: 15 });
     } else {
       const stays: [number, string][] = [[1, 'Stay the night'], [3, 'Stay 3 nights'], [7, 'Stay a week']];
       stays.forEach(([n, label], i) => button(this, 30 + i * 180, 452, 170, 46, `${label}\n${home ? 'free' : `${perNight * n} gold`}`, () => this.stay(n), {

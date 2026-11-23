@@ -329,6 +329,19 @@ export function buyResidence(state: GameState, ring: Ring): string | null {
   return null;
 }
 
+/** What the Estate Office pays for a residence. */
+export const residenceSellPrice = (ring: Ring) => Math.round(GUILD.residences[ring].price * GUILD.residences.sellShare);
+
+/** Sell a residence back to the Estate Office. Returns the gold received (0 if the party doesn't own it). */
+export function sellResidence(state: GameState, ring: Ring): number {
+  if (!state.residences.includes(ring)) return 0;
+  const gold = residenceSellPrice(ring);
+  state.residences = state.residences.filter((r) => r !== ring);
+  state.gold += gold;
+  note(state, `Sold the ${GUILD.residences[ring].name} to the Estate Office for ${gold} gold.`);
+  return gold;
+}
+
 /** Stay `nights` nights at a residence the party owns: free. */
 export function stayAtHome(state: GameState, ring: Ring, nights: number, rng: Rng): string[] {
   if (!state.residences.includes(ring)) throw new Error(`The party doesn't own the ${GUILD.residences[ring].name}`);

@@ -5,7 +5,7 @@ import type { Character, GameState } from '../src/data/types';
 import { createCharacter, deriveStats, makeRng } from '../src/game/character';
 import { makeUnit } from '../src/game/battle';
 import {
-  acceptQuest, advanceDay, advanceDays, buyDrinks, buyResidence, buySlave, makeQuest, stayAtHome, stayAtInn, canTakeQuest, dailyUpkeep, departBlock, lineupMembers, mainCharacter,
+  acceptQuest, advanceDay, advanceDays, buyDrinks, buyResidence, buySlave, makeQuest, sellResidence, stayAtHome, stayAtInn, canTakeQuest, dailyUpkeep, departBlock, lineupMembers, mainCharacter,
   newCampaign, registerPrisoner, resolveQuest, rewardShares, sleepOutside, toggleLineup,
 } from '../src/game/city';
 import { activityOf, expectedQuality, healthOf, isInjured, moraleOf } from '../src/game/condition';
@@ -14,7 +14,7 @@ import {
   companionContract, companionDemand, evaluateOffer, joinParty, mercenaryRates, offerValue, openingTerms,
 } from '../src/game/contracts';
 import { DEMO_STAGES, newDemo, resolveDemoBattle } from '../src/game/demo';
-import { adventurerCount, adventurerRank, leaderboard, rankCounts, simulateGuildDay } from '../src/game/guild';
+import { adventurerCount, adventurerRank, deathFactor, leaderboard, rankCounts, simulateGuildDay } from '../src/game/guild';
 
 const start = (seed = 1): GameState => newCampaign(createCharacter('Main', '#3d7be0', 'sword_shield'), 'Testers', makeRng(seed));
 
@@ -113,6 +113,24 @@ describe('ranks and the leaderboard', () => {
     s.renown = 150;
     stayAtInn(s, 'standard', GUILD.ranks.demotionDays, makeRng(1));
     expect(s.rank).toBe('C');
+  });
+
+  it('high-level adventurers die less often, so A-rank parties keep their strength', () => {
+    expect(deathFactor(1)).toBe(1);
+    expect(deathFactor(18)).toBeLessThan(deathFactor(8));
+    expect(deathFactor(8)).toBeLessThan(deathFactor(3));
+    const levels: number[] = [];
+    for (const seed of [1, 2, 3]) {
+      const s = start(seed);
+      const rng = makeRng(seed * 31);
+      for (let d = 1; d <= 730; d++) {
+        s.day += 1;
+        simulateGuildDay(s, rng);
+        if (d % 30 === 0) for (const p of s.guild.rivals.filter((x) => x.rank === 'A')) levels.push(p.members.reduce((a, m) => a + m.level, 0) / p.members.length);
+      }
+    }
+    expect(levels.length).toBeGreaterThan(0);
+    expect(levels.reduce((a, b) => a + b, 0) / levels.length).toBeGreaterThanOrEqual(15);
   });
 
   it('adventurer ranks follow level; quests and new rival parties match them', () => {
@@ -284,6 +302,11 @@ describe('contracts', () => {
     expect(s.gold).toBe(0); // free
     const r = parseSave(serializeSave(s));
     expect(r.ok && r.state.residences).toEqual(['outer', 'middle']);
+    // The Estate Office buys them back for part of the price.
+    expect(sellResidence(s, 'outer')).toBe(Math.round(2000 * GUILD.residences.sellShare));
+    expect(s.residences).toEqual(['middle']);
+    expect(sellResidence(s, 'outer')).toBe(0);
+    expect(() => stayAtHome(s, 'outer', 1, makeRng(1))).toThrow();
   });
 
   it('quests do not end the day, and only one quest a day', () => {

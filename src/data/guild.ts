@@ -47,7 +47,7 @@ export interface GuildConfig {
   upkeep: { foodLodgingPerDay: number };
   inns: Record<InnTier, InnConfig>;
   lodging: { expectedQuality: Record<'S' | Rank, number>; relationshipAbove: number; relationshipBelowPerStep: number; outsidePerPerson: number };
-  residences: Record<Ring, { name: string; price: number }>;
+  residences: Record<Ring, { name: string; price: number }> & { sellShare: number };
   condition: {
     maxHealthLoss: number;
     healthPerDay: number;
@@ -99,6 +99,9 @@ export interface GuildConfig {
     wipeChanceOnFailure: number;
     levelUpChanceOnSuccess: number;
     levelUpFalloff: number;
+    deathLevelFalloff: number;
+    minDeathFactor: number;
+    recruitLevelGap: number;
     retireChancePerDay: number;
     maxLevel: number;
   };
@@ -146,9 +149,9 @@ function parseInns(v: unknown): Record<InnTier, InnConfig> {
   return out;
 }
 
-function parseResidences(v: unknown): Record<Ring, { name: string; price: number }> {
+function parseResidences(v: unknown): GuildConfig['residences'] {
   const o = obj(v, 'residences');
-  const out = {} as Record<Ring, { name: string; price: number }>;
+  const out = { sellShare: num(o.sellShare, 'residences.sellShare', 0, 1) } as GuildConfig['residences'];
   for (const r of RINGS) {
     const h = obj(o[r], `residences.${r}`);
     if (typeof h.name !== 'string' || !h.name) fail(`residences.${r}.name`, 'must be a name');
@@ -223,7 +226,7 @@ export function parseGuildConfig(data: unknown): GuildConfig {
     simulation: {
       ...numbers<Omit<GuildConfig['simulation'], 'partySize' | 'rankDifficulty'>>(s, 'simulation',
         ['targetAdventurers', 'targetParties', 'poolTarget', 'questChancePerDay', 'successPerLevel', 'lossChanceOnSuccess',
-          'lossChanceOnFailure', 'wipeChanceOnFailure', 'levelUpChanceOnSuccess', 'levelUpFalloff', 'retireChancePerDay', 'maxLevel']),
+          'lossChanceOnFailure', 'wipeChanceOnFailure', 'levelUpChanceOnSuccess', 'levelUpFalloff', 'deathLevelFalloff', 'minDeathFactor', 'recruitLevelGap', 'retireChancePerDay', 'maxLevel']),
       partySize: range(s.partySize, 'simulation.partySize', 1),
       rankDifficulty: perRank(s.rankDifficulty, 'simulation.rankDifficulty'),
     },

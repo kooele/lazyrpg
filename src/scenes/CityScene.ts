@@ -29,22 +29,23 @@ const PLACES: Record<Ring, Place[]> = {
     { name: 'Slums', blurb: 'The poorest quarter, inside the outer wall.', at: [330, 650] },
     { name: 'Customs Office', blurb: 'Duties on everything that comes through the harbour.', at: [1352, 455] },
     { name: GUILD.inns.standard.name, blurb: `Inn: lodging at ${GUILD.inns.standard.pricePerPerson} gold per person a night, and drinks. What C-rank adventurers expect.`, at: [330, 330], scene: 'Inn', data: { tier: 'standard' } },
-    { name: GUILD.residences.outer.name, blurb: `A home of your own (${GUILD.residences.outer.price} gold): free nights, as good as an inn.`, at: [560, 860], scene: 'Inn', data: { ring: 'outer' } },
+    { name: GUILD.residences.outer.name, blurb: `A home of your own (${GUILD.residences.outer.price} gold at the Estate Office): free nights, as good as an inn.`, at: [560, 860], scene: 'Inn', data: { ring: 'outer' } },
   ],
   middle: [
     { name: 'Tailor', blurb: 'Clothes and fittings.', at: [520, 380] },
     { name: 'Auction House', blurb: 'Rare goods to the highest bidder.', at: [1010, 420] },
     { name: 'Library', blurb: 'Books, maps and old records.', at: [640, 650] },
     { name: 'Church', blurb: 'Prayer and healing.', at: [905, 640] },
+    { name: 'Estate Office', blurb: 'Buy and sell residences in every ring.', at: [1110, 300], scene: 'Estate' },
     { name: GUILD.inns.highEnd.name, blurb: `High-end inn: ${GUILD.inns.highEnd.pricePerPerson} gold per person a night, and drinks. What B-rank adventurers expect.`, at: [1060, 560], scene: 'Inn', data: { tier: 'highEnd' } },
-    { name: GUILD.residences.middle.name, blurb: `A Middle Ring home (${GUILD.residences.middle.price} gold): free nights, as good as a high-end inn.`, at: [470, 560], scene: 'Inn', data: { ring: 'middle' } },
+    { name: GUILD.residences.middle.name, blurb: `A Middle Ring home (${GUILD.residences.middle.price} gold at the Estate Office): free nights, as good as a high-end inn.`, at: [470, 560], scene: 'Inn', data: { ring: 'middle' } },
   ],
   inner: [
     { name: "Lord's Manor", blurb: 'Seat of the Lord of Arch City.', at: [765, 392] },
     { name: 'Central Government Office', blurb: 'Permits, taxes and the city\'s business.', at: [650, 470] },
     { name: 'Central Church', blurb: 'The great church at the heart of the city.', at: [885, 470] },
     { name: GUILD.inns.luxury.name, blurb: `Luxury inn: ${GUILD.inns.luxury.pricePerPerson} gold per person a night, and drinks. What A and S-rank adventurers expect.`, at: [765, 548], scene: 'Inn', data: { tier: 'luxury' } },
-    { name: GUILD.residences.inner.name, blurb: `An Inner Ring mansion (${GUILD.residences.inner.price} gold): free nights, as good as a luxury inn.`, at: [600, 560], scene: 'Inn', data: { ring: 'inner' } },
+    { name: GUILD.residences.inner.name, blurb: `An Inner Ring mansion (${GUILD.residences.inner.price} gold at the Estate Office): free nights, as good as a luxury inn.`, at: [600, 560], scene: 'Inn', data: { ring: 'inner' } },
   ],
 };
 
