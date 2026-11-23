@@ -92,7 +92,7 @@ describe('stats and content files', () => {
     expect(skillStatText(SKILLS.fireball)).toBe(
       'Effect: 120% M.Atk, a stack of Burn\nTags: Projectile, Debuff, Magical\nAP: Ends turn\nMana: 40\nCooldown: 2 turns');
     expect(skillStatText(SKILLS.ignite)).toBe(
-      'Effect: 20% M.Atk, a stack of Burn\nTags: Debuff, Magical\nAP: 1 AP\nMana: 20\nCooldown: 1 turn');
+      'Effect: 20% M.Atk, a stack of Burn\nTags: Debuff, Magical\nAP: 1 AP\nMana: 30\nCooldown: 1 turn');
     expect(skillStats(SKILLS.arcane_weapon)[0].value).toBe('Toggle: Weapon attacks +50% M.Atk per hit (10 mana each); 10 mana a turn while on');
     expect(skillStatText(SKILLS.sword_slash)).toBe('Effect: 100% P.Atk\nTags: Melee, Engage, Physical\nAP: Ends turn');
     expect(skillStats(SKILLS.engage)[0].value).toBe(SKILLS.engage.description);
@@ -1863,14 +1863,14 @@ describe('Elementalist rework: Ignite, Freeze, Fireball, Iceblast and Burn explo
     return { battle: new Battle(openMap(), [m, e], () => 0.99), m, e };
   };
 
-  it('Ignite: 1 AP, 20 mana, 1-turn cooldown, 20% M.Atk and one Burn stack; Freeze does the same with Slow', () => {
-    expect(SKILLS.ignite).toMatchObject({ ap: 1, mana: 20, cooldown: 1, level: 1, hits: [{ mAtk: 0.2 }] });
-    expect(SKILLS.freeze).toMatchObject({ ap: 1, mana: 20, cooldown: 1, level: 1, hits: [{ mAtk: 0.2 }] });
+  it('Ignite: 1 AP, 30 mana, 1-turn cooldown, 20% M.Atk and one Burn stack; Freeze does the same with Slow', () => {
+    expect(SKILLS.ignite).toMatchObject({ ap: 1, mana: 30, cooldown: 1, level: 1, hits: [{ mAtk: 0.2 }] });
+    expect(SKILLS.freeze).toMatchObject({ ap: 1, mana: 30, cooldown: 1, level: 1, hits: [{ mAtk: 0.2 }] });
     const { battle, m, e } = duelOf(['ignite', 'freeze']);
     battle.perform(m, 'ignite', { x: 4, y: 3 });
     expect(e.hp).toBe(500 - 17); // 24 M.Atk x 100/140
     expect(e.statuses.find((s) => s.id === 'burn')?.stacks).toBe(1);
-    expect(m).toMatchObject({ acted: false, mp: m.stats.mana - 20 }); // 1 AP: the turn goes on
+    expect(m).toMatchObject({ acted: false, mp: m.stats.mana - 30 }); // 1 AP: the turn goes on
     battle.perform(m, 'freeze', { x: 4, y: 3 });
     expect(e.statuses.find((s) => s.id === 'slow')?.stacks).toBe(1);
     expect(m.ap).toBe(0); // both AP spent
@@ -1885,14 +1885,14 @@ describe('Elementalist rework: Ignite, Freeze, Fireball, Iceblast and Burn explo
     expect(e.statuses.find((s) => s.id === 'slow')?.stacks).toBe(1);
   });
 
-  it('Burn stacks to 2; a 3rd stack Explodes: Burn is gone and the unit takes 20% of max Health, reduced by Defense', () => {
+  it('Burn stacks to 2; a 3rd stack Explodes: Burn is gone and the unit takes 15% of max Health, reduced by Defense', () => {
     const { battle, m, e } = duelOf(['ignite']);
     e.statuses.push({ id: 'burn', name: 'Burn', debuff: true, stacks: 2, amount: 0, turns: Infinity, tick: 'end' });
     const events = battle.perform(m, 'ignite', { x: 4, y: 3 });
     expect(events).toContainEqual(expect.objectContaining({ type: 'status', name: 'Explosion' }));
-    // 20% of 500 = 100, x 100/140 for Def 40 = 71; plus Ignite's own 17.
-    expect(events).toContainEqual(expect.objectContaining({ type: 'damage', cause: 'status', amount: 71 }));
-    expect(e.hp).toBe(500 - 17 - 71);
+    // 15% of 500 = 75, x 100/140 for Def 40 = 54; plus Ignite's own 17.
+    expect(events).toContainEqual(expect.objectContaining({ type: 'damage', cause: 'status', amount: 54 }));
+    expect(e.hp).toBe(500 - 17 - 54);
     expect(e.statuses.some((s) => s.id === 'burn' || s.id === 'explosion')).toBe(false);
     // Shields absorb it too.
     const b = duelOf(['ignite']);
@@ -1900,6 +1900,21 @@ describe('Elementalist rework: Ignite, Freeze, Fireball, Iceblast and Burn explo
     b.e.statuses.push({ id: 'shield', name: 'Shield', debuff: false, stacks: 0, amount: 999, turns: 2, tick: 'start' });
     b.battle.perform(b.m, 'ignite', { x: 4, y: 3 });
     expect(b.e.hp).toBe(500);
+  });
+
+  it('Wraiths attack with Spectral Touch; Chill Touch (Slow) has a 1-turn cooldown', () => {
+    expect(SKILLS.chill_touch.cooldown).toBe(1);
+    const w = makeUnit(makeEnemy('wraith', 12, makeRng(1)), 'enemy', { x: 4, y: 3 });
+    const h = makeUnit(hero(), 'player', { x: 3, y: 3 });
+    const battle = new Battle(openMap(), [h, w], () => 0.99);
+    expect(battle.basicAttack(w).id).toBe('spectral_touch');
+    battle.endPhase();
+    battle.perform(w, 'chill_touch', { x: 3, y: 3 });
+    expect(h.statuses.find((s) => s.id === 'slow')?.stacks).toBe(1);
+    battle.endPhase();
+    battle.endPhase();
+    expect(battle.isReady(w, 'chill_touch')).toBe(false); // next turn: Spectral Touch only
+    expect(battle.canUseSkill(w, 'spectral_touch')).toBe(true);
   });
 });
 

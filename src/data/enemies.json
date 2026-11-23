@@ -502,6 +502,7 @@
         "resist": 3.0
       },
       "skills": [
+        "spectral_touch",
         "chill_touch",
         "wail"
       ],

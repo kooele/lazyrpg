@@ -56,7 +56,7 @@
 
   "statuses": {
     "burn": { "name": "Burn", "debuff": true, "stacking": true, "decay": true, "maxStacks": 2, "overflow": { "status": "explosion", "turns": 1 }, "tick": "end", "damagePctMaxHpPerStack": 0.05, "mitigated": true, "description": "At the end of each turn: take 5% of max Health per stack (reduced by Defense, absorbed by shields), then lose a stack. Up to 2 stacks; a 3rd stack Explodes instead." },
-    "explosion": { "name": "Explosion", "debuff": true, "stacking": false, "tick": "start", "instantDamagePctMaxHp": 0.2, "mitigated": true, "description": "Burn's 3rd stack: removes Burn and deals 20% of max Health at once (reduced by Defense, absorbed by shields)." },
+    "explosion": { "name": "Explosion", "debuff": true, "stacking": false, "tick": "start", "instantDamagePctMaxHp": 0.15, "mitigated": true, "description": "Burn's 3rd stack: removes Burn and deals 15% of max Health at once (reduced by Defense, absorbed by shields)." },
     "arcane_weapon": { "name": "Arcane Weapon", "debuff": false, "stacking": false, "tick": "start", "toggle": true, "manaPerTurn": 10, "manaPerHit": 10, "weaponOnHit": { "mAtk": 0.5 }, "description": "Weapon attacks deal an extra 50% M.Atk (Magical) to each target hit, for 10 mana each. Costs 10 mana at the start of each turn. Switches off when mana runs out." },
     "frenzy": { "name": "Frenzy", "debuff": false, "stacking": false, "tick": "end", "statMods": { "pAtk": 20 }, "description": "+20 P.Atk." },
     "slow": { "name": "Slow", "debuff": true, "stacking": true, "decay": true, "maxStacks": 2, "overflow": { "status": "frozen", "turns": 1 }, "tick": "end", "statMods": { "movement": -4 }, "description": "-4 Movement (one grass tile) per stack; loses a stack at the end of each turn. Up to 2 stacks; a 3rd stack Freezes the unit instead." },
@@ -167,14 +167,14 @@
     "ignite": {
       "name": "Ignite", "description": "Set an enemy on fire.",
       "tags": ["debuff", "magical"],
-      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "ap": 1, "cooldown": 1, "mana": 20,
+      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "ap": 1, "cooldown": 1, "mana": 30,
       "hits": [{ "mAtk": 0.2 }],
       "applyStatus": [{ "status": "burn", "stacks": 1 }]
     },
     "freeze": {
       "name": "Freeze", "description": "Chill an enemy, slowing it down.",
       "tags": ["debuff", "magical"],
-      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "ap": 1, "cooldown": 1, "mana": 20,
+      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "ap": 1, "cooldown": 1, "mana": 30,
       "hits": [{ "mAtk": 0.2 }],
       "applyStatus": [{ "status": "slow", "stacks": 1 }]
     },
@@ -405,10 +405,16 @@
       "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 2,
       "hits": [{ "pAtk": 0.6 }], "applyStatus": [{ "status": "poison", "stacks": 2, "turns": 3 }]
     },
+    "spectral_touch": {
+      "name": "Spectral Touch", "description": "A cold, grasping touch on an adjacent enemy.",
+      "tags": ["monster", "melee", "engage", "magical"],
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 0,
+      "hits": [{ "mAtk": 1 }]
+    },
     "chill_touch": {
       "name": "Chill Touch", "description": "A freezing touch that drains warmth and slows an adjacent enemy.",
       "tags": ["monster", "melee", "engage", "magical", "debuff"],
-      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 0,
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 1,
       "hits": [{ "mAtk": 1 }], "applyStatus": [{ "status": "slow", "stacks": 1 }]
     },
     "wail": {
