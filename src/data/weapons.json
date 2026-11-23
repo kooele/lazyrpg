@@ -5,7 +5,7 @@
     "sword_shield": {
       "name": "Sword & Shield", "tag": "SW", "art": "sword_shield",
       "description": "Frontline weapon. High Defense; locks enemies in melee and shields itself.",
-      "statMultipliers": { "pAtk": 1.0, "mAtk": 0.8, "defense": 1.5 },
+      "statMultipliers": { "pAtk": 1.0, "mAtk": 0.8, "defense": 1.25 },
       "skills": ["sword_slash", "shield_up"]
     },
     "spear": {
@@ -17,14 +17,14 @@
     "bow": {
       "name": "Bow", "tag": "BW", "art": "bow",
       "description": "Ranged weapon with three modes:\n• Direct: 100% P.Atk, weapon range\n• Indirect: 70% P.Atk, 1.5x range,\n   arcs over cover\n• Melee: 80% P.Atk, 1.5 tiles\nSwitch Mode is a free action.",
-      "statMultipliers": { "pAtk": 0.8, "mAtk": 0.8 },
+      "statMultipliers": { "pAtk": 1.0, "mAtk": 0.8, "defense": 0.8 },
       "range": 5,
       "skills": ["bow_attack", "switch_mode"]
     },
     "staff": {
       "name": "Staff", "tag": "ST", "art": "staff",
       "description": "Magic focus. Strikes mix physical and magic power; pairs with Mage skills.",
-      "statMultipliers": { "pAtk": 0.5, "mAtk": 1.2 },
+      "statMultipliers": { "pAtk": 0.6, "mAtk": 1.2, "defense": 0.8 },
       "skills": ["empowered_strike", "magic_bolt"]
     }
   }

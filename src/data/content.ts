@@ -91,6 +91,16 @@ export function parseContent(skillsData: unknown, weaponsData: unknown): GameCon
         return { status: S.str(o.status, `${p}.overflow.status`), turns: S.num(o.turns, `${p}.overflow.turns`) };
       })(),
       frozen: S.bool(st.frozen, `${p}.frozen`) || undefined,
+      decay: S.bool(st.decay, `${p}.decay`) || undefined,
+      mitigated: S.bool(st.mitigated, `${p}.mitigated`) || undefined,
+      instantDamagePctMaxHp: S.optNum(st.instantDamagePctMaxHp, `${p}.instantDamagePctMaxHp`),
+      toggle: S.bool(st.toggle, `${p}.toggle`) || undefined,
+      manaPerTurn: S.optNum(st.manaPerTurn, `${p}.manaPerTurn`),
+      manaPerHit: S.optNum(st.manaPerHit, `${p}.manaPerHit`),
+      weaponOnHit: st.weaponOnHit === undefined ? undefined : (() => {
+        const o = S.obj(st.weaponOnHit, `${p}.weaponOnHit`);
+        return { pAtk: S.optNum(o.pAtk, `${p}.weaponOnHit.pAtk`), mAtk: S.optNum(o.mAtk, `${p}.weaponOnHit.mAtk`) };
+      })(),
       casterScaled: st.casterScaled === undefined ? undefined : (() => {
         const o = S.obj(st.casterScaled, `${p}.casterScaled`);
         return { stat: S.oneOf(o.stat, `${p}.casterScaled.stat`, STAT_KEYS), pAtk: S.optNum(o.pAtk, `${p}.casterScaled.pAtk`), mAtk: S.optNum(o.mAtk, `${p}.casterScaled.mAtk`) };
@@ -131,7 +141,9 @@ export function parseContent(skillsData: unknown, weaponsData: unknown): GameCon
       const o = S.obj(a, `${path}[${i}]`);
       const status = S.str(o.status, `${path}[${i}].status`);
       if (!statuses[status]) fail('skills.json', `${path}[${i}].status`, `"${status}" is not defined in "statuses"`);
-      return { status, turns: S.num(o.turns, `${path}[${i}].turns`), stacks: S.optNum(o.stacks, `${path}[${i}].stacks`) };
+      // Decaying statuses (Burn, Slow) last by stacks, not turns.
+      const turns = statuses[status].decay && o.turns === undefined ? 0 : S.num(o.turns, `${path}[${i}].turns`);
+      return { status, turns, stacks: S.optNum(o.stacks, `${path}[${i}].stacks`) };
     });
     let cone: ConeDef | undefined;
     if (r.cone !== undefined) {
@@ -195,6 +207,11 @@ export function parseContent(skillsData: unknown, weaponsData: unknown): GameCon
       weaponRange: S.optNum(r.weaponRange, `${p}.weaponRange`),
       basicMode: r.basicMode === undefined ? undefined : S.str(r.basicMode, `${p}.basicMode`),
       switchMode: S.bool(r.switchMode, `${p}.switchMode`) || undefined,
+      toggleStatus: r.toggleStatus === undefined ? undefined : (() => {
+        const st = S.str(r.toggleStatus, `${p}.toggleStatus`);
+        if (!statuses[st]?.toggle) fail('skills.json', `${p}.toggleStatus`, `"${st}" must be a status with "toggle": true`);
+        return st;
+      })(),
     };
     if (skill.basicAttack !== undefined && (skill.basicAttack < 1 || !Number.isInteger(skill.basicAttack))) fail('skills.json', `${p}.basicAttack`, 'must be a whole number of 1 or more');
     if (skill.basicAttackDamage && skill.basicAttackDamage.length !== skill.basicAttack) fail('skills.json', `${p}.basicAttackDamage`, 'needs one multiplier per basic attack (and "basicAttack")');
@@ -338,12 +355,25 @@ function damageText(h: DamagePart): string {
 }
 
 /** What a skill does, with its numbers: "100% M.Atk, Burn x1 (2 turns)". Falls back to the description. */
+/**
+ * An applied status: "a stack of Burn" / "2 stacks of Burn" for decaying ones (they lose a stack a turn),
+ * "Blinded (1 turn)" for the rest.
+ */
+function statusText(a: { status: string; turns: number; stacks?: number }): string {
+  const st = STATUSES[a.status];
+  if (st.decay) {
+    const n = a.stacks ?? 1;
+    return n === 1 ? `a stack of ${st.name}` : `${n} stacks of ${st.name}`;
+  }
+  return `${st.name}${a.stacks && a.stacks > 1 ? ` x${a.stacks}` : ''} (${turns(a.turns)})`;
+}
+
 export function skillEffect(s: SkillDef): string {
   if (s.modes) return s.description;
   if (s.zone) {
     const z = s.zone;
     const side = 2 * Math.floor(z.radius) + 1;
-    const hit = [damageText(z.hit), ...z.applyStatus.map((a) => `${STATUSES[a.status].name}${a.stacks ? ` x${a.stacks}` : ''} (${turns(a.turns)})`)].join(', ');
+    const hit = [damageText(z.hit), ...z.applyStatus.map(statusText)].join(', ');
     return `${side}x${side} zone for ${turns(z.turns)}. Each tile entered: ${hit}. Ending a turn inside: ${z.endTurnHits} hits`;
   }
   const parts: string[] = [];
@@ -365,7 +395,7 @@ export function skillEffect(s: SkillDef): string {
     if (sc) {
       const from = [sc.pAtk ? `${pct(sc.pAtk)} ${STAT_INFO.pAtk.short}` : '', sc.mAtk ? `${pct(sc.mAtk)} ${STAT_INFO.mAtk.short}` : ''].filter(Boolean).join(' + ');
       parts.push(`${STAT_INFO[sc.stat].name} +${from} (${turns(a.turns)})`);
-    } else parts.push(`${st.name}${a.stacks ? ` x${a.stacks}` : ''} (${turns(a.turns)})`);
+    } else parts.push(statusText(a));
   }
   for (const a of s.selfStatus ?? []) parts.push(`You: ${STATUSES[a.status].name} (${turns(a.turns)})`);
   if (s.recoilIfSurvives) {
@@ -375,6 +405,11 @@ export function skillEffect(s: SkillDef): string {
   if (s.knockback) parts.push(`Knockback ${tiles(s.knockback)}`);
   if (s.engageWithin !== undefined) parts.push(s.engageWithin <= 1.5 ? 'Engages an adjacent target' : `Engages a target within ${tiles(s.engageWithin)}`);
   if (s.cleanse) parts.push('Removes all debuffs');
+  if (s.toggleStatus) {
+    const st = STATUSES[s.toggleStatus];
+    const hit = st.weaponOnHit ? `Weapon attacks +${damageText(st.weaponOnHit)} per hit${st.manaPerHit ? ` (${st.manaPerHit} mana each)` : ''}` : st.name;
+    parts.push(`Toggle: ${hit}${st.manaPerTurn ? `; ${st.manaPerTurn} mana a turn while on` : ''}`);
+  }
   if (s.teleport) parts.push(s.charge ? 'Teleport next to the target' : 'Teleport');
   else if (s.charge) parts.push('Dash next to the target');
   return parts.length ? parts.join(', ') : s.description;

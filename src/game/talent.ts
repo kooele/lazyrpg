@@ -49,6 +49,23 @@ export function overallTalent(c: Pick<Character, 'talents'>, cfg: StatConfig = S
   return best;
 }
 
+/**
+ * The overall talent with a + or - for a more precise reading: each grade's band (halfway to the next grade either
+ * side) is split in thirds, so an average just above a grade reads "C+" and just below the next one "B-".
+ * S can't go above S (+) and F can't go below F (-), since no stat grows faster or slower than those.
+ */
+export function overallTalentLabel(c: Pick<Character, 'talents'>, cfg: StatConfig = STAT_CONFIG): string {
+  const g = overallTalent(c, cfg);
+  const diff = talentScore(c, cfg) - growthRate(g, cfg);
+  const i = TALENT_GRADES.indexOf(g);
+  // The neighboring grade on the side the average leans to (TALENT_GRADES runs worst first).
+  const next = diff > 0 ? TALENT_GRADES[i + 1] : TALENT_GRADES[i - 1];
+  if (!next || Math.abs(diff) < 1e-9) return g;
+  const gap = Math.abs(growthRate(next, cfg) - growthRate(g, cfg));
+  if (Math.abs(diff) < gap / 6 - 1e-9) return g;
+  return `${g}${diff > 0 ? '+' : '-'}`;
+}
+
 /** Text color for a grade. */
 export const TALENT_COLORS: Record<Talent, string> = {
   S: '#ff9f43', A: '#e0b44c', B: '#6fdc8c', C: '#f4ecd8', D: '#9aa3bd', F: '#ff6b6b',

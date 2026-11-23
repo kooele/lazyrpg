@@ -536,7 +536,9 @@ export class BattleScene extends Phaser.Scene {
       const { x, y } = this.slotRect(i);
       const cd = u && id ? u.cooldowns[id] ?? 0 : 0;
       const usable = !!(u && id && interactive && b.canUseSkill(u, id) && cd <= 0);
-      const selected = !!(id && this.mode === 'target' && this.action?.id === id);
+      // A toggle that's on (Arcane Weapon) stays highlighted.
+      const toggledOn = !!(u && s?.toggleStatus && b.isToggledOn(u, s.toggleStatus));
+      const selected = !!(id && this.mode === 'target' && this.action?.id === id) || toggledOn;
       const bg = this.add.rectangle(x, y, SLOT_W, SLOT_H, selected ? 0x4a3d1c : s ? (usable ? COLORS.panelLight : 0x161a28) : 0x10131d)
         .setOrigin(0).setStrokeStyle(2, selected ? COLORS.accent : usable ? COLORS.border : 0x262c40);
       B.add(bg);
@@ -545,8 +547,10 @@ export class BattleScene extends Phaser.Scene {
         B.add(text(this, x + SLOT_W / 2, y + 30, s.name, {
           fontSize: '11px', color: usable ? COLORS.text : '#5d6480', align: 'center', wordWrap: { width: SLOT_W - 6 },
         }).setOrigin(0.5));
-        const cost = [isFree(s) ? 'free' : s.ap === 'end' ? '' : `${s.ap}AP`, s.mana ? `${s.mana}MP` : ''].filter(Boolean).join(' ');
-        if (cost) B.add(text(this, x + SLOT_W / 2, y + SLOT_H - 4, cost, { fontSize: '10px', color: u.mp < s.mana ? COLORS.bad : COLORS.dim }).setOrigin(0.5, 1));
+        // AP along the bottom ("Ends Turn" for turn-ending skills), mana at the top between the hotkey and the cooldown.
+        const ap = toggledOn ? 'ON · free' : isFree(s) ? 'free' : s.ap === 'end' ? 'Ends Turn' : `${s.ap}AP`;
+        B.add(text(this, x + SLOT_W / 2, y + SLOT_H - 4, ap, { fontSize: '10px', color: COLORS.dim }).setOrigin(0.5, 1));
+        if (s.mana && !toggledOn) B.add(text(this, x + SLOT_W / 2, y + 3, `${s.mana}MP`, { fontSize: '10px', color: u.mp < s.mana ? COLORS.bad : COLORS.dim }).setOrigin(0.5, 0));
         if (cd > 0) B.add(text(this, x + SLOT_W - 5, y + 2, String(cd), { fontSize: '13px', color: COLORS.bad, fontStyle: 'bold' }).setOrigin(1, 0));
       }
       bg.setInteractive({ useHandCursor: !!s });
@@ -669,7 +673,9 @@ export class BattleScene extends Phaser.Scene {
     const b = this.battle;
     const shield = b.shieldOf(u);
     const terrainDef = TERRAIN[b.map.tiles[u.y][u.x]].defense;
-    const effects = u.statuses.map((s) => (s.id === 'shield' ? `Shield ${s.amount} (${s.turns}t)` : `${s.name}${s.stacks > 1 ? ` x${s.stacks}` : ''} (${s.turns}t)`));
+    const effects = u.statuses.map((s) => (s.id === 'shield' ? `Shield ${s.amount} (${s.turns}t)`
+      : STATUSES[s.id]?.decay ? `${s.name} x${s.stacks}` // loses a stack each turn
+        : `${s.name}${s.stacks > 1 ? ` x${s.stacks}` : ''} (${Number.isFinite(s.turns) ? `${s.turns}t` : 'on'})`));
     if (u.overwatch) effects.push(`Watching: ${SKILLS[u.overwatch.skillId].name}`);
     const opp = b.opponentOf(u);
     if (opp) effects.push(`Engaged with ${opp.character.name}`);
@@ -769,8 +775,8 @@ export class BattleScene extends Phaser.Scene {
     this.previewAction = null;
     this.threat = null;
     this.mode = 'target';
-    // Switch Mode needs no target: do it right away.
-    if (this.action.switchMode) {
+    // Switch Mode and toggles (Arcane Weapon) need no target: do it right away.
+    if (this.action.switchMode || this.action.toggleStatus) {
       void this.useSkill(u, this.action, { x: u.x, y: u.y });
       return;
     }
@@ -1225,6 +1231,12 @@ export class BattleScene extends Phaser.Scene {
     if (e.type === 'mode') {
       summary.push(`switches to ${e.name} mode`);
       this.floatText(this.battle.unit(e.target), e.name, '#e0b44c', index * 120);
+      return;
+    }
+    if (e.type === 'toggle') {
+      const label = `${e.name} ${e.on ? 'on' : 'off'}`;
+      summary.push(e.reason === 'mana' ? `${e.name} fades (out of mana)` : `${e.name} ${e.on ? 'on' : 'off'}`);
+      this.floatText(this.battle.unit(e.target), label, '#c18cff', index * 120);
       return;
     }
     if (e.type === 'disengage') {

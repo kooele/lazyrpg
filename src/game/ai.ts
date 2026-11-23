@@ -113,8 +113,12 @@ function scoreSkill(battle: Battle, u: Unit, skill: SkillDef, from: Point, aim: 
       if (!friendly && def.debuff) {
         // Worth less against targets likely to resist it.
         const lands = 1 - battle.resistChance(t) / 100;
-        score += lands * t.stats.health * (def.damagePctMaxHpPerStack ?? 0) * (a.stacks ?? 1) * a.turns;
-        if (def.statMods || def.statPct) score += lands * 15 * a.turns;
+        // Decaying statuses (Burn, Slow) lose a stack a turn: n stacks give n + (n-1) + ... stack-turns.
+        const n = a.stacks ?? 1;
+        const stackTurns = def.decay ? (n * (n + 1)) / 2 : n * a.turns;
+        const lasts = def.decay ? n : a.turns;
+        score += lands * t.stats.health * (def.damagePctMaxHpPerStack ?? 0) * stackTurns;
+        if (def.statMods || def.statPct) score += lands * 15 * lasts;
       } else if (friendly && !def.debuff && !t.statuses.some((x) => x.id === a.status)) {
         // Buffs (e.g. Howl's Frenzy) are worth it when a fight is close.
         const fightNear = battle.living().some((f) => f.team !== u.team && dist(f, t) <= 6);
@@ -138,7 +142,11 @@ function scoreSkill(battle: Battle, u: Unit, skill: SkillDef, from: Point, aim: 
       }
       for (const s of t.statuses) {
         if (!s.debuff) continue;
-        score += t.stats.health * (STATUSES[s.id]?.damagePctMaxHpPerStack ?? 0) * s.stacks * s.turns + 15 * s.turns;
+        const def = STATUSES[s.id];
+        // Decaying statuses (Burn, Slow) last as many turns as they have stacks.
+        const lasts = def?.decay ? s.stacks : s.turns;
+        const stackTurns = def?.decay ? (s.stacks * (s.stacks + 1)) / 2 : s.stacks * s.turns;
+        score += t.stats.health * (def?.damagePctMaxHpPerStack ?? 0) * stackTurns + 15 * lasts;
       }
     }
   }
@@ -308,12 +316,28 @@ export function shouldSurrender(battle: Battle, u: Unit): boolean {
 }
 
 /**
+ * Could `u` get out of its opponent's reach this turn if it broke away? Not when it can't move
+ * (Frozen, or its movement AP is spent) or every tile it could reach is still next to the opponent.
+ * Breaking away then only hands the opponent a free attack, and the unit ends up fighting it again.
+ */
+function canGetAway(battle: Battle, u: Unit, opp: Unit): boolean {
+  if (u.moved || u.ap < 1 || battle.isFrozen(u)) return false;
+  for (const k of battle.reachable(u).keys()) {
+    const [x, y] = k.split(',').map(Number);
+    if (dist({ x, y }, opp) > 1.5) return true;
+  }
+  return false;
+}
+
+/**
  * Should an engaged unit break away? Ranged fighters do, and so does anyone badly
- * hurt, as long as the opponent's free opportunity attack won't finish them off.
+ * hurt, as long as the opponent's free opportunity attack won't finish them off
+ * and they can actually get away (see canGetAway).
  */
 export function shouldDisengage(battle: Battle, u: Unit): boolean {
   const opp = battle.opponentOf(u);
   if (!opp || !battle.canAct(u) || aiTypeOf(u) === 'evil') return false;
+  if (!canGetAway(battle, u, opp)) return false;
   // A bow counts as ranged even while engaged forces it into Melee mode.
   const raw = SKILLS[battle.skillIds(u)[0]];
   const ranged = !!raw?.modes?.some((m) => !hasTag(SKILLS[m], 'melee')) || battle.basicAttack(u).range > 1.5 || battle.basicAttack(u).los !== undefined;

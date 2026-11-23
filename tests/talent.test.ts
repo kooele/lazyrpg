@@ -6,7 +6,7 @@ import { companionDemand, mercenaryRates, slavePrice, talentPriceFactor } from '
 import { newCampaign } from '../src/game/city';
 import { randomAdventurer } from '../src/game/people';
 import { parseSave, serializeSave } from '../src/game/save';
-import { overallTalent, rollTalent, rollTalents, talentStats } from '../src/game/talent';
+import { overallTalent, overallTalentLabel, rollTalent, rollTalents, talentStats } from '../src/game/talent';
 
 const all = (g: Talent) => Object.fromEntries(talentStats().map((k) => [k, g]));
 
@@ -53,6 +53,21 @@ describe('talent', () => {
     expect(overallTalent({})).toBe('C');
     expect(overallTalent({ talents: all('S') })).toBe('S');
     expect(overallTalent({ talents: { health: 'S', mana: 'C', pAtk: 'S', mAtk: 'C', defense: 'C', resist: 'C' } })).toBe('B'); // 1.2
+  });
+
+  it('the overall label adds + or - within a grade: A+ just under S, S- just under all-S', () => {
+    const t = (...g: Talent[]) => ({ talents: { health: g[0], mana: g[1], pAtk: g[2], mAtk: g[3], defense: g[4], resist: g[5] } });
+    expect(overallTalentLabel({})).toBe('C');
+    expect(overallTalentLabel({ talents: all('S') })).toBe('S'); // nothing above S
+    expect(overallTalentLabel({ talents: all('F') })).toBe('F'); // nothing below F
+    expect(overallTalentLabel(t('S', 'S', 'S', 'S', 'S', 'A'))).toBe('S-'); // 1.567
+    expect(overallTalentLabel(t('A', 'A', 'A', 'A', 'S', 'S'))).toBe('A+'); // 1.467
+    expect(overallTalentLabel(t('B', 'C', 'C', 'C', 'C', 'C'))).toBe('C+'); // 1.033
+    expect(overallTalentLabel(t('D', 'C', 'C', 'C', 'C', 'C'))).toBe('C-'); // 0.967
+    expect(overallTalentLabel(t('A', 'C', 'C', 'C', 'C', 'D'))).toBe('C+'); // 1.033
+    expect(overallTalentLabel(t('B', 'B', 'B', 'C', 'C', 'C'))).toBe('C+'); // 1.1: halfway, rounds to C
+    expect(overallTalentLabel(t('B', 'B', 'B', 'B', 'C', 'C'))).toBe('B-'); // 1.133
+    expect(overallTalentLabel(t('B', 'B', 'B', 'B', 'B', 'B'))).toBe('B');
   });
 
   it('talented adventurers cost more', () => {
