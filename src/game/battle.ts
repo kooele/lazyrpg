@@ -1615,11 +1615,6 @@ export function makeEnemy(type: string, level: number, rng: Rng): Character {
 }
 
 /**
- * An encounter for `stage`: random picks from the types that fit the stage until the
- * threat budget (threatPerAdventurer x party size) is spent. Weak types come in bigger packs.
- * Past the last level range, the budget keeps growing by 25% of a party per stage.
- */
-/**
  * The foes of an encounter at `stage`: one main type whose level range fits, plus the other fitting types
  * that fight the same way (so wolves come with wolves and beasts, bandits with other humans). Main type first.
  */
@@ -1629,15 +1624,20 @@ export function pickFoes(stage: number, rng: Rng): string[] {
   return [main, ...fit.filter((t) => t !== main && ENEMIES[t].ai === ENEMIES[main].ai)];
 }
 
-export function generateEnemies(stage: number, partySize: number, rng: Rng, mobMultiplier = 1, foes?: string[]): Character[] {
+/**
+ * An encounter for `stage`: random picks from the foes (see pickFoes) until the threat budget
+ * (encounter.threat x mobMultiplier, the quest's threat) is spent. Weak types come in bigger packs.
+ * The budget never depends on the party: a lone adventurer faces as many enemies as a full party.
+ * Past the last level range, the budget keeps growing by 25% per stage.
+ */
+export function generateEnemies(stage: number, rng: Rng, mobMultiplier = 1, foes?: string[]): Character[] {
   const fitting = enemyTypesForStage(stage);
   const want = foes?.length ? foes : pickFoes(stage, rng);
   const themed = fitting.filter((t) => want.includes(t.type));
   const options = themed.length ? themed : fitting;
   const top = Math.max(...Object.values(ENEMIES).map((d) => d.levels[1]));
-  const party = Math.max(1, partySize);
   // Quick Battle's difficulty slider multiplies the budget (and the cap on how many come).
-  const budget = party * ENCOUNTER.threatPerAdventurer * (1 + Math.max(0, stage - top) * 0.25) * mobMultiplier;
+  const budget = ENCOUNTER.threat * (1 + Math.max(0, stage - top) * 0.25) * mobMultiplier;
   const cap = Math.round(ENCOUNTER.maxEnemies * mobMultiplier);
   const out: Character[] = [];
   let spent = 0;

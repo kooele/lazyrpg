@@ -782,7 +782,7 @@ describe('enemies', () => {
       const foes = pickFoes(10, makeRng(seed));
       const ai = ENEMIES[foes[0]].ai;
       expect(foes.every((f) => ENEMIES[f].ai === ai)).toBe(true);
-      const enemies = generateEnemies(10, 5, makeRng(seed), 1, foes);
+      const enemies = generateEnemies(10, makeRng(seed), 1, foes);
       expect(enemies.every((e) => foes.includes(e.enemyType!))).toBe(true);
     }
   });
@@ -838,13 +838,18 @@ describe('enemies', () => {
   });
 
   it('weak types come in bigger packs (threat budget)', () => {
-    const rats = generateEnemies(1, 4, makeRng(3));
+    const rats = generateEnemies(1, makeRng(3));
     expect(rats).toHaveLength(8); // 0.5 threat each, budget 4
     expect(rats.every((e) => e.enemyType === 'rat' && e.level === 1)).toBe(true);
-    const wolves = generateEnemies(4, 4, makeRng(3), 1, ['wolf']);
+    const wolves = generateEnemies(4, makeRng(3), 1, ['wolf']);
     expect(wolves).toHaveLength(4);
-    expect(generateEnemies(4, 4, makeRng(3), 1, ['goblin'])).toHaveLength(7); // 0.6 threat each
-    expect(generateEnemies(1, 1, makeRng(3))).toHaveLength(2);
+    expect(generateEnemies(4, makeRng(3), 1, ['goblin'])).toHaveLength(7); // 0.6 threat each
+  });
+
+  it("the encounter doesn't depend on the party: an easy bandit quest still brings a gang", () => {
+    // The lowest quest threat (0.8) used to mean a single bandit for a solo adventurer.
+    const bandits = generateEnemies(5, makeRng(3), 0.8, ['bandit']);
+    expect(bandits.length).toBe(Math.ceil(4 * 0.8)); // threat 1 each, budget 4 x 0.8
   });
 
   it('enemies.json is validated with precise errors', () => {
@@ -1169,7 +1174,7 @@ describe('battles', () => {
       const rng = makeRng(seed);
       const map = generateMap(rng);
       const party = randomParty(4, 1 + (seed % 3), rng);
-      const foes = generateEnemies(1 + (seed % 3), 4, rng);
+      const foes = generateEnemies(1 + (seed % 3), rng);
       const pd = deploymentTiles(map, 'player', party.length);
       const ed = deploymentTiles(map, 'enemy', foes.length);
       const battle = new Battle(map, [
@@ -1903,8 +1908,8 @@ describe('bow mode memory, engagement and enemy archers', () => {
 
 describe('quick battle difficulty', () => {
   it('the enemy count multiplier scales the encounter, and big ones deploy further in', () => {
-    const base = generateEnemies(1, 4, makeRng(3));
-    const five = generateEnemies(1, 4, makeRng(3), 5);
+    const base = generateEnemies(1, makeRng(3));
+    const five = generateEnemies(1, makeRng(3), 5);
     expect(five.length).toBeGreaterThanOrEqual(base.length * 4);
     expect(five.length).toBeLessThanOrEqual(Math.round(8 * 5));
     const map = generateMap(makeRng(3));

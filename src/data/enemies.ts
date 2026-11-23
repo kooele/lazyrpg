@@ -4,7 +4,8 @@ import { SKILLS, WEAPONS } from './content';
 import { BODY_MODELS, ENEMY_AIS, ENEMY_MODELS, STAT_KEYS, type EnemyAi, type EnemyDef, type MonsterKind, type Stats, type UnitModel } from './types';
 
 export interface EncounterRules {
-  threatPerAdventurer: number;
+  /** Threat budget of one encounter (before the quest's threat multiplier); never depends on the party. */
+  threat: number;
   maxEnemies: number;
 }
 
@@ -26,7 +27,7 @@ export function parseEnemies(data: unknown): { enemies: Record<string, EnemyDef>
   const root = obj(data, '(root)');
   const enc = obj(root.encounter ?? {}, 'encounter');
   const encounter: EncounterRules = {
-    threatPerAdventurer: num(enc.threatPerAdventurer ?? 1, 'encounter.threatPerAdventurer'),
+    threat: num(enc.threat ?? 4, 'encounter.threat'),
     maxEnemies: num(enc.maxEnemies ?? 8, 'encounter.maxEnemies'),
   };
   const enemies: Record<string, EnemyDef> = {};
