@@ -1536,15 +1536,16 @@ export class Battle {
 
   /** End the current team's turn; returns events from the start of the next turn (e.g. Burn). */
   endPhase(): BattleEvent[] {
-    // Units ending their turn inside a zone are hit (Firestorm: twice).
+    // Effects that last "through" the unit's turn (Slow, Frozen) count down first, so the end-of-turn zone hits
+    // below (and anything they freeze) carry over into the unit's next turn instead of wearing off at once.
     const events: BattleEvent[] = [];
-    for (const u of this.living(this.phase)) {
-      for (const z of this.zonesAt(u)) events.push(...this.zoneHit(z, u, z.def.endTurnHits));
-    }
-    // Effects that last "through" the unit's turn (e.g. Slow) count down now.
     for (const u of this.living(this.phase)) {
       for (const s of u.statuses) if (s.tick === 'end') this.tickStatus(s);
       u.statuses = u.statuses.filter((s) => this.stillActive(s));
+    }
+    // Units ending their turn inside a zone are hit (Firestorm: twice).
+    for (const u of this.living(this.phase)) {
+      for (const z of this.zonesAt(u)) events.push(...this.zoneHit(z, u, z.def.endTurnHits));
     }
     const next: Team = this.phase === 'player' ? 'enemy' : 'player';
     if (next === 'player') this.round += 1;

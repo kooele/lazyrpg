@@ -1707,15 +1707,34 @@ describe('zones (Firestorm, Blizzard), Slow stacks and Frozen', () => {
     expect(e.statuses.find((st) => st.id === 'slow')).toBeUndefined(); // the stacks became Frozen
     expect(result.interrupted).toBe(true);
     expect(battle.canMove(e)).toBe(false);
-    // Ending the turn inside: 2 more hits (2 new Slow stacks), and one drops off as the turn ends.
+    // Frozen lasts one turn: this one. Ending the turn inside: 2 more hits (2 new Slow stacks) that carry over.
     const end = battle.endPhase();
     expect(end.filter((ev) => ev.type === 'zoneHit')).toHaveLength(2);
-    expect(e.statuses.find((st) => st.id === 'slow')?.stacks).toBe(1);
-    // Next own turn: still Frozen, movement AP gone.
+    expect(battle.isFrozen(e)).toBe(false);
+    expect(e.statuses.find((st) => st.id === 'slow')?.stacks).toBe(2);
+    // Next own turn: free to move again, slowed by both stacks (one drops off as it ends).
     battle.endPhase();
+    expect(e.ap).toBe(2);
+    expect(battle.canMove(e)).toBe(true);
+    expect(battle.stat(e, 'movement')).toBe(16 - 8);
+  });
+
+  it('a 3rd Slow stack from a skill Freezes the target for exactly its next turn', () => {
+    const m = makeUnit(hero('staff', ['freeze']), 'player', { x: 1, y: 3 });
+    const e = makeUnit(hero('bow'), 'enemy', { x: 4, y: 3 });
+    const battle = new Battle(openMap(), [m, e], () => 0.99); // never resisted
+    e.statuses.push({ id: 'slow', name: 'Slow', debuff: true, stacks: 2, amount: 0, turns: Infinity, tick: 'end' });
+    battle.perform(m, 'freeze', { x: 4, y: 3 });
+    expect(e.statuses.map((st) => [st.id, st.turns])).toEqual([['frozen', 1]]);
+    battle.endPhase(); // the enemy's turn: Frozen, movement AP gone
     expect(battle.isFrozen(e)).toBe(true);
     expect(e.ap).toBe(1);
     expect(battle.canMove(e)).toBe(false);
+    battle.endPhase(); // it wears off as that turn ends
+    expect(battle.isFrozen(e)).toBe(false);
+    battle.endPhase(); // the enemy's next turn: back to normal
+    expect(e.ap).toBe(2);
+    expect(battle.canMove(e)).toBe(true);
   });
 
   it("Firestorm: ending a turn inside hits twice (2 Burn stacks); it lasts 2 of the caster's turns", () => {
