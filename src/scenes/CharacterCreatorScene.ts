@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import {
-  BASIC_SKILLS, NAME_MAX_LENGTH, PALETTE, isSupport, SKILLS, SKILL_TABS, SKILL_TREES, WEAPONS, XP_PER_LEVEL, resolveWeaponSkill, skillStatText,
+  NAME_MAX_LENGTH, PALETTE, isSupport, SKILLS, SKILL_TABS, SKILL_TREES, WEAPONS, XP_PER_LEVEL, resolveWeaponSkill, skillStatText,
 } from '../data/content';
 import { STAT_CONFIG, visibleStatKeys } from '../data/stats';
 import {
@@ -260,8 +260,6 @@ export class CharacterCreatorScene extends Phaser.Scene {
       items.push({ obj: c, height: Math.max(28 + stats.height, mini.size + 6) });
     };
     w.skills.forEach((sid, i) => skillItem(sid, i === 0 ? '  (basic attack)' : ''));
-    items.push({ obj: this.add.container(0, 0, [text(this, 0, 4, 'Basic abilities (every Adventurer)', { fontSize: '12px', color: COLORS.dim })]), height: 24 });
-    BASIC_SKILLS.forEach((sid) => skillItem(sid));
     this.weaponList?.destroy();
     this.weaponList = new ScrollList(this, 342, 182, 272, 358, 10);
     this.weaponList.setItems(items, 'top');
@@ -274,8 +272,7 @@ export class CharacterCreatorScene extends Phaser.Scene {
     // ---- Right: skill trees (hover a skill for details) --------------------------------
     const points = skillPoints(d);
     const free = freePoints(d);
-    L.add(text(this, 636, 66, `Skill points  ${pointsUsed(d)}/${points}${free > 0 ? `  (${free} to spend)` : ''}`, { color: free > 0 ? COLORS.gold : COLORS.dim }));
-    L.add(text(this, 936, 68, '+1 every level', { color: COLORS.dim, fontSize: '12px' }).setOrigin(1, 0));
+    L.add(text(this, 636, 66, `Skill points  ${pointsUsed(d)}/${points}`, { color: free > 0 ? COLORS.gold : COLORS.dim }));
     [...SKILL_TABS, { id: 'body', name: 'Body' }].forEach((t, i) => {
       L.add(button(this, 636 + i * 102, 90, 96, 30, t.name, () => {
         this.tab = t.id;
@@ -298,8 +295,8 @@ export class CharacterCreatorScene extends Phaser.Scene {
     const trees = SKILL_TREES.filter((t) => t.tab === this.tab);
     const tree = trees.find((t) => t.id === this.subTab[this.tab]) ?? trees[0];
     if (!tree) return;
-    // Subclass tabs, indented under the class tabs.
-    const subX = 648, subW = 288, gap = 4;
+    // Subclass tabs, lined up with the class tabs above (same edges and gap).
+    const subX = 636, subW = 300, gap = 6;
     const w = (subW - gap * (trees.length - 1)) / trees.length;
     trees.forEach((t, i) => {
       const learned = t.skills.filter((sid) => d.skillIds.includes(sid)).length;
@@ -317,7 +314,7 @@ export class CharacterCreatorScene extends Phaser.Scene {
       const s = SKILLS[sid];
       const on = d.skillIds.includes(sid);
       const locked = !isUnlocked(d, sid);
-      const label = locked ? `${s.name}  (needs Lv ${s.level})` : `${on ? '✔ ' : ''}${s.name}${s.level > 1 ? ` (Lv ${s.level})` : ''}`;
+      const label = locked ? `${s.name}  (Lv ${s.level} Req.)` : `${on ? '✔ ' : ''}${s.name}${s.level > 1 ? ` (Lv ${s.level})` : ''}`;
       L.add(button(this, subX, ty, subW, rowH - 4, label, () => this.toggleSkill(sid), {
         selected: on, enabled: !locked, fontSize: rowH < 30 ? 13 : 14, onHover: () => this.showSkill(s), onOut: () => this.tooltip.hide(),
       }));
