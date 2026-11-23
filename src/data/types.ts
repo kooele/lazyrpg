@@ -359,7 +359,17 @@ export type Contract =
     /** How demanding they are (1 = average). */
     greed: number;
   }
-  | { type: 'slave'; price: number; origin: 'market' | 'prisoner' };
+  | {
+    type: 'slave';
+    price: number;
+    origin: 'market' | 'prisoner';
+    /** 0-100, like a companion's: moves with how they're treated, and drives Obedience. */
+    relationship: number;
+    /** 0-100. Below 100, battle stats drop (see combatPenalty). */
+    obedience: number;
+    /** Day they were last punished (once a day). */
+    punishedDay?: number;
+  };
 
 export type MemberType = Contract['type'];
 

@@ -4,8 +4,8 @@ import { ACTIVITIES, GUILD } from '../data/guild';
 import type { Character } from '../data/types';
 import { bodyPoints, deriveStats, freePoints, skillPoints } from '../game/character';
 import { lineupMembers, scheduledMembers, sellSlave, toggleLineup } from '../game/city';
-import { ACTIVITY_INFO, activityOf, healthOf, injuryPenalty, isInjured, moraleOf } from '../game/condition';
-import { daysLeft, isCompanion, leaveParty, weeklyCost } from '../game/contracts';
+import { ACTIVITY_INFO, activityOf, combatPenalty, healthOf, injuryPenalty, isInjured, moraleOf, moralePenalty, obediencePenalty } from '../game/condition';
+import { daysLeft, isCompanion, isSlave, leaveParty, punishSlave, weeklyCost } from '../game/contracts';
 import { adventurerRank } from '../game/guild';
 import { markDirty, requireState, session } from '../game/session';
 import { MEMBER_COLOR, MEMBER_LABEL, cityHeader, memberStatus } from '../ui/hud';
@@ -58,7 +58,9 @@ export class PartyScene extends Phaser.Scene {
       row.add(text(this, 58, 6, `${c.name}  Lv ${c.level} (${adventurerRank(c.level)})`, { fontSize: '15px' }));
       row.add(text(this, 58, 26, memberStatus(state, c), { fontSize: '11px', color: MEMBER_COLOR[c.contract?.type ?? 'main'], wordWrap: { width: 200 } }));
       if (lineup.has(c.id)) row.add(text(this, 300, 6, '⚔ lineup', { fontSize: '11px', color: COLORS.gold }).setOrigin(1, 0));
-      const cond = `${isInjured(c) ? `Injured ${healthOf(c)}` : 'Healthy'} · Morale ${moraleOf(c)} · ${ACTIVITY_INFO[activityOf(state, c)].name}`;
+      const pen = Math.round(combatPenalty(c) * 100);
+      const obey = isSlave(c) ? ` · Obd ${c.contract.obedience}` : '';
+      const cond = `${isInjured(c) ? `Hurt ${healthOf(c)}` : 'Healthy'} · Mor ${moraleOf(c)}${obey}${pen ? ` · -${pen}%` : ''} · ${ACTIVITY_INFO[activityOf(state, c)].name}`;
       const low = moraleOf(c) < GUILD.condition.lowMorale;
       row.add(text(this, 58, 40, cond, { fontSize: '11px', color: isInjured(c) || low ? COLORS.bad : COLORS.dim }));
       return { obj: row, height: 58 };
@@ -93,6 +95,16 @@ export class PartyScene extends Phaser.Scene {
     };
     bar(88, 'Health', healthOf(c), 0x6fdc8c, isInjured(c) ? `-${Math.round(injuryPenalty(c) * 100)}% stats` : '');
     bar(116, 'Morale', moraleOf(c), 0xe0b44c, c.id !== state.mainId ? 'unhappy' : '');
+    const pen = combatPenalty(c);
+    if (pen > 0) {
+      const parts = [
+        injuryPenalty(c) ? `injury ${Math.round(injuryPenalty(c) * 100)}` : '',
+        moralePenalty(c) ? `morale ${Math.round(moralePenalty(c) * 100)}` : '',
+        obediencePenalty(c) ? `obey ${Math.round(obediencePenalty(c) * 100)}` : '',
+      ].filter(Boolean);
+      text(this, X + 570, 140, `In battle: -${Math.round(pen * 100)}% all stats`, { fontSize: '11px', color: COLORS.bad }).setOrigin(1, 0);
+      text(this, X + 570, 153, parts.join(' × '), { fontSize: '10px', color: COLORS.dim }).setOrigin(1, 0);
+    }
 
     const st = deriveStats(c);
     text(this, X + 150, 166, `HP ${st.health}   MP ${st.mana}   P.Atk ${st.pAtk}   M.Atk ${st.mAtk}\nDef ${st.defense}   Resist ${st.resist}   Move ${st.movement}`, { fontSize: '13px', lineSpacing: 4 });
@@ -130,6 +142,20 @@ export class PartyScene extends Phaser.Scene {
       g.fillStyle(0x0b0d14).fillRect(X + 160, y0 + 96, 220, 10);
       g.fillStyle(0xe05a9b).fillRect(X + 160, y0 + 96, 2.2 * rel, 10);
       text(this, X + 16, y0 + 112, `+${GUILD.companion.relationshipPerQuest} for each quest completed together. Higher relationship means lower demands on renewal.`, {
+        fontSize: '11px', color: COLORS.dim, wordWrap: { width: W - 32 },
+      });
+    } else if (isSlave(c)) {
+      const S = GUILD.slave;
+      const { relationship: rel, obedience: ob } = c.contract;
+      text(this, X + 16, y0 + 70, `Relationship ${Math.round(rel)}/100`, { fontSize: '13px' });
+      g.fillStyle(0x0b0d14).fillRect(X + 160, y0 + 74, 220, 10);
+      g.fillStyle(0xe05a9b).fillRect(X + 160, y0 + 74, 2.2 * rel, 10);
+      text(this, X + 16, y0 + 92, `Obedience ${Math.round(ob)}/100`, { fontSize: '13px', color: ob < 50 ? COLORS.bad : COLORS.text });
+      g.fillStyle(0x0b0d14).fillRect(X + 160, y0 + 96, 220, 10);
+      g.fillStyle(0x9fb7d8).fillRect(X + 160, y0 + 96, 2.2 * ob, 10);
+      const trend = rel >= S.obedienceRiseFrom ? `rising ${S.obedienceChangePerDay}/day` : rel < S.obedienceFallBelow ? `falling ${S.obedienceChangePerDay}/day` : 'steady';
+      text(this, X + 390, y0 + 92, trend, { fontSize: '11px', color: trend.startsWith('falling') ? COLORS.bad : COLORS.dim });
+      text(this, X + 16, y0 + 112, `Obedience rises while relationship is ${S.obedienceRiseFrom}+ and falls below ${S.obedienceFallBelow}. Punishing: +${S.punishObedience} Obedience, -${S.punishRelationship} relationship.`, {
         fontSize: '11px', color: COLORS.dim, wordWrap: { width: W - 32 },
       });
     }
@@ -176,6 +202,15 @@ export class PartyScene extends Phaser.Scene {
         this.render();
         toast(this, `Sold for ${gold} gold.`);
       }, 'Sell'), { fontSize: 14 });
+      const punished = isSlave(c) && c.contract.punishedDay === state.day;
+      button(this, X + 456, by, 112, 44, 'Punish', () => confirmDialog(this,
+        `Punish ${c.name}?\nObedience +${GUILD.slave.punishObedience}, relationship -${GUILD.slave.punishRelationship}.\nObedience will drift back down while relationship stays below ${GUILD.slave.obedienceFallBelow}.`, () => {
+          const err = punishSlave(c, state.day);
+          if (err) return toast(this, err, COLORS.bad);
+          markDirty();
+          this.render();
+        }, 'Punish'), { fontSize: 14, enabled: !punished });
+      if (punished) text(this, X + 456, by - 18, 'Punished today.', { fontSize: '11px', color: COLORS.dim });
     } else if (k?.type === 'mercenary') {
       button(this, X + 306, by, 140, 44, 'Dismiss', () => confirmDialog(this, `Dismiss ${c.name}? No refund.`, () => {
         leaveParty(state, c);

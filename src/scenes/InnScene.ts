@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { GUILD, LODGING_QUALITY, isResidence, type InnTier, type Ring } from '../data/guild';
 import { boarders, buyDrinks, dailyUpkeep, drinksCost, isPayday, stayAtHome, stayAtInn, weeklyWages } from '../game/city';
 import { QUALITY_TEXT, lodgingName, lodgingRelationship, moraleOf } from '../game/condition';
-import { isCompanion } from '../game/contracts';
+import { bondOf, isHoused } from '../game/contracts';
 import { markDirty, requireState, session } from '../game/session';
 import { cityHeader } from '../ui/hud';
 import { COLORS, HEIGHT, ScrollList, WIDTH, button, figure, panel, setupCamera, text } from '../ui/widgets';
@@ -60,7 +60,7 @@ export class InnScene extends Phaser.Scene {
     const quality = LODGING_QUALITY[this.place];
     const perks = [
       `Counts as ${QUALITY_TEXT[quality]} (quality ${quality} of 3). D-rank adventurers are fine outside; C-rank expect an inn, B-rank a high-end inn, A and S-rank a luxury one (or a residence in that ring).`,
-      `The party houses ${guests.length}: you, your slaves, and companions whose contract includes food & lodging. Those companions like a better night than they expect and resent a worse one.`,
+      `The party houses ${guests.length}: you, your slaves, and companions whose contract includes food & lodging. Those companions, and slaves, like a better night than they expect and resent a worse one.`,
     ];
     text(this, 30, 214, perks.join('\n'), { fontSize: '12px', color: COLORS.dim, wordWrap: { width: 532 }, lineSpacing: 3 });
     guests.forEach((c, i) => figure(this, 52 + i * 52, 372, 62, c.appearance, c.weaponId));
@@ -79,11 +79,11 @@ export class InnScene extends Phaser.Scene {
       }));
       if (state.gold < perNight) text(this, 30, 502, 'You can\'t afford a night here.', { fontSize: '13px', color: COLORS.bad });
     }
-    const housed = state.party.filter((c) => isCompanion(c) && c.contract.foodLodging);
+    const housed = state.party.filter((c) => bondOf(c) && isHoused(c));
     if (housed.length) {
       const mood = housed.map((c) => {
         const d = lodgingRelationship(c, this.place);
-        const rel = Math.round(isCompanion(c) ? c.contract.relationship : 0);
+        const rel = Math.round(bondOf(c)?.relationship ?? 0);
         return `${c.name} ${rel}${d ? ` (${d > 0 ? '+' : ''}${d}/night)` : ''}`;
       });
       text(this, 30, 520, `Relationship here: ${mood.join(', ')}`, { fontSize: '12px', color: '#e05a9b', wordWrap: { width: 532 } });

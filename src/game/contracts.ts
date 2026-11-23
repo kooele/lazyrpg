@@ -8,6 +8,22 @@ const round5 = (v: number) => Math.max(0, Math.round(v / 5) * 5);
 
 export type CompanionContract = Extract<Contract, { type: 'companion' }>;
 export const isCompanion = (c: Character): c is Character & { contract: CompanionContract } => c.contract?.type === 'companion';
+export type SlaveContract = Extract<Contract, { type: 'slave' }>;
+export const isSlave = (c: Character): c is Character & { contract: SlaveContract } => c.contract?.type === 'slave';
+
+/** Members with a relationship score: companions and slaves. */
+export function bondOf(c: Character): CompanionContract | SlaveContract | null {
+  return isCompanion(c) || isSlave(c) ? c.contract : null;
+}
+
+/** Change a companion's or slave's relationship (0-100). No-op for everyone else. */
+export function changeRelationship(c: Character, delta: number): void {
+  const b = bondOf(c);
+  if (b) b.relationship = Math.max(0, Math.min(100, b.relationship + delta));
+}
+
+/** Members whose food and lodging the party pays: the main character, slaves, and companions with it in their contract. */
+export const isHoused = (c: Character) => c.contract?.type === 'main' || c.contract?.type === 'slave' || (isCompanion(c) && c.contract.foodLodging);
 
 // ---- talent ----------------------------------------------------------------------------------------
 
@@ -121,6 +137,25 @@ export function slavePrice(level: number, rng: () => number, talent = 1): number
 }
 
 export const bounty = (level: number) => GUILD.slave.bountyPerLevel * level;
+
+/** A new slave's contract: market slaves start fairly obedient, registered captives much less so. */
+export function slaveContract(origin: SlaveContract['origin'], price: number, rng: () => number): SlaveContract {
+  const [lo, hi] = origin === 'market' ? GUILD.slave.obedienceMarket : GUILD.slave.obedienceCaptive;
+  return { type: 'slave', price, origin, relationship: GUILD.slave.startingRelationship, obedience: Math.round(lo + rng() * (hi - lo)) };
+}
+
+/**
+ * Punish a slave: Obedience up by punishObedience, relationship down by punishRelationship (once a day).
+ * Returns an error message, or null.
+ */
+export function punishSlave(c: Character, day: number): string | null {
+  if (!isSlave(c)) return 'Only slaves can be punished.';
+  if (c.contract.punishedDay === day) return `${c.name} was already punished today.`;
+  c.contract.obedience = Math.min(100, c.contract.obedience + GUILD.slave.punishObedience);
+  c.contract.relationship = Math.max(0, c.contract.relationship - GUILD.slave.punishRelationship);
+  c.contract.punishedDay = day;
+  return null;
+}
 
 // ---- the roster -------------------------------------------------------------------------------------
 

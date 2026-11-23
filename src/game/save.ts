@@ -93,7 +93,15 @@ function validateContract(raw: unknown, path: string): Contract {
     return { type, pay, amount: int(o.amount, `${path}.amount`, 0, pay === 'cut' ? 100 : Number.MAX_SAFE_INTEGER) };
   }
   if (type === 'slave') {
-    return { type, price: int(o.price, `${path}.price`), origin: oneOf(o.origin, ['market', 'prisoner'] as const, `${path}.origin`) };
+    const origin = oneOf(o.origin, ['market', 'prisoner'] as const, `${path}.origin`);
+    // Older saves had no relationship or Obedience for slaves: start them in the middle of their range.
+    const [lo, hi] = origin === 'market' ? GUILD.slave.obedienceMarket : GUILD.slave.obedienceCaptive;
+    return {
+      type, price: int(o.price, `${path}.price`), origin,
+      relationship: o.relationship === undefined ? GUILD.slave.startingRelationship : num(o.relationship, `${path}.relationship`, 0, 100),
+      obedience: o.obedience === undefined ? Math.round((lo + hi) / 2) : num(o.obedience, `${path}.obedience`, 0, 100),
+      ...(typeof o.punishedDay === 'number' ? { punishedDay: Math.floor(o.punishedDay) } : {}),
+    };
   }
   const startDay = int(o.startDay, `${path}.startDay`, 0);
   return {

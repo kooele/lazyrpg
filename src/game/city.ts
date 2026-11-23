@@ -7,7 +7,9 @@ import { STAT_CONFIG } from '../data/stats';
 import { RANKS, type Character, type GameState, type Quest, type Rank } from '../data/types';
 import { enemyTypesForStage, pickFoes } from './battle';
 import { grantXp, newId, type Rng } from './character';
-import { bounty, canFight, isCompanion, isExpired, leaveParty, slavePrice, talentPriceFactor } from './contracts';
+import {
+  bondOf, bounty, canFight, changeRelationship, isCompanion, isExpired, isHoused, isSlave, leaveParty, slaveContract, slavePrice, talentPriceFactor,
+} from './contracts';
 import {
   ACTIVITY_INFO, QUALITY_TEXT, activityOf, changeHealth, changeMorale, expectedQuality, healthLoss, healthOf, lodgingName, lodgingRelationship, moraleOf,
   type BattleCondition,
@@ -248,7 +250,7 @@ export function resolveQuest(
     for (const c of members) {
       const levels = grantXp(c, questXp(q.stage, c.level));
       if (levels > 0) lines.push(`${c.name} reached level ${c.level}! +${levels} skill point${levels > 1 ? 's' : ''}.`);
-      if (isCompanion(c)) c.contract.relationship = Math.min(100, c.contract.relationship + GUILD.companion.relationshipPerQuest);
+      changeRelationship(c, GUILD.companion.relationshipPerQuest);
     }
     // Enemies who surrendered (only humans do) are taken prisoner.
     for (const foe of surrendered) {
@@ -264,7 +266,7 @@ export function resolveQuest(
   } else {
     state.progress.defeats += 1;
     lines.push('No reward. The party limps home to recover.');
-    for (const c of members) if (isCompanion(c)) c.contract.relationship = Math.max(0, c.contract.relationship - 2);
+    for (const c of members) changeRelationship(c, -2);
   }
   lines.push(`Morale: ${members.map((c) => `${c.name} ${c.morale}`).join(', ')}.`);
   lines.push(...moraleDepartures(state));
@@ -284,6 +286,24 @@ export function resolveQuest(
   lines.push(...rankNews(state));
   lines.push(`Back in ${GUILD.city} on day ${state.day}. Find an inn for the night, or sleep outside.`);
   return lines;
+}
+
+/** Slaves' Obedience follows their relationship: up while it's good, down while it's poor. Returns messages for big moves. */
+export function obedienceDrift(state: GameState): string[] {
+  const S = GUILD.slave;
+  const out: string[] = [];
+  for (const c of state.party) {
+    if (!isSlave(c)) continue;
+    const k = c.contract;
+    const before = k.obedience;
+    if (k.relationship >= S.obedienceRiseFrom) k.obedience = Math.min(100, k.obedience + S.obedienceChangePerDay);
+    else if (k.relationship < S.obedienceFallBelow) k.obedience = Math.max(0, k.obedience - S.obedienceChangePerDay);
+    // Only mention it when it crosses a multiple of 10, to keep the log readable.
+    if (Math.floor(before / 10) !== Math.floor(k.obedience / 10)) {
+      out.push(note(state, `${c.name}'s Obedience ${k.obedience > before ? 'rose' : 'fell'} to ${k.obedience}.`));
+    }
+  }
+  return out;
 }
 
 /** Members at 0 Morale leave the party (never the main character). Returns the messages. */
@@ -435,33 +455,34 @@ export function advanceDay(state: GameState, rng: Rng, lodging: Lodging = 'road'
   // Food and lodging.
   const upkeep = dailyUpkeep(state, lodging);
   if (upkeep > state.gold) {
-    say(`Not enough gold for food and lodging (${upkeep} needed). Your companions are unhappy.`);
+    say(`Not enough gold for food and lodging (${upkeep} needed). Your companions and slaves are unhappy.`);
     state.gold = 0;
-    for (const c of state.party) if (isCompanion(c) && c.contract.foodLodging) c.contract.relationship = Math.max(0, c.contract.relationship - 5);
+    for (const c of state.party) if (isHoused(c)) changeRelationship(c, -5);
   } else {
     state.gold -= upkeep;
-    // Housed companions compare the night with what someone of their level expects.
+    // Housed companions and slaves compare the night with what someone of their rank expects.
     if (lodging !== 'road') {
       const moods: string[] = [];
       for (const c of state.party) {
-        if (!isCompanion(c) || !c.contract.foodLodging) continue;
+        if (!bondOf(c) || !isHoused(c)) continue;
         const d = lodgingRelationship(c, lodging);
         if (!d) continue;
-        c.contract.relationship = Math.max(0, Math.min(100, c.contract.relationship + d));
+        changeRelationship(c, d);
         moods.push(`${c.name} ${d > 0 ? '+' : ''}${d} (expects ${QUALITY_TEXT[expectedQuality(c)]})`);
       }
       if (moods.length) say(`${lodging === 'outside' ? 'A night outside' : `A night at ${lodgingName(lodging)}`}. Relationship: ${moods.join(', ')}.`);
     }
   }
 
-  // Low Morale sours companions a little more every day; at 0 Morale, members leave.
+  // Low Morale sours companions and slaves a little more every day; at 0 Morale, members leave.
   const sour: string[] = [];
   for (const c of state.party) {
-    if (!isCompanion(c) || moraleOf(c) >= GUILD.condition.lowMorale) continue;
-    c.contract.relationship = Math.max(0, c.contract.relationship - GUILD.condition.lowMoraleRelationshipPerDay);
+    if (!bondOf(c) || moraleOf(c) >= GUILD.condition.lowMorale) continue;
+    changeRelationship(c, -GUILD.condition.lowMoraleRelationshipPerDay);
     sour.push(c.name);
   }
   if (sour.length) say(`Low morale (below ${GUILD.condition.lowMorale}): ${sour.join(', ')} -${GUILD.condition.lowMoraleRelationshipPerDay} relationship.`);
+  out.push(...obedienceDrift(state));
   out.push(...moraleDepartures(state));
 
   // Payday every 7th day.
@@ -516,14 +537,14 @@ export function restockMarket(state: GameState, rng: Rng): void {
   state.market.restockDay = state.day + GUILD.slave.restockDays;
 }
 
-export function buySlave(state: GameState, id: string): string | null {
+export function buySlave(state: GameState, id: string, rng: Rng = Math.random): string | null {
   const offer = state.market.slaves.find((o) => o.character.id === id);
   if (!offer) return 'No longer for sale.';
   if (state.party.length >= GUILD.maxRoster) return `Your party is full (${GUILD.maxRoster}).`;
   if (state.gold < offer.price) return `Not enough gold (${offer.price} needed).`;
   state.gold -= offer.price;
   state.market.slaves = state.market.slaves.filter((o) => o !== offer);
-  state.party.push({ ...offer.character, contract: { type: 'slave', price: offer.price, origin: 'market' } });
+  state.party.push({ ...offer.character, contract: slaveContract('market', offer.price, rng) });
   return null;
 }
 
@@ -549,13 +570,13 @@ export function turnInPrisoner(state: GameState, id: string): number {
   return p.price;
 }
 
-export function registerPrisoner(state: GameState, id: string): string | null {
+export function registerPrisoner(state: GameState, id: string, rng: Rng = Math.random): string | null {
   const p = state.prisoners.find((o) => o.character.id === id);
   if (!p) return 'No such prisoner.';
   if (state.party.length >= GUILD.maxRoster) return `Your party is full (${GUILD.maxRoster}).`;
   if (state.gold < GUILD.slave.registrationFee) return `The registration fee is ${GUILD.slave.registrationFee} gold.`;
   state.gold -= GUILD.slave.registrationFee;
   state.prisoners = state.prisoners.filter((o) => o !== p);
-  state.party.push({ ...p.character, contract: { type: 'slave', price: GUILD.slave.registrationFee, origin: 'prisoner' } });
+  state.party.push({ ...p.character, contract: slaveContract('prisoner', GUILD.slave.registrationFee, rng) });
   return null;
 }

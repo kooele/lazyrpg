@@ -17,6 +17,20 @@ export const isInjured = (c: Character) => healthOf(c) < MAX_HEALTH;
 /** Share of every stat an injured member loses in battle: 1/3 of their missing Health (Health 70 = -10%). */
 export const injuryPenalty = (c: Character) => (MAX_HEALTH - healthOf(c)) / 3 / 100;
 
+/** Share lost for every full 5 points of a 0-100 value below 100 (combat.percentPer5: 1% by default). */
+const per5 = (v: number) => (Math.floor((100 - Math.max(0, Math.min(100, v))) / 5) * GUILD.combat.percentPer5) / 100;
+
+/** Share of every stat a member loses in battle from low Morale: 1% per 5 below 100. */
+export const moralePenalty = (c: Character) => per5(moraleOf(c));
+
+/** Slaves only: share of every stat lost from low Obedience, 1% per 5 below 100. */
+export const obediencePenalty = (c: Character) => (c.contract?.type === 'slave' ? per5(c.contract.obedience) : 0);
+
+/** Total share of every battle stat a party member loses: injury, Morale and Obedience, multiplied together. */
+export function combatPenalty(c: Character): number {
+  return 1 - (1 - injuryPenalty(c)) * (1 - moralePenalty(c)) * (1 - obediencePenalty(c));
+}
+
 export function changeHealth(c: Character, delta: number): void {
   c.health = Math.round(clamp(healthOf(c) + delta, MAX_HEALTH));
 }

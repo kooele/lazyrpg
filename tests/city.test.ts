@@ -8,10 +8,10 @@ import {
   acceptQuest, advanceDay, advanceDays, buyDrinks, buyResidence, buySlave, makeQuest, sellResidence, stayAtHome, stayAtInn, canTakeQuest, dailyUpkeep, departBlock, lineupMembers, mainCharacter,
   newCampaign, registerPrisoner, resolveQuest, rewardShares, sleepOutside, toggleLineup,
 } from '../src/game/city';
-import { activityOf, expectedQuality, healthOf, isInjured, moraleOf } from '../src/game/condition';
+import { activityOf, combatPenalty, expectedQuality, healthOf, isInjured, moraleOf, moralePenalty, obediencePenalty } from '../src/game/condition';
 import { parseSave, serializeSave } from '../src/game/save';
 import {
-  companionContract, companionDemand, evaluateOffer, joinParty, mercenaryRates, offerValue, openingTerms,
+  companionContract, companionDemand, evaluateOffer, joinParty, mercenaryRates, offerValue, openingTerms, punishSlave, slaveContract,
 } from '../src/game/contracts';
 import { DEMO_STAGES, newDemo, resolveDemoBattle } from '../src/game/demo';
 import { adventurerCount, adventurerRank, deathFactor, leaderboard, rankCounts, simulateGuildDay } from '../src/game/guild';
@@ -345,6 +345,7 @@ describe('contracts', () => {
     expect(isInjured(c)).toBe(true);
     expect(lineupMembers(s).map((m) => m.id)).toEqual([s.mainId, c.id]);
     // Health 70: 30 missing, so -10% to every stat in battle.
+    c.morale = 100; // only the injury here (Morale has its own test)
     const full = deriveStats(c);
     const unit = makeUnit(c, 'player', { x: 0, y: 0 });
     expect(unit.stats.health).toBe(Math.round(full.health * 0.9));
@@ -551,8 +552,91 @@ describe('contracts', () => {
     s.prisoners.push({ character: s.guild.pool[0].character, price: 50 });
     s.gold = GUILD.slave.registrationFee;
     expect(registerPrisoner(s, s.prisoners[0].character.id)).toBeNull();
-    expect(s.party.at(-1)!.contract).toEqual({ type: 'slave', price: GUILD.slave.registrationFee, origin: 'prisoner' });
+    const k = s.party.at(-1)!.contract;
+    expect(k).toMatchObject({ type: 'slave', price: GUILD.slave.registrationFee, origin: 'prisoner', relationship: GUILD.slave.startingRelationship });
+    if (k?.type !== 'slave') throw new Error('not a slave');
+    expect(k.obedience).toBeGreaterThanOrEqual(GUILD.slave.obedienceCaptive[0]);
+    expect(k.obedience).toBeLessThanOrEqual(GUILD.slave.obedienceCaptive[1]);
     expect(s.gold).toBe(0);
+  });
+
+  it('market slaves start fairly obedient (40-80), captives much less (0-40)', () => {
+    for (let seed = 0; seed < 30; seed++) {
+      const m = slaveContract('market', 100, makeRng(seed));
+      const p = slaveContract('prisoner', 60, makeRng(seed));
+      expect(m.obedience).toBeGreaterThanOrEqual(40);
+      expect(m.obedience).toBeLessThanOrEqual(80);
+      expect(p.obedience).toBeGreaterThanOrEqual(0);
+      expect(p.obedience).toBeLessThanOrEqual(40);
+    }
+  });
+
+  it('battle stats drop 1% per 5 Morale below 100 and, for slaves, 1% per 5 Obedience below 100; all multiply', () => {
+    const c = createCharacter('M', '#3d7be0', 'sword_shield');
+    c.morale = 100;
+    expect(combatPenalty(c)).toBe(0);
+    c.morale = 50;
+    expect(moralePenalty(c)).toBeCloseTo(0.1);
+    c.morale = 52; // only full steps of 5 count
+    expect(moralePenalty(c)).toBeCloseTo(0.09);
+    c.morale = 50;
+    c.health = 70; // injury -10%
+    expect(combatPenalty(c)).toBeCloseTo(1 - 0.9 * 0.9);
+    expect(obediencePenalty(c)).toBe(0); // not a slave
+    c.contract = { type: 'slave', price: 1, origin: 'market', relationship: 40, obedience: 60 };
+    expect(obediencePenalty(c)).toBeCloseTo(0.08);
+    expect(combatPenalty(c)).toBeCloseTo(1 - 0.9 * 0.9 * 0.92);
+    const full = deriveStats(c);
+    const unit = makeUnit(c, 'player', { x: 0, y: 0 });
+    expect(unit.stats.pAtk).toBe(Math.round(full.pAtk * 0.9 * 0.9 * 0.92));
+  });
+
+  it('obedience follows the relationship; punishing trades relationship for a quick boost', () => {
+    const s = start();
+    s.gold = 10000;
+    const a = s.guild.pool[0];
+    a.character.level = 2; // D rank: fine sleeping outside, so nights don't move relationship
+    s.market.slaves.push({ character: a.character, price: 10 });
+    expect(buySlave(s, a.character.id, makeRng(1))).toBeNull();
+    const slave = s.party.at(-1)!;
+    if (slave.contract?.type !== 'slave') throw new Error('not a slave');
+    const k = slave.contract;
+    slave.morale = 100;
+    k.obedience = 50;
+    k.relationship = GUILD.slave.obedienceRiseFrom;
+    sleepOutside(s, makeRng(1));
+    expect(k.obedience).toBe(51);
+    k.relationship = 50; // in between: steady
+    sleepOutside(s, makeRng(1));
+    expect(k.obedience).toBe(51);
+    // Punishing: +20 Obedience, -20 relationship (to 30), once a day...
+    expect(punishSlave(slave, s.day)).toBeNull();
+    expect([k.obedience, k.relationship]).toEqual([71, 30]);
+    expect(punishSlave(slave, s.day)).toMatch(/already/);
+    // ...and with relationship below 40, Obedience drains away again.
+    for (let i = 0; i < 25; i++) sleepOutside(s, makeRng(1));
+    expect(k.obedience).toBe(46);
+    expect(k.relationship).toBe(30);
+  });
+
+  it('slaves have a relationship that moves like a companion\'s (quests, lodging)', () => {
+    const s = start();
+    s.gold = 10000;
+    const a = s.guild.pool[0];
+    a.character.level = 8; // C rank: expects an inn
+    s.market.slaves.push({ character: a.character, price: 10 });
+    buySlave(s, a.character.id, makeRng(1));
+    const slave = s.party.at(-1)!;
+    if (slave.contract?.type !== 'slave') throw new Error('not a slave');
+    slave.morale = 100;
+    const rel = slave.contract.relationship;
+    sleepOutside(s, makeRng(1));
+    expect(slave.contract.relationship).toBe(rel - GUILD.lodging.relationshipBelowPerStep);
+    toggleLineup(s, slave.id);
+    acceptQuest(s, s.guild.board.find((x) => canTakeQuest(s, x))!.id);
+    s.quest!.days = 1;
+    resolveQuest(s, 'victory', makeRng(1));
+    expect(slave.contract.relationship).toBe(rel - GUILD.lodging.relationshipBelowPerStep + GUILD.companion.relationshipPerQuest);
   });
 
   it('the main character always goes and cannot be benched', () => {

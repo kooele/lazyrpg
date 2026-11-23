@@ -59,6 +59,7 @@ export interface GuildConfig {
     moralePerHealthLost: number;
     moraleMemberDied: number;
   };
+  combat: { percentPer5: number };
   schedule: { recoverMultiplier: number; trainingXp: number; oddJobsGold: number; dayOffMorale: number };
   /** Price multiplier from talent: max(min, 1 + weight x (average growth rate - 1)). */
   talentPrice: { weight: number; min: number };
@@ -84,6 +85,14 @@ export interface GuildConfig {
     sellBackShare: number;
     registrationFee: number;
     bountyPerLevel: number;
+    obedienceMarket: [number, number];
+    obedienceCaptive: [number, number];
+    startingRelationship: number;
+    obedienceRiseFrom: number;
+    obedienceFallBelow: number;
+    obedienceChangePerDay: number;
+    punishObedience: number;
+    punishRelationship: number;
   };
   simulation: {
     targetAdventurers: number;
@@ -221,7 +230,14 @@ export function parseGuildConfig(data: unknown): GuildConfig {
       termDemand: termDemand as Record<string, number>,
       expectedWeeklyLoot: perRank(c.expectedWeeklyLoot, 'companion.expectedWeeklyLoot'),
     },
-    slave: numbers(d.slave, 'slave', ['priceBase', 'pricePerLevel', 'marketSize', 'restockDays', 'sellBackShare', 'registrationFee', 'bountyPerLevel']),
+    slave: {
+      ...numbers<Omit<GuildConfig['slave'], 'obedienceMarket' | 'obedienceCaptive'>>(d.slave, 'slave', ['priceBase', 'pricePerLevel', 'marketSize', 'restockDays',
+        'sellBackShare', 'registrationFee', 'bountyPerLevel', 'startingRelationship', 'obedienceRiseFrom', 'obedienceFallBelow',
+        'obedienceChangePerDay', 'punishObedience', 'punishRelationship']),
+      obedienceMarket: range(obj(d.slave, 'slave').obedienceMarket, 'slave.obedienceMarket'),
+      obedienceCaptive: range(obj(d.slave, 'slave').obedienceCaptive, 'slave.obedienceCaptive'),
+    },
+    combat: numbers(d.combat, 'combat', ['percentPer5'], 20),
     simulation: {
       ...numbers<Omit<GuildConfig['simulation'], 'partySize' | 'rankDifficulty'>>(s, 'simulation',
         ['targetAdventurers', 'targetParties', 'poolTarget', 'questChancePerDay', 'successPerLevel', 'lossChanceOnSuccess',

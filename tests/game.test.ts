@@ -21,6 +21,7 @@ function openMap(w = 10, h = 7): BattleMap {
 function hero(weaponId = 'sword_shield', skillIds: string[] = [], name = 'H'): Character {
   const c = createCharacter(name, '#3d7be0', weaponId);
   c.skillIds = skillIds;
+  c.morale = 100; // full strength: the Morale penalty has its own tests
   return c;
 }
 
