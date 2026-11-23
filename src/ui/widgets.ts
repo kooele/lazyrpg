@@ -356,6 +356,8 @@ export class ScrollList {
   private offset = 0;
   private readonly bar: Phaser.GameObjects.Graphics;
   private readonly track: Phaser.GameObjects.Rectangle;
+  /** Clips items to the list's box, so an item cut off at the bottom shows partly (a hint there is more). */
+  private readonly maskShape: Phaser.GameObjects.Graphics;
   private dragging = false;
   /** Called whenever the scroll position changes. */
   onChange: ((offset: number) => void) | null = null;
@@ -372,6 +374,11 @@ export class ScrollList {
     this.track = scene.add.rectangle(w - 6, 0, 6, h, 0xffffff, 0.06).setOrigin(0).setInteractive({ useHandCursor: true });
     this.bar = scene.add.graphics();
     this.root.add([this.track, this.bar]);
+    this.maskShape = scene.make.graphics({}, false);
+    // In world coordinates: lists are placed directly in the scene, not inside a moved container.
+    this.maskShape.fillStyle(0xffffff).fillRect(x, y, w, h);
+    this.root.enableFilters();
+    this.root.filters!.internal.addMask(this.maskShape, false, undefined, 'world');
     this.onWheel = (p, _over, _dx, dy) => {
       if (this.contains(p) && dy !== 0) this.scrollBy(Math.sign(dy));
     };
@@ -440,7 +447,8 @@ export class ScrollList {
     this.offset = Math.max(0, Math.min(this.maxOffset(), this.offset));
     let yy = 0;
     this.items.forEach((it, i) => {
-      const visible = i >= this.offset && yy + it.height <= this.h;
+      // Items from the offset down; the last one may be cut off by the mask.
+      const visible = i >= this.offset && yy < this.h;
       it.obj.setVisible(visible);
       if (visible) {
         it.obj.setPosition(0, yy);
@@ -466,6 +474,7 @@ export class ScrollList {
     this.scene.input.off('pointerup', this.onUp);
     for (const it of this.items) it.obj.destroy();
     this.items = [];
+    this.maskShape.destroy();
     this.root.destroy();
   }
 }
