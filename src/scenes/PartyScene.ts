@@ -58,7 +58,8 @@ export class PartyScene extends Phaser.Scene {
       row.add(text(this, 58, 26, memberStatus(state, c), { fontSize: '11px', color: MEMBER_COLOR[c.contract?.type ?? 'main'], wordWrap: { width: 200 } }));
       if (lineup.has(c.id)) row.add(text(this, 300, 6, '⚔ lineup', { fontSize: '11px', color: COLORS.gold }).setOrigin(1, 0));
       const cond = `${isInjured(c) ? `Injured ${healthOf(c)}` : 'Healthy'} · Morale ${moraleOf(c)} · ${ACTIVITY_INFO[activityOf(state, c)].name}`;
-      row.add(text(this, 58, 40, cond, { fontSize: '11px', color: isInjured(c) ? COLORS.bad : COLORS.dim }));
+      const low = moraleOf(c) < GUILD.condition.lowMorale;
+      row.add(text(this, 58, 40, cond, { fontSize: '11px', color: isInjured(c) || low ? COLORS.bad : COLORS.dim }));
       return { obj: row, height: 58 };
     }), 'keep');
 
@@ -84,13 +85,17 @@ export class PartyScene extends Phaser.Scene {
     text(this, X + 356, 146, `${c.xp}/${XP_PER_LEVEL} XP`, { fontSize: '11px', color: COLORS.dim });
     // Strategic Layer condition: Health (not battle HP) and Morale.
     const bar = (y: number, label: string, v: number, color: number) => {
-      text(this, X + 420, y, `${label} ${v}/100`, { fontSize: '12px', color: label === 'Health' && v < 100 ? COLORS.bad : COLORS.text });
+      const warn = label === 'Health' ? v < 100 : v < GUILD.condition.lowMorale;
+      text(this, X + 420, y, `${label} ${v}/100`, { fontSize: '12px', color: warn ? COLORS.bad : COLORS.text });
       g.fillStyle(0x0b0d14).fillRect(X + 420, y + 17, 150, 6);
       g.fillStyle(color).fillRect(X + 420, y + 17, 1.5 * v, 6);
     };
     bar(88, 'Health', healthOf(c), 0x6fdc8c);
     bar(116, 'Morale', moraleOf(c), 0xe0b44c);
     if (isInjured(c)) text(this, X + 570, 90, 'Injured', { fontSize: '11px', color: COLORS.bad }).setOrigin(1, 0);
+    if (moraleOf(c) < GUILD.condition.lowMorale && c.id !== state.mainId) {
+      text(this, X + 570, 118, isCompanion(c) ? 'Unhappy' : 'Low', { fontSize: '11px', color: COLORS.bad }).setOrigin(1, 0);
+    }
 
     const st = deriveStats(c);
     text(this, X + 150, 166, `HP ${st.health}   MP ${st.mana}   P.Atk ${st.pAtk}   M.Atk ${st.mAtk}\nDef ${st.defense}   Resist ${st.resist}   Move ${st.movement}`, { fontSize: '13px', lineSpacing: 4 });

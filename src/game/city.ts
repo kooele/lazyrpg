@@ -9,7 +9,7 @@ import { enemyTypesForStage } from './battle';
 import { grantXp, newId, type Rng } from './character';
 import { bounty, canFight, isCompanion, isExpired, leaveParty, slavePrice, talentPriceFactor } from './contracts';
 import {
-  ACTIVITY_INFO, activityOf, changeHealth, changeMorale, expectedInn, healthLoss, healthOf, lodgingRelationship,
+  ACTIVITY_INFO, activityOf, changeHealth, changeMorale, expectedInn, healthLoss, healthOf, lodgingRelationship, moraleOf,
   type BattleCondition,
 } from './condition';
 import { createGuild, simulateGuildDay, updateRanks } from './guild';
@@ -174,19 +174,23 @@ export function resolveQuest(state: GameState, outcome: 'victory' | 'defeat', rn
   const lines: string[] = [];
   const C = GUILD.condition;
 
-  // Injuries, deaths and Morale.
+  // Injuries, deaths (Health 0) and Morale.
   const dead: Character[] = [];
   for (const c of went) {
     changeMorale(c, -C.moralePerQuest - (outcome === 'defeat' ? C.moraleFailedQuest : 0));
     const r = conditions.find((x) => x.id === c.id);
     if (!r) continue;
-    if (r.fell && c.id !== state.mainId && rng() < C.deathChanceOnFall) {
-      dead.push(c);
-      continue;
-    }
     const loss = r.fell ? C.maxHealthLoss : healthLoss(r.lowestHp);
     if (loss <= 0) continue;
     changeHealth(c, -loss);
+    if (healthOf(c) <= 0) {
+      // The main character pulls through at 1 Health; anyone else dies.
+      if (c.id === state.mainId) c.health = 1;
+      else {
+        dead.push(c);
+        continue;
+      }
+    }
     changeMorale(c, -loss * C.moralePerHealthLost);
     lines.push(`${c.name} is injured: Health ${healthOf(c)}/100 (-${loss}).`);
   }
@@ -194,7 +198,7 @@ export function resolveQuest(state: GameState, outcome: 'victory' | 'defeat', rn
     state.party = state.party.filter((m) => m !== c);
     state.lineup = state.lineup.filter((id) => id !== c.id);
     delete state.schedule[c.id];
-    lines.push(`${c.name} fell in battle and did not survive.`);
+    lines.push(`${c.name}'s wounds were fatal (Health 0). They did not survive.`);
     note(state, `${c.name} died on "${q.title}".`);
   }
   if (dead.length) for (const c of state.party) changeMorale(c, -C.moraleMemberDied * dead.length);
@@ -228,6 +232,7 @@ export function resolveQuest(state: GameState, outcome: 'victory' | 'defeat', rn
     for (const c of members) if (isCompanion(c)) c.contract.relationship = Math.max(0, c.contract.relationship - 2);
   }
   lines.push(`Morale: ${members.map((c) => `${c.name} ${c.morale}`).join(', ')}.`);
+  lines.push(...moraleDepartures(state));
   // Mercenaries were hired for this quest only.
   for (const c of members.filter((m) => m.contract?.type === 'mercenary')) {
     leaveParty(state, c);
@@ -244,6 +249,16 @@ export function resolveQuest(state: GameState, outcome: 'victory' | 'defeat', rn
   lines.push(...rankNews(state));
   lines.push(`Back in ${GUILD.city} on day ${state.day}. Find an inn for the night, or sleep outside.`);
   return lines;
+}
+
+/** Members at 0 Morale leave the party (never the main character). Returns the messages. */
+export function moraleDepartures(state: GameState): string[] {
+  const out: string[] = [];
+  for (const c of state.party.filter((m) => m.id !== state.mainId && moraleOf(m) <= 0)) {
+    leaveParty(state, c, isCompanion(c) ? c.contract.greed : 1);
+    out.push(note(state, `${c.name} has had enough (Morale 0) and left the party.`));
+  }
+  return out;
 }
 
 /** Update the leaderboard ranks; returns the player's promotion or demotion message, if any. */
@@ -370,6 +385,16 @@ export function advanceDay(state: GameState, rng: Rng, lodging: Lodging = 'road'
       if (moods.length) say(`${lodging === 'outside' ? 'A night outside' : `A night at ${GUILD.inns[lodging].name}`}. Relationship: ${moods.join(', ')}.`);
     }
   }
+
+  // Low Morale sours companions a little more every day; at 0 Morale, members leave.
+  const sour: string[] = [];
+  for (const c of state.party) {
+    if (!isCompanion(c) || moraleOf(c) >= GUILD.condition.lowMorale) continue;
+    c.contract.relationship = Math.max(0, c.contract.relationship - GUILD.condition.lowMoraleRelationshipPerDay);
+    sour.push(c.name);
+  }
+  if (sour.length) say(`Low morale (below ${GUILD.condition.lowMorale}): ${sour.join(', ')} -${GUILD.condition.lowMoraleRelationshipPerDay} relationship.`);
+  out.push(...moraleDepartures(state));
 
   // Payday every 7th day.
   if (isPayday(state.day)) {

@@ -27,15 +27,16 @@
     "outsidePerPerson": 0
   },
   "condition": {
-    "_comment": "Health (0-100, not battle HP) and Morale (0-100) of party members. After a battle, Health drops by maxHealthLoss x the share of HP the unit lost at its lowest point (falling = the full amount). Below 100 Health a member is injured and can't go on quests; everyone recovers healthPerDay each night. A member who falls in battle dies with deathChanceOnFall (never the main character). Morale changes: moralePerQuest for each member who goes on a quest, moraleFailedQuest more if it fails, moralePerHealthLost per Health point lost to injuries, moraleMemberDied for everyone when a member dies. New members start at startingMorale.",
+    "_comment": "Health (0-100, not battle HP) and Morale (0-100) of party members. After a battle, Health drops by maxHealthLoss x the share of HP the unit lost at its lowest point (falling = the full amount). Below 100 Health a member is injured and can't go on quests; everyone recovers healthPerDay each night. A member whose Health reaches 0 dies (the main character is left at 1 instead). Morale changes: moralePerQuest for each member who goes on a quest, moraleFailedQuest more if it fails, moralePerHealthLost per Health point lost to injuries, moraleMemberDied for everyone when a member dies. New members start at startingMorale. Below lowMorale, companions lose lowMoraleRelationshipPerDay relationship each day; a member at 0 Morale leaves the party (not the main character).",
     "maxHealthLoss": 60,
     "healthPerDay": 10,
-    "deathChanceOnFall": 0.15,
     "startingMorale": 75,
     "moralePerQuest": 5,
     "moraleFailedQuest": 10,
     "moralePerHealthLost": 0.2,
-    "moraleMemberDied": 15
+    "moraleMemberDied": 15,
+    "lowMorale": 50,
+    "lowMoraleRelationshipPerDay": 2
   },
   "schedule": {
     "_comment": "What members who aren't on a quest do each day (Manage Party). recover: recovers recoverMultiplier x healthPerDay. training: trainingXp XP. oddJobs: oddJobsGold gold. dayOff: dayOffMorale Morale.",

@@ -42,7 +42,8 @@ export interface GuildConfig {
   condition: {
     maxHealthLoss: number;
     healthPerDay: number;
-    deathChanceOnFall: number;
+    lowMorale: number;
+    lowMoraleRelationshipPerDay: number;
     startingMorale: number;
     moralePerQuest: number;
     moraleFailedQuest: number;
@@ -169,11 +170,8 @@ export function parseGuildConfig(data: unknown): GuildConfig {
     upkeep: numbers(d.upkeep, 'upkeep', ['foodLodgingPerDay']),
     inns: parseInns(d.inns),
     lodging: numbers(d.lodging, 'lodging', ['luxuryFromLevel', 'relationshipAbove', 'relationshipBelowPerStep', 'outsidePerPerson']),
-    condition: {
-      ...numbers<GuildConfig['condition']>(d.condition, 'condition', ['maxHealthLoss', 'healthPerDay', 'startingMorale', 'moralePerQuest',
-        'moraleFailedQuest', 'moralePerHealthLost', 'moraleMemberDied'], 100),
-      deathChanceOnFall: num(obj(d.condition, 'condition').deathChanceOnFall, 'condition.deathChanceOnFall', 0, 1),
-    },
+    condition: numbers<GuildConfig['condition']>(d.condition, 'condition', ['maxHealthLoss', 'healthPerDay', 'startingMorale', 'moralePerQuest',
+      'moraleFailedQuest', 'moralePerHealthLost', 'moraleMemberDied', 'lowMorale', 'lowMoraleRelationshipPerDay'], 100),
     schedule: numbers(d.schedule, 'schedule', ['recoverMultiplier', 'trainingXp', 'oddJobsGold', 'dayOffMorale']),
     talentPrice: numbers(d.talentPrice ?? { weight: 2, min: 0.4 }, 'talentPrice', ['weight', 'min']),
     mercenary: numbers(d.mercenary, 'mercenary', ['feePerLevel', 'cutBase', 'cutPerLevel']),

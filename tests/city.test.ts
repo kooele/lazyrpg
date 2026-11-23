@@ -283,7 +283,7 @@ describe('contracts', () => {
     expect(moraleOf(c)).toBe(m + GUILD.schedule.dayOffMorale);
   });
 
-  it('a member who falls can die; everyone else loses morale. The main character never dies', () => {
+  it('a member whose Health reaches 0 dies; everyone else loses morale. The main character pulls through at 1', () => {
     const s = start();
     const c = companion(s);
     if (c.contract?.type !== 'companion') throw new Error('not a companion');
@@ -292,12 +292,52 @@ describe('contracts', () => {
     toggleLineup(s, c.id);
     acceptQuest(s, s.guild.board.find((x) => canTakeQuest(s, x))!.id);
     s.quest!.days = 1;
-    const always = () => 0; // every roll succeeds
-    const lines = resolveQuest(s, 'defeat', always, [{ id: s.mainId, lowestHp: 0, fell: true }, { id: c.id, lowestHp: 0, fell: true }]);
+    // With maxHealthLoss at 100, falling takes a fully healthy member to 0 Health.
+    const max = GUILD.condition.maxHealthLoss;
+    GUILD.condition.maxHealthLoss = 100;
+    const lines = resolveQuest(s, 'defeat', makeRng(1), [{ id: s.mainId, lowestHp: 0, fell: true }, { id: c.id, lowestHp: 0, fell: true }]);
+    GUILD.condition.maxHealthLoss = max;
     expect(s.party.some((m) => m.id === c.id)).toBe(false);
     expect(lines.some((l) => /did not survive/.test(l))).toBe(true);
-    expect(healthOf(mainCharacter(s))).toBe(100 - GUILD.condition.maxHealthLoss);
+    expect(healthOf(mainCharacter(s))).toBe(1);
     expect(moraleOf(other)).toBe(GUILD.condition.startingMorale - GUILD.condition.moraleMemberDied);
+  });
+
+  it('a fall from full Health costs maxHealthLoss but is not fatal while that is below 100', () => {
+    const s = start();
+    const c = companion(s);
+    if (c.contract?.type !== 'companion') throw new Error('not a companion');
+    c.contract.endDay = 100;
+    toggleLineup(s, c.id);
+    acceptQuest(s, s.guild.board.find((x) => canTakeQuest(s, x))!.id);
+    s.quest!.days = 1;
+    resolveQuest(s, 'victory', makeRng(1), [{ id: c.id, lowestHp: 0, fell: true }]);
+    expect(healthOf(c)).toBe(Math.max(0, 100 - GUILD.condition.maxHealthLoss));
+    expect(s.party.includes(c)).toBe(GUILD.condition.maxHealthLoss < 100);
+  });
+
+  it('below 50 morale companions lose relationship daily; at 0 morale members leave (not the main character)', () => {
+    const s = start();
+    const C = GUILD.condition;
+    const c = companion(s);
+    if (c.contract?.type !== 'companion') throw new Error('not a companion');
+    c.contract.endDay = 100;
+    c.contract.relationship = 50;
+    s.gold = 1000;
+    s.schedule[c.id] = 'training';
+    c.morale = C.lowMorale - 1;
+    stayAtInn(s, 'standard', 1, makeRng(1));
+    expect(c.contract.relationship).toBe(50 - C.lowMoraleRelationshipPerDay);
+    c.morale = C.lowMorale;
+    stayAtInn(s, 'standard', 1, makeRng(1));
+    expect(c.contract.relationship).toBe(50 - C.lowMoraleRelationshipPerDay);
+    c.morale = 0;
+    mainCharacter(s).morale = 0;
+    const msgs = stayAtInn(s, 'standard', 1, makeRng(1));
+    expect(s.party.some((m) => m.id === c.id)).toBe(false);
+    expect(s.guild.pool.some((a) => a.character.id === c.id)).toBe(true);
+    expect(msgs.some((m) => /left the party/.test(m))).toBe(true);
+    expect(s.party.some((m) => m.id === s.mainId)).toBe(true);
   });
 
   it('schedule: training gives XP, odd jobs gold; members on the quest skip it that day', () => {
