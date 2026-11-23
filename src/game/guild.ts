@@ -3,25 +3,12 @@
 import { WEAPONS } from '../data/content';
 import { GUILD } from '../data/guild';
 import { RANKS, type AdventurerRank, type FreeAdventurer, type GameState, type GuildState, type Quest, type Rank, type RivalMember, type RivalParty } from '../data/types';
-import { postQuests } from './board';
+import { encounterBudget, postQuests } from './board';
 import { newId, type Rng } from './character';
 import { randInt, randomAdventurer, randomName, randomPartyName } from './people';
 
 const SIM = GUILD.simulation;
 export const PLAYER_ID = 'player';
-
-// ---- encounters ----------------------------------------------------------------------------------
-
-/** Quest rank whose stages contain `stage` (the lowest below them, the highest past them). */
-export function rankForStage(stage: number): Rank {
-  const tiers = RANKS.map((r) => ({ r, t: GUILD.quests[r] })).sort((a, b) => a.t.stages[0] - b.t.stages[0]);
-  return (tiers.find(({ t }) => stage <= t.stages[1]) ?? tiers[tiers.length - 1]).r;
-}
-
-/** Enemy threat budget of a quest of `rank`: the rank's encounter size times the quest's threat. Never depends on the party. */
-export function encounterBudget(rank: Rank, threat = 1): number {
-  return GUILD.quests[rank].encounter * threat;
-}
 
 // ---- ranks -----------------------------------------------------------------------------------------
 
@@ -197,12 +184,21 @@ export function deathFactor(level: number): number {
 /** A rival party's chance to complete a quest of a rank. */
 export function rivalSuccessChance(p: RivalParty, rank: Rank): number {
   const power = avg(p.members.map((m) => m.level)) + 0.25 * (p.members.length - 4);
-  return Math.max(0.1, Math.min(0.95, 0.55 + SIM.successPerLevel * (power - SIM.rankDifficulty[rank])));
+  return Math.max(0.1, Math.min(0.95, 0.55 + SIM.successPerLevel * (power - rankDifficulty(rank))));
 }
 
-/** How hard a board quest is, as the party level it calls for: its enemy level, more for a big group. */
-export function questDifficulty(q: Quest): number {
-  return q.stage - 1 + ((q.threat ?? 1) - 1) * 4;
+/**
+ * How hard a board quest is, as the average party level it calls for: its enemy level, plus a level for each
+ * threat point its encounter has over board.standardEncounter (minus one for each it has fewer).
+ */
+export function questDifficulty(q: Pick<Quest, 'rank' | 'stage' | 'threat'>): number {
+  return q.stage - 1 + (encounterBudget(q.rank, q.threat ?? 1) - GUILD.board.standardEncounter);
+}
+
+/** How hard a usual quest of `rank` is (mid-rank enemy level, threat 1): what rival parties weigh when picking a rank. */
+export function rankDifficulty(rank: Rank): number {
+  const [lo, hi] = GUILD.quests[rank].stages;
+  return questDifficulty({ rank, stage: Math.round((lo + hi) / 2), threat: 1 });
 }
 
 /** A rival party's chance to complete a board quest. */
@@ -305,7 +301,7 @@ export function simulateGuildDay(state: GameState, rng: Rng): void {
         const chance = q ? rivalQuestChance(p, q) : rivalSuccessChance(p, rank);
         const renown = q ? q.renown : GUILD.quests[rank].renown;
         const what = q ? `"${q.title}"` : `${QUEST_WORDS[rank]} promotion quest`;
-        const difficulty = q ? questDifficulty(q) : SIM.rankDifficulty[rank];
+        const difficulty = q ? questDifficulty(q) : rankDifficulty(rank);
         p.lastDay = day;
         if (rng() < chance) {
           p.renown += renown * (0.8 + rng() * 0.4);

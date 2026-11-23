@@ -14,7 +14,7 @@ import { dist, generateMap, hasLineOfSight, passable, withinRange, type BattleMa
 import { parseSave, serializeSave } from '../src/game/save';
 import { skillShape } from '../src/game/reach';
 import { advanceDays, newCampaign } from '../src/game/city';
-import { encounterBudget, rankForStage } from '../src/game/guild';
+import { encounterBudget, rankForStage } from '../src/game/board';
 import { GUILD } from '../src/data/guild';
 
 function openMap(w = 10, h = 7): BattleMap {

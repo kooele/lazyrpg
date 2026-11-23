@@ -1,5 +1,5 @@
 {
-  "_readme": "Management and simulation numbers for Arch City and its Adventurer Guild. Gold amounts are whole numbers. Every day the party pays for food (see food: each fed member eats at the quality set for them in Manage Party) and for a night somewhere: an inn (priced per person by inns), a residence, sleeping outside (see lodging), or on the road during quests (upkeep.roadPerPerson). upkeep.foodLodgingPerDay is what food and lodging are worth per day to a companion when negotiating a contract. Party ranks come from renown (see ranks). Quests: stages is the enemy level range (an adventurer rank's levels; see adventurerRanks), reward a gold range, days how long the trip takes. companion.expectedWeeklyLoot is how much gold a candidate thinks a party of that rank earns per week; they use it to value a loot cut. simulation tunes the rival parties: the chance a party goes on a quest each day, its chance of success (0.55 + successPerLevel x (average level - rankDifficulty), clamped), and what can go wrong. Each member levels up after a success with levelUpChanceOnSuccess x levelUpFalloff^(level - 1), so high levels come slowly. A party tries its promotion quest once it has the renown and at least a 50% chance. Experienced adventurers die less: each member's chance to be lost on a quest is multiplied by deathLevelFalloff^(level - 1) (at least minDeathFactor), and a party's wipe chance by the same factor for its average level. Parties recruit from the guild hall only adventurers within recruitLevelGap levels of their average (or anyone, when down to 2 members). New adventurers arrive at about the rate adventurers are lost, nudged toward targetAdventurers.",
+  "_readme": "Management and simulation numbers for Arch City and its Adventurer Guild. Gold amounts are whole numbers. Every day the party pays for food (see food: each fed member eats at the quality set for them in Manage Party) and for a night somewhere: an inn (priced per person by inns), a residence, sleeping outside (see lodging), or on the road during quests (upkeep.roadPerPerson). upkeep.foodLodgingPerDay is what food and lodging are worth per day to a companion when negotiating a contract. Party ranks come from renown (see ranks). Quests: stages is the enemy level range (an adventurer rank's levels; see adventurerRanks), reward a gold range, days how long the trip takes. companion.expectedWeeklyLoot is how much gold a candidate thinks a party of that rank earns per week; they use it to value a loot cut. simulation tunes the rival parties: the chance a party goes on a quest each day, its chance of success (0.55 + successPerLevel x (average level - the quest's difficulty: its enemy level - 1, plus 1 per encounter threat point over board.standardEncounter), clamped), and what can go wrong. Each member levels up after a success with levelUpChanceOnSuccess x levelUpFalloff^(level - 1), so high levels come slowly. A party tries its promotion quest once it has the renown and at least a 50% chance. Experienced adventurers die less: each member's chance to be lost on a quest is multiplied by deathLevelFalloff^(level - 1) (at least minDeathFactor), and a party's wipe chance by the same factor for its average level. Parties recruit from the guild hall only adventurers within recruitLevelGap levels of their average (or anyone, when down to 2 members). New adventurers arrive at about the rate adventurers are lost, nudged toward targetAdventurers.",
   "city": "Arch City",
   "startingGold": 500,
   "startingRenown": 0,
@@ -19,12 +19,13 @@
   },
   "boardSize": 24,
   "board": {
-    "_comment": "The guild's quest board is shared with the rival parties, who take quests from it (see simulation). Each day up to maxPostsPerDay new quests are posted until it holds boardSize; postWeights is how often each rank is posted, and there are always at least minAtPartyRank quests at the player's rank. Quests vary: threat multiplies the enemy group's size (and the pay), and pay is extra luck on the reward, so some quests are much better deals than others.",
+    "_comment": "The guild's quest board is shared with the rival parties, who take quests from it (see simulation). Each day up to maxPostsPerDay new quests are posted until it holds boardSize; postWeights is how often each rank is posted, and there are always at least minAtPartyRank quests at the player's rank. Quests vary: threat multiplies the enemy group's size, and pay is extra luck on the reward, so some quests are much better deals than others. standardEncounter is the encounter budget the quests' reward table is set for: a quest's gold is its reward-table figure x (its encounter budget / standardEncounter) x pay, so bigger groups pay more. For rival parties, each threat point over standardEncounter makes a quest one level harder (and each point under, one easier).",
     "maxPostsPerDay": 8,
     "minAtPartyRank": 6,
     "postWeights": { "A": 0.15, "B": 0.25, "C": 0.35, "D": 0.25 },
     "threat": [0.8, 1.35],
-    "pay": [0.75, 1.35]
+    "pay": [0.75, 1.35],
+    "standardEncounter": 4
   },
   "quests": {
     "_comment": "Per quest rank: stages (enemy levels), reward, renown, days, and encounter: the enemies' threat budget (enemies.json threat per unit: a bandit is 1, a rat 0.5), multiplied by each quest's own threat roll (board.threat). Encounter size comes from the quest alone, never from the party that takes it. Quick Battle stages use the budget of the rank whose stages they fall in.",
@@ -136,7 +137,6 @@
     "poolTarget": 10,
     "partySize": [3, 6],
     "questChancePerDay": 0.25,
-    "rankDifficulty": { "D": 2, "C": 7, "B": 12, "A": 17 },
     "successPerLevel": 0.18,
     "lossChanceOnSuccess": 0.004,
     "lossChanceOnFailure": 0.06,

@@ -74,23 +74,23 @@ Every 7th day is **payday** for companions.
 
 The **Quest Board** is shared with every rival party. It holds about **24 quests** across all ranks: up to 8 new ones are posted each day (35% C, 25% D, 25% B, 15% A), each stays up 4–8 days, and there are always at least 6 at your rank. **Rival parties take quests from it every day**, and they go for the best deals first, so a generous quest may not last. You can take quests at your rank or below (the board shows those by default; **All quests** shows the rest, locked). Quests vary in risk and reward:
 
-- **Group size**: the enemy group is 0.8–1.35× the usual size ("Small group", "Large band"). Pay and renown scale with it.
+- **Group size**: the enemy group is 0.8–1.35× the usual size for its rank ("Small group", "Large band"). Pay and renown scale with it.
 - **Pay**: on top of that, the reward is 0.75–1.35× the usual for the quest's level and group size. Cards flag **Generous pay** and **Poor pay**.
 
-Quests of a rank have enemies of that rank's levels (usual pay shown):
+Quests of a rank have enemies of that rank's levels, and bigger groups at higher ranks (see [encounter size](#enemies)). Gold scales with the group: the reward table in `guild.json` is set for a standard encounter of 4 threat (`board.standardEncounter`), and a quest pays its table figure × its encounter budget ÷ 4. Usual pay (threat 1) shown:
 
-| Rank | Enemy levels | Reward | Renown |
-|---|---|---|---|
-| D | 1–5 | 70–110 | 14 |
-| C | 6–10 | 170–280 | 32 |
-| B | 11–15 | 380–600 | 75 |
-| A | 16–20 | 850–1300 | 170 |
+| Rank | Enemy levels | Encounter budget | Reward (table × budget ÷ 4) | Renown |
+|---|---|---|---|---|
+| D | 1–5 | 3 | 55–85 (70–110 × 0.75) | 14 |
+| C | 6–10 | 4 | 170–280 | 32 |
+| B | 11–15 | 5 | 475–750 (380–600 × 1.25) | 75 |
+| A | 16–20 | 6 | 1275–1950 (850–1300 × 1.5) | 170 |
 
 XP from a won quest depends on the enemy level against each member's level: 100 XP at an equal level, up to 200 for punching above it, and as little as 15 for easy work.
 
 ### The other parties
 
-The rival parties are simulated day by day. A new game starts them spread over the ranks (5% A, 20% B, 60% C, 15% D), each made of adventurers of about its rank. Each day a party has a 25% chance of going on a quest. It takes the board quest (at its rank or below) with the best reward for the risk: its chance of success (its level and size against the quest's enemy level and group size; it won't take anything under 55%) times the gold and renown, minus what a failure would cost. A different party gets first pick each day; if nothing suits it, it rests. Success earns renown and sometimes a level (less often at high levels). With enough renown, a party takes its promotion quest once it has at least an even chance. Failure costs renown and can cost members (they die or quit), and a badly outmatched party can be **wiped out** and removed. Experience keeps adventurers alive: a member's chance of being lost is ×0.88 per level above 1 (at least ×0.1, so a level-18 veteran is about 10× less likely to die than a recruit), and wipes scale the same way with the party's average level. Parties only recruit adventurers within 4 levels of their average (anyone once they're down to 2), so A-rank parties stay A-rank strength. Parties of one break up, and the survivor goes back to the guild hall. New adventurers (mostly fresh recruits, now and then a veteran) arrive at about the rate adventurers are lost, nudged toward 100. When the hall gets crowded (or there are fewer than usual parties), they band together as a **new D-rank party**. **Guild News** reports all of this.
+The rival parties are simulated day by day. A new game starts them spread over the ranks (5% A, 20% B, 60% C, 15% D), each made of adventurers of about its rank. Each day a party has a 25% chance of going on a quest. It takes the board quest (at its rank or below) with the best reward for the risk: its chance of success (its level and size against the quest's difficulty: its enemy level, plus a level for each threat point its encounter has over the standard 4, so a large A-rank band counts as several levels harder; it won't take anything under 55%) times the gold and renown, minus what a failure would cost. A different party gets first pick each day; if nothing suits it, it rests. Success earns renown and sometimes a level (less often at high levels). With enough renown, a party takes its promotion quest once it has at least an even chance. Failure costs renown and can cost members (they die or quit), and a badly outmatched party can be **wiped out** and removed. Experience keeps adventurers alive: a member's chance of being lost is ×0.88 per level above 1 (at least ×0.1, so a level-18 veteran is about 10× less likely to die than a recruit), and wipes scale the same way with the party's average level. Parties only recruit adventurers within 4 levels of their average (anyone once they're down to 2), so A-rank parties stay A-rank strength. Parties of one break up, and the survivor goes back to the guild hall. New adventurers (mostly fresh recruits, now and then a veteran) arrive at about the rate adventurers are lost, nudged toward 100. When the hall gets crowded (or there are fewer than usual parties), they band together as a **new D-rank party**. **Guild News** reports all of this.
 
 ### Party members
 

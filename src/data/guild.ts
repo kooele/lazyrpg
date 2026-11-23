@@ -50,7 +50,7 @@ export interface GuildConfig {
   /** First level of each adventurer rank above D. */
   adventurerRanks: Record<'C' | 'B' | 'A' | 'S', number>;
   boardSize: number;
-  board: { maxPostsPerDay: number; minAtPartyRank: number; postWeights: Record<Rank, number>; threat: [number, number]; pay: [number, number] };
+  board: { maxPostsPerDay: number; minAtPartyRank: number; postWeights: Record<Rank, number>; threat: [number, number]; pay: [number, number]; standardEncounter: number };
   quests: Record<Rank, QuestTier>;
   /** foodLodgingPerDay: what food and lodging are worth to a companion (negotiations); roadPerPerson: a night on the road. */
   upkeep: { foodLodgingPerDay: number; roadPerPerson: number };
@@ -117,7 +117,6 @@ export interface GuildConfig {
     poolTarget: number;
     partySize: [number, number];
     questChancePerDay: number;
-    rankDifficulty: Record<Rank, number>;
     successPerLevel: number;
     lossChanceOnSuccess: number;
     lossChanceOnFailure: number;
@@ -250,6 +249,7 @@ export function parseGuildConfig(data: unknown): GuildConfig {
         minAtPartyRank: num(b.minAtPartyRank, 'board.minAtPartyRank', 0, 60),
         postWeights: perRank(b.postWeights, 'board.postWeights'),
         threat: range(b.threat, 'board.threat', 0.1),
+        standardEncounter: num(b.standardEncounter, 'board.standardEncounter', 0.5),
         pay: range(b.pay, 'board.pay', 0.1),
       };
     })(),
@@ -298,11 +298,10 @@ export function parseGuildConfig(data: unknown): GuildConfig {
       };
     })(),
     simulation: {
-      ...numbers<Omit<GuildConfig['simulation'], 'partySize' | 'rankDifficulty'>>(s, 'simulation',
+      ...numbers<Omit<GuildConfig['simulation'], 'partySize'>>(s, 'simulation',
         ['targetAdventurers', 'targetParties', 'poolTarget', 'questChancePerDay', 'successPerLevel', 'lossChanceOnSuccess',
           'lossChanceOnFailure', 'wipeChanceOnFailure', 'levelUpChanceOnSuccess', 'levelUpFalloff', 'deathLevelFalloff', 'minDeathFactor', 'recruitLevelGap', 'retireChancePerDay', 'maxLevel']),
       partySize: range(s.partySize, 'simulation.partySize', 1),
-      rankDifficulty: perRank(s.rankDifficulty, 'simulation.rankDifficulty'),
     },
   };
 }

@@ -11,10 +11,21 @@ const PLACES = ['the Old Sewers', 'Mill Road', 'Briar Farm', 'the Eastern Woods'
   'the Ruined Chapel', 'Hollow Creek', 'the Quarry', 'Thornfield', 'the North Gate', 'Lantern Hill', 'the Old Watchtower',
   'Ashford Mine', 'the Sunken Road', 'Raven Hollow', 'the Bone Fields', 'Greywater Bridge', 'the High Moor'];
 
+/** Quest rank whose stages contain `stage` (the lowest below them, the highest past them). */
+export function rankForStage(stage: number): Rank {
+  const tiers = RANKS.map((r) => ({ r, t: GUILD.quests[r] })).sort((a, b) => a.t.stages[0] - b.t.stages[0]);
+  return (tiers.find(({ t }) => stage <= t.stages[1]) ?? tiers[tiers.length - 1]).r;
+}
+
+/** Enemy threat budget of a quest of `rank`: the rank's encounter size times the quest's threat. Never depends on the party. */
+export function encounterBudget(rank: Rank, threat = 1): number {
+  return GUILD.quests[rank].encounter * threat;
+}
+
 const roll = ([lo, hi]: [number, number], rng: Rng) => lo + rng() * (hi - lo);
 const round5 = (v: number) => Math.max(5, Math.round(v / 5) * 5);
 
-/** The usual reward for a quest of `rank` at enemy level `stage` with a normal-sized group: up the rank's range with the level. */
+/** The reward table's figure for a quest of `rank` at enemy level `stage` (for a standard encounter): up the rank's range with the level. */
 export function baseReward(rank: Rank, stage: number): number {
   const t = GUILD.quests[rank];
   const [s0, s1] = t.stages;
@@ -22,9 +33,22 @@ export function baseReward(rank: Rank, stage: number): number {
   return t.reward[0] + (t.reward[1] - t.reward[0]) * f;
 }
 
-/** How well a quest pays for its danger: reward / the usual reward for its level and group size (1 = fair). */
+/**
+ * How big a quest's encounter is next to the standard one the reward table is set for (board.standardEncounter):
+ * its rank's encounter budget times its threat, over the standard. Rewards scale with it.
+ */
+export function encounterScale(q: Pick<Quest, 'rank' | 'threat'>): number {
+  return encounterBudget(q.rank, q.threat ?? 1) / GUILD.board.standardEncounter;
+}
+
+/** The usual reward for a quest: its level's base reward, scaled by the size of its encounter. */
+export function fairReward(q: Pick<Quest, 'rank' | 'stage' | 'threat'>): number {
+  return baseReward(q.rank, q.stage) * encounterScale(q);
+}
+
+/** How well a quest pays for its danger: reward / the usual reward for its level and encounter size (1 = fair). */
 export function payRatio(q: Quest): number {
-  return q.reward / (baseReward(q.rank, q.stage) * (q.threat ?? 1));
+  return q.reward / fairReward(q);
 }
 
 /** "generous", "fair" or "poor" pay for the danger. */
@@ -56,7 +80,7 @@ export function makeQuest(rank: Rank, day: number, rng: Rng, promotion = false):
     title: promotion ? `Promotion: ${title}` : title,
     rank,
     stage,
-    reward: round5(baseReward(rank, stage) * threat * pay),
+    reward: round5(fairReward({ rank, stage, threat }) * pay),
     renown: Math.round(tier.renown * threat),
     days: randInt(tier.days[0], tier.days[1], rng),
     expires: day + (promotion ? 365 : randInt(4, 8, rng)),

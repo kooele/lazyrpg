@@ -11,7 +11,7 @@ import { BAR_PAGE, makeRng, skillBarLayout, swapBarSlots } from '../game/charact
 import { TERRAIN, generateMap, key, type Point } from '../game/grid';
 import { GUILD } from '../data/guild';
 import { lineupMembers, resolveQuest } from '../game/city';
-import { encounterBudget, rankForStage } from '../game/guild';
+import { encounterBudget, rankForStage } from '../game/board';
 import { DEMO_STAGES, requireDemo, resolveDemoBattle } from '../game/demo';
 import { markDirty, requireState } from '../game/session';
 import { COLORS, HEIGHT, ScrollList, UI_SCALE, WIDTH, button, confirmDialog, figure, monsterFigure, panel, setupCamera, text } from '../ui/widgets';

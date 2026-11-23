@@ -14,8 +14,8 @@ import {
   companionContract, companionDemand, evaluateOffer, joinParty, mercenaryRates, offerValue, openingTerms, punishSlave, slaveContract,
 } from '../src/game/contracts';
 import { DEMO_STAGES, newDemo, resolveDemoBattle } from '../src/game/demo';
-import { payRatio } from '../src/game/board';
-import { adventurerCount, adventurerRank, deathFactor, leaderboard, rivalPickQuest, rivalQuestChance, rankCounts, simulateGuildDay } from '../src/game/guild';
+import { encounterBudget, fairReward, payRatio } from '../src/game/board';
+import { adventurerCount, adventurerRank, deathFactor, leaderboard, questDifficulty, rankDifficulty, rivalPickQuest, rivalQuestChance, rankCounts, simulateGuildDay } from '../src/game/guild';
 
 const start = (seed = 1): GameState => newCampaign(createCharacter('Main', '#3d7be0', 'sword_shield'), 'Testers', makeRng(seed));
 /** Feed everyone exactly what their rank expects, so food doesn't move relationships (for tests about something else). */
@@ -148,6 +148,29 @@ describe('ranks and the leaderboard', () => {
     for (const r of ['D', 'C', 'B', 'A'] as const) {
       const q = makeQuest(r, 1, makeRng(5));
       expect(adventurerRank(q.stage)).toBe(r);
+    }
+  });
+
+  it('quest gold and difficulty follow the encounter budget (its rank and threat), not just the enemy level', () => {
+    const q = (rank: 'D' | 'C' | 'B' | 'A', stage: number, threat: number) => ({ rank, stage, threat });
+    const std = GUILD.board.standardEncounter;
+    // Gold: the reward table's figure x encounter budget / the standard encounter.
+    expect(fairReward(q('C', 6, 1))).toBeCloseTo(GUILD.quests.C.reward[0] * encounterBudget('C') / std);
+    expect(fairReward(q('A', 16, 1.2))).toBeCloseTo(GUILD.quests.A.reward[0] * encounterBudget('A', 1.2) / std);
+    expect(fairReward(q('B', 11, 1.3))).toBeGreaterThan(fairReward(q('B', 11, 0.9)));
+    // Difficulty: enemy level - 1, plus a level per threat point over the standard encounter.
+    expect(questDifficulty(q('C', 8, 1))).toBeCloseTo(7 + encounterBudget('C') - std);
+    expect(questDifficulty(q('A', 18, 1.35))).toBeCloseTo(17 + encounterBudget('A', 1.35) - std);
+    expect(questDifficulty(q('B', 12, 1.3))).toBeGreaterThan(questDifficulty(q('B', 12, 0.9)));
+    // Ranks get harder in order.
+    expect(rankDifficulty('D')).toBeLessThan(rankDifficulty('C'));
+    expect(rankDifficulty('C')).toBeLessThan(rankDifficulty('B'));
+    expect(rankDifficulty('B')).toBeLessThan(rankDifficulty('A'));
+    // Posted quests pay fairly for their encounter (times the pay luck).
+    for (let seed = 0; seed < 30; seed++) {
+      const quest = makeQuest('A', 1, makeRng(seed));
+      expect(payRatio(quest)).toBeGreaterThan(GUILD.board.pay[0] - 0.05);
+      expect(payRatio(quest)).toBeLessThan(GUILD.board.pay[1] + 0.05);
     }
   });
 
