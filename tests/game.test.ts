@@ -1455,6 +1455,36 @@ describe('skill-sheet systems: level locks, Disengage and the new skills', () =>
     expect(e.engagedWith).toBeNull();
   });
 
+  it("Arcane Pulse that can't push its opponent (rock or unit behind it) keeps the engagement, with no free hit", () => {
+    const pulse = (behind: 'rock' | 'unit' | 'one tile') => {
+      const map = openMap();
+      if (behind === 'rock') map.tiles[3][5] = 'rock';
+      if (behind === 'one tile') map.tiles[3][6] = 'rock';
+      const a = makeUnit(hero('staff', ['arcane_pulse']), 'player', { x: 3, y: 3 });
+      const e = makeUnit(hero('sword_shield'), 'enemy', { x: 4, y: 3 });
+      const units = [a, e];
+      if (behind === 'unit') units.push(makeUnit(hero('bow', [], 'B'), 'enemy', { x: 5, y: 3 }));
+      const battle = new Battle(map, units, makeRng(1));
+      a.engagedWith = e.uid;
+      e.engagedWith = a.uid;
+      const events = battle.perform(a, 'arcane_pulse', { x: 4, y: 3 });
+      return { a, e, events };
+    };
+    for (const behind of ['rock', 'unit'] as const) {
+      const { a, e, events } = pulse(behind);
+      expect(e, behind).toMatchObject({ x: 4, y: 3 });
+      expect(a.engagedWith, behind).toBe(e.uid);
+      expect(e.engagedWith, behind).toBe(a.uid);
+      expect(events.some((ev) => ev.type === 'disengage'), behind).toBe(false);
+      expect(events.some((ev) => ev.type === 'damage' && ev.cause === 'opportunity'), behind).toBe(false);
+    }
+    // Pushed only 1 of its 2 tiles: it still moved, so the engagement breaks (with the free hit).
+    const { a, e, events } = pulse('one tile');
+    expect(e).toMatchObject({ x: 5, y: 3 });
+    expect(a.engagedWith).toBeNull();
+    expect(events).toContainEqual(expect.objectContaining({ type: 'damage', cause: 'opportunity', source: a.uid, target: e.uid }));
+  });
+
   it('Arcane Pulse is not a disengage: engaged, it only hits the opponent, and the push gives the caster a free hit', () => {
     const { battle, units: [a, e, f] } = setup(openMap(), [
       { c: hero('staff', ['arcane_pulse']), team: 'player', at: { x: 3, y: 3 } },
