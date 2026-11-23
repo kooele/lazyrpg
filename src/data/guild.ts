@@ -11,7 +11,7 @@ export interface QuestTier {
 
 export type InnTier = 'standard' | 'highEnd' | 'luxury';
 export const INN_TIERS: readonly InnTier[] = ['standard', 'highEnd', 'luxury'];
-/** City rings (where residences are). */
+/** Residences, cheapest first (ids kept from when the city had three rings: 'outer' is in the Outer City, 'middle' and 'inner' in the Inner City). */
 export type Ring = 'outer' | 'middle' | 'inner';
 export const RINGS: readonly Ring[] = ['outer', 'middle', 'inner'];
 export interface InnConfig {
@@ -26,7 +26,7 @@ export interface InnConfig {
 export type Lodging = InnTier | Ring | 'outside' | 'road';
 /** A night in the city (not on the road). */
 export type CityLodging = Exclude<Lodging, 'road'>;
-/** Night quality (for adventurers' expectations): outside 0, then each ring's inn or residence 1-3. */
+/** Night quality (for adventurers' expectations): outside 0, then each inn or residence 1-3. */
 export const LODGING_QUALITY: Record<CityLodging, number> = { outside: 0, standard: 1, outer: 1, highEnd: 2, middle: 2, luxury: 3, inner: 3 };
 export const isResidence = (l: Lodging): l is Ring => (RINGS as readonly string[]).includes(l);
 

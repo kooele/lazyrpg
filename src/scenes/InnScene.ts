@@ -11,11 +11,11 @@ type Place = InnTier | Ring;
 
 const BLURB: Record<Place, string> = {
   standard: 'A busy common-room inn by the outer wall: stew, ale and a straw mattress. It does the job.',
-  highEnd: 'A respectable Middle Ring inn: clean sheets, a private room each and a decent wine list.',
-  luxury: 'The finest house in the Inner Ring: feather beds, hot baths and a cellar to match. Seasoned adventurers expect nothing less.',
+  highEnd: 'A respectable Inner City inn just inside the inner wall: clean sheets, a private room each and a decent wine list.',
+  luxury: 'The finest house in the Inner City: feather beds, hot baths and a cellar to match. Seasoned adventurers expect nothing less.',
   outer: 'A sturdy townhouse inside the outer wall. Your own roof: nights here cost nothing.',
-  middle: 'A handsome house in the Middle Ring, among merchants and guild masters. Nights here cost nothing.',
-  inner: 'A mansion in the Inner Ring, a street away from the Lord\'s Manor. Nights here cost nothing.',
+  middle: 'A handsome townhouse inside the inner wall, among merchants and guild masters. Nights here cost nothing.',
+  inner: 'A mansion in the heart of the Inner City, a street away from the Lord\'s Manor. Nights here cost nothing.',
 };
 
 /** An inn or one of the party's residences: end the day with a night's lodging (or several). Inns also sell drinks. */
@@ -59,7 +59,7 @@ export class InnScene extends Phaser.Scene {
     text(this, 30, 184, price, { fontSize: '18px', color: COLORS.gold });
     const quality = LODGING_QUALITY[this.place];
     const perks = [
-      `Counts as ${QUALITY_TEXT[quality]} (quality ${quality} of 3). D-rank adventurers are fine outside; C-rank expect an inn, B-rank a high-end inn, A and S-rank a luxury one (or a residence in that ring).`,
+      `Counts as ${QUALITY_TEXT[quality]} (quality ${quality} of 3). D-rank adventurers are fine outside; C-rank expect an inn, B-rank a high-end inn, A and S-rank a luxury one (or a residence as good).`,
       `The party houses ${guests.length}: you, your slaves, and companions whose contract includes food & lodging. Those companions, and slaves, like a better night than they expect and resent a worse one.`,
     ];
     text(this, 30, 214, perks.join('\n'), { fontSize: '12px', color: COLORS.dim, wordWrap: { width: 532 }, lineSpacing: 3 });
@@ -71,7 +71,7 @@ export class InnScene extends Phaser.Scene {
       fontSize: '13px', lineSpacing: 4,
     });
     if (home && !owned) {
-      button(this, 30, 452, 530, 46, `For sale at the Estate Office (Middle Ring): ${GUILD.residences[home].price} gold`, () => this.scene.start('Estate'), { fontSize: 15 });
+      button(this, 30, 452, 530, 46, `For sale at the Estate Office (Inner City): ${GUILD.residences[home].price} gold`, () => this.scene.start('Estate'), { fontSize: 15 });
     } else {
       const stays: [number, string][] = [[1, 'Stay the night'], [3, 'Stay 3 nights'], [7, 'Stay a week']];
       stays.forEach(([n, label], i) => button(this, 30 + i * 180, 452, 170, 46, `${label}\n${perNight * n} gold${home ? ' (food)' : ''}`, () => this.stay(n), {

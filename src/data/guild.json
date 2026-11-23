@@ -50,18 +50,18 @@
   },
   "_inns": "drinksPerPerson / drinksMorale: a round of drinks for the whole party (once a day) costs drinksPerPerson per member and raises everyone's Morale by drinksMorale.",
   "lodging": {
-    "_comment": "Every day ends with a night somewhere: an inn, a residence the party owns (free), or sleeping outside (free). Night quality: outside 0; the Sleeping Griffin or an Outer Ring residence 1; the Silver Lantern or a Middle Ring residence 2; the Gilded Crown or an Inner Ring residence 3. expectedQuality is what an adventurer of each rank (from their level) expects. Each night, housed companions (food & lodging in their contract) gain relationshipAbove when the party sleeps better than they expect, and lose relationshipBelowPerStep for each step worse. Nights on the road during multi-day quests cost upkeep.roadPerPerson and don't count.",
+    "_comment": "Every day ends with a night somewhere: an inn, a residence the party owns (free), or sleeping outside (free). Night quality: outside 0; the Sleeping Griffin or the Outer City House 1; the Silver Lantern or the Inner City Townhouse 2; the Gilded Crown or the Inner City Mansion 3. expectedQuality is what an adventurer of each rank (from their level) expects. Each night, housed companions (food & lodging in their contract) gain relationshipAbove when the party sleeps better than they expect, and lose relationshipBelowPerStep for each step worse. Nights on the road during multi-day quests cost upkeep.roadPerPerson and don't count.",
     "expectedQuality": { "D": 0, "C": 1, "B": 2, "A": 3, "S": 3 },
     "relationshipAbove": 2,
     "relationshipBelowPerStep": 3,
     "outsidePerPerson": 0
   },
   "residences": {
-    "_comment": "Homes the party can buy and sell at the Estate Office (Middle Ring), one per ring. Nights there are free and count as that ring's quality (see lodging). The office buys a residence back for sellShare of its price.",
+    "_comment": "Homes the party can buy and sell at the Estate Office (Inner City): one in the Outer City (key outer) and two in the Inner City (keys middle and inner; the keys are kept for old saves). Nights there are free and count as quality 1, 2 and 3 (see lodging). The office buys a residence back for sellShare of its price.",
     "sellShare": 0.7,
-    "outer": { "name": "Outer Ring Residence", "price": 2000 },
-    "middle": { "name": "Middle Ring Residence", "price": 10000 },
-    "inner": { "name": "Inner Ring Residence", "price": 50000 }
+    "outer": { "name": "Outer City House", "price": 2000 },
+    "middle": { "name": "Inner City Townhouse", "price": 10000 },
+    "inner": { "name": "Inner City Mansion", "price": 50000 }
   },
   "condition": {
     "_comment": "Health (0-100, not battle HP) and Morale (0-100) of party members. After a battle, Health drops by maxHealthLoss x the share of HP the unit lost at its lowest point (falling = the full amount). Below 100 Health a member is injured and can't go on quests; everyone recovers healthPerDay each night. A member whose Health reaches 0 dies (the main character is left at 1 instead). Morale changes: moralePerQuest for each member who goes on a quest, moraleFailedQuest more if it fails, moralePerHealthLost per Health point lost to injuries, moraleMemberDied for everyone when a member dies. New members start at startingMorale. Below lowMorale, companions lose lowMoraleRelationshipPerDay relationship each day; a member at 0 Morale leaves the party (not the main character).",

@@ -375,7 +375,7 @@ describe('contracts', () => {
     expect(buyResidence(s, 'middle')).toBeNull();
     expect(s.gold).toBe(0);
     expect(() => stayAtHome(s, 'inner', 1, makeRng(1))).toThrow();
-    c.level = 12; // B rank: a Middle Ring residence is as good as a high-end inn
+    c.level = 12; // B rank: the Inner City Townhouse is as good as a high-end inn
     neutralFood(s);
     s.gold = 100;
     stayAtHome(s, 'middle', 1, makeRng(1));

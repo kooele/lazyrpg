@@ -6,14 +6,15 @@ import { markDirty, requireState, session } from '../game/session';
 import { cityHeader } from '../ui/hud';
 import { COLORS, HEIGHT, WIDTH, button, confirmDialog, panel, setupCamera, text, toast } from '../ui/widgets';
 
-const RING_NAME: Record<Ring, string> = { outer: 'Outer Ring', middle: 'Middle Ring', inner: 'Inner Ring' };
+/** Which part of the city each residence is in (the townhouse and the mansion are both in the Inner City). */
+const DISTRICT: Record<Ring, string> = { outer: 'Outer City', middle: 'Inner City', inner: 'Inner City' };
 const BLURB: Record<Ring, string> = {
   outer: 'A sturdy townhouse inside the outer wall, a short walk from the guild.',
-  middle: 'A handsome house among the merchants and guild masters of the Middle Ring.',
-  inner: 'A mansion in the Inner Ring, a street away from the Lord\'s Manor.',
+  middle: 'A handsome townhouse inside the inner wall, among merchants and guild masters.',
+  inner: 'A mansion in the heart of the Inner City, a street away from the Lord\'s Manor.',
 };
 
-/** The Estate Office (Middle Ring): buy and sell the party's residences. */
+/** The Estate Office (Inner City): buy and sell the party's residences. */
 export class EstateScene extends Phaser.Scene {
   constructor() {
     super('Estate');
@@ -34,7 +35,7 @@ export class EstateScene extends Phaser.Scene {
     const state = requireState();
     cityHeader(this, state, 'Estate Office');
     button(this, WIDTH - 176, 74, 160, 34, `Back to ${GUILD.city}`, () => this.scene.start('City'), { fontSize: 14 });
-    text(this, 20, 82, `Homes for sale in ${GUILD.city}. Nights in your own residence are free, and count as good as that ring's inn.\nThe office buys a residence back for ${Math.round(GUILD.residences.sellShare * 100)}% of its price.`, {
+    text(this, 20, 82, `Homes for sale in ${GUILD.city}. Nights in your own residence are free, and count as good as an inn of the same standing.\nThe office buys a residence back for ${Math.round(GUILD.residences.sellShare * 100)}% of its price.`, {
       fontSize: '13px', color: COLORS.dim, wordWrap: { width: WIDTH - 220 }, lineSpacing: 3,
     });
 
@@ -46,7 +47,7 @@ export class EstateScene extends Phaser.Scene {
       const w = 300;
       panel(this, x, y, w, HEIGHT - 146, owned ? 0x1f2a1f : COLORS.panel);
       text(this, x + 14, y + 12, home.name, { fontSize: '19px', color: owned ? '#6fdc8c' : COLORS.text, wordWrap: { width: w - 28 } });
-      text(this, x + 14, y + 40, RING_NAME[ring], { fontSize: '13px', color: COLORS.dim });
+      text(this, x + 14, y + 40, DISTRICT[ring], { fontSize: '13px', color: COLORS.dim });
       text(this, x + 14, y + 70, BLURB[ring], { fontSize: '13px', wordWrap: { width: w - 28 }, lineSpacing: 3 });
       const q = LODGING_QUALITY[ring];
       text(this, x + 14, y + 140, `Night quality ${q} of 3: counts as ${QUALITY_TEXT[q]}.`, { fontSize: '12px', color: COLORS.dim, wordWrap: { width: w - 28 } });
