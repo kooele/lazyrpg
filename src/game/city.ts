@@ -21,6 +21,7 @@ import { randInt, randomAdventurer } from './people';
 
 export function newCampaign(main: Character, partyName: string, rng: Rng): GameState {
   main.contract = { type: 'main' };
+  if (!main.traits?.includes('protagonist')) main.traits = [...(main.traits ?? []), 'protagonist'];
   const state: GameState = {
     progress: { victories: 0, defeats: 0 },
     day: 1,

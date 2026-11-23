@@ -51,6 +51,8 @@ Party members have two Strategic Layer stats, both out of 100 (`condition` and `
 
 **Slaves** have a **relationship** (it moves like a companion's: quests completed together, nights better or worse than they expect, low Morale, missed upkeep) and **Obedience** (0–100). Market slaves start at 40–80 Obedience, registered captives at 0–40, both at 40 relationship. Obedience **rises 1 a day while relationship is 60+** and **falls 1 a day below 40**. **Punish** (Manage Party, once a day per slave) gives **+20 Obedience for −20 relationship**: a quick boost that drains away again unless the relationship is repaired. (`slave` in `guild.json`.)
 
+**Traits** are listed under each adventurer's skills in Manage Party (hover one for what it does). For now there's one: **Protagonist**, which your main character has. It **doubles Health recovery** (20 a night, 40 on Recover) and **doubles Morale gains** (drinks, days off). Morale losses aren't doubled. Traits are defined in `src/data/traits.ts`. In Manage Party, hovering **Health**, **Morale**, **Relationship** or **Obedience** (marked ⓘ) shows a tooltip with how that stat works and where the member stands now.
+
 The **schedule** (Manage Party) sets what each member does on days they aren't on a quest. It runs when the day ends; members who went on that day's quest skip it.
 
 | Activity | Effect per day |
@@ -303,6 +305,8 @@ A version-3 save holds the whole city: the day, gold, renown and rank, your part
   }
 }
 ```
+
+The main character also has `"traits": ["protagonist"]` (older saves get it on load).
 
 ## Development
 

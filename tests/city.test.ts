@@ -480,8 +480,10 @@ describe('contracts', () => {
     expect(moraleOf(c)).toBe(C.startingMorale - C.moralePerQuest - C.moraleFailedQuest);
     expect(moraleOf(main)).toBe(C.startingMorale - C.moralePerQuest - C.moraleFailedQuest - Math.round(loss * C.moralePerHealthLost));
     const before = moraleOf(main);
+    const cBefore = moraleOf(c);
     expect(buyDrinks(s, 'standard')).toBeNull();
-    expect(moraleOf(main)).toBe(before + GUILD.inns.standard.drinksMorale);
+    expect(moraleOf(c)).toBe(cBefore + GUILD.inns.standard.drinksMorale);
+    expect(moraleOf(main)).toBe(before + 2 * GUILD.inns.standard.drinksMorale); // Protagonist: double gains
     expect(buyDrinks(s, 'standard')).toMatch(/already/);
     // Day off the next day (the quest day itself doesn't count for those who went).
     stayAtInn(s, 'standard', 1, makeRng(1));
@@ -799,6 +801,39 @@ describe('contracts', () => {
     s.quest!.days = 1;
     resolveQuest(s, 'victory', makeRng(1));
     expect(slave.contract.relationship).toBe(rel - GUILD.lodging.relationshipBelowPerStep + GUILD.companion.relationshipPerQuest);
+  });
+
+  it('the main character is the Protagonist: double injury recovery and double Morale gains', () => {
+    const s = start();
+    const main = mainCharacter(s);
+    expect(main.traits).toEqual(['protagonist']);
+    const c = companion(s);
+    if (c.contract?.type !== 'companion') throw new Error('not a companion');
+    c.contract.endDay = 100;
+    expect(c.traits).toBeUndefined();
+    s.gold = 1000;
+    for (const m of [main, c]) {
+      m.health = 50;
+      m.morale = 50;
+      s.schedule[m.id] = 'dayOff';
+    }
+    sleepOutside(s, makeRng(1));
+    expect(main.health).toBe(50 + 2 * GUILD.condition.healthPerDay);
+    expect(c.health).toBe(50 + GUILD.condition.healthPerDay);
+    expect(main.morale).toBe(50 + 2 * GUILD.schedule.dayOffMorale);
+    expect(c.morale).toBe(50 + GUILD.schedule.dayOffMorale);
+    // Losses aren't doubled.
+    const before = main.morale!;
+    acceptQuest(s, s.guild.board.find((x) => canTakeQuest(s, x))!.id);
+    s.quest!.days = 1;
+    resolveQuest(s, 'victory', makeRng(3));
+    expect(main.morale).toBe(before - GUILD.condition.moralePerQuest);
+    // Saves keep it, and older saves give it to the main character.
+    delete main.traits;
+    const r = parseSave(serializeSave(s));
+    if (!r.ok) throw new Error(r.error);
+    expect(r.state.party.find((m) => m.id === s.mainId)!.traits).toEqual(['protagonist']);
+    expect(r.state.party.find((m) => m.id === c.id)!.traits).toBeUndefined();
   });
 
   it('the main character always goes and cannot be benched', () => {

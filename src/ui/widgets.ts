@@ -268,7 +268,10 @@ export class Tooltip {
     this.bg = scene.add.rectangle(0, 0, width, 10, 0x0b0e18, 0.96).setOrigin(0).setStrokeStyle(1.5, COLORS.accent);
     this.label = text(scene, 10, 8, '', { fontSize: '13px', wordWrap: { width: width - 20 }, lineSpacing: 3 });
     this.box = scene.add.container(0, 0, [this.bg, this.label]).setDepth(5000).setVisible(false);
-    scene.input.on('pointermove', () => this.box.visible && this.place());
+    const follow = () => this.box.visible && this.place();
+    scene.input.on('pointermove', follow);
+    // Scenes that redraw by destroying their children take the tooltip with them: stop following then.
+    this.box.once('destroy', () => scene.input.off('pointermove', follow));
   }
 
   /** Show text, optionally followed by a diagram (e.g. from `reachDiagram`). */

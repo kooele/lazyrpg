@@ -299,6 +299,10 @@ export interface EnemyDef {
   weaponSkillUse: 'basic' | 'all';
 }
 
+/** Traits an adventurer can have (see traits.ts). */
+export const TRAIT_IDS = ['protagonist'] as const;
+export type TraitId = (typeof TRAIT_IDS)[number];
+
 /** A party member (Adventurer) or an enemy. Adventurers' stats come from level + weapon. */
 export interface Character {
   id: string;
@@ -326,6 +330,8 @@ export interface Character {
   health?: number;
   /** Strategic Layer: 0-100. Missing = the starting morale (guild.json condition.startingMorale). */
   morale?: number;
+  /** Adventurers: lasting traits (the main character is the Protagonist). */
+  traits?: TraitId[];
 }
 
 // ---- management: contracts, the guild, Arch City ----------------------------------------

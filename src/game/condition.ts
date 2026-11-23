@@ -1,6 +1,7 @@
 // Strategic Layer condition of party members: Health (0-100, separate from battle HP) and Morale (0-100).
 // Pure logic (no Phaser).
 import { GUILD, LODGING_QUALITY, foodQuality, isResidence, type Activity, type CityLodging, type FoodTier, type Lodging } from '../data/guild';
+import { TRAITS, type TraitDef } from '../data/traits';
 import type { Character, GameState } from '../data/types';
 import { adventurerRank } from './guild';
 
@@ -31,12 +32,20 @@ export function combatPenalty(c: Character): number {
   return 1 - (1 - injuryPenalty(c)) * (1 - moralePenalty(c)) * (1 - obediencePenalty(c));
 }
 
+/** A trait effect for a member: every trait's multiplier, multiplied together (1 without traits). */
+export const traitFactor = (c: Character, key: 'healthRecovery' | 'moraleGain') =>
+  (c.traits ?? []).reduce((m, t) => m * (TRAITS[t] as TraitDef)[key], 1);
+
+/** Change Health. Recovery (a gain) is multiplied by traits (Protagonist: x2). */
 export function changeHealth(c: Character, delta: number): void {
-  c.health = Math.round(clamp(healthOf(c) + delta, MAX_HEALTH));
+  const d = delta > 0 ? delta * traitFactor(c, 'healthRecovery') : delta;
+  c.health = Math.round(clamp(healthOf(c) + d, MAX_HEALTH));
 }
 
+/** Change Morale. Gains are multiplied by traits (Protagonist: x2); losses aren't. */
 export function changeMorale(c: Character, delta: number): void {
-  c.morale = Math.round(clamp(moraleOf(c) + delta, MAX_MORALE));
+  const d = delta > 0 ? delta * traitFactor(c, 'moraleGain') : delta;
+  c.morale = Math.round(clamp(moraleOf(c) + d, MAX_MORALE));
 }
 
 /** How a member came out of a battle: the lowest HP they were taken down to (0-1 of max) and whether they fell. */
