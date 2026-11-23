@@ -26,7 +26,7 @@ interface Place {
 /**
  * Locations by district. Outer City: between the outer and inner walls, plus the harbour to the east
  * (the Adventurer Guild is the domed hall on the plaza in the south-west). Inner City: inside the inner wall,
- * with the cathedral, the manor and the triumphal arch at its centre.
+ * with the cathedral, the manor and a triumphal arch (a monument, not a location) at its centre.
  */
 const PLACES: Record<District, Place[]> = {
   outer: [
@@ -45,7 +45,7 @@ const PLACES: Record<District, Place[]> = {
   inner: [
     { name: "Lord's Manor", blurb: 'Seat of the Lord of Arch City.', at: [860, 378] },
     { name: 'Central Church', blurb: 'The great cathedral at the heart of the city.', at: [655, 375] },
-    { name: 'Central Government Office', blurb: 'Permits, taxes and the city\'s business, by the triumphal arch.', at: [757, 440] },
+    { name: 'Central Government Office', blurb: 'Permits, taxes and the city\'s business, in the long hall beside the Lord\'s Manor.', at: [890, 425] },
     { name: 'Library', blurb: 'Books, maps and old records.', at: [530, 300] },
     { name: 'Estate Office', blurb: 'Buy and sell residences across the city.', at: [990, 330], scene: 'Estate' },
     { name: GUILD.inns.highEnd.name, blurb: `High-end inn: ${GUILD.inns.highEnd.pricePerPerson} gold per person a night, and drinks. What B-rank adventurers expect.`, at: [995, 570], scene: 'Inn', data: { tier: 'highEnd' } },
