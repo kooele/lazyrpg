@@ -27,10 +27,11 @@
     "pay": [0.75, 1.35]
   },
   "quests": {
-    "D": { "stages": [1, 5], "reward": [70, 110], "renown": 14, "days": [1, 2] },
-    "C": { "stages": [6, 10], "reward": [170, 280], "renown": 32, "days": [1, 3] },
-    "B": { "stages": [11, 15], "reward": [380, 600], "renown": 75, "days": [2, 3] },
-    "A": { "stages": [16, 20], "reward": [850, 1300], "renown": 170, "days": [2, 4] }
+    "_comment": "Per quest rank: stages (enemy levels), reward, renown, days, and encounter: the enemies' threat budget (enemies.json threat per unit: a bandit is 1, a rat 0.5), multiplied by each quest's own threat roll (board.threat). Encounter size comes from the quest alone, never from the party that takes it. Quick Battle stages use the budget of the rank whose stages they fall in.",
+    "D": { "stages": [1, 5], "reward": [70, 110], "renown": 14, "days": [1, 2], "encounter": 3 },
+    "C": { "stages": [6, 10], "reward": [170, 280], "renown": 32, "days": [1, 3], "encounter": 4 },
+    "B": { "stages": [11, 15], "reward": [380, 600], "renown": 75, "days": [2, 3], "encounter": 5 },
+    "A": { "stages": [16, 20], "reward": [850, 1300], "renown": 170, "days": [2, 4], "encounter": 6 }
   },
   "upkeep": { "foodLodgingPerDay": 4, "roadPerPerson": 2 },
   "food": {

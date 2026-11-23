@@ -10,6 +10,19 @@ import { randInt, randomAdventurer, randomName, randomPartyName } from './people
 const SIM = GUILD.simulation;
 export const PLAYER_ID = 'player';
 
+// ---- encounters ----------------------------------------------------------------------------------
+
+/** Quest rank whose stages contain `stage` (the lowest below them, the highest past them). */
+export function rankForStage(stage: number): Rank {
+  const tiers = RANKS.map((r) => ({ r, t: GUILD.quests[r] })).sort((a, b) => a.t.stages[0] - b.t.stages[0]);
+  return (tiers.find(({ t }) => stage <= t.stages[1]) ?? tiers[tiers.length - 1]).r;
+}
+
+/** Enemy threat budget of a quest of `rank`: the rank's encounter size times the quest's threat. Never depends on the party. */
+export function encounterBudget(rank: Rank, threat = 1): number {
+  return GUILD.quests[rank].encounter * threat;
+}
+
 // ---- ranks -----------------------------------------------------------------------------------------
 
 /** Renown a party needs to hold `rank` (D: none). */

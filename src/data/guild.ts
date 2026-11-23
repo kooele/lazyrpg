@@ -4,6 +4,8 @@ import { RANKS, type Rank } from './types';
 
 export interface QuestTier {
   stages: [number, number];
+  /** Enemy threat budget of this rank's encounters (times each quest's threat). */
+  encounter: number;
   reward: [number, number];
   renown: number;
   days: [number, number];
@@ -218,6 +220,7 @@ export function parseGuildConfig(data: unknown): GuildConfig {
       reward: range(t.reward, `quests.${r}.reward`),
       renown: num(t.renown, `quests.${r}.renown`),
       days: range(t.days, `quests.${r}.days`, 1),
+      encounter: num(t.encounter, `quests.${r}.encounter`, 0.5),
     };
   }
   const c = obj(d.companion, 'companion');

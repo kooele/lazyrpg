@@ -1625,23 +1625,20 @@ export function pickFoes(stage: number, rng: Rng): string[] {
 }
 
 /**
- * An encounter for `stage`: random picks from the foes (see pickFoes) until the threat budget
- * (encounter.threat x mobMultiplier, the quest's threat) is spent. Weak types come in bigger packs.
- * The budget never depends on the party: a lone adventurer faces as many enemies as a full party.
- * Past the last level range, the budget keeps growing by 25% per stage.
+ * An encounter for `stage`: random picks from the foes (see pickFoes) until `budget` threat is spent
+ * (see encounterBudget: it comes from the quest, never the party). Weak types come in bigger packs.
+ * Past the last level range, the budget keeps growing by 25% per stage. At most `cap` enemies.
  */
-export function generateEnemies(stage: number, rng: Rng, mobMultiplier = 1, foes?: string[]): Character[] {
+export function generateEnemies(stage: number, rng: Rng, budget: number, foes?: string[], cap = ENCOUNTER.maxEnemies): Character[] {
   const fitting = enemyTypesForStage(stage);
   const want = foes?.length ? foes : pickFoes(stage, rng);
   const themed = fitting.filter((t) => want.includes(t.type));
   const options = themed.length ? themed : fitting;
   const top = Math.max(...Object.values(ENEMIES).map((d) => d.levels[1]));
-  // Quick Battle's difficulty slider multiplies the budget (and the cap on how many come).
-  const budget = ENCOUNTER.threat * (1 + Math.max(0, stage - top) * 0.25) * mobMultiplier;
-  const cap = Math.round(ENCOUNTER.maxEnemies * mobMultiplier);
+  const total = budget * (1 + Math.max(0, stage - top) * 0.25);
   const out: Character[] = [];
   let spent = 0;
-  while (spent < budget - 1e-9 && out.length < cap) {
+  while (spent < total - 1e-9 && out.length < cap) {
     const pick = options[Math.floor(rng() * options.length)];
     out.push(makeEnemy(pick.type, pick.level, rng));
     spent += ENEMIES[pick.type].threat;

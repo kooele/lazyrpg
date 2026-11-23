@@ -11,10 +11,11 @@ import { BAR_PAGE, makeRng, skillBarLayout, swapBarSlots } from '../game/charact
 import { TERRAIN, generateMap, key, type Point } from '../game/grid';
 import { GUILD } from '../data/guild';
 import { lineupMembers, resolveQuest } from '../game/city';
+import { encounterBudget, rankForStage } from '../game/guild';
 import { DEMO_STAGES, requireDemo, resolveDemoBattle } from '../game/demo';
 import { markDirty, requireState } from '../game/session';
 import { COLORS, HEIGHT, ScrollList, UI_SCALE, WIDTH, button, confirmDialog, figure, monsterFigure, panel, setupCamera, text } from '../ui/widgets';
-import { ENEMIES } from '../data/enemies';
+import { ENCOUNTER, ENEMIES } from '../data/enemies';
 
 /** Tile size in layout pixels; set per battle so the map fits the 672x500 board area. */
 let TILE = 56;
@@ -133,7 +134,11 @@ export class BattleScene extends Phaser.Scene {
     HP_Y = Math.round(18 * K);
     const party = d ? d.party : lineupMembers(requireState());
     const pSpots = deploymentTiles(map, 'player', party.length);
-    const generated = generateEnemies(stage, rng, d ? d.mobMultiplier : (quest?.threat ?? 1), quest?.foes);
+    // Encounter size comes from the quest (its rank and threat), never from the party. Quick Battle uses the rank its
+    // stage falls in, and its Enemies slider multiplies the budget and the cap on how many come.
+    const generated = d
+      ? generateEnemies(stage, rng, encounterBudget(rankForStage(stage), d.mobMultiplier), undefined, Math.round(ENCOUNTER.maxEnemies * d.mobMultiplier))
+      : generateEnemies(stage, rng, encounterBudget(quest!.rank, quest!.threat ?? 1), quest!.foes);
     const eSpots = deploymentTiles(map, 'enemy', generated.length);
     const foes = generated.slice(0, eSpots.length); // never more than there is room for
     const units = [
