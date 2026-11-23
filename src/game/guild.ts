@@ -2,7 +2,8 @@
 // day-by-day simulation of the other adventurers. Pure logic (no Phaser).
 import { WEAPONS } from '../data/content';
 import { GUILD } from '../data/guild';
-import { RANKS, type AdventurerRank, type FreeAdventurer, type GameState, type GuildState, type Rank, type RivalMember, type RivalParty } from '../data/types';
+import { RANKS, type AdventurerRank, type FreeAdventurer, type GameState, type GuildState, type Quest, type Rank, type RivalMember, type RivalParty } from '../data/types';
+import { postQuests } from './board';
 import { newId, type Rng } from './character';
 import { randInt, randomAdventurer, randomName, randomPartyName } from './people';
 
@@ -186,6 +187,39 @@ export function rivalSuccessChance(p: RivalParty, rank: Rank): number {
   return Math.max(0.1, Math.min(0.95, 0.55 + SIM.successPerLevel * (power - SIM.rankDifficulty[rank])));
 }
 
+/** How hard a board quest is, as the party level it calls for: its enemy level, more for a big group. */
+export function questDifficulty(q: Quest): number {
+  return q.stage - 1 + ((q.threat ?? 1) - 1) * 4;
+}
+
+/** A rival party's chance to complete a board quest. */
+export function rivalQuestChance(p: RivalParty, q: Quest): number {
+  const power = avg(p.members.map((m) => m.level)) + 0.25 * (p.members.length - 4);
+  return Math.max(0.1, Math.min(0.95, 0.55 + SIM.successPerLevel * (power - questDifficulty(q))));
+}
+
+/**
+ * The board quest a rival party takes: at its rank or below (never promotion quests), at least a 55% chance,
+ * and the best expected value: chance x (gold + renown) minus what a failure costs. Null if nothing suits it.
+ */
+export function rivalPickQuest(p: RivalParty, board: Quest[]): Quest | null {
+  const own = RANKS.indexOf(p.rank);
+  let best: Quest | null = null;
+  let bestScore = 0;
+  for (const q of board) {
+    if (q.promotion || RANKS.indexOf(q.rank) < own) continue;
+    const chance = rivalQuestChance(p, q);
+    if (chance < 0.55) continue;
+    const prize = q.reward + q.renown * 5;
+    const score = chance * prize - (1 - chance) * prize;
+    if (score > bestScore) {
+      bestScore = score;
+      best = q;
+    }
+  }
+  return best;
+}
+
 /** Which quest rank a rival takes: the hardest one at or below its rank it is fairly sure of, and now and then one above. */
 export function rivalQuestRank(p: RivalParty, rng: Rng): Rank {
   const own = RANKS.indexOf(p.rank);
@@ -234,8 +268,12 @@ export function simulateGuildDay(state: GameState, rng: Rng): void {
   const news = (text: string) => g.news.push({ day, text });
   const people = new Set<string>([...g.rivals.flatMap((p) => p.members.map((m) => m.name)), ...g.pool.map((a) => a.character.name)]);
   const expected = expectedDailyLosses(state);
+  // New postings go up before the parties pick their quests.
+  postQuests(state, rng);
 
-  for (const p of [...g.rivals]) {
+  // A different party gets first pick of the board each day.
+  const order = [...g.rivals].map((p) => ({ p, k: rng() })).sort((a, b) => a.k - b.k).map((x) => x.p);
+  for (const p of order) {
     // Retirement.
     p.members = p.members.filter((m) => {
       if (rng() >= SIM.retireChancePerDay) return true;
@@ -243,44 +281,51 @@ export function simulateGuildDay(state: GameState, rng: Rng): void {
       return false;
     });
     if (p.members.length > 0 && rng() < SIM.questChancePerDay) {
-      // With enough renown, a party tries its promotion quest once it's fairly sure of it.
+      // With enough renown, a party tries its promotion quest once it's fairly sure of it;
+      // otherwise it takes the best deal it can handle from the board (or rests if there's none).
       const up = nextRank(p.rank);
       const promo = !!up && promotionReady(p.rank, p.renown) && rivalSuccessChance(p, up) >= 0.5;
-      const rank = promo ? up! : rivalQuestRank(p, rng);
-      const chance = rivalSuccessChance(p, rank);
-      const tier = GUILD.quests[rank];
-      p.lastDay = day;
-      if (rng() < chance) {
-        p.renown += tier.renown * (0.8 + rng() * 0.4);
-        p.wins += 1;
-        p.last = `Day ${day}: completed ${QUEST_WORDS[rank]} quest`;
-        if (promo) {
-          p.rank = rank;
-          p.belowSince = 0;
-          p.last = `Day ${day}: promoted to ${rank} rank`;
-          if (rank === 'A' || rank === 'B') news(`${p.name} passed their promotion quest and rose to ${rank} rank.`);
-        }
-        for (const m of p.members) if (m.level < SIM.maxLevel && rng() < SIM.levelUpChanceOnSuccess * SIM.levelUpFalloff ** (m.level - 1)) m.level += 1;
-        const lost = p.members.filter((m) => rng() < SIM.lossChanceOnSuccess * deathFactor(m.level));
-        if (lost.length) {
-          p.members = p.members.filter((m) => !lost.includes(m));
-          p.renown = Math.max(0, p.renown - renownLoss(tier.renown, false, lost.length));
-          news(`${p.name} completed ${QUEST_WORDS[rank]} quest, but ${lost.map((m) => m.name).join(' and ')} did not come back.`);
-        }
-      } else {
-        p.losses += 1;
-        const outmatched = Math.max(0, SIM.rankDifficulty[rank] - avg(p.members.map((m) => m.level)));
-        if (rng() < SIM.wipeChanceOnFailure * deathFactor(avg(p.members.map((m) => m.level))) * (1 + outmatched * 0.5)) {
-          news(`${p.name} were wiped out on ${QUEST_WORDS[rank]} quest. (${p.members.map((m) => m.name).join(', ')})`);
-          p.members = [];
+      const q = promo ? null : rivalPickQuest(p, g.board);
+      if (promo || q) {
+        if (q) g.board = g.board.filter((x) => x !== q);
+        const rank = q ? q.rank : up!;
+        const chance = q ? rivalQuestChance(p, q) : rivalSuccessChance(p, rank);
+        const renown = q ? q.renown : GUILD.quests[rank].renown;
+        const what = q ? `"${q.title}"` : `${QUEST_WORDS[rank]} promotion quest`;
+        const difficulty = q ? questDifficulty(q) : SIM.rankDifficulty[rank];
+        p.lastDay = day;
+        if (rng() < chance) {
+          p.renown += renown * (0.8 + rng() * 0.4);
+          p.wins += 1;
+          p.last = `Day ${day}: completed ${what}`;
+          if (promo) {
+            p.rank = rank;
+            p.belowSince = 0;
+            p.last = `Day ${day}: promoted to ${rank} rank`;
+            if (rank === 'A' || rank === 'B') news(`${p.name} passed their promotion quest and rose to ${rank} rank.`);
+          }
+          for (const m of p.members) if (m.level < SIM.maxLevel && rng() < SIM.levelUpChanceOnSuccess * SIM.levelUpFalloff ** (m.level - 1)) m.level += 1;
+          const lost = p.members.filter((m) => rng() < SIM.lossChanceOnSuccess * deathFactor(m.level));
+          if (lost.length) {
+            p.members = p.members.filter((m) => !lost.includes(m));
+            p.renown = Math.max(0, p.renown - renownLoss(renown, false, lost.length));
+            news(`${p.name} completed ${what}, but ${lost.map((m) => m.name).join(' and ')} did not come back.`);
+          }
         } else {
-          const lost = p.members.filter((m) => rng() < SIM.lossChanceOnFailure * deathFactor(m.level) * (1 + outmatched * 0.5));
-          p.members = p.members.filter((m) => !lost.includes(m));
-          p.renown = Math.max(0, p.renown - renownLoss(tier.renown, true, lost.length));
-          p.last = `Day ${day}: failed ${QUEST_WORDS[rank]} quest`;
-          news(lost.length
-            ? `${p.name} failed ${QUEST_WORDS[rank]} quest and lost ${lost.map((m) => m.name).join(' and ')}.`
-            : `${p.name} failed ${QUEST_WORDS[rank]} quest and limped home.`);
+          p.losses += 1;
+          const outmatched = Math.max(0, difficulty - avg(p.members.map((m) => m.level)));
+          if (rng() < SIM.wipeChanceOnFailure * deathFactor(avg(p.members.map((m) => m.level))) * (1 + outmatched * 0.5)) {
+            news(`${p.name} were wiped out on ${what}. (${p.members.map((m) => m.name).join(', ')})`);
+            p.members = [];
+          } else {
+            const lost = p.members.filter((m) => rng() < SIM.lossChanceOnFailure * deathFactor(m.level) * (1 + outmatched * 0.5));
+            p.members = p.members.filter((m) => !lost.includes(m));
+            p.renown = Math.max(0, p.renown - renownLoss(renown, true, lost.length));
+            p.last = `Day ${day}: failed ${what}`;
+            news(lost.length
+              ? `${p.name} failed ${what} and lost ${lost.map((m) => m.name).join(' and ')}.`
+              : `${p.name} failed ${what} and limped home.`);
+          }
         }
       }
     }

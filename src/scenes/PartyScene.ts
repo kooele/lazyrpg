@@ -3,7 +3,7 @@ import { MAX_PARTY_SIZE, SKILLS, WEAPONS, XP_PER_LEVEL } from '../data/content';
 import { ACTIVITIES, GUILD } from '../data/guild';
 import type { Character } from '../data/types';
 import { bodyPoints, deriveStats, freePoints, skillPoints } from '../game/character';
-import { lineupMembers, scheduledMembers, sellSlave, toggleLineup } from '../game/city';
+import { lineupMembers, marketBuyPrice, scheduledMembers, sellSlave, toggleLineup } from '../game/city';
 import { ACTIVITY_INFO, activityOf, combatPenalty, healthOf, injuryPenalty, isInjured, moraleOf, moralePenalty, obediencePenalty } from '../game/condition';
 import { daysLeft, isCompanion, isSlave, leaveParty, punishSlave, weeklyCost } from '../game/contracts';
 import { adventurerRank } from '../game/guild';
@@ -196,7 +196,7 @@ export class PartyScene extends Phaser.Scene {
       }, 'Release'), { fontSize: 14 });
       if (left > 7) text(this, X + 306, by - 18, 'Renewal opens in the last week.', { fontSize: '11px', color: COLORS.dim });
     } else if (k?.type === 'slave') {
-      button(this, X + 306, by, 140, 44, 'Sell', () => confirmDialog(this, `Sell ${c.name} back to the market?`, () => {
+      button(this, X + 306, by, 140, 44, 'Sell', () => confirmDialog(this, `Sell ${c.name} to the slave market for ${marketBuyPrice(state, c, false)} gold?`, () => {
         const gold = sellSlave(state, c.id, Math.random);
         markDirty();
         this.render();

@@ -219,6 +219,7 @@ function validateQuest(raw: unknown, path: string): Quest {
     expires: int(o.expires, `${path}.expires`),
     description: typeof o.description === 'string' ? o.description : '',
     ...(o.promotion === true ? { promotion: true } : {}),
+    ...(o.threat !== undefined ? { threat: num(o.threat, `${path}.threat`, 0.1, 5) } : {}),
     // Enemy types that no longer exist are dropped; the battle picks new ones if none are left.
     ...(Array.isArray(o.foes) && o.foes.some((f) => typeof f === 'string' && ENEMIES[f]) ? { foes: o.foes.filter((f): f is string => typeof f === 'string' && !!ENEMIES[f]) } : {}),
   };
@@ -320,7 +321,8 @@ function validateState(raw: Record<string, unknown>): GameState {
     },
     market: {
       slaves: arr(market.slaves, 'market.slaves').map((o, i) => validateOffer(o, `market.slaves[${i}]`)),
-      restockDay: int(market.restockDay, 'market.restockDay'),
+      // Older saves had no price index (and a restock day, which is no longer used).
+      priceIndex: market.priceIndex === undefined ? 1 : num(market.priceIndex, 'market.priceIndex', 0.01, 10),
     },
     prisoners: arr(raw.prisoners, 'prisoners').map((o, i) => validateOffer(o, `prisoners[${i}]`)),
     quest: raw.quest === null || raw.quest === undefined ? null : validateQuest(raw.quest, 'quest'),

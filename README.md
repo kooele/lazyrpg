@@ -59,7 +59,12 @@ Every 7th day is **payday** for companions.
 
 **Party ranks** (D to A) come from **renown**: **C at 100**, **B at 400**, **A at 1600** (`ranks` in `guild.json`). Reaching the next rank's renown posts that rank's **promotion quest** on the Quest Board (gold frame); completing it promotes the party. Renown doesn't fade: completing a quest earns it, **failing a quest loses that quest's renown**, and **each party member who dies loses half of it**. A party that stays **below its rank's renown for a full week drops a rank**. The **Leaderboard** lists every party by rank, then renown. Your party starts at D. Parties hold up to **12 members** and take up to **5** on a quest.
 
-The **Quest Board** always has 6 quests, mostly at your rank, some below and some above. You can take quests at your rank or below; the ones above are shown locked so you can see what's coming. Quests of a rank have enemies of that rank's levels:
+The **Quest Board** is shared with every rival party. It holds about **24 quests** across all ranks: up to 8 new ones are posted each day (35% C, 25% D, 25% B, 15% A), each stays up 4–8 days, and there are always at least 6 at your rank. **Rival parties take quests from it every day**, and they go for the best deals first, so a generous quest may not last. You can take quests at your rank or below (the board shows those by default; **All quests** shows the rest, locked). Quests vary in risk and reward:
+
+- **Group size**: the enemy group is 0.8–1.35× the usual size ("Small group", "Large band"). Pay and renown scale with it.
+- **Pay**: on top of that, the reward is 0.75–1.35× the usual for the quest's level and group size. Cards flag **Generous pay** and **Poor pay**.
+
+Quests of a rank have enemies of that rank's levels (usual pay shown):
 
 | Rank | Enemy levels | Reward | Renown |
 |---|---|---|---|
@@ -72,7 +77,7 @@ XP from a won quest depends on the enemy level against each member's level: 100 
 
 ### The other parties
 
-The rival parties are simulated day by day. A new game starts them spread over the ranks (5% A, 20% B, 60% C, 15% D), each made of adventurers of about its rank. Each day a party has a 25% chance of going on a quest: the hardest rank at or below its own that it's fairly sure of. Success earns renown and sometimes a level (less often at high levels). With enough renown, a party takes its promotion quest once it has at least an even chance. Failure costs renown and can cost members (they die or quit), and a badly outmatched party can be **wiped out** and removed. Experience keeps adventurers alive: a member's chance of being lost is ×0.88 per level above 1 (at least ×0.1, so a level-18 veteran is about 10× less likely to die than a recruit), and wipes scale the same way with the party's average level. Parties only recruit adventurers within 4 levels of their average (anyone once they're down to 2), so A-rank parties stay A-rank strength. Parties of one break up, and the survivor goes back to the guild hall. New adventurers (mostly fresh recruits, now and then a veteran) arrive at about the rate adventurers are lost, nudged toward 100. When the hall gets crowded (or there are fewer than usual parties), they band together as a **new D-rank party**. **Guild News** reports all of this.
+The rival parties are simulated day by day. A new game starts them spread over the ranks (5% A, 20% B, 60% C, 15% D), each made of adventurers of about its rank. Each day a party has a 25% chance of going on a quest. It takes the board quest (at its rank or below) with the best reward for the risk: its chance of success (its level and size against the quest's enemy level and group size; it won't take anything under 55%) times the gold and renown, minus what a failure would cost. A different party gets first pick each day; if nothing suits it, it rests. Success earns renown and sometimes a level (less often at high levels). With enough renown, a party takes its promotion quest once it has at least an even chance. Failure costs renown and can cost members (they die or quit), and a badly outmatched party can be **wiped out** and removed. Experience keeps adventurers alive: a member's chance of being lost is ×0.88 per level above 1 (at least ×0.1, so a level-18 veteran is about 10× less likely to die than a recruit), and wipes scale the same way with the party's average level. Parties only recruit adventurers within 4 levels of their average (anyone once they're down to 2), so A-rank parties stay A-rank strength. Parties of one break up, and the survivor goes back to the guild hall. New adventurers (mostly fresh recruits, now and then a veteran) arrive at about the rate adventurers are lost, nudged toward 100. When the hall gets crowded (or there are fewer than usual parties), they band together as a **new D-rank party**. **Guild News** reports all of this.
 
 ### Party members
 
@@ -81,13 +86,15 @@ The rival parties are simulated day by day. A new game starts them spread over t
 | **Main character** | Created at the start | Food & lodging | Permanent; always goes on quests |
 | **Mercenary** | Guild Hall | A fixed fee up front, **or** a % of the next quest's reward | Leaves after the next quest, win or lose |
 | **Companion** | Guild Hall, after negotiating a contract | Base pay every 7th day, a % of each reward, food & lodging if included | Permanent while the contract runs |
-| **Slave** | Slave Market, or a captured prisoner registered at the magistrate | Food & lodging only | Permanent; can be sold back to the market |
+| **Slave** | Slave Market, or a captured prisoner registered at the magistrate | Food & lodging only | Permanent; can be sold to the market |
 
 **Companion contracts** have four terms: **base pay**, **loot cut** (% of each quest reward), **food and lodging included** (worth 28 gold a week to them), and **term length** (2, 4, 8 or 12 weeks). Candidates ask more the higher their level and the greedier they are, a little more for short terms and less for long ones. They value a loot cut by what a party of your rank usually earns (150 gold a week at D, 2000 at A). An offer close to what they want gets a counter-offer; a low one offends them. Each rejected offer uses up patience, and once it runs out they won't talk to you for a week.
 
 Companions (and slaves, see above) have a **relationship** score (0–100). It goes up by 6 for every quest completed together, drops if you can't pay them, and lowers their demands when you renew: by up to 30% at 100. When a contract ends, they sit out of quests and you have 3 days to **renew** it (Manage Party) before they leave. Walking out of a renewal ends the contract on the spot. Unpaid companions lose 20 relationship each payday, and quit when it reaches 0.
 
-**Prisoners**: human enemies who surrender in battle are taken prisoner when you win. Take them to the magistrate at the Slave Market to turn them in for a bounty (35 gold per level), or pay a 60 gold fee to register them as your slave.
+**Prisoners**: human enemies who surrender in battle are taken prisoner when you win. Take them to the magistrate at the Slave Market to turn them in for a bounty (35 gold per level), pay a 60 gold fee to register them as your slave, or **sell them to the market** (half their current market price).
+
+**The Slave Market** is a living market (`market` in `guild.json`). It holds **10–30 slaves**: a few (1–4) are sold to other buyers every day, and a **shipment of 5–12 arrives twice a week** (days 1 and 4 of each week; the screen shows the next one). Slaves are of about your party's rank. **Prices follow supply and demand**: each slave's value (120 gold + 70 per level above 1, × talent) times a price index that drifts a little every day and rises when stock is short (falls when there's a glut), between 70% and 150% of usual. Selling your slaves to the market gets 40% of the current price, captives 50%.
 
 All of these numbers are in `src/data/guild.json`.
 

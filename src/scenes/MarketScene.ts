@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { SKILLS, WEAPONS } from '../data/content';
 import { GUILD } from '../data/guild';
 import type { Offer } from '../data/types';
-import { buySlave, registerPrisoner, turnInPrisoner } from '../game/city';
+import { askingPrice, buySlave, marketBuyPrice, nextShipmentDay, registerPrisoner, sellCaptive, turnInPrisoner } from '../game/city';
 import { adventurerRank } from '../game/guild';
 import { markDirty, requireState, session } from '../game/session';
 import { cityHeader } from '../ui/hud';
@@ -30,27 +30,32 @@ export class MarketScene extends Phaser.Scene {
     cityHeader(this, state, 'Slave Market');
     button(this, WIDTH - 176, 74, 160, 34, `Back to ${GUILD.city}`, () => this.scene.start('City'), { fontSize: 14 });
     text(this, 20, 76, 'Slaves fight for no pay, but the party must feed and house them every day.', { fontSize: '13px' });
-    text(this, 20, 96, `New stock on day ${state.market.restockDay} · Food & lodging ${GUILD.upkeep.foodLodgingPerDay} gold a day each · Party ${state.party.length}/${GUILD.maxRoster}`, {
-      fontSize: '12px', color: COLORS.dim,
+    const idx = state.market.priceIndex;
+    const mood = idx >= 1.15 ? 'high' : idx <= 0.87 ? 'low' : 'usual';
+    const next = nextShipmentDay(state.day + 1);
+    text(this, 20, 96, `${state.market.slaves.length} for sale · Prices ${Math.round(idx * 100)}% of usual (${mood}) · Next shipment day ${next} · Party ${state.party.length}/${GUILD.maxRoster}`, {
+      fontSize: '12px', color: mood === 'high' ? '#e08a5a' : mood === 'low' ? '#6fdc8c' : COLORS.dim,
     });
 
     panel(this, 16, 118, 560, HEIGHT - 134);
     text(this, 28, 126, 'For sale', { fontSize: '16px', color: COLORS.gold });
     const list = new ScrollList(this, 24, 150, 544, HEIGHT - 174, 4);
-    list.setItems(state.market.slaves.map((o) => this.row(o, 544, [
-      { label: `Buy: ${o.price} gold`, enabled: state.gold >= o.price, act: () => this.buy(o) },
-    ])), 'top');
+    const stock = [...state.market.slaves].sort((a, b) => a.character.level - b.character.level || a.price - b.price);
+    list.setItems(stock.map((o) => this.row(o, 544, [
+      { label: `Buy: ${askingPrice(state, o)} gold`, enabled: state.gold >= askingPrice(state, o), act: () => this.buy(o) },
+    ])), 'keep');
     if (state.market.slaves.length === 0) text(this, 296, 300, 'Sold out until the next delivery.', { color: COLORS.dim }).setOrigin(0.5);
 
     panel(this, 588, 118, 356, HEIGHT - 134);
     text(this, 600, 126, "Magistrate's office", { fontSize: '16px', color: COLORS.gold });
-    text(this, 600, 150, `Bandits captured on quests are judged here. Turn them in for the bounty, or pay a ${GUILD.slave.registrationFee} gold fee to register them as your slave.`, {
+    text(this, 600, 150, `Captives are judged here: turn them in for the bounty, register them as your slave (${GUILD.slave.registrationFee} gold fee), or sell them to the market.`, {
       fontSize: '12px', color: COLORS.dim, wordWrap: { width: 332 },
     });
     const plist = new ScrollList(this, 596, 206, 340, HEIGHT - 230, 4);
     plist.setItems(state.prisoners.map((o) => this.row(o, 340, [
       { label: `Bounty ${o.price}g`, enabled: true, act: () => this.turnIn(o) },
       { label: `Register ${GUILD.slave.registrationFee}g`, enabled: state.gold >= GUILD.slave.registrationFee, act: () => this.register(o) },
+      { label: `Sell ${marketBuyPrice(state, o.character, true)}g`, enabled: true, act: () => this.sellCaptive(o) },
     ], true)), 'top');
     if (state.prisoners.length === 0) text(this, 766, 300, 'No prisoners.\nHuman foes who surrender\nare taken prisoner.', { color: COLORS.dim, align: 'center' }).setOrigin(0.5);
   }
@@ -66,20 +71,22 @@ export class MarketScene extends Phaser.Scene {
     row.add(talentTag(this, 64 + name.width + 12, 9, c, { fontSize: 12, detail: false }));
     row.add(text(this, 64, 26, `Level ${c.level} (${adventurerRank(c.level)}-rank) · ${WEAPONS[c.weaponId].name}`, { fontSize: '13px', color: COLORS.gold }));
     if (!compact) row.add(talentTag(this, 64, 45, c, { fontSize: 11, overall: false, sep: '   ' }));
-    row.add(text(this, 64, compact ? 46 : 62, c.skillIds.map((s) => SKILLS[s].name).join(', ') || 'No tree skills yet', {
+    const skills = c.skillIds.map((s) => SKILLS[s].name);
+    const shown = compact && skills.length > 3 ? `${skills.slice(0, 3).join(', ')} +${skills.length - 3} more` : skills.join(', ');
+    row.add(text(this, 64, compact ? 46 : 62, shown || 'No tree skills yet', {
       fontSize: '12px', color: COLORS.dim, wordWrap: { width: compact ? 260 : 270 },
     }));
     actions.forEach((a, i) => {
-      const bx = compact ? 64 + i * 134 : w - 150;
+      const bx = compact ? 64 + i * 88 : w - 150;
       const by = compact ? 66 : 26;
-      row.add(button(this, bx, by, compact ? 126 : 130, 32, a.label, a.act, { fontSize: 13, enabled: a.enabled }));
+      row.add(button(this, bx, by, compact ? 84 : 130, 32, a.label, a.act, { fontSize: compact ? 11 : 13, enabled: a.enabled }));
     });
     return { obj: row, height: h };
   }
 
   private buy(o: Offer): void {
     const state = requireState();
-    confirmDialog(this, `Buy ${o.character.name} (Lv ${o.character.level}) for ${o.price} gold?`, () => {
+    confirmDialog(this, `Buy ${o.character.name} (Lv ${o.character.level}) for ${askingPrice(state, o)} gold?`, () => {
       const err = buySlave(state, o.character.id);
       if (err) return toast(this, err, COLORS.bad);
       markDirty();
@@ -94,6 +101,16 @@ export class MarketScene extends Phaser.Scene {
     markDirty();
     this.render();
     toast(this, `${o.character.name} is taken away. Bounty: ${gold} gold.`);
+  }
+
+  private sellCaptive(o: Offer): void {
+    const state = requireState();
+    confirmDialog(this, `Sell ${o.character.name} (Lv ${o.character.level}) to the slave market for ${marketBuyPrice(state, o.character, true)} gold?`, () => {
+      const gold = sellCaptive(state, o.character.id);
+      markDirty();
+      this.render();
+      toast(this, `${o.character.name} goes on the market. You get ${gold} gold.`);
+    }, 'Sell');
   }
 
   private register(o: Offer): void {

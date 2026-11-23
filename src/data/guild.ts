@@ -43,6 +43,7 @@ export interface GuildConfig {
   /** First level of each adventurer rank above D. */
   adventurerRanks: Record<'C' | 'B' | 'A' | 'S', number>;
   boardSize: number;
+  board: { maxPostsPerDay: number; minAtPartyRank: number; postWeights: Record<Rank, number>; threat: [number, number]; pay: [number, number] };
   quests: Record<Rank, QuestTier>;
   upkeep: { foodLodgingPerDay: number };
   inns: Record<InnTier, InnConfig>;
@@ -60,6 +61,16 @@ export interface GuildConfig {
     moraleMemberDied: number;
   };
   combat: { percentPer5: number };
+  market: {
+    stock: [number, number];
+    shipmentWeekdays: number[];
+    shipmentSize: [number, number];
+    dailySales: [number, number];
+    priceIndex: [number, number];
+    drift: number;
+    stockReference: number;
+    captiveSellShare: number;
+  };
   schedule: { recoverMultiplier: number; trainingXp: number; oddJobsGold: number; dayOffMorale: number };
   /** Price multiplier from talent: max(min, 1 + weight x (average growth rate - 1)). */
   talentPrice: { weight: number; min: number };
@@ -80,8 +91,6 @@ export interface GuildConfig {
   slave: {
     priceBase: number;
     pricePerLevel: number;
-    marketSize: number;
-    restockDays: number;
     sellBackShare: number;
     registrationFee: number;
     bountyPerLevel: number;
@@ -208,7 +217,17 @@ export function parseGuildConfig(data: unknown): GuildConfig {
       deathRenown: num(rk.deathRenown, 'ranks.deathRenown', 0, 10),
     },
     adventurerRanks: advRanks,
-    boardSize: num(d.boardSize, 'boardSize', 1, 20),
+    boardSize: num(d.boardSize, 'boardSize', 1, 60),
+    board: (() => {
+      const b = obj(d.board, 'board');
+      return {
+        maxPostsPerDay: num(b.maxPostsPerDay, 'board.maxPostsPerDay', 1, 60),
+        minAtPartyRank: num(b.minAtPartyRank, 'board.minAtPartyRank', 0, 60),
+        postWeights: perRank(b.postWeights, 'board.postWeights'),
+        threat: range(b.threat, 'board.threat', 0.1),
+        pay: range(b.pay, 'board.pay', 0.1),
+      };
+    })(),
     quests,
     upkeep: numbers(d.upkeep, 'upkeep', ['foodLodgingPerDay']),
     inns: parseInns(d.inns),
@@ -231,13 +250,28 @@ export function parseGuildConfig(data: unknown): GuildConfig {
       expectedWeeklyLoot: perRank(c.expectedWeeklyLoot, 'companion.expectedWeeklyLoot'),
     },
     slave: {
-      ...numbers<Omit<GuildConfig['slave'], 'obedienceMarket' | 'obedienceCaptive'>>(d.slave, 'slave', ['priceBase', 'pricePerLevel', 'marketSize', 'restockDays',
+      ...numbers<Omit<GuildConfig['slave'], 'obedienceMarket' | 'obedienceCaptive'>>(d.slave, 'slave', ['priceBase', 'pricePerLevel',
         'sellBackShare', 'registrationFee', 'bountyPerLevel', 'startingRelationship', 'obedienceRiseFrom', 'obedienceFallBelow',
         'obedienceChangePerDay', 'punishObedience', 'punishRelationship']),
       obedienceMarket: range(obj(d.slave, 'slave').obedienceMarket, 'slave.obedienceMarket'),
       obedienceCaptive: range(obj(d.slave, 'slave').obedienceCaptive, 'slave.obedienceCaptive'),
     },
     combat: numbers(d.combat, 'combat', ['percentPer5'], 20),
+    market: (() => {
+      const m = obj(d.market, 'market');
+      const days = Array.isArray(m.shipmentWeekdays) && m.shipmentWeekdays.length
+        ? m.shipmentWeekdays.map((v, i) => num(v, `market.shipmentWeekdays[${i}]`, 0, 6)) : fail('market.shipmentWeekdays', 'must list days of the week (0-6)');
+      return {
+        stock: range(m.stock, 'market.stock'),
+        shipmentWeekdays: days,
+        shipmentSize: range(m.shipmentSize, 'market.shipmentSize'),
+        dailySales: range(m.dailySales, 'market.dailySales'),
+        priceIndex: range(m.priceIndex, 'market.priceIndex', 0.01),
+        drift: num(m.drift, 'market.drift', 0, 1),
+        stockReference: num(m.stockReference, 'market.stockReference', 1),
+        captiveSellShare: num(m.captiveSellShare, 'market.captiveSellShare', 0, 2),
+      };
+    })(),
     simulation: {
       ...numbers<Omit<GuildConfig['simulation'], 'partySize' | 'rankDifficulty'>>(s, 'simulation',
         ['targetAdventurers', 'targetParties', 'poolTarget', 'questChancePerDay', 'successPerLevel', 'lossChanceOnSuccess',

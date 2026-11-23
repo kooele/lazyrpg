@@ -4,17 +4,21 @@ import { GUILD } from '../data/guild';
 import type { FreeAdventurer, Quest } from '../data/types';
 import { acceptQuest, canTakeQuest, lineupMembers, toggleLineup } from '../game/city';
 import { joinParty, mercenaryRates, rosterFull, talentPriceFactor } from '../game/contracts';
+import { groupLabel, payRating } from '../game/board';
 import { adventurerCount, adventurerRank, leaderboard, nextRank, rankThreshold } from '../game/guild';
 import { markDirty, requireState, session } from '../game/session';
 import { cityHeader, rankBadge } from '../ui/hud';
 import { COLORS, HEIGHT, ScrollList, WIDTH, button, confirmDialog, figure, panel, setupCamera, talentTag, text, toast, type ScrollItem } from '../ui/widgets';
 
 type Tab = 'board' | 'hall' | 'ranks' | 'news';
+const CARD_H = 132;
 const TABS: [Tab, string][] = [['board', 'Quest Board'], ['hall', 'Guild Hall'], ['ranks', 'Leaderboard'], ['news', 'Guild News']];
 
 /** The Adventurer Guild: quests, recruiting, the party leaderboard and the guild's news. */
 export class GuildScene extends Phaser.Scene {
   private tab: Tab = 'board';
+  /** Quest board filter: every quest, or only the ones the party can take. */
+  private allQuests = false;
 
   constructor() {
     super('Guild');
@@ -58,39 +62,66 @@ export class GuildScene extends Phaser.Scene {
     const status = state.quest
       ? `Accepted: ${state.quest.title}. Set out from the city screen.`
       : `Your party is ${state.rank} rank: it can take ${state.rank}-rank quests and below.${up ? ` ${up}-rank promotion quest at ${rankThreshold(up)} renown (you have ${Math.round(state.renown)}).` : ''}`;
-    text(this, 20, 118, status, { fontSize: '14px', color: state.quest ? COLORS.gold : COLORS.text });
-    text(this, 20, 138, `Lineup (${lineup.length}/${MAX_PARTY_SIZE}): ${lineup.map((c) => `${c.name} Lv${c.level}`).join(', ')}   (change it in Manage Party)`, {
+    text(this, 20, 116, status, { fontSize: '14px', color: state.quest ? COLORS.gold : COLORS.text });
+    text(this, 20, 136, `Lineup (${lineup.length}/${MAX_PARTY_SIZE}): ${lineup.map((c) => `${c.name} Lv${c.level}`).join(', ')}   (change it in Manage Party)`, {
       fontSize: '12px', color: COLORS.dim,
     });
-    const quests = state.guild.board;
-    quests.forEach((q, i) => this.questCard(q, 16 + (i % 2) * 468, 162 + Math.floor(i / 2) * 156));
+    const all = state.guild.board;
+    const mine = all.filter((q) => canTakeQuest(state, q));
+    const quests = this.allQuests ? all : mine;
+    button(this, 16, 156, 200, 28, `Quests you can take (${mine.length})`, () => {
+      this.allQuests = false;
+      this.render();
+    }, { selected: !this.allQuests, fontSize: 12 });
+    button(this, 224, 156, 160, 28, `All quests (${all.length})`, () => {
+      this.allQuests = true;
+      this.render();
+    }, { selected: this.allQuests, fontSize: 12 });
+    text(this, 396, 162, 'Rival parties take quests from this board every day; the best deals go first.', { fontSize: '12px', color: COLORS.dim });
+    const list = new ScrollList(this, 16, 192, WIDTH - 32, HEIGHT - 208, 8);
+    const rows: ScrollItem[] = [];
+    for (let i = 0; i < quests.length; i += 2) {
+      const row = this.add.container(0, 0);
+      quests.slice(i, i + 2).forEach((q, k) => row.add(this.questCard(q, k * 464, 0)));
+      rows.push({ obj: row, height: CARD_H });
+    }
+    list.setItems(rows, 'keep');
+    if (quests.length === 0) text(this, WIDTH / 2, 320, 'No quests you can take right now. Check back tomorrow.', { color: COLORS.dim }).setOrigin(0.5);
     if (state.quest) {
-      button(this, WIDTH - 236, HEIGHT - 50, 220, 40, 'Set out now', () => this.scene.start('City'), { fill: 0x4a2a22, fontSize: 15 });
+      button(this, WIDTH - 196, 112, 180, 36, 'Set out now', () => this.scene.start('City'), { fill: 0x4a2a22, fontSize: 14 });
     }
   }
 
-  private questCard(q: Quest, x: number, y: number): void {
+  private questCard(q: Quest, x: number, y: number): Phaser.GameObjects.Container {
     const state = requireState();
     const allowed = canTakeQuest(state, q);
-    panel(this, x, y, 460, 146, allowed ? COLORS.panel : 0x141722);
-    if (q.promotion) this.add.rectangle(x, y, 460, 146).setOrigin(0).setStrokeStyle(2, COLORS.accent);
-    rankBadge(this, x + 12, y + 12, q.rank, 28);
-    text(this, x + 50, y + 12, q.title, { fontSize: '17px', color: allowed ? COLORS.text : COLORS.dim, wordWrap: { width: 396 } });
-    text(this, x + 50, y + 36, `${q.promotion ? 'PROMOTION · ' : ''}Enemy level ${q.stage} · ${q.days} day${q.days > 1 ? 's' : ''} away${q.promotion ? '' : ` · on the board until day ${q.expires}`}`, { fontSize: '12px', color: COLORS.dim });
-    text(this, x + 12, y + 58, q.description, { fontSize: '13px', wordWrap: { width: 436 }, color: allowed ? COLORS.text : COLORS.dim });
-    text(this, x + 12, y + 110, `${q.reward} gold`, { fontSize: '18px', color: COLORS.gold });
-    text(this, x + 120, y + 114, `Renown +${q.renown}`, { fontSize: '13px', color: COLORS.dim });
+    const W = 452;
+    const c = this.add.container(x, y);
+    c.add(panel(this, 0, 0, W, CARD_H, allowed ? COLORS.panel : 0x141722));
+    if (q.promotion) c.add(this.add.rectangle(0, 0, W, CARD_H).setOrigin(0).setStrokeStyle(2, COLORS.accent));
+    c.add(rankBadge(this, 10, 10, q.rank, 26));
+    c.add(text(this, 44, 10, q.title, { fontSize: '16px', color: allowed ? COLORS.text : COLORS.dim, wordWrap: { width: W - 54 } }));
+    const group = groupLabel(q);
+    c.add(text(this, 44, 32, `${q.promotion ? 'PROMOTION · ' : ''}Enemy level ${q.stage}${group ? ` · ${group}` : ''} · ${q.days} day${q.days > 1 ? 's' : ''} away${q.promotion ? '' : ` · until day ${q.expires}`}`, {
+      fontSize: '12px', color: group === 'Large band' ? '#e08a5a' : COLORS.dim,
+    }));
+    c.add(text(this, 10, 52, q.description, { fontSize: '12px', wordWrap: { width: W - 20 }, color: allowed ? COLORS.text : COLORS.dim }));
+    c.add(text(this, 10, 100, `${q.reward} gold`, { fontSize: '17px', color: COLORS.gold }));
+    const pay = payRating(q);
+    if (pay !== 'fair') c.add(text(this, 100, 104, pay === 'generous' ? 'Generous pay' : 'Poor pay', { fontSize: '12px', color: pay === 'generous' ? '#6fdc8c' : COLORS.bad }));
+    c.add(text(this, 196, 104, `Renown +${q.renown}`, { fontSize: '12px', color: COLORS.dim }));
     if (!allowed) {
-      text(this, x + 448, y + 116, q.promotion ? `Needs ${rankThreshold(q.rank)} renown` : `Requires ${q.rank} rank`, { fontSize: '13px', color: COLORS.bad }).setOrigin(1, 0);
-      return;
+      c.add(text(this, W - 10, 104, q.promotion ? `Needs ${rankThreshold(q.rank)} renown` : `Requires ${q.rank} rank`, { fontSize: '12px', color: COLORS.bad }).setOrigin(1, 0));
+      return c;
     }
-    button(this, x + 318, y + 102, 130, 34, 'Accept', () => {
+    c.add(button(this, W - 122, 92, 112, 32, 'Accept', () => {
       const err = acceptQuest(state, q.id);
       if (err) return toast(this, err, COLORS.bad);
       markDirty();
       this.render();
       toast(this, `Accepted "${q.title}". Set out from the city screen when ready.`);
-    }, { enabled: !state.quest, fontSize: 15 });
+    }, { enabled: !state.quest, fontSize: 14 }));
+    return c;
   }
 
   // ---- guild hall: mercenaries and companions -------------------------------------------------------

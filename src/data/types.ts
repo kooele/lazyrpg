@@ -433,6 +433,8 @@ export interface Quest {
   promotion?: boolean;
   /** Enemy types it sends against the party (enemies.json ids, main foe first). Missing = picked when the battle starts. */
   foes?: string[];
+  /** Size of the enemy group (multiplies the encounter budget; 1 = usual). The reward scales with it. */
+  threat?: number;
 }
 
 export interface NewsItem {
@@ -454,9 +456,10 @@ export interface Offer {
 }
 
 export interface MarketState {
+  /** Slaves for sale. Their `price` is their value; the asking price is value x priceIndex. */
   slaves: Offer[];
-  /** Next day the market gets new stock. */
-  restockDay: number;
+  /** Supply and demand: multiplies every price at the market (1 = usual). */
+  priceIndex: number;
 }
 
 export interface Progress {

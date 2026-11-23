@@ -1,12 +1,11 @@
 // Arch City: the calendar, the quest board, upkeep and pay, the slave market and prisoners.
 // Pure logic (no Phaser): scenes call these and show the messages they return.
 import { MAX_PARTY_SIZE } from '../data/content';
-import { ENEMIES } from '../data/enemies';
 import { GUILD, isResidence, type InnTier, type Lodging, type Ring } from '../data/guild';
 import { STAT_CONFIG } from '../data/stats';
-import { RANKS, type Character, type GameState, type Quest, type Rank } from '../data/types';
-import { enemyTypesForStage, pickFoes } from './battle';
-import { grantXp, newId, type Rng } from './character';
+import { RANKS, type Character, type GameState, type Offer, type Quest, type Rank } from '../data/types';
+import { makeQuest, postQuests } from './board';
+import { grantXp, type Rng } from './character';
 import {
   bondOf, bounty, canFight, changeRelationship, isCompanion, isExpired, isHoused, isSlave, leaveParty, slaveContract, slavePrice, talentPriceFactor,
 } from './contracts';
@@ -32,7 +31,7 @@ export function newCampaign(main: Character, partyName: string, rng: Rng): GameS
     party: [main],
     lineup: [main.id],
     guild: createGuild(rng),
-    market: { slaves: [], restockDay: 1 },
+    market: { slaves: [], priceIndex: 1 },
     prisoners: [],
     quest: null,
     lastQuestDay: 0,
@@ -45,7 +44,7 @@ export function newCampaign(main: Character, partyName: string, rng: Rng): GameS
   };
   updateRanks(state);
   restockMarket(state, rng);
-  refillBoard(state, rng);
+  refillBoard(state, rng, true);
   note(state, `Welcome to ${GUILD.city}. ${partyName} is registered at the Adventurer Guild as a ${state.rank}-rank party.`);
   return state;
 }
@@ -96,52 +95,19 @@ export function departBlock(state: GameState): string | null {
 
 // ---- quests --------------------------------------------------------------------------------------------
 
-const PLACES = ['the Old Sewers', 'Mill Road', 'Briar Farm', 'the Eastern Woods', "Gallow's Pass", 'the Salt Marsh', 'Kestrel Ford',
-  'the Ruined Chapel', 'Hollow Creek', 'the Quarry', 'Thornfield', 'the North Gate', 'Lantern Hill', 'the Old Watchtower'];
-
-export function makeQuest(rank: Rank, day: number, rng: Rng, promotion = false): Quest {
-  const tier = GUILD.quests[rank];
-  // A promotion quest is a fair test: the easier half of its rank's levels.
-  const stage = promotion ? randInt(tier.stages[0], Math.ceil((tier.stages[0] + tier.stages[1]) / 2), rng) : randInt(tier.stages[0], tier.stages[1], rng);
-  const foes = pickFoes(stage, rng);
-  const levels = new Map(enemyTypesForStage(stage).map((t) => [t.type, t.level]));
-  const place = PLACES[Math.floor(rng() * PLACES.length)];
-  const top = Math.max(...Object.values(ENEMIES).map((d) => d.levels[1]));
-  const title = `${ENEMIES[foes[0]].questTitle} at ${place}`;
-  const names = foes.map((t) => `${ENEMIES[t].name}s (Lv ${levels.get(t)})`);
-  return {
-    id: newId('q'),
-    title: promotion ? `Promotion: ${title}` : title,
-    rank,
-    stage,
-    reward: Math.round(randInt(tier.reward[0], tier.reward[1], rng) / 5) * 5,
-    renown: tier.renown,
-    days: randInt(tier.days[0], tier.days[1], rng),
-    expires: day + (promotion ? 365 : randInt(4, 8, rng)),
-    description: `${promotion ? `The guild's ${rank}-rank trial. ` : ''}${names.join(' and ')} reported at ${place}.${stage > top ? ' A large band: expect many of them.' : ''}`,
-    ...(promotion ? { promotion: true } : {}),
-    foes,
-  };
-}
+export { makeQuest } from './board';
 
 /**
- * Keep the board full: mostly quests at the party's rank, some below, some above (locked until promoted).
- * With enough renown for the next rank, its promotion quest is posted too (until the party passes it).
+ * The day's postings on the shared board (see board.ts), plus the player's promotion quest once they have the
+ * renown for the next rank (until they pass it). Promotion quests first, then by rank and level.
  */
-export function refillBoard(state: GameState, rng: Rng): void {
+export function refillBoard(state: GameState, rng: Rng, fill = false): void {
   const g = state.guild;
   const up = nextRank(state.rank);
-  g.board = g.board.filter((q) => q.expires >= state.day && (!q.promotion || q.rank === up));
+  g.board = g.board.filter((q) => !q.promotion || q.rank === up);
+  postQuests(state, rng, fill ? Infinity : undefined);
   if (up && promotionReady(state.rank, state.renown) && !g.board.some((q) => q.promotion) && !state.quest?.promotion) {
     g.board.unshift(makeQuest(up, state.day, rng, true));
-    // It takes a regular quest's place on a full board.
-    if (g.board.length > GUILD.boardSize) g.board.splice(g.board.length - 1, 1);
-  }
-  const own = RANKS.indexOf(state.rank);
-  while (g.board.length < GUILD.boardSize) {
-    const r = rng();
-    const idx = r < 0.25 && own > 0 ? own - 1 : r < 0.5 && own < RANKS.length - 1 ? own + 1 : own;
-    g.board.push(makeQuest(RANKS[idx], state.day, rng));
   }
   g.board.sort((a, b) => Number(!!b.promotion) - Number(!!a.promotion) || RANKS.indexOf(b.rank) - RANKS.indexOf(a.rank) || a.stage - b.stage);
 }
@@ -519,7 +485,7 @@ export function advanceDay(state: GameState, rng: Rng, lodging: Lodging = 'road'
   simulateGuildDay(state, rng);
   out.push(...rankNews(state));
   refillBoard(state, rng);
-  if (state.day >= state.market.restockDay) restockMarket(state, rng);
+  out.push(...marketDay(state, rng));
   return out;
 }
 
@@ -527,38 +493,100 @@ export function advanceDay(state: GameState, rng: Rng, lodging: Lodging = 'road'
 
 /** Levels of slaves for sale: around the party's rank's adventurers. */
 const MARKET_LEVELS: Record<Rank, [number, number]> = { D: [1, 5], C: [4, 10], B: [9, 15], A: [14, 20] };
+const round5 = (v: number) => Math.max(5, Math.round(v / 5) * 5);
 
-export function restockMarket(state: GameState, rng: Rng): void {
+/** A slave for sale: a random adventurer near the party's rank, valued by level and talent. */
+function marketSlave(state: GameState, rng: Rng) {
   const [lo, hi] = MARKET_LEVELS[state.rank];
-  state.market.slaves = Array.from({ length: GUILD.slave.marketSize }, () => {
-    const c = randomAdventurer(randInt(lo, hi, rng), rng);
-    return { character: c, price: slavePrice(c.level, rng, talentPriceFactor(c)) };
-  }).sort((a, b) => a.character.level - b.character.level);
-  state.market.restockDay = state.day + GUILD.slave.restockDays;
+  const c = randomAdventurer(randInt(lo, hi, rng), rng);
+  return { character: c, price: slavePrice(c.level, rng, talentPriceFactor(c)) };
+}
+
+/** Asking price of a slave for sale: its value x the market's price index. */
+export const askingPrice = (state: GameState, o: Offer) => round5(o.price * state.market.priceIndex);
+
+/** What the market pays for a party slave (sellBackShare) or a captive (captiveSellShare) right now. */
+export function marketBuyPrice(state: GameState, c: Character, captive: boolean): number {
+  const value = slavePrice(c.level, () => 0.5, talentPriceFactor(c));
+  return Math.round(value * state.market.priceIndex * (captive ? GUILD.market.captiveSellShare : GUILD.slave.sellBackShare));
+}
+
+/** Is a shipment due on `day` (market.shipmentWeekdays)? And the next shipment day from `day` on. */
+export const isShipmentDay = (day: number) => GUILD.market.shipmentWeekdays.includes(day % 7);
+export function nextShipmentDay(day: number): number {
+  for (let d = day; d < day + 8; d++) if (isShipmentDay(d)) return d;
+  return day;
+}
+
+/** Stock the market for a new game: somewhere in the middle of its range. */
+export function restockMarket(state: GameState, rng: Rng): void {
+  const [lo, hi] = GUILD.market.stock;
+  const n = randInt(Math.round(lo + (hi - lo) * 0.25), Math.round(lo + (hi - lo) * 0.75), rng);
+  state.market.slaves = Array.from({ length: n }, () => marketSlave(state, rng)).sort((a, b) => a.character.level - b.character.level);
+  state.market.priceIndex = 1;
+}
+
+/** Keep the market's price index in step with supply (stock) and a little random demand. */
+function updatePrices(state: GameState, rng: Rng): void {
+  const M = GUILD.market;
+  const stock = Math.max(1, state.market.slaves.length);
+  const target = Math.sqrt(M.stockReference / stock);
+  let idx = state.market.priceIndex * (1 + (rng() * 2 - 1) * M.drift);
+  idx += (target - idx) * 0.15;
+  state.market.priceIndex = Math.round(Math.max(M.priceIndex[0], Math.min(M.priceIndex[1], idx)) * 1000) / 1000;
+}
+
+/** A day at the slave market: a few slaves sold to other buyers, a shipment twice a week, prices follow supply. */
+export function marketDay(state: GameState, rng: Rng): string[] {
+  const M = GUILD.market;
+  const m = state.market;
+  const sales = randInt(M.dailySales[0], M.dailySales[1], rng);
+  for (let i = 0; i < sales && m.slaves.length > M.stock[0]; i++) m.slaves.splice(Math.floor(rng() * m.slaves.length), 1);
+  const out: string[] = [];
+  if (isShipmentDay(state.day)) {
+    const n = Math.min(randInt(M.shipmentSize[0], M.shipmentSize[1], rng), M.stock[1] - m.slaves.length);
+    for (let i = 0; i < n; i++) m.slaves.push(marketSlave(state, rng));
+    m.slaves.sort((a, b) => a.character.level - b.character.level);
+    if (n > 0) state.guild.news.push({ day: state.day, text: `A shipment of ${n} slaves arrived at the Slave Market.` });
+  }
+  updatePrices(state, rng);
+  return out;
 }
 
 export function buySlave(state: GameState, id: string, rng: Rng = Math.random): string | null {
   const offer = state.market.slaves.find((o) => o.character.id === id);
   if (!offer) return 'No longer for sale.';
   if (state.party.length >= GUILD.maxRoster) return `Your party is full (${GUILD.maxRoster}).`;
-  if (state.gold < offer.price) return `Not enough gold (${offer.price} needed).`;
-  state.gold -= offer.price;
+  const price = askingPrice(state, offer);
+  if (state.gold < price) return `Not enough gold (${price} needed).`;
+  state.gold -= price;
   state.market.slaves = state.market.slaves.filter((o) => o !== offer);
-  state.party.push({ ...offer.character, contract: slaveContract('market', offer.price, rng) });
+  state.party.push({ ...offer.character, contract: slaveContract('market', price, rng) });
   return null;
 }
 
-/** Sell a slave back to the market. Returns the gold received. */
+/** Sell a party slave to the market (sellBackShare of the current price). Returns the gold received. */
 export function sellSlave(state: GameState, id: string, rng: Rng): number {
   const c = state.party.find((m) => m.id === id);
   if (!c || c.contract?.type !== 'slave') return 0;
-  const gold = Math.round(slavePrice(c.level, rng, talentPriceFactor(c)) * GUILD.slave.sellBackShare);
+  const gold = marketBuyPrice(state, c, false);
   state.gold += gold;
   state.party = state.party.filter((m) => m !== c);
   state.lineup = state.lineup.filter((x) => x !== c.id);
   delete state.schedule[c.id];
   const { contract: _k, ...character } = c;
   state.market.slaves.push({ character, price: slavePrice(c.level, rng, talentPriceFactor(c)) });
+  return gold;
+}
+
+/** Sell a captive to the slave market (captiveSellShare of the current price). Returns the gold received (0 if unknown). */
+export function sellCaptive(state: GameState, id: string, rng: Rng = Math.random): number {
+  const p = state.prisoners.find((o) => o.character.id === id);
+  if (!p) return 0;
+  const gold = marketBuyPrice(state, p.character, true);
+  state.prisoners = state.prisoners.filter((o) => o !== p);
+  state.gold += gold;
+  state.market.slaves.push({ character: p.character, price: slavePrice(p.character.level, rng, talentPriceFactor(p.character)) });
   return gold;
 }
 

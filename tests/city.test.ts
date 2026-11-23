@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import guildJson from '../src/data/guild.json';
 import { GUILD, parseGuildConfig } from '../src/data/guild';
-import type { Character, GameState } from '../src/data/types';
+import type { Character, GameState, Quest } from '../src/data/types';
 import { createCharacter, deriveStats, makeRng } from '../src/game/character';
 import { makeEnemy, makeUnit } from '../src/game/battle';
 import {
-  acceptQuest, advanceDay, advanceDays, buyDrinks, buyResidence, buySlave, makeQuest, sellResidence, stayAtHome, stayAtInn, canTakeQuest, dailyUpkeep, departBlock, lineupMembers, mainCharacter,
+  acceptQuest, advanceDay, advanceDays, askingPrice, buyDrinks, isShipmentDay, marketBuyPrice, marketDay, sellCaptive, buyResidence, buySlave, makeQuest, sellResidence, stayAtHome, stayAtInn, canTakeQuest, dailyUpkeep, departBlock, lineupMembers, mainCharacter,
   newCampaign, registerPrisoner, resolveQuest, rewardShares, sleepOutside, toggleLineup,
 } from '../src/game/city';
 import { activityOf, combatPenalty, expectedQuality, healthOf, isInjured, moraleOf, moralePenalty, obediencePenalty } from '../src/game/condition';
@@ -14,7 +14,8 @@ import {
   companionContract, companionDemand, evaluateOffer, joinParty, mercenaryRates, offerValue, openingTerms, punishSlave, slaveContract,
 } from '../src/game/contracts';
 import { DEMO_STAGES, newDemo, resolveDemoBattle } from '../src/game/demo';
-import { adventurerCount, adventurerRank, deathFactor, leaderboard, rankCounts, simulateGuildDay } from '../src/game/guild';
+import { payRatio } from '../src/game/board';
+import { adventurerCount, adventurerRank, deathFactor, leaderboard, rivalPickQuest, rivalQuestChance, rankCounts, simulateGuildDay } from '../src/game/guild';
 
 const start = (seed = 1): GameState => newCampaign(createCharacter('Main', '#3d7be0', 'sword_shield'), 'Testers', makeRng(seed));
 
@@ -144,6 +145,49 @@ describe('ranks and the leaderboard', () => {
       const q = makeQuest(r, 1, makeRng(5));
       expect(adventurerRank(q.stage)).toBe(r);
     }
+  });
+
+  it('the board is shared and busy: plenty of quests across the ranks, always some at the party\'s rank', () => {
+    const s = start();
+    expect(s.guild.board.length).toBeGreaterThanOrEqual(GUILD.boardSize);
+    expect(s.guild.board.filter((q) => q.rank === s.rank).length).toBeGreaterThanOrEqual(GUILD.board.minAtPartyRank);
+    expect(new Set(s.guild.board.map((q) => q.rank)).size).toBeGreaterThan(2);
+    for (const q of s.guild.board) {
+      expect(q.threat).toBeGreaterThanOrEqual(GUILD.board.threat[0]);
+      expect(q.threat).toBeLessThanOrEqual(GUILD.board.threat[1]);
+      const r = payRatio(q);
+      expect(r).toBeGreaterThan(GUILD.board.pay[0] - 0.05);
+      expect(r).toBeLessThan(GUILD.board.pay[1] + 0.05);
+    }
+    // Rival parties take quests off the board (not just expiry).
+    const rng = makeRng(2);
+    let taken = 0;
+    for (let d = 0; d < 20; d++) {
+      const before = s.guild.board.filter((q) => q.expires > s.day);
+      advanceDay(s, rng);
+      taken += before.filter((q) => !s.guild.board.includes(q)).length;
+    }
+    expect(taken).toBeGreaterThan(20);
+    expect(s.guild.board.filter((q) => q.rank === s.rank).length).toBeGreaterThanOrEqual(GUILD.board.minAtPartyRank);
+    expect(s.guild.news.some((n) => /completed "|failed "/.test(n.text)) || s.guild.rivals.some((p) => /completed "|failed "/.test(p.last))).toBe(true);
+  });
+
+  it('rivals take the best deal they can handle: good pay for the risk, never above their rank or too dangerous', () => {
+    const s = start();
+    const p = s.guild.rivals.find((r) => r.rank === 'C')!;
+    p.members.forEach((m) => (m.level = 8));
+    const q = (o: Partial<Quest>): Quest => ({ ...makeQuest('C', s.day, makeRng(1)), stage: 7, threat: 1, ...o });
+    const cheap = q({ reward: 150 });
+    const rich = q({ reward: 300 });
+    const tooHard = q({ stage: 10, threat: 1.35, reward: 900 });
+    const aboveRank = { ...makeQuest('B', s.day, makeRng(1)), stage: 11, reward: 2000 };
+    expect(rivalPickQuest(p, [cheap, rich, tooHard, aboveRank])).toBe(rich);
+    expect(rivalQuestChance(p, tooHard)).toBeLessThan(0.55);
+    expect(rivalPickQuest(p, [tooHard, aboveRank])).toBeNull();
+    // A safer quest can beat a slightly richer risky one.
+    const safe = q({ stage: 6, threat: 0.8, reward: 250 });
+    const risky = q({ stage: 9, threat: 1.2, reward: 270 });
+    expect(rivalPickQuest(p, [risky, safe])).toBe(safe);
   });
 
   it('quests above the party rank are locked', () => {
@@ -545,6 +589,52 @@ describe('contracts', () => {
     s.quest!.days = 1;
     resolveQuest(s, 'defeat', makeRng(3), [], [makeEnemy('bandit', 5, makeRng(4))]);
     expect(s.prisoners).toHaveLength(1);
+  });
+
+  it('the slave market holds 10-30 slaves, sells a few daily, gets shipments twice a week, and prices follow supply', () => {
+    const s = start();
+    const rng = makeRng(7);
+    const M = GUILD.market;
+    const low: number[] = [];
+    const high: number[] = [];
+    let shipments = 0;
+    for (let d = 0; d < 365; d++) {
+      s.day += 1;
+      const before = s.market.slaves.length;
+      marketDay(s, rng);
+      const n = s.market.slaves.length;
+      expect(n).toBeGreaterThanOrEqual(M.stock[0]);
+      expect(n).toBeLessThanOrEqual(M.stock[1]);
+      if (n > before) {
+        expect(isShipmentDay(s.day)).toBe(true);
+        shipments++;
+      }
+      expect(s.market.priceIndex).toBeGreaterThanOrEqual(M.priceIndex[0]);
+      expect(s.market.priceIndex).toBeLessThanOrEqual(M.priceIndex[1]);
+      (n <= 15 ? low : n >= 25 ? high : []).push(s.market.priceIndex);
+    }
+    expect(shipments).toBeGreaterThan(80); // about twice a week
+    const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+    expect(low.length && high.length).toBeTruthy();
+    expect(mean(low)).toBeGreaterThan(mean(high)); // scarce slaves cost more
+    // Asking prices follow the index.
+    const o = s.market.slaves[0];
+    s.market.priceIndex = 1.2;
+    expect(askingPrice(s, o)).toBe(Math.max(5, Math.round((o.price * 1.2) / 5) * 5));
+  });
+
+  it('captives can be sold to the slave market', () => {
+    const s = start();
+    s.prisoners.push({ character: s.guild.pool[0].character, price: 50 });
+    const id = s.prisoners[0].character.id;
+    const gold = s.gold;
+    const stock = s.market.slaves.length;
+    const pay = marketBuyPrice(s, s.prisoners[0].character, true);
+    expect(sellCaptive(s, id, makeRng(1))).toBe(pay);
+    expect(s.gold).toBe(gold + pay);
+    expect(s.prisoners).toHaveLength(0);
+    expect(s.market.slaves).toHaveLength(stock + 1);
+    expect(s.market.slaves.some((o) => o.character.id === id)).toBe(true);
   });
 
   it('prisoners can be registered as slaves for a fee', () => {
