@@ -1,6 +1,6 @@
 // The Adventurer Guild's quest board, shared by the player and the rival parties.
 // Pure logic (no Phaser). Quests are posted daily; rivals take some (see guild.ts), the rest expire.
-import { ENEMIES } from '../data/enemies';
+import { ENCOUNTER, ENEMIES } from '../data/enemies';
 import { GUILD } from '../data/guild';
 import { RANKS, type GameState, type Quest, type Rank } from '../data/types';
 import { enemyTypesForStage, pickFoes } from './battle';
@@ -36,6 +36,28 @@ export const fairReward = (q: Pick<Quest, 'stage' | 'count'>) => totalThreat(q) 
 
 /** Renown for completing a quest: its total threat x renownPerThreat. */
 export const questRenown = (q: Pick<Quest, 'stage' | 'count'>) => Math.max(1, Math.round(totalThreat(q) * T.renownPerThreat));
+
+/**
+ * About how many enemies a quest sends: its group size over the average threat of its enemy types
+ * (rats are 0.5 each, so a group of 4 is about 8 of them), at most encounter.maxEnemies.
+ */
+export function expectedEnemies(q: Pick<Quest, 'count' | 'foes'>): number {
+  const types = (q.foes ?? []).filter((f) => ENEMIES[f]);
+  const each = types.length ? types.reduce((sum, f) => sum + ENEMIES[f].threat, 0) / types.length : 1;
+  return Math.max(1, Math.min(ENCOUNTER.maxEnemies, Math.ceil(q.count / each - 1e-9)));
+}
+
+/**
+ * Danger within the quest's rank, 1-5: where its total threat falls between the rank's weakest possible quest
+ * (smallest group at its lowest level) and its strongest (largest group at its highest level), on a log scale.
+ */
+export function dangerRating(q: Pick<Quest, 'rank' | 'stage' | 'count'>): number {
+  const tier = GUILD.quests[q.rank];
+  const lo = Math.log(tier.count[0] * strength(tier.stages[0]));
+  const hi = Math.log(tier.count[1] * strength(tier.stages[1]));
+  const f = hi > lo ? (Math.log(totalThreat(q)) - lo) / (hi - lo) : 0.5;
+  return Math.max(1, Math.min(5, 1 + Math.floor(f * 5)));
+}
 
 const roll = ([lo, hi]: [number, number], rng: Rng) => lo + rng() * (hi - lo);
 const round5 = (v: number) => Math.max(5, Math.round(v / 5) * 5);

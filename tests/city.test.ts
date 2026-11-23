@@ -14,7 +14,7 @@ import {
   companionContract, companionDemand, evaluateOffer, joinParty, mercenaryRates, offerValue, openingTerms, punishSlave, slaveContract, bounty, registrationFee, slaveTax, slaveValue,
 } from '../src/game/contracts';
 import { DEMO_STAGES, newDemo, resolveDemoBattle } from '../src/game/demo';
-import { fairReward, payRatio, questRenown, strength, totalThreat, usualCount } from '../src/game/board';
+import { dangerRating, expectedEnemies, fairReward, payRatio, questRenown, strength, totalThreat, usualCount } from '../src/game/board';
 import { adventurerCount, adventurerRank, deathFactor, leaderboard, questDifficulty, rankDifficulty, rivalPickQuest, rivalQuestChance, rankCounts, simulateGuildDay } from '../src/game/guild';
 
 const start = (seed = 1): GameState => newCampaign(createCharacter('Main', '#3d7be0', 'sword_shield'), 'Testers', makeRng(seed));
@@ -184,6 +184,20 @@ describe('ranks and the leaderboard', () => {
       expect(new Set(quests.map((x) => x.count)).size).toBeGreaterThan(1);
       expect(new Set(quests.map((x) => x.stage)).size).toBeGreaterThan(1);
     }
+  });
+
+  it('quest cards: about how many foes to expect, and danger 1-5 within the rank', () => {
+    // A group of 4 threat points: 4 bandits (threat 1), 8 rats (0.5), 7 goblins (0.6).
+    expect(expectedEnemies({ count: 4, foes: ['bandit'] })).toBe(4);
+    expect(expectedEnemies({ count: 4, foes: ['rat'] })).toBe(8);
+    expect(expectedEnemies({ count: 4, foes: ['goblin'] })).toBe(7);
+    expect(expectedEnemies({ count: 20, foes: ['rat'] })).toBe(12); // at most the field's cap
+    // Danger: the weakest quest of a rank is 1, the strongest 5, and it grows with level and group size.
+    const tier = GUILD.quests.C;
+    expect(dangerRating({ rank: 'C', stage: tier.stages[0], count: tier.count[0] })).toBe(1);
+    expect(dangerRating({ rank: 'C', stage: tier.stages[1], count: tier.count[1] })).toBe(5);
+    expect(dangerRating({ rank: 'C', stage: 8, count: 5 })).toBeGreaterThanOrEqual(dangerRating({ rank: 'C', stage: 8, count: 3 }));
+    expect(dangerRating({ rank: 'C', stage: 9, count: 4 })).toBeGreaterThanOrEqual(dangerRating({ rank: 'C', stage: 7, count: 4 }));
   });
 
   it('the board is shared and busy: plenty of quests across the ranks, always some at the party\'s rank', () => {

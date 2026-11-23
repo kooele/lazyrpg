@@ -1,14 +1,15 @@
 import Phaser from 'phaser';
 import { MAX_PARTY_SIZE, SKILLS, WEAPONS } from '../data/content';
 import { GUILD } from '../data/guild';
+import { ENEMIES } from '../data/enemies';
 import type { FreeAdventurer, Quest } from '../data/types';
 import { acceptQuest, canTakeQuest, lineupMembers, toggleLineup } from '../game/city';
 import { joinParty, mercenaryRates, rosterFull, talentPriceFactor } from '../game/contracts';
-import { groupLabel, payRating, totalThreat } from '../game/board';
+import { dangerRating, expectedEnemies, payRating } from '../game/board';
 import { adventurerCount, adventurerRank, leaderboard, nextRank, rankThreshold } from '../game/guild';
 import { markDirty, requireState, session } from '../game/session';
 import { cityHeader, rankBadge } from '../ui/hud';
-import { COLORS, HEIGHT, ScrollList, WIDTH, button, confirmDialog, figure, panel, setupCamera, talentTag, text, toast, type ScrollItem } from '../ui/widgets';
+import { ART_H, COLORS, HEIGHT, MONSTER_W, ScrollList, WIDTH, button, monsterKey, confirmDialog, figure, panel, setupCamera, talentTag, text, toast, type ScrollItem } from '../ui/widgets';
 
 type Tab = 'board' | 'hall' | 'ranks' | 'news';
 const CARD_H = 132;
@@ -92,6 +93,101 @@ export class GuildScene extends Phaser.Scene {
     }
   }
 
+  /**
+   * One foe on a quest card: a small copy of the enemy type's battle art for monsters, or a drawn head badge
+   * for foes that are people in battle (see humanBadge).
+   */
+  private foeIcon(box: Phaser.GameObjects.Container, g: Phaser.GameObjects.Graphics, cx: number, y: number, allowed: boolean, type: string): void {
+    const kind = ENEMIES[type]?.art.kind ?? 'human';
+    const key = monsterKey(kind);
+    if (kind !== 'human' && this.textures.exists(key)) {
+      const h = 26;
+      const img = this.add.image(cx, y + 8, key).setOrigin(0.5, 76 / ART_H).setDisplaySize(MONSTER_W * (h / ART_H), h).setFlipX(true);
+      if (!allowed) img.setTint(0x6d7286);
+      box.add(img);
+      return;
+    }
+    this.humanBadge(g, cx, y, type, allowed);
+  }
+
+  /** A head badge for foes drawn as people in battle: goblins, bandits, skeletons, orcs, sellswords, renegades. */
+  private humanBadge(g: Phaser.GameObjects.Graphics, cx: number, y: number, type: string, allowed: boolean): void {
+    const c = (v: number) => (allowed ? v : 0x6d7286);
+    const eyes = (col: number, dy = 0) => g.fillStyle(c(col), 1).fillCircle(cx - 2.3, y - 0.5 + dy, 1.2).fillCircle(cx + 2.3, y - 0.5 + dy, 1.2);
+    switch (type) {
+      case 'goblin': // green, long pointed ears
+        g.fillStyle(c(0x6fae4a), 1).fillTriangle(cx - 5, y - 2, cx - 4, y + 1, cx - 11, y - 5).fillTriangle(cx + 5, y - 2, cx + 4, y + 1, cx + 11, y - 5);
+        g.fillEllipse(cx, y, 11, 12);
+        eyes(0xffe27a);
+        g.fillStyle(0x181c2b, 1).fillRect(cx - 2.5, y + 3, 5, 1.2);
+        break;
+      case 'bandit': // hood and a red face mask
+        g.fillStyle(c(0x5a4636), 1).fillTriangle(cx - 7, y + 7, cx + 7, y + 7, cx, y - 9);
+        g.fillEllipse(cx, y + 1, 12, 13);
+        g.fillStyle(c(0xd8a882), 1).fillEllipse(cx, y + 1, 8, 9);
+        g.fillStyle(c(0x2a2a30), 1).fillRect(cx - 4, y - 1.5, 8, 2.5);
+        g.fillStyle(c(0xb03a2e), 1).fillRect(cx - 4, y + 2, 8, 3.5);
+        break;
+      case 'skeleton': // greenish bone under a rusted helmet, with green eyes (unlike the danger skulls)
+        g.fillStyle(c(0xbfc6a4), 1).fillEllipse(cx, y + 0.5, 10, 10);
+        g.fillRect(cx - 2.8, y + 3.5, 5.6, 3.5);
+        g.fillStyle(c(0x6a4a32), 1).fillEllipse(cx, y - 3.5, 13, 7).fillRect(cx - 7, y - 2.5, 14, 2);
+        g.fillStyle(c(0x8a6a4a), 1).fillRect(cx - 0.8, y - 7, 1.6, 4);
+        g.fillStyle(0x0e1018, 1).fillEllipse(cx - 2.2, y + 0.8, 3, 3).fillEllipse(cx + 2.2, y + 0.8, 3, 3);
+        g.fillStyle(c(0x7dff8a), 1).fillCircle(cx - 2.2, y + 0.8, 0.9).fillCircle(cx + 2.2, y + 0.8, 0.9);
+        g.fillStyle(0x0e1018, 1).fillRect(cx - 1.6, y + 5, 0.8, 2).fillRect(cx + 0.8, y + 5, 0.8, 2);
+        break;
+      case 'orc': // square green head, dark brow, tusks
+        g.fillStyle(c(0x6f8a4a), 1).fillRoundedRect(cx - 6.5, y - 6, 13, 13, 4);
+        g.fillStyle(c(0x3a3a2a), 1).fillRect(cx - 6.5, y - 6, 13, 3);
+        eyes(0xff5a3a);
+        g.fillStyle(c(0xf0ead0), 1).fillTriangle(cx - 4, y + 4, cx - 2.5, y + 4, cx - 3.2, y + 1).fillTriangle(cx + 2.5, y + 4, cx + 4, y + 4, cx + 3.2, y + 1);
+        break;
+      case 'sellsword': // steel helmet with a nose guard
+        g.fillStyle(c(0xd8a882), 1).fillEllipse(cx, y + 1.5, 9, 10);
+        g.fillStyle(c(0xaab4c4), 1).fillEllipse(cx, y - 2.5, 13, 9).fillRect(cx - 7, y - 1, 14, 2);
+        g.fillStyle(c(0x7a8494), 1).fillRect(cx - 0.7, y - 1, 1.4, 6);
+        eyes(0x1a1a20, 1);
+        break;
+      default: // renegades (and any other people): a dark hood with red eyes
+        g.fillStyle(c(0x3a2f4a), 1).fillTriangle(cx - 7, y + 8, cx + 7, y + 8, cx, y - 9);
+        g.fillEllipse(cx, y + 1, 12, 12);
+        g.fillStyle(0x0a0a12, 1).fillEllipse(cx, y + 1.5, 8, 8);
+        eyes(0xff4a3a, 1.5);
+    }
+  }
+
+  /**
+   * A quest's foes at a glance: an icon per enemy expected, cycling through its enemy types (left), and five
+   * skulls, the first `danger` of them lit (orange at 4-5), for how dangerous it is for its rank (right).
+   * Hovering says the same in words.
+   */
+  private questIcons(x: number, y: number, enemies: number, danger: number, cardW: number, allowed: boolean, types: string[]): Phaser.GameObjects.Container {
+    const box = this.add.container(0, 0);
+    const g = this.add.graphics();
+    box.add(g);
+    for (let i = 0; i < enemies; i++) this.foeIcon(box, g, x + 7 + i * 16, y, allowed, types[i % types.length]);
+    const fromX = cardW - 12 - 5 * 18;
+    for (let i = 0; i < 5; i++) {
+      const cx = fromX + 8 + i * 18;
+      const bone = !allowed ? 0x6d7286 : i < danger ? (danger >= 4 ? 0xff8a6b : 0xe8dcc0) : 0x3a4158;
+      g.fillStyle(bone, 1).fillCircle(cx, y - 1, 6);
+      g.fillRect(cx - 3.5, y + 2, 7, 5);
+      g.fillStyle(0x181c2b, 1).fillCircle(cx - 2.3, y - 1.5, 1.7).fillCircle(cx + 2.3, y - 1.5, 1.7);
+      g.fillRect(cx - 2, y + 4.5, 1, 2.5).fillRect(cx + 1, y + 4.5, 1, 2.5);
+    }
+    const crowd = enemies <= 2 ? 'A couple of foes' : enemies <= 4 ? 'A handful of foes' : enemies <= 7 ? 'A sizeable band' : 'A horde';
+    const peril = ['', 'An easy job for its rank', 'Modest danger for its rank', 'A fair fight for its rank', 'Dangerous for its rank', 'Deadly for its rank'][danger];
+    const hit = this.add.rectangle(x - 4, y - 10, cardW - x - 4, 20, 0xffffff, 0).setOrigin(0).setInteractive();
+    const tip = text(this, x, y + 10, `${crowd} (about ${enemies}). ${peril}.`, {
+      fontSize: '11px', color: COLORS.text, backgroundColor: '#000000d0', padding: { x: 6, y: 3 },
+    }).setVisible(false).setDepth(5);
+    hit.on('pointerover', () => tip.setVisible(true));
+    hit.on('pointerout', () => tip.setVisible(false));
+    box.add([hit, tip]);
+    return box;
+  }
+
   private questCard(q: Quest, x: number, y: number): Phaser.GameObjects.Container {
     const state = requireState();
     const allowed = canTakeQuest(state, q);
@@ -101,12 +197,14 @@ export class GuildScene extends Phaser.Scene {
     if (q.promotion) c.add(this.add.rectangle(0, 0, W, CARD_H).setOrigin(0).setStrokeStyle(2, COLORS.accent));
     c.add(rankBadge(this, 10, 10, q.rank, 26));
     c.add(text(this, 44, 10, q.title, { fontSize: '16px', color: allowed ? COLORS.text : COLORS.dim, wordWrap: { width: W - 54 } }));
-    const group = groupLabel(q);
-    // Total threat: the group's size (in threat points) x the strength of an enemy at its level.
-    c.add(text(this, 44, 32, `${q.promotion ? 'PROMOTION · ' : ''}Lv ${q.stage} × group ${q.count}${group ? ` (${group.toLowerCase()})` : ''} = Threat ${Math.round(totalThreat(q))} · ${q.days} day${q.days > 1 ? 's' : ''} away${q.promotion ? '' : ` · until day ${q.expires}`}`, {
-      fontSize: '12px', color: group === 'Large band' ? '#e08a5a' : COLORS.dim,
-    }));
-    c.add(text(this, 10, 52, q.description, { fontSize: '12px', wordWrap: { width: W - 20 }, color: allowed ? COLORS.text : COLORS.dim }));
+    // The foes at a glance: an icon per enemy expected, and 1-5 skulls for how dangerous the quest is for its rank.
+    const enemies = expectedEnemies(q);
+    const danger = dangerRating(q);
+    c.add(this.questIcons(44, 40, enemies, danger, W, allowed, q.foes?.length ? q.foes : ['bandit']));
+    c.add(text(this, 10, 56, q.description, { fontSize: '12px', wordWrap: { width: W - 20 }, color: allowed ? COLORS.text : COLORS.dim }));
+    const days = ['', "A day's", 'A two-day', 'A three-day', 'A four-day', 'A five-day'][q.days] ?? `A ${q.days}-day`;
+    const when = q.promotion ? 'The guild holds this trial open' : `The notice comes down after day ${q.expires}`;
+    c.add(text(this, 10, 86, `${days} journey · ${when}.`, { fontSize: '11px', color: COLORS.dim, fontStyle: 'italic', wordWrap: { width: W - 140 } }));
     c.add(text(this, 10, 100, `${q.reward} gold`, { fontSize: '17px', color: COLORS.gold }));
     const pay = payRating(q);
     if (pay !== 'fair') c.add(text(this, 100, 104, pay === 'generous' ? 'Generous pay' : 'Poor pay', { fontSize: '12px', color: pay === 'generous' ? '#6fdc8c' : COLORS.bad }));
