@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { figureSvg, lookModel } from '../art/unitArt';
 import { DEFAULT_WEAPON, WEAPONS } from '../data/content';
 import { STAT_INFO, type Appearance, type Character, type Look } from '../data/types';
-import { TALENT_COLORS, overallTalent, talentOf, talentStats } from '../game/talent';
+import { TALENT_COLORS, overallTalent, overallTalentLabel, talentOf, talentStats } from '../game/talent';
 
 export const WIDTH = 960;
 export const HEIGHT = 640;
@@ -526,7 +526,7 @@ export function talentTag(
   if (opts.overall ?? true) {
     const overall = overallTalent(c);
     put('Talent ', COLORS.dim);
-    put(overall, TALENT_COLORS[overall], true, size * 0.8);
+    put(overallTalentLabel(c), TALENT_COLORS[overall], true, size * 0.8);
   }
   if (opts.detail ?? true) {
     talentStats().forEach((k, i) => {

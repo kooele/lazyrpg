@@ -308,12 +308,28 @@ export function shouldSurrender(battle: Battle, u: Unit): boolean {
 }
 
 /**
+ * Could `u` get out of its opponent's reach this turn if it broke away? Not when it can't move
+ * (Frozen, or its movement AP is spent) or every tile it could reach is still next to the opponent.
+ * Breaking away then only hands the opponent a free attack, and the unit ends up fighting it again.
+ */
+function canGetAway(battle: Battle, u: Unit, opp: Unit): boolean {
+  if (u.moved || u.ap < 1 || battle.isFrozen(u)) return false;
+  for (const k of battle.reachable(u).keys()) {
+    const [x, y] = k.split(',').map(Number);
+    if (dist({ x, y }, opp) > 1.5) return true;
+  }
+  return false;
+}
+
+/**
  * Should an engaged unit break away? Ranged fighters do, and so does anyone badly
- * hurt, as long as the opponent's free opportunity attack won't finish them off.
+ * hurt, as long as the opponent's free opportunity attack won't finish them off
+ * and they can actually get away (see canGetAway).
  */
 export function shouldDisengage(battle: Battle, u: Unit): boolean {
   const opp = battle.opponentOf(u);
   if (!opp || !battle.canAct(u) || aiTypeOf(u) === 'evil') return false;
+  if (!canGetAway(battle, u, opp)) return false;
   // A bow counts as ranged even while engaged forces it into Melee mode.
   const raw = SKILLS[battle.skillIds(u)[0]];
   const ranged = !!raw?.modes?.some((m) => !hasTag(SKILLS[m], 'melee')) || battle.basicAttack(u).range > 1.5 || battle.basicAttack(u).los !== undefined;

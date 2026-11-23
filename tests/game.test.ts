@@ -1031,6 +1031,37 @@ describe('progression and enemy behaviour', () => {
     wolf.hp = Math.round(wolf.stats.health * 0.3);
     expect(shouldDisengage(battle, wolf)).toBe(true);
   });
+
+  it("doesn't break away when it can't get away (Frozen or boxed in): that only gives a free attack, then it re-engages", () => {
+    const slime = makeUnit(makeEnemy('slime', 3, makeRng(2)), 'enemy', { x: 5, y: 3 });
+    const a = makeUnit(hero(), 'player', { x: 4, y: 3 });
+    const battle = new Battle(openMap(), [a, slime], makeRng(1));
+    battle.perform(a, 'sword_slash', { x: 5, y: 3 });
+    battle.endPhase();
+    slime.hp = Math.round(slime.stats.health * 0.3);
+    expect(wantsToFlee(battle, slime)).toBe(true);
+    expect(shouldDisengage(battle, slime)).toBe(true);
+    // Frozen: it can't move, so it stays and fights.
+    slime.statuses.push({ id: 'frozen', name: 'Frozen', debuff: true, stacks: 1, turns: 2 } as never);
+    expect(shouldDisengage(battle, slime)).toBe(false);
+    const hp = slime.hp;
+    runAiTurn(battle, slime);
+    expect(slime.hp).toBe(hp); // no opportunity attack taken
+    expect(battle.opponentOf(slime)).toBe(a);
+  });
+
+  it("doesn't break away when every tile it could reach is still next to its opponent", () => {
+    // Heroes on every side: the slime can't walk anywhere.
+    const slime = makeUnit(makeEnemy('slime', 3, makeRng(2)), 'enemy', { x: 5, y: 3 });
+    const a = makeUnit(hero(), 'player', { x: 4, y: 3 });
+    const walls = [{ x: 6, y: 3 }, { x: 5, y: 2 }, { x: 5, y: 4 }].map((at, i) => makeUnit(hero('sword_shield', [], `W${i}`), 'player', at));
+    const battle = new Battle(openMap(), [a, ...walls, slime], makeRng(1));
+    battle.perform(a, 'sword_slash', { x: 5, y: 3 });
+    battle.endPhase();
+    slime.hp = Math.round(slime.stats.health * 0.3);
+    expect(wantsToFlee(battle, slime)).toBe(true);
+    expect(shouldDisengage(battle, slime)).toBe(false);
+  });
 });
 
 describe('battles', () => {

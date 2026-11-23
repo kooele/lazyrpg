@@ -16,7 +16,7 @@ import { markDirty, requireState, session } from '../game/session';
 import { COLORS, ScrollList, Tooltip, button, figure, hex, overlayInput, panel, reachDiagram, setupCamera, text, toast, type ScrollItem } from '../ui/widgets';
 import { GUILD } from '../data/guild';
 import { skillShape, type ReachContext } from '../game/reach';
-import { TALENT_COLORS, growthRate, overallTalent, rollTalents, talentGrowth, talentOf, talentStats } from '../game/talent';
+import { TALENT_COLORS, growthRate, overallTalent, overallTalentLabel, rollTalents, talentGrowth, talentOf, talentStats } from '../game/talent';
 
 interface CreatorData {
   /** main: create the main character for a new game. edit: change a party member's loadout (and the main character's look). */
@@ -415,7 +415,7 @@ export class CharacterCreatorScene extends Phaser.Scene {
     L.add(text(this, 140, 388, `Level ${d.level} · ${WEAPONS[d.weaponId].name}`, { color: COLORS.dim, fontSize: '12px', wordWrap: { width: 168 } }));
     if (this.canReroll) {
       L.add(button(this, 30, 362, 100, 22, 'Reroll talent', () => this.reroll(), {
-        fontSize: 12, ...this.hoverTip(() => `Roll new talent grades (F to S) for every growing stat.\nOr set each one with the ‹ › arrows next to it.\nTalent sets how fast a stat grows with level:\n${this.gradeTable()}\n\nOverall talent now: ${overallTalent(d)}`),
+        fontSize: 12, ...this.hoverTip(() => `Roll new talent grades (F to S) for every growing stat.\nOr set each one with the ‹ › arrows next to it.\nTalent sets how fast a stat grows with level:\n${this.gradeTable()}\n\nOverall talent now: ${overallTalentLabel(d)}`),
       }));
     }
     const total = deriveStats(d);
@@ -448,7 +448,7 @@ export class CharacterCreatorScene extends Phaser.Scene {
     const y0 = top + 132;
     L.add(panel(this, 24, y0, 290, 548 - y0));
     L.add(text(this, 36, y0 + 8, 'Stats', { color: COLORS.dim, fontSize: '14px' }));
-    L.add(text(this, 300, y0 + 8, `Talent ${overallTalent(d)}`, { color: TALENT_COLORS[overallTalent(d)], fontSize: '14px' }).setOrigin(1, 0));
+    L.add(text(this, 300, y0 + 8, `Talent ${overallTalentLabel(d)}`, { color: TALENT_COLORS[overallTalent(d)], fontSize: '14px' }).setOrigin(1, 0));
     const shown = visibleStatKeys();
     const rowH = Math.min(36, Math.floor((548 - y0 - 50) / shown.length));
     shown.forEach((k: StatKey, i) => {

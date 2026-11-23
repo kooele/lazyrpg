@@ -545,8 +545,10 @@ export class BattleScene extends Phaser.Scene {
         B.add(text(this, x + SLOT_W / 2, y + 30, s.name, {
           fontSize: '11px', color: usable ? COLORS.text : '#5d6480', align: 'center', wordWrap: { width: SLOT_W - 6 },
         }).setOrigin(0.5));
-        const cost = [isFree(s) ? 'free' : s.ap === 'end' ? '' : `${s.ap}AP`, s.mana ? `${s.mana}MP` : ''].filter(Boolean).join(' ');
-        if (cost) B.add(text(this, x + SLOT_W / 2, y + SLOT_H - 4, cost, { fontSize: '10px', color: u.mp < s.mana ? COLORS.bad : COLORS.dim }).setOrigin(0.5, 1));
+        // AP along the bottom ("Ends Turn" for turn-ending skills), mana at the top between the hotkey and the cooldown.
+        const ap = isFree(s) ? 'free' : s.ap === 'end' ? 'Ends Turn' : `${s.ap}AP`;
+        B.add(text(this, x + SLOT_W / 2, y + SLOT_H - 4, ap, { fontSize: '10px', color: COLORS.dim }).setOrigin(0.5, 1));
+        if (s.mana) B.add(text(this, x + SLOT_W / 2, y + 3, `${s.mana}MP`, { fontSize: '10px', color: u.mp < s.mana ? COLORS.bad : COLORS.dim }).setOrigin(0.5, 0));
         if (cd > 0) B.add(text(this, x + SLOT_W - 5, y + 2, String(cd), { fontSize: '13px', color: COLORS.bad, fontStyle: 'bold' }).setOrigin(1, 0));
       }
       bg.setInteractive({ useHandCursor: !!s });
