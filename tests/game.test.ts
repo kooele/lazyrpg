@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import skillsJson from '../src/data/skills.json';
 import weaponsJson from '../src/data/weapons.json';
-import { SKILLS, TREE_SKILLS, WEAPONS, parseContent, skillFormula, skillPointsForLevel } from '../src/data/content';
+import { SKILLS, TREE_SKILLS, WEAPONS, parseContent, skillFormula, skillPointsForLevel, skillStatText, skillStats } from '../src/data/content';
 import enemiesJson from '../src/data/enemies.json';
 import { parseEnemies } from '../src/data/enemies';
 import { STAT_CONFIG, parseStatConfig } from '../src/data/stats';
@@ -78,6 +78,29 @@ describe('stats and content files', () => {
     expect(skillFormula(SKILLS.execute)).toBe("100% P.Atk + 15% target's missing HP");
     expect(skillFormula(SKILLS.double_strike)).toBe('basic attack x2');
     expect(skillFormula(SKILLS.life_risking_strike)).toBe('250% P.Atk · you: Exposed (1 turn) · if it survives, you take 100% P.Atk');
+  });
+
+  it('skill stat lists are uniform: effect rows, then Target, Range, AP, Mana, Cooldown on every skill', () => {
+    const labels = (id: string) => skillStats(SKILLS[id]).map((r) => r.label);
+    for (const [id, s] of Object.entries(SKILLS)) {
+      if (s.modes) continue;
+      const l = labels(id);
+      const common = l.filter((x) => ['Target', 'Range', 'AP', 'Mana', 'Cooldown'].includes(x));
+      expect(common, id).toEqual(['Target', 'Range', 'AP', 'Mana', 'Cooldown']);
+      expect(l.indexOf('Target'), id).toBe(l.length - common.length - (l.includes('Needs') ? 1 : 0) - (l.includes('Unlocks') ? 1 : 0));
+      // Numbers live in the list, not the description.
+      expect(s.description, id).not.toMatch(/\d+%/);
+    }
+    expect(skillStatText(SKILLS.fireball, true)).toBe([
+      '• Damage: 100% M.Atk', '• Applies: Burn x1, 2 turns', '• Target: Enemy', '• Range: 5 tiles',
+      '• Needs: Line of sight', '• AP: Ends turn', '• Mana: None', '• Cooldown: 2 turns',
+    ].join('\n'));
+    expect(skillStatText(SKILLS.fireball)).toContain('• Applies: Burn x1, 2 turns\n   Lose 1%');
+    expect(labels('life_risking_strike')).toEqual(['Damage', 'On you', 'Recoil', 'Target', 'Range', 'AP', 'Mana', 'Cooldown', 'Unlocks']);
+    expect(skillStats(SKILLS.charge).find((r) => r.label === 'Range')!.value).toBe('Movement');
+    expect(skillStats(SKILLS.indirect_shot).find((r) => r.label === 'Range')!.value).toBe('Weapon range x1.5');
+    expect(skillStats(SKILLS.circle_swing).find((r) => r.label === 'Target')!.value).toBe('Every unit around you');
+    expect(skillStats(SKILLS.bow_attack).map((r) => r.label)).toEqual(['Direct mode', 'Indirect mode', 'Melee mode']);
   });
 });
 

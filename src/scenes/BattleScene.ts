@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { SKILLS, STATUSES, WEAPONS, hasTag, isFree, isSupport, skillDetails, skillFormula, tagNames } from '../data/content';
+import { SKILLS, STATUSES, WEAPONS, hasTag, isFree, isSupport, skillStatText, tagNames } from '../data/content';
 import type { SkillDef } from '../data/types';
 import { bestAction, bestFreeAction, planTurn, preferredMode, shouldDisengage, shouldEscape } from '../game/ai';
 import {
@@ -32,7 +32,10 @@ const SLOT_H = 66;
 const SLOT_GAP = 4;
 /** Battle log (sidebar, under the unit panel). */
 const LOG_Y = 222;
-const LOG_H = 252;
+const LOG_H = 170;
+/** Hover/skill info panel under the log. */
+const INFO_Y = 400;
+const INFO_H = 232;
 const HOTKEYS = ['ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE', 'ZERO'];
 /** Where a unit's feet are, relative to its tile center; the HP bar sits just below. */
 let FEET_Y = 14;
@@ -141,8 +144,8 @@ export class BattleScene extends Phaser.Scene {
     this.bar = this.add.container(0, 0);
     this.barPage = 0;
     this.barDrag = null;
-    panel(this, SIDE_X, 482, SIDE_W, 150);
-    this.hoverText = text(this, SIDE_X + 10, 489, '', { fontSize: '12px', wordWrap: { width: SIDE_W - 20 }, lineSpacing: 1 });
+    panel(this, SIDE_X, INFO_Y, SIDE_W, INFO_H);
+    this.hoverText = text(this, SIDE_X + 10, INFO_Y + 7, '', { fontSize: '12px', wordWrap: { width: SIDE_W - 20 }, lineSpacing: 1 });
     panel(this, SIDE_X, LOG_Y, SIDE_W, LOG_H);
     this.logList = new ScrollList(this, SIDE_X + 8, LOG_Y + 6, SIDE_W - 14, LOG_H - 12, 1);
 
@@ -566,7 +569,7 @@ export class BattleScene extends Phaser.Scene {
     const why = !interactive || usable ? '' : u.mp < s.mana ? `\nNot enough mana (${u.mp}/${s.mana}).`
       : s.target === 'move' && !u.moved ? '\nUse your regular move first.' : !b.canAct(u) ? '\nThis unit\'s turn is over.' : !b.canPay(u, s) ? '\nNot enough AP.' : '';
     const modeLine = raw.modes ? `\nBow mode: ${b.modeName(u)} (Switch Mode changes it)` : raw.switchMode && b.modesOf(u) ? `\nNow: ${b.modeName(u)}. Next: ${SKILLS[b.modesOf(u)![(u.weaponMode + 1) % b.modesOf(u)!.length]].modeName}` : '';
-    this.hoverText.setText(`${s.name} [${tagNames(s).join(', ') || 'basic'}]\n${skillFormula(s) || s.description}\n${skillDetails(s)}${modeLine}${cd > 0 ? `\nReady ${cd === 1 ? 'next turn' : `in ${cd} turns`}.` : ''}${why}\nDrag to another slot to move it.`);
+    this.hoverText.setText(`${s.name} [${tagNames(s).join(', ') || 'basic'}]\n${s.description}\n${skillStatText(s, true)}${modeLine}${cd > 0 ? `\nReady ${cd === 1 ? 'next turn' : `in ${cd} turns`}.` : ''}${why}\nDrag to another slot to move it.`);
   }
 
   /** Page up/down. While dragging a skill, ▼ past the last page opens an empty one to drop it on. */
