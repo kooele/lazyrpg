@@ -11,6 +11,12 @@
     "rangeScale": "for 'movement' skills: range in tiles = floor(rangeScale x Movement / movementCosts.grass)",
     "applyStatus": "list of { status, turns, stacks }",
     "level": "Skill-tree skills: the character level needed to learn it (default 1).",
+    "modes": "A weapon basic attack with switchable modes (the Bow): list of skill ids, the first is the default. The unit's current mode decides which one is used; Switch Mode cycles them. Overwatch and 'weapon' skills follow the current mode.",
+    "modeName": "Short name of a mode skill (Direct, Indirect, Melee)",
+    "weaponRange": "Range as a multiple of the weapon's range (weapons.json \"range\"), e.g. 1.5 = Weapon Range x 1.5",
+    "basicMode": "For 'basicAttack' skills: use the weapon mode with this tag (e.g. \"melee\") instead of the current one",
+    "switchMode": "true = cycles the user's weapon to its next mode",
+    "damageTypes": "Each hit is split by what it scales with: P.Atk, Def and missing HP are Physical damage, M.Atk is Magical damage. Tag skills 'physical' / 'magical' to match (a test checks it).",
     "basicAttack": "Hit with the user's weapon basic attack this many times (instead of 'hits'). Used by Double Strike and Circle Swing.",
     "selfStatus": "list of { status, turns } applied to the user before the skill resolves (never resisted)",
     "recoilIfSurvives": "{ pAtk, mAtk, ... } damage the user takes (after its own Defense) if the target survives the hits",
@@ -27,7 +33,8 @@
     "knockback": { "name": "Knockback", "description": "Pushes targets away. Walls and other units stop the push. A unit pushed out of an engagement takes a free basic attack from its opponent." },
     "reaction": { "name": "Reaction", "description": "Sets a watch that triggers during the enemy's turn when they move into it. Lasts until your next turn." },
     "disengage": { "name": "Disengage", "description": "Usable while engaged, even on units other than your opponent. Using it ends your engagement with no free attack for your opponent." },
-    "physical": { "name": "Physical", "description": "A physical attack." },
+    "physical": { "name": "Physical", "description": "Deals Physical damage (from P.Atk, Def or missing Health)." },
+    "magical": { "name": "Magical", "description": "Deals Magical damage (from M.Atk)." },
     "stealth": { "name": "Stealth", "description": "Makes you Stealthed: enemies can't target you directly." },
     "teleport": { "name": "Teleport", "description": "Moves you instantly, ignoring terrain and units in the way." },
     "movement": { "name": "Movement", "description": "Range scales with your Movement: every 4 Movement (one grass tile) = 1 tile, rounded down. Slow shortens it." },
@@ -51,7 +58,7 @@
   "skills": {
     "sword_slash": {
       "name": "Sword Slash", "description": "Slash an enemy for 100% P.Atk.",
-      "tags": ["melee", "engage"],
+      "tags": ["melee", "engage", "physical"],
       "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 0,
       "hits": [{ "pAtk": 1 }]
     },
@@ -63,21 +70,37 @@
     },
     "spear_thrust": {
       "name": "Spear Thrust", "description": "Thrust toward a tile, hitting the first enemy in the way for 100% P.Atk.",
-      "tags": ["melee"],
+      "tags": ["melee", "physical"],
       "target": "line", "affects": "enemy", "range": 2, "minRange": 1, "cooldown": 0,
       "hits": [{ "pAtk": 1 }]
     },
+    "bow_attack": {
+      "name": "Bow Attack", "description": "The bow's basic attack. How it works depends on the bow's mode (Direct, Indirect or Melee): use Switch Mode to change it.",
+      "modes": ["direct_shot", "indirect_shot", "bow_strike"]
+    },
     "direct_shot": {
-      "name": "Direct Shot", "description": "Shoot an enemy for 100% P.Atk.",
-      "tags": ["projectile"],
-      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "los": "sight", "cooldown": 0,
+      "name": "Direct Shot", "modeName": "Direct", "description": "Shoot an enemy within your weapon's range for 100% P.Atk. Needs line of sight.",
+      "tags": ["projectile", "physical"],
+      "target": "unit", "affects": "enemy", "range": 5, "weaponRange": 1, "minRange": 1, "los": "sight", "cooldown": 0,
       "hits": [{ "pAtk": 1 }]
     },
     "indirect_shot": {
-      "name": "Indirect Shot", "description": "Lob an arrow at an enemy for 70% P.Atk. Arcs over obstacles.",
-      "tags": ["indirect"],
-      "target": "unit", "affects": "enemy", "range": 6, "minRange": 1, "cooldown": 0,
+      "name": "Indirect Shot", "modeName": "Indirect", "description": "Lob an arrow at an enemy within 1.5x your weapon's range for 70% P.Atk. Arcs over obstacles.",
+      "tags": ["indirect", "physical"],
+      "target": "unit", "affects": "enemy", "range": 7.5, "weaponRange": 1.5, "minRange": 1, "cooldown": 0,
       "hits": [{ "pAtk": 0.7 }]
+    },
+    "bow_strike": {
+      "name": "Bow Strike", "modeName": "Melee", "description": "Strike an enemy next to you with the bow for 80% P.Atk.",
+      "tags": ["melee", "physical"],
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 0,
+      "hits": [{ "pAtk": 0.8 }]
+    },
+    "switch_mode": {
+      "name": "Switch Mode", "description": "Switch the bow to its next mode: Direct, then Indirect, then Melee, then back to Direct.",
+      "tags": ["free"],
+      "target": "self", "affects": "ally", "range": 0, "minRange": 0, "cooldown": 0, "ap": 0,
+      "switchMode": true
     },
     "overwatch": {
       "name": "Overwatch", "description": "Basic ability. Watch a 60° arc in any direction, as far as your weapon reaches. The first enemy to move into it takes your basic attack but keeps moving.",
@@ -92,26 +115,26 @@
     },
     "empowered_strike": {
       "name": "Empowered Strike", "description": "Strike an enemy for 100% P.Atk + 50% M.Atk.",
-      "tags": ["melee", "engage"],
+      "tags": ["melee", "engage", "physical", "magical"],
       "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 0,
       "hits": [{ "pAtk": 1, "mAtk": 0.5 }]
     },
     "magic_bolt": {
       "name": "Magic Bolt", "description": "Fire a bolt at an enemy for 50% P.Atk + 50% M.Atk.",
-      "tags": ["projectile"],
+      "tags": ["projectile", "physical", "magical"],
       "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "los": "sight", "cooldown": 0,
       "hits": [{ "pAtk": 0.5, "mAtk": 0.5 }]
     },
 
     "arcane_bolt": {
       "name": "Arcane Bolt", "description": "Fire an arcane bolt at an enemy for 100% M.Atk.",
-      "tags": ["projectile"],
+      "tags": ["projectile", "magical"],
       "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "los": "sight", "cooldown": 0, "mana": 20,
       "hits": [{ "mAtk": 1 }]
     },
     "arcane_pulse": {
       "name": "Arcane Pulse", "description": "Blast an enemy for 100% M.Atk and knock it back 2 tiles.",
-      "tags": ["disengage", "knockback"],
+      "tags": ["disengage", "knockback", "magical"],
       "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "los": "sight", "cooldown": 2, "mana": 40, "level": 3,
       "hits": [{ "mAtk": 1 }], "knockback": 2
     },
@@ -123,14 +146,14 @@
     },
     "fireball": {
       "name": "Fireball", "description": "Hurl a fireball at an enemy for 100% M.Atk and apply 1 stack of Burn for 2 turns.",
-      "tags": ["projectile", "debuff"],
+      "tags": ["projectile", "debuff", "magical"],
       "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "los": "sight", "cooldown": 2,
       "hits": [{ "mAtk": 1 }],
       "applyStatus": [{ "status": "burn", "stacks": 1, "turns": 2 }]
     },
     "freeze": {
       "name": "Freeze", "description": "Freeze an enemy for 100% M.Atk and apply Slow for 2 turns.",
-      "tags": ["debuff"],
+      "tags": ["debuff", "magical"],
       "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "cooldown": 2,
       "hits": [{ "mAtk": 1 }],
       "applyStatus": [{ "status": "slow", "turns": 2 }]
@@ -197,46 +220,46 @@
     },
     "execute": {
       "name": "Execute", "description": "Strike an enemy for 100% P.Atk + 15% of its missing Health.",
-      "tags": ["weapon"],
+      "tags": ["weapon", "physical"],
       "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 2, "mana": 20, "level": 3,
       "hits": [{ "pAtk": 1, "missingHp": 0.15 }]
     },
     "circle_swing": {
-      "name": "Circle Swing", "description": "Hit every enemy within your weapon's range with your basic attack and knock them back 1 tile.",
+      "name": "Circle Swing", "description": "Hit every unit within your weapon's range (allies included) with your basic attack and knock them back 1 tile. A bow always swings in Melee mode.",
       "tags": ["weapon", "area", "knockback"],
-      "target": "self", "affects": "enemy", "range": 0, "minRange": 0, "cooldown": 3, "mana": 30, "level": 5,
-      "basicAttack": 1, "knockback": 1
+      "target": "self", "affects": "any", "range": 0, "minRange": 0, "cooldown": 3, "mana": 30, "level": 5,
+      "basicAttack": 1, "basicMode": "melee", "knockback": 1
     },
 
     "_monsters": "Skills used only by monsters (see enemies.json). They are not in any skill tree.",
     "gnaw": {
       "name": "Gnaw", "description": "Gnaw an enemy for 100% P.Atk.",
-      "tags": ["monster", "melee"],
+      "tags": ["monster", "melee", "physical"],
       "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 0,
       "hits": [{ "pAtk": 1 }]
     },
     "slam": {
       "name": "Slam", "description": "Slam into an enemy for 100% P.Atk.",
-      "tags": ["monster", "melee", "engage"],
+      "tags": ["monster", "melee", "engage", "physical"],
       "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 0,
       "hits": [{ "pAtk": 1 }]
     },
     "sticky_spit": {
       "name": "Sticky Spit", "description": "Spit goo at an enemy for 60% M.Atk and apply Slow and Corrode (-25% Defense) for 2 turns.",
-      "tags": ["monster", "projectile", "debuff"],
+      "tags": ["monster", "projectile", "debuff", "magical"],
       "target": "unit", "affects": "enemy", "range": 3, "minRange": 1, "los": "sight", "cooldown": 2,
       "hits": [{ "mAtk": 0.6 }],
       "applyStatus": [{ "status": "slow", "turns": 2 }, { "status": "corrode", "turns": 2 }]
     },
     "bite": {
       "name": "Bite", "description": "Bite an enemy for 100% P.Atk and latch on.",
-      "tags": ["monster", "melee", "engage"],
+      "tags": ["monster", "melee", "engage", "physical"],
       "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 0,
       "hits": [{ "pAtk": 1 }]
     },
     "pounce": {
       "name": "Pounce", "description": "Leap next to an enemy and strike it for 90% P.Atk.",
-      "tags": ["monster", "movement", "melee", "engage"],
+      "tags": ["monster", "movement", "melee", "engage", "physical"],
       "target": "unit", "affects": "enemy", "range": 4, "rangeScale": 1, "minRange": 1, "cooldown": 2,
       "hits": [{ "pAtk": 0.9 }], "charge": true
     },

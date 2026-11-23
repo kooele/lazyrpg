@@ -286,7 +286,7 @@ describe('skills', () => {
     ]);
     battle.perform(a, 'shield_up', { x: 1, y: 1 });
     battle.endPhase();
-    battle.perform(e, 'direct_shot', { x: 1, y: 1 }); // 80 x 100/175 = 46
+    battle.perform(e, 'bow_attack', { x: 1, y: 1 }); // Direct mode: 80 x 100/175 = 46
     expect(battle.shieldOf(a)).toBe(4);
     expect(a.hp).toBe(500);
   });
@@ -327,7 +327,7 @@ describe('skills', () => {
     expect(e.hp).toBe(500 - 80); // 120 x 2/3
   });
 
-  it('circle swing hits every enemy within weapon range with the basic attack and pushes them', () => {
+  it('circle swing hits every unit within weapon range (allies too) with the basic attack and pushes them', () => {
     const { battle, units: [s, ally, foe, far] } = setup(openMap(), [
       { c: hero('spear', ['circle_swing']), team: 'player', at: { x: 4, y: 3 } },
       { c: hero('bow'), team: 'player', at: { x: 5, y: 4 } },
@@ -335,8 +335,8 @@ describe('skills', () => {
       { c: hero('bow'), team: 'enemy', at: { x: 7, y: 3 } },
     ]);
     battle.perform(s, 'circle_swing', { x: 4, y: 3 });
-    expect(ally.hp).toBe(500); // enemies only
-    expect(ally).toMatchObject({ x: 5, y: 4 });
+    expect(ally.hp).toBeLessThan(500); // allies included
+    expect(ally).toMatchObject({ x: 6, y: 5 });
     expect(foe.hp).toBe(500 - 67); // Spear Thrust's 100% P.Atk
     expect(foe).toMatchObject({ x: 2, y: 3 });
     expect(far.hp).toBe(500); // 3 tiles away: outside the spear's range 2
@@ -520,7 +520,7 @@ describe('engagement', () => {
 
   it('a successful push breaks the engagement, even if the units stay adjacent', () => {
     const { units: [a, e] } = duel();
-    const spear = makeUnit(hero('spear', ['circle_swing'], 'S'), 'player', { x: 5, y: 4 });
+    const spear = makeUnit(hero('sword_shield', ['circle_swing'], 'S'), 'player', { x: 5, y: 4 });
     const b2 = new Battle(openMap(), [a, e, spear], makeRng(2));
     b2.perform(a, 'sword_slash', { x: 4, y: 3 });
     const events = b2.perform(spear, 'circle_swing', { x: 5, y: 4 }); // pushes the enemy to (3,2)
@@ -1020,7 +1020,7 @@ describe('action points, mana and Dash', () => {
     battle.move(a, { x: 2, y: 1 });
     expect(a).toMatchObject({ ap: 1, moved: true, acted: false });
     expect(battle.canMove(a)).toBe(false);
-    battle.perform(a, 'direct_shot', { x: 5, y: 1 });
+    battle.perform(a, 'bow_attack', { x: 5, y: 1 });
     expect(a).toMatchObject({ ap: 0, acted: true });
     battle.endPhase();
     battle.endPhase();
@@ -1032,28 +1032,28 @@ describe('action points, mana and Dash', () => {
       { c: hero('bow', ['kick']), team: 'player', at: { x: 1, y: 1 } },
       { c: hero(), team: 'enemy', at: { x: 2, y: 1 } },
     ]);
-    const original = { ...SKILLS.direct_shot };
+    const original = { ...SKILLS.bow_attack };
     try {
-      Object.assign(SKILLS.direct_shot, skill('direct_shot', { ap: 1 }));
-      battle.perform(a, 'direct_shot', { x: 2, y: 1 });
+      Object.assign(SKILLS.bow_attack, skill('bow_attack', { ap: 1 }));
+      battle.perform(a, 'bow_attack', { x: 2, y: 1 });
       expect(a).toMatchObject({ ap: 1, moved: true, acted: false }); // the movement AP went first
       expect(battle.canMove(a)).toBe(false);
-      battle.perform(a, 'direct_shot', { x: 2, y: 1 });
+      battle.perform(a, 'bow_attack', { x: 2, y: 1 });
       expect(a).toMatchObject({ ap: 0, acted: false });
-      expect(battle.canUseSkill(a, 'direct_shot')).toBe(false);
+      expect(battle.canUseSkill(a, 'bow_attack')).toBe(false);
       expect(battle.canUseSkill(a, 'kick')).toBe(true); // still a free action
       battle.endPhase();
       battle.endPhase();
-      Object.assign(SKILLS.direct_shot, skill('direct_shot', { ap: 2 }));
+      Object.assign(SKILLS.bow_attack, skill('bow_attack', { ap: 2 }));
       battle.move(a, { x: 1, y: 2 });
-      expect(battle.canUseSkill(a, 'direct_shot')).toBe(false); // needs both AP
+      expect(battle.canUseSkill(a, 'bow_attack')).toBe(false); // needs both AP
       battle.undoMove(a);
       expect(a.ap).toBe(2);
-      battle.perform(a, 'direct_shot', { x: 2, y: 1 });
+      battle.perform(a, 'bow_attack', { x: 2, y: 1 });
       expect(a).toMatchObject({ ap: 0, acted: false });
       expect(battle.canUseSkill(a, 'kick')).toBe(true);
     } finally {
-      Object.assign(SKILLS.direct_shot, original);
+      Object.assign(SKILLS.bow_attack, original);
     }
   });
 
@@ -1102,14 +1102,14 @@ describe('action points, mana and Dash', () => {
 describe('skill bar', () => {
   it('defaults to basic attack, Overwatch, Dash, then the rest; padded to pages of 10', () => {
     const c = hero('bow', ['kick', 'execute']);
-    expect(skillBarLayout(c).slice(0, 6)).toEqual(['direct_shot', 'overwatch', 'dash', 'indirect_shot', 'kick', 'execute']);
+    expect(skillBarLayout(c).slice(0, 6)).toEqual(['bow_attack', 'overwatch', 'dash', 'switch_mode', 'kick', 'execute']);
     expect(skillBarLayout(c)).toHaveLength(10);
   });
 
   it('keeps the player layout; lost skills leave a gap and new ones go after the last used slot', () => {
     const c = hero('bow', ['kick']);
     swapBarSlots(c, 0, 7); // basic attack to slot 8
-    expect(skillBarLayout(c)[7]).toBe('direct_shot');
+    expect(skillBarLayout(c)[7]).toBe('bow_attack');
     expect(skillBarLayout(c)[0]).toBeNull();
     c.level = 3;
     c.skillIds = ['execute']; // Kick unlearned, Execute learned
@@ -1133,11 +1133,11 @@ describe('skill bar', () => {
     const c = createCharacter('Main', '#3d7be0', 'bow');
     swapBarSlots(c, 0, 4);
     const file = JSON.parse(serializeSave(newCampaign(c, 'Testers', makeRng(2))));
-    expect(file.party[0].skillBar[4]).toBe('direct_shot');
+    expect(file.party[0].skillBar[4]).toBe('bow_attack');
     file.party[0].skillBar[1] = 'old_skill';
     const r = parseSave(JSON.stringify(file));
     expect(r.ok && r.state.party[0].skillBar![1]).toBeNull();
-    expect(r.ok && skillBarLayout(r.state.party[0])[4]).toBe('direct_shot');
+    expect(r.ok && skillBarLayout(r.state.party[0])[4]).toBe('bow_attack');
   });
 });
 
@@ -1226,7 +1226,7 @@ describe('skill-sheet systems: level locks, Disengage and the new skills', () =>
     expect(a).toMatchObject({ x: 2, y: 2, engagedWith: null, acted: false });
     expect(battle.isStealthed(a)).toBe(true);
     battle.endPhase();
-    expect(battle.targetsOf(archer, SKILLS.direct_shot, { x: 2, y: 2 })).toEqual([]);
+    expect(battle.targetsOf(archer, SKILLS.bow_attack, { x: 2, y: 2 })).toEqual([]);
     battle.endPhase();
     expect(battle.isStealthed(a)).toBe(false);
   });
@@ -1278,5 +1278,80 @@ describe('skill-sheet systems: level locks, Disengage and the new skills', () =>
     kill.battle.perform(kill.units[0], 'life_risking_strike', { x: 4, y: 3 });
     expect(kill.units[1].alive).toBe(false);
     expect(kill.units[0].hp).toBe(500);
+  });
+});
+
+describe('bow modes and damage types', () => {
+  it('Switch Mode cycles the bow Direct -> Indirect -> Melee for free; the basic attack follows', () => {
+    const map = openMap(14, 7);
+    const { battle, units: [a, e] } = setup(map, [
+      { c: hero('bow'), team: 'player', at: { x: 1, y: 3 } },
+      { c: hero('sword_shield'), team: 'enemy', at: { x: 7, y: 3 } },
+    ]);
+    expect(battle.modeName(a)).toBe('Direct');
+    expect(battle.skillRange(a, SKILLS.bow_attack)).toBe(5);
+    expect(battle.canTarget(a, SKILLS.bow_attack, { x: 7, y: 3 })).toBe(false); // 6 tiles
+    const ev = battle.perform(a, 'switch_mode', { x: 1, y: 3 });
+    expect(ev).toContainEqual({ type: 'mode', target: a.uid, name: 'Indirect' });
+    expect(a).toMatchObject({ ap: 2, acted: false }); // free
+    expect(battle.skillRange(a, SKILLS.bow_attack)).toBe(7.5); // weapon range 5 x 1.5
+    expect(battle.skillLos(a, SKILLS.bow_attack)).toBeUndefined(); // arcs over cover
+    battle.perform(a, 'bow_attack', { x: 7, y: 3 });
+    expect(e.hp).toBe(500 - 32); // 70% of 80 P.Atk x 100/175
+    battle.endPhase();
+    battle.endPhase();
+    battle.perform(a, 'switch_mode', { x: 1, y: 3 });
+    expect(battle.modeName(a)).toBe('Melee');
+    expect(battle.skillRange(a, SKILLS.bow_attack)).toBe(1.5);
+    expect(battle.previewHits(a, SKILLS.bow_attack, e)).toEqual([37]); // 80% of 80 x 100/175
+    battle.perform(a, 'switch_mode', { x: 1, y: 3 });
+    expect(battle.modeName(a)).toBe('Direct');
+    // Switch Mode never keeps a turn open on its own.
+    expect(battle.usableFreeActions(a)).toEqual([]);
+  });
+
+  it('Overwatch and Weapon skills use the current bow mode; Circle Swing always swings in Melee mode', () => {
+    const { battle, units: [a, foe] } = setup(openMap(14, 7), [
+      { c: hero('bow', ['execute', 'circle_swing']), team: 'player', at: { x: 3, y: 3 } },
+      { c: hero('sword_shield'), team: 'enemy', at: { x: 4, y: 4 } },
+      { c: hero('sword_shield'), team: 'enemy', at: { x: 6, y: 3 } },
+    ]);
+    expect(battle.coneRadius(a, SKILLS.overwatch)).toBe(5);
+    expect(battle.skillRange(a, SKILLS.execute)).toBe(5);
+    battle.perform(a, 'switch_mode', { x: 3, y: 3 }); // Indirect
+    expect(battle.coneRadius(a, SKILLS.overwatch)).toBe(7.5);
+    expect(battle.skillRange(a, SKILLS.execute)).toBe(7.5);
+    // Circle Swing in Indirect mode still uses Melee: 1.5 tiles, 80% P.Atk.
+    expect(battle.areaTiles(a, SKILLS.circle_swing, a)).toHaveLength(8);
+    const events = battle.perform(a, 'circle_swing', { x: 3, y: 3 });
+    expect(events.filter((ev) => ev.type === 'damage')).toEqual([expect.objectContaining({ target: foe.uid, amount: 37, damageType: 'physical' })]);
+  });
+
+  it('hits are split into Physical (P.Atk, Def, missing HP) and Magical (M.Atk) damage', () => {
+    const { battle, units: [m, e] } = setup(openMap(), [
+      { c: hero('staff', ['fireball']), team: 'player', at: { x: 1, y: 3 } },
+      { c: hero('sword_shield'), team: 'enemy', at: { x: 3, y: 3 } },
+    ]);
+    const bolt = battle.perform(m, 'magic_bolt', { x: 3, y: 3 }).filter((ev) => ev.type === 'damage');
+    // 50% of 50 P.Atk and 50% of 120 M.Atk, each x 100/175
+    expect(bolt).toEqual([
+      expect.objectContaining({ damageType: 'physical', amount: 14 }),
+      expect.objectContaining({ damageType: 'magical', amount: 34 }),
+    ]);
+    expect(battle.previewHits(m, SKILLS.magic_bolt, e)).toEqual([48]);
+    battle.endPhase();
+    battle.endPhase();
+    const fire = battle.perform(m, 'fireball', { x: 3, y: 3 }).filter((ev) => ev.type === 'damage');
+    expect(fire.every((ev) => ev.type === 'damage' && ev.damageType === 'magical')).toBe(true);
+  });
+
+  it('skills are tagged Physical / Magical to match the damage their hits deal', () => {
+    for (const s of Object.values(SKILLS)) {
+      const hits = [...(s.hits ?? []), ...(s.recoilIfSurvives ? [s.recoilIfSurvives] : [])];
+      const physical = hits.some((h) => h.pAtk || h.def || h.missingHp);
+      const magical = hits.some((h) => h.mAtk);
+      expect([s.id, s.tags.includes('physical')]).toEqual([s.id, physical]);
+      expect([s.id, s.tags.includes('magical')]).toEqual([s.id, magical]);
+    }
   });
 });

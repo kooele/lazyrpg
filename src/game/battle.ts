@@ -1,8 +1,8 @@
 // Pure battle rules (no rendering). BattleScene drives this and animates the events it returns.
-import { DEFAULT_WEAPON, ENEMY_COLOR, SKILLS, STATUSES, WEAPONS, hasTag, isFree } from '../data/content';
+import { DEFAULT_WEAPON, ENEMY_COLOR, SKILLS, STATUSES, WEAPONS, hasTag, isFree, modeWithTag, resolveWeaponSkill } from '../data/content';
 import { ENCOUNTER, ENEMIES } from '../data/enemies';
 import { STAT_CONFIG, type StatConfig } from '../data/stats';
-import type { Character, DamagePart, LosRule, SkillDef, StatKey, Stats } from '../data/types';
+import { DAMAGE_TYPES, type Character, type DamagePart, type DamageType, type LosRule, type SkillDef, type StatKey, type Stats } from '../data/types';
 import { allSkills, deriveStats, modelFor, newId, type Rng } from './character';
 import { losFor, minRangeFor, rangeFor, type ReachContext } from './reach';
 import {
@@ -70,6 +70,8 @@ export interface Unit {
   engagedWith: string | null;
   /** 'weapon'-tagged skills are unusable while true (nothing sets it yet). */
   weaponDisabled: boolean;
+  /** Current mode of a weapon with modes (the Bow): index into its basic attack's modes. Starts at 0 (Direct). */
+  weaponMode: number;
   /** Fled off the edge of the map (counts as gone, not dead). */
   escaped?: boolean;
 }
@@ -78,7 +80,7 @@ export interface Unit {
 export type DamageCause = 'skill' | 'status' | 'overwatch' | 'opportunity';
 
 export type BattleEvent =
-  | { type: 'damage'; source?: string; target: string; amount: number; absorbed: number; killed: boolean; cause: DamageCause }
+  | { type: 'damage'; source?: string; target: string; amount: number; absorbed: number; killed: boolean; cause: DamageCause; damageType?: DamageType }
   | { type: 'engage'; source: string; target: string }
   | { type: 'disengage'; source: string; target: string; reason: 'disengage' | 'separated' | 'displaced' | 'escaped' }
   | { type: 'heal'; source: string; target: string; amount: number }
@@ -88,7 +90,8 @@ export type BattleEvent =
   | { type: 'cleanse'; source: string; target: string; removed: string[] }
   | { type: 'move'; target: string; from: Point; to: Point; kind: 'knockback' | 'teleport' | 'charge' }
   | { type: 'overwatch'; source: string; skillId: string }
-  | { type: 'escape'; target: string };
+  | { type: 'escape'; target: string }
+  | { type: 'mode'; target: string; name: string };
 
 export interface MoveResult {
   /** Tiles actually walked (may stop early if intercepted or killed). */
@@ -131,6 +134,7 @@ export function makeUnit(character: Character, team: Team, pos: Point): Unit {
     overwatch: null,
     engagedWith: null,
     weaponDisabled: false,
+    weaponMode: 0,
   };
 }
 
@@ -196,28 +200,55 @@ export class Battle {
 
   /** The weapon's basic attack (first weapon skill). */
   basicAttack(u: Unit): SkillDef {
+    return this.skillFor(u, this.rawBasic(u));
+  }
+
+  /** The basic attack as listed (a bow's is 'Bow Attack', whatever its mode). */
+  private rawBasic(u: Unit): SkillDef {
     return SKILLS[allSkills(u.character)[0] ?? WEAPONS[DEFAULT_WEAPON].skills[0]];
   }
 
-  private resolved = new Map<string, SkillDef>();
+  /** Does the unit's weapon have modes (Switch Mode)? */
+  modesOf(u: Unit): string[] | undefined {
+    return this.rawBasic(u).modes;
+  }
+
+  /** Name of the unit's current weapon mode (e.g. "Indirect"), or null for weapons without modes. */
+  modeName(u: Unit): string | null {
+    const raw = this.rawBasic(u);
+    if (!raw.modes) return null;
+    const m = resolveWeaponSkill(raw, WEAPONS[u.character.weaponId], u.weaponMode);
+    return m.modeName ?? m.name;
+  }
+
+  /** skillFor results per skill object, then per unit and weapon mode. */
+  private resolved = new WeakMap<SkillDef, Map<string, SkillDef>>();
 
   /**
    * The skill as `u` uses it: 'basicAttack' skills take their hits from the user's weapon,
    * and a 'weapon' self-centered area without its own radius reaches as far as the weapon.
    */
   skillFor(u: Unit, s: SkillDef): SkillDef {
-    const needsWeapon = !!s.basicAttack || (s.target === 'self' && hasTag(s, 'weapon') && s.aoeRadius === undefined);
-    if (!needsWeapon) return s;
-    const cacheKey = `${u.uid}:${s.id}`;
-    let out = this.resolved.get(cacheKey);
+    const areaFromWeapon = s.target === 'self' && hasTag(s, 'weapon') && s.aoeRadius === undefined;
+    if (!s.modes && s.weaponRange === undefined && !s.basicAttack && !areaFromWeapon) return s;
+    const cacheKey = `${u.uid}:${u.weaponMode}`;
+    let perSkill = this.resolved.get(s);
+    if (!perSkill) this.resolved.set(s, (perSkill = new Map()));
+    let out = perSkill.get(cacheKey);
     if (!out) {
-      const basic = this.basicAttack(u);
-      out = {
-        ...s,
-        hits: s.basicAttack ? Array.from({ length: s.basicAttack }, () => basic.hits ?? []).flat() : s.hits,
-        aoeRadius: s.target === 'self' && hasTag(s, 'weapon') && s.aoeRadius === undefined ? basic.range : s.aoeRadius,
-      };
-      this.resolved.set(cacheKey, out);
+      const weapon = WEAPONS[u.character.weaponId];
+      out = resolveWeaponSkill(s, weapon, u.weaponMode);
+      if (out.basicAttack || areaFromWeapon) {
+        // Circle Swing always swings a bow in Melee mode ('basicMode').
+        const forced = out.basicMode ? modeWithTag(this.rawBasic(u), out.basicMode) : undefined;
+        const basic = forced ? resolveWeaponSkill(forced, weapon) : this.basicAttack(u);
+        out = {
+          ...out,
+          hits: out.basicAttack ? Array.from({ length: out.basicAttack }, () => basic.hits ?? []).flat() : out.hits,
+          aoeRadius: areaFromWeapon ? basic.range : out.aoeRadius,
+        };
+      }
+      perSkill.set(cacheKey, out);
     }
     return out;
   }
@@ -229,15 +260,15 @@ export class Battle {
 
   /** Effective range: 'movement' skills scale with Movement, 'weapon' skills use the weapon's range. */
   skillRange(u: Unit, s: SkillDef): number {
-    return rangeFor(s, this.reachContext(u));
+    return rangeFor(this.skillFor(u, s), this.reachContext(u));
   }
 
   skillMinRange(u: Unit, s: SkillDef): number {
-    return minRangeFor(s, this.reachContext(u));
+    return minRangeFor(this.skillFor(u, s), this.reachContext(u));
   }
 
   skillLos(u: Unit, s: SkillDef): LosRule | undefined {
-    return losFor(s, this.reachContext(u));
+    return losFor(this.skillFor(u, s), this.reachContext(u));
   }
 
   /** Off cooldown, enough mana, and not blocked by a disabled weapon. */
@@ -321,7 +352,7 @@ export class Battle {
     const events: BattleEvent[] = [];
     for (const part of basic.hits ?? []) {
       if (!victim.alive) break;
-      events.push(this.dealDamage(victim, this.hitDamage(attacker, victim, part), attacker.uid, 'opportunity'));
+      events.push(...this.dealHit(attacker, victim, part, 'opportunity'));
     }
     return events;
   }
@@ -409,6 +440,7 @@ export class Battle {
     if (!this.canAct(u) || !this.skillIds(u).includes(skillId) || !this.isUsable(u, skillId) || !this.canPay(u, skill)) return false;
     // Dash: a second move with the action AP, only once the regular move is spent.
     if (skill.target === 'move') return u.moved && !u.engagedWith;
+    if (skill.switchMode) return !!this.modesOf(u);
     return true;
   }
 
@@ -429,7 +461,7 @@ export class Battle {
   usableFreeActions(u: Unit): string[] {
     return this.skillIds(u).filter((id) => {
       const s = SKILLS[id];
-      if (!isFree(s) || !this.canUseSkill(u, id)) return false;
+      if (!isFree(s) || s.switchMode || !this.canUseSkill(u, id)) return false;
       return this.rangeTiles(u, s).some((t) => this.targetsOf(u, s, t).length > 0);
     });
   }
@@ -610,7 +642,7 @@ export class Battle {
       w.overwatch = null;
       for (const part of ow.hits) {
         if (!mover.alive) break;
-        events.push(this.dealDamage(mover, this.hitDamage(w, mover, part), w.uid, 'overwatch'));
+        events.push(...this.dealHit(w, mover, part, 'overwatch'));
       }
       if (ow.interrupt) interrupted = true;
     }
@@ -899,14 +931,41 @@ export class Battle {
 
   // ---- damage -----------------------------------------------------------------------
 
-  /** Damage of one hit after the target's Defense (before shields). */
+  /**
+   * One hit split by damage type, after the target's mitigation (before shields):
+   * P.Atk, Def and missing Health are Physical, M.Atk is Magical. A hybrid hit
+   * (Empowered Strike) deals one portion of each.
+   */
+  hitPortions(attacker: Unit, target: Unit, part: DamagePart): { type: DamageType; amount: number }[] {
+    const raw: Record<DamageType, number> = {
+      physical: (part.pAtk ?? 0) * this.stat(attacker, 'pAtk') + (part.def ?? 0) * this.stat(attacker, 'defense') + (part.missingHp ?? 0) * (target.stats.health - target.hp),
+      magical: (part.mAtk ?? 0) * this.stat(attacker, 'mAtk'),
+    };
+    const out = DAMAGE_TYPES.filter((t) => raw[t] > 0).map((type) => ({ type, amount: Math.max(1, Math.round(raw[type] * this.mitigation(attacker, target, type))) }));
+    return out.length ? out : [{ type: 'physical', amount: 1 }];
+  }
+
+  /**
+   * Damage multiplier for a hit of `type` on `target`. Both types use Defense for now;
+   * this is where magic resistance and physical / magic penetration will go.
+   */
+  mitigation(_attacker: Unit, target: Unit, _type: DamageType): number {
+    return defenseMultiplier(this.stat(target, 'defense'));
+  }
+
+  /** Total damage of one hit (all damage types). */
   hitDamage(attacker: Unit, target: Unit, part: DamagePart): number {
-    const raw =
-      (part.pAtk ?? 0) * this.stat(attacker, 'pAtk') +
-      (part.mAtk ?? 0) * this.stat(attacker, 'mAtk') +
-      (part.def ?? 0) * this.stat(attacker, 'defense') +
-      (part.missingHp ?? 0) * (target.stats.health - target.hp);
-    return Math.max(1, Math.round(raw * defenseMultiplier(this.stat(target, 'defense'))));
+    return this.hitPortions(attacker, target, part).reduce((a, p) => a + p.amount, 0);
+  }
+
+  /** Deal one hit: a damage event per damage type in it. */
+  private dealHit(attacker: Unit, target: Unit, part: DamagePart, cause: DamageCause): BattleEvent[] {
+    const events: BattleEvent[] = [];
+    for (const p of this.hitPortions(attacker, target, part)) {
+      if (!target.alive) break;
+      events.push(this.dealDamage(target, p.amount, attacker.uid, cause, false, p.type));
+    }
+    return events;
   }
 
   /** Predicted damage of each hit of `skill` on `target` (accounts for missing health growing). */
@@ -948,7 +1007,7 @@ export class Battle {
     return Math.round((skill.heal?.mAtk ?? 0) * this.stat(caster, 'mAtk'));
   }
 
-  private dealDamage(target: Unit, amount: number, source: string | undefined, cause: DamageCause, bypassShield = false): BattleEvent {
+  private dealDamage(target: Unit, amount: number, source: string | undefined, cause: DamageCause, bypassShield = false, damageType?: DamageType): BattleEvent {
     let absorbed = 0;
     if (!bypassShield) {
       for (const s of target.statuses) {
@@ -966,7 +1025,7 @@ export class Battle {
       target.overwatch = null;
       this.breakEngagement(target);
     }
-    return { type: 'damage', source, target: target.uid, amount: amount - absorbed, absorbed, killed, cause };
+    return { type: 'damage', source, target: target.uid, amount: amount - absorbed, absorbed, killed, cause, ...(damageType ? { damageType } : {}) };
   }
 
   // ---- actions -------------------------------------------------------------------------
@@ -999,6 +1058,12 @@ export class Battle {
       }
     }
     for (const a of skill.selfStatus ?? []) events.push(this.applyStatus(u, u, a.status, a.turns, 1, true));
+    if (skill.switchMode) {
+      const modes = this.modesOf(u);
+      if (!modes) throw new Error(`${u.character.name}'s weapon has no modes`);
+      u.weaponMode = (u.weaponMode + 1) % modes.length;
+      events.push({ type: 'mode', target: u.uid, name: this.modeName(u)! });
+    }
     if (skill.charge) {
       const dest = this.chargeDestination(u, tile, u, skill)!;
       if (dest.x !== u.x || dest.y !== u.y) {
@@ -1027,11 +1092,11 @@ export class Battle {
     for (const t of targets) {
       for (const part of used.hits ?? []) {
         if (!t.alive) break;
-        events.push(this.dealDamage(t, this.hitDamage(u, t, part), u.uid, 'skill'));
+        events.push(...this.dealHit(u, t, part, 'skill'));
       }
       // Life-Risking Strike: the user pays if the target is still standing.
       if (skill.recoilIfSurvives && t.alive && u.alive) {
-        events.push(this.dealDamage(u, this.hitDamage(u, u, skill.recoilIfSurvives), u.uid, 'skill'));
+        events.push(...this.dealHit(u, u, skill.recoilIfSurvives, 'skill'));
         if (!u.alive) u.acted = true;
       }
       if (!t.alive) continue;

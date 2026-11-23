@@ -91,9 +91,15 @@ export function parseContent(skillsData: unknown, weaponsData: unknown): GameCon
   const TARGETS: readonly SkillTarget[] = ['unit', 'self', 'line', 'cone', 'emptyTile', 'move'];
   const LOS: readonly LosRule[] = ['sight', 'fire'];
   const skills: Record<string, SkillDef> = {};
+  // Skills with modes (the bow's basic attack) are filled in from their modes once every skill is read.
+  const moded: [string, Record<string, unknown>][] = [];
   for (const [id, raw] of entries(S.obj(root.skills, 'skills'))) {
     const p = `skills.${id}`;
     const r = S.obj(raw, p);
+    if (r.modes !== undefined) {
+      moded.push([id, r]);
+      continue;
+    }
     const skillTags = S.arr(r.tags ?? [], `${p}.tags`).map((t, i) => {
       const tag = S.str(t, `${p}.tags[${i}]`);
       return tags[tag] ? tag : fail('skills.json', `${p}.tags[${i}]`, `"${tag}" is not defined in "tags"`);
@@ -157,6 +163,10 @@ export function parseContent(skillsData: unknown, weaponsData: unknown): GameCon
       basicAttack: S.optNum(r.basicAttack, `${p}.basicAttack`),
       selfStatus: r.selfStatus === undefined ? undefined : statusList(r.selfStatus, `${p}.selfStatus`),
       recoilIfSurvives: r.recoilIfSurvives === undefined ? undefined : part(r.recoilIfSurvives, `${p}.recoilIfSurvives`),
+      modeName: r.modeName === undefined ? undefined : S.str(r.modeName, `${p}.modeName`),
+      weaponRange: S.optNum(r.weaponRange, `${p}.weaponRange`),
+      basicMode: r.basicMode === undefined ? undefined : S.str(r.basicMode, `${p}.basicMode`),
+      switchMode: S.bool(r.switchMode, `${p}.switchMode`) || undefined,
     };
     if (skill.basicAttack !== undefined && (skill.basicAttack < 1 || !Number.isInteger(skill.basicAttack))) fail('skills.json', `${p}.basicAttack`, 'must be a whole number of 1 or more');
     if (skill.basicAttack !== undefined && skill.hits) fail('skills.json', `${p}.basicAttack`, "can't be combined with \"hits\"");
@@ -164,6 +174,26 @@ export function parseContent(skillsData: unknown, weaponsData: unknown): GameCon
     if (skill.target === 'cone' && !skill.cone) fail('skills.json', `${p}.cone`, 'is required when target is "cone"');
     if (skillTags.includes('movement') && skill.rangeScale === undefined) fail('skills.json', `${p}.rangeScale`, 'is required for "movement" skills');
     skills[id] = skill;
+  }
+
+  for (const [id, r] of moded) {
+    const p = `skills.${id}`;
+    const modes = S.arr(r.modes, `${p}.modes`).map((m, i) => {
+      const mid = S.str(m, `${p}.modes[${i}]`);
+      if (!skills[mid]) fail('skills.json', `${p}.modes[${i}]`, `"${mid}" is not defined in "skills" (modes can't have modes)`);
+      return mid;
+    });
+    if (modes.length < 2) fail('skills.json', `${p}.modes`, 'needs at least two modes');
+    const first = skills[modes[0]];
+    skills[id] = {
+      ...first,
+      id,
+      name: S.str(r.name, `${p}.name`),
+      description: S.str(r.description, `${p}.description`),
+      modeName: undefined,
+      level: 1,
+      modes,
+    };
   }
 
   const skillTabs = S.arr(root.skillTabs, 'skillTabs').map((t, i) => {
@@ -208,7 +238,12 @@ export function parseContent(skillsData: unknown, weaponsData: unknown): GameCon
       description: W.str(o.description, `${p}.description`),
       statMultipliers: W.stats(o.statMultipliers ?? {}, `${p}.statMultipliers`),
       skills: ws,
+      range: W.optNum(o.range, `${p}.range`),
     };
+    for (const sid of ws) {
+      const needsRange = [sid, ...(skills[sid].modes ?? [])].some((m) => skills[m].weaponRange !== undefined);
+      if (needsRange && weapons[id].range === undefined) fail('weapons.json', `${p}.range`, `is required: "${sid}" uses the weapon's range`);
+    }
   }
   if (Object.keys(weapons).length === 0) fail('weapons.json', 'weapons', 'must define at least one weapon');
   return { weapons, skills, tags, statuses, skillTabs, skillTrees, basicSkills };
@@ -228,6 +263,23 @@ export const DEFAULT_WEAPON = Object.keys(WEAPONS)[0];
 export const TREE_SKILLS: string[] = SKILL_TREES.flatMap((t) => t.skills);
 
 export const hasTag = (s: SkillDef, tag: string) => s.tags.includes(tag);
+
+/**
+ * A weapon skill as a unit uses it: a moded basic attack becomes its current mode
+ * (`mode` = index, wraps around), and `weaponRange` skills get their range from the weapon.
+ */
+export function resolveWeaponSkill(s: SkillDef, weapon: WeaponDef | undefined, mode = 0): SkillDef {
+  let out = s;
+  if (out.modes) out = CONTENT.skills[out.modes[((mode % out.modes.length) + out.modes.length) % out.modes.length]];
+  if (out.weaponRange !== undefined && weapon?.range !== undefined) out = { ...out, range: out.weaponRange * weapon.range };
+  return out;
+}
+
+/** The weapon mode skill with `tag` (e.g. Circle Swing's 'melee'), if the basic attack has modes. */
+export function modeWithTag(basic: SkillDef, tag: string): SkillDef | undefined {
+  const id = basic.modes?.find((m) => hasTag(CONTENT.skills[m], tag));
+  return id ? CONTENT.skills[id] : undefined;
+}
 export const isFree = (s: SkillDef) => s.ap === 0;
 
 /** "Free", "1 AP", "2 AP" or "Ends turn". */
@@ -241,6 +293,7 @@ const pct = (v: number) => `${Math.round(v * 100)}%`;
 
 /** "80% P.Atk, then 40% P.Atk + 100% Def" etc. */
 export function skillFormula(s: SkillDef): string {
+  if (s.modes) return s.modes.map((m) => `${SKILLS[m].modeName ?? SKILLS[m].name}: ${skillFormula(SKILLS[m])}`).join(' / ');
   const parts: string[] = [];
   if (s.hits?.length) {
     parts.push(s.hits.map((h) => [

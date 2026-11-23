@@ -103,7 +103,7 @@ Weapons **multiply** these stats:
 |---|---|---|
 | Sword & Shield | x1 P.Atk, x0.8 M.Atk, x1.5 Def | Sword Slash, Shield Up |
 | Spear | x1 P.Atk, x0.8 M.Atk | Spear Thrust |
-| Bow | x0.8 P.Atk, x0.8 M.Atk | Direct Shot, Indirect Shot |
+| Bow | x0.8 P.Atk, x0.8 M.Atk, range 5 | Bow Attack (by mode), Switch Mode |
 | Staff | x0.5 P.Atk, x1.2 M.Atk | Empowered Strike, Magic Bolt |
 
 ### Action points and mana
@@ -121,10 +121,20 @@ Moving after a skill isn't possible once the movement AP is gone. **Undo move** 
 
 Skills can cost **mana** (`mana` in `skills.json`), which doesn't come back during a battle: Engage 10, Kick 10, Arcane Bolt 20, Charge 20, Cleanse 20, Double Strike 20, Execute 20, Flicker Strike 20, Pocket Sand 20, Shadow Step 20, Circle Swing 30, Life-Risking Strike 30, Arcane Pulse 40, Arcane Shift 40, Heal 40. Skill buttons show the cost; without enough mana a skill is greyed out.
 
+**Bow modes**: the bow's basic attack depends on its mode. **Switch Mode** (a free action) cycles Direct → Indirect → Melee → Direct; every bow starts a battle in Direct. Overwatch, opportunity attacks and Weapon skills (Execute, Double Strike) use the current mode; Circle Swing always swings in Melee mode. Modes are set in `skills.json` (`bow_attack.modes`), with ranges relative to the weapon's `range` in `weapons.json`.
+
+| Mode | Skill | Range | Damage |
+|---|---|---|---|
+| Direct | Direct Shot | Weapon range (5), needs line of sight | 100% P.Atk |
+| Indirect | Indirect Shot | Weapon range x 1.5 (7.5), arcs over cover | 70% P.Atk |
+| Melee | Bow Strike | 1.5 | 80% P.Atk |
+
+**Damage types**: every hit is split by what it scales with. P.Atk, Defense and missing Health deal **Physical** damage (red numbers); M.Atk deals **Magical** damage (violet numbers), so a hybrid hit like Magic Bolt shows one of each. Both are reduced by Defense for now; `Battle.mitigation` is where magic resistance and physical / magic penetration will go. Skills are tagged Physical / Magical to match their hits (a test checks this).
+
 **Basic abilities** (every Adventurer, listed under the weapon in the creator):
 
 - **Dash** (1 AP, 20 MP, cooldown 1): only after the regular move. Spends the action AP to move again, up to your Movement. Overwatch can still fire on the way; it can't be undone.
-- **Overwatch** (ends turn): watch a 60° arc in any direction, as far as your weapon reaches (Bow 5, Spear 2, sword and staff 1.5). The first enemy to move into it takes your basic attack and keeps moving. Bow and Spear no longer have their own Overwatch / Intercept.
+- **Overwatch** (ends turn): watch a 60° arc in any direction, as far as your weapon reaches (Bow 5 in Direct mode, 7.5 in Indirect, 1.5 in Melee; Spear 2; sword and staff 1.5). The first enemy to move into it takes your basic attack and keeps moving. Bow and Spear no longer have their own Overwatch / Intercept.
 
 ### Skill points, skill trees and the Body tab
 
@@ -143,12 +153,12 @@ Status effects: Burn, Slow, Corrode, Frenzy, **Blinded** (Pocket Sand: −30% P.
 Every skill has tags that explain how it behaves. These five change the rules:
 
 - **Movement**: range in tiles = rangeScale × Movement ÷ 4 (the grass cost), rounded down. Charge uses 100% (4 tiles at Movement 16), and Slow (−4 Movement) shortens it. Arcane Shift has a fixed range of 2.
-- **Weapon**: uses your weapon's basic-attack range and line rules (Execute with a Bow reaches 5 tiles). Double Strike hits with the basic attack twice, and Circle Swing hits every enemy within the weapon's range with it. Unusable while the weapon is disabled (nothing disables weapons yet).
+- **Weapon**: uses your weapon's basic-attack range and line rules (Execute with a Bow reaches 5 tiles). Double Strike hits with the basic attack twice, and Circle Swing hits every unit within the weapon's range with it, allies included (a bow uses its Melee mode for both the reach and the hit). Unusable while the weapon is disabled (nothing disables weapons yet).
 - **Engage**: see below. Sword Slash, Empowered Strike, Engage, Kick, Charge, Flicker Strike, Life-Risking Strike.
 - **Disengage**: usable while engaged, on anyone, and it ends your engagement with no free attack for your opponent. Arcane Pulse, Arcane Shift, Shadow Step.
 - **Free Action**: costs 0 AP (Kick). Usable any time until the unit's turn ends, so after a move or a 1/2-AP skill, but not after a turn-ending one. The turn doesn't end automatically while a unit still has a free action with a target in reach; press **End Turn** when done.
 
-Descriptive tags: Melee, Physical, Projectile, Indirect, Area, Knockback, Reaction, Teleport, Stealth, Debuff, Support.
+Descriptive tags: Melee, Physical, Magical, Projectile, Indirect, Area, Knockback, Reaction, Teleport, Stealth, Debuff, Support.
 
 ### Enemies
 
@@ -159,7 +169,7 @@ Each enemy type has a fixed level range and its own stats and skills (`src/data/
 | Giant Rat | 1–2 | Gnaw. Fast and weak; comes in packs. |
 | Green Slime | 2–3 | Slam (Engage); Sticky Spit at level 3 (ranged, applies Slow and Corrode: -25% Defense, 2-turn cooldown). Slow-moving and tough. |
 | Grey Wolf | 3–4 | Bite (Engage) and Pounce (leaps in, Engage); Howl at level 4 (Frenzy: +20 P.Atk to nearby allies). Very fast. |
-| Bandit | 4–5 | Carries a random weapon but only uses its basic attack (no Indirect Shot, Magic Bolt...). Thugs also have Shield Up, Hexers Fireball, Archers Execute; all learn Kick at level 5. |
+| Bandit | 4–5 | Carries a random weapon but only uses its basic attack (no Switch Mode or Magic Bolt, so archers always shoot in Direct mode). Thugs also have Shield Up, Hexers Fireball, Archers Execute; all learn Kick at level 5. |
 
 **Enemy AI** weighs how dangerous a tile is (how much the party could hit it for next turn) against what it can do from there. Healthy enemies take small risks freely. Danger it can't avoid anyway doesn't hold it back, so a unit that's already in the thick of the fight keeps fighting. Below 35% health, an enemy that can reach the edge of the map this turn **flees the battle** and is removed. Otherwise it falls back to regroup with healthy allies (and may disengage to do it), or, if it's on its own, makes a last stand. Wounded enemies may hold back from walking into a deadly spot, but never for more than two turns in a row.
 
@@ -178,9 +188,9 @@ Heal and Cleanse work on any unit, enemies included. An attack aimed straight at
 
 ### Lines, cooldowns, and prepared systems
 
-- *Line of sight* (no rock in between): Direct Shot, Magic Bolt, Arcane Bolt, Arcane Pulse, Fireball, and Overwatch with a weapon that needs it (Bow).
+- *Line of sight* (no rock in between): Direct Shot (bow in Direct mode), Magic Bolt, Arcane Bolt, Arcane Pulse, Fireball, and Overwatch with a weapon that needs it (Bow).
 - *Line of fire* (no rock **or unit** in between): no skill uses it right now; set `"los": "fire"` on a skill to use it.
-- No line needed: melee skills, Spear Thrust (it stops at the first enemy in the way), Indirect Shot, Freeze, Heal, Cleanse, Arcane Shift.
+- No line needed: melee skills, Spear Thrust (it stops at the first enemy in the way), Indirect Shot (bow in Indirect mode), Freeze, Heal, Cleanse, Arcane Shift.
 - **Ranges** use Euclidean distance. Ranges of 2 or more round the distance to the nearest tile, so range 2 also reaches 2-over-1-up and shapes are rounder. Ranges 1 and 1.5 stay exact: 1 is the 4 neighbours, 1.5 adds the diagonals. Set `rangeRounding.fromRange` in `stats.json` to change the cut-off.
 - Skill tooltips and the weapon panel show a **tile diagram** of what each skill covers, with you in gold, rather than describing range in words.
 - A cooldown of N means the skill can't be used during your next N turns.

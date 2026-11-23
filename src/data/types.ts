@@ -41,6 +41,8 @@ export interface WeaponDef {
   statMultipliers: Partial<Stats>;
   /** Skills granted by the weapon. The first one is the basic attack. */
   skills: string[];
+  /** The weapon's range in tiles, for skills with a `weaponRange` (the bow's modes). */
+  range?: number;
 }
 
 export interface TagDef {
@@ -69,6 +71,14 @@ export interface StatusDef {
   /** Enemies can't target the unit directly or trigger overwatch on it (area attacks still hit). Ends when it attacks. */
   stealth?: boolean;
 }
+
+/**
+ * Damage types. A hit is split by what it scales with: P.Atk, Def and missing Health deal
+ * Physical damage, M.Atk deals Magical damage. Both are reduced by Defense for now; the split is
+ * where type-specific rules (magic resistance, physical / magic penetration) will hook in.
+ */
+export const DAMAGE_TYPES = ['physical', 'magical'] as const;
+export type DamageType = (typeof DAMAGE_TYPES)[number];
 
 /** One hit of a damaging skill. Values are fractions (0.8 = 80%). */
 export interface DamagePart {
@@ -154,6 +164,16 @@ export interface SkillDef {
   selfStatus?: { status: string; turns: number }[];
   /** Damage the user takes (after its own Defense) when the target survives the hits. */
   recoilIfSurvives?: DamagePart;
+  /** A basic attack with switchable modes (the Bow): skill ids, the first is the default. */
+  modes?: string[];
+  /** Short name of a mode skill (Direct, Indirect, Melee). */
+  modeName?: string;
+  /** Range as a multiple of the weapon's range (needs `range` on the weapon). */
+  weaponRange?: number;
+  /** For `basicAttack` skills: use the weapon mode with this tag (e.g. 'melee') instead of the current mode. */
+  basicMode?: string;
+  /** Cycles the user's weapon to its next mode. */
+  switchMode?: boolean;
 }
 
 export type SkillTab = string;

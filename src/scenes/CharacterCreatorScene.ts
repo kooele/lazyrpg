@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import {
-  BASIC_SKILLS, NAME_MAX_LENGTH, PALETTE, isSupport, SKILLS, SKILL_TABS, SKILL_TREES, WEAPONS, XP_PER_LEVEL, skillDetails, skillFormula, tagNames,
+  BASIC_SKILLS, NAME_MAX_LENGTH, PALETTE, isSupport, SKILLS, SKILL_TABS, SKILL_TREES, WEAPONS, XP_PER_LEVEL, resolveWeaponSkill, skillDetails, skillFormula, tagNames,
 } from '../data/content';
 import { STAT_CONFIG, visibleStatKeys } from '../data/stats';
 import {
@@ -146,7 +146,8 @@ export class CharacterCreatorScene extends Phaser.Scene {
 
   /** What this adventurer's Movement / weapon-scaled skills reach. */
   private reachContext(): ReachContext {
-    return { movement: deriveStats(this.draft).movement, basic: SKILLS[WEAPONS[this.draft.weaponId].skills[0]] };
+    const weapon = WEAPONS[this.draft.weaponId];
+    return { movement: deriveStats(this.draft).movement, basic: resolveWeaponSkill(SKILLS[weapon.skills[0]], weapon) };
   }
 
   private isSupport(s: SkillDef): boolean {

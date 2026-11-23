@@ -510,11 +510,11 @@ export class BattleScene extends Phaser.Scene {
     for (let i = 0; i < BAR_PAGE; i++) {
       const index = this.barPage * BAR_PAGE + i;
       const id = layout[index];
-      const s = id ? SKILLS[id] : null;
+      const s = id ? (u ? b.skillFor(u, SKILLS[id]) : SKILLS[id]) : null;
       const { x, y } = this.slotRect(i);
       const cd = u && id ? u.cooldowns[id] ?? 0 : 0;
       const usable = !!(u && id && interactive && b.canUseSkill(u, id) && cd <= 0);
-      const selected = !!(s && this.mode === 'target' && this.action?.id === id);
+      const selected = !!(id && this.mode === 'target' && this.action?.id === id);
       const bg = this.add.rectangle(x, y, SLOT_W, SLOT_H, selected ? 0x4a3d1c : s ? (usable ? COLORS.panelLight : 0x161a28) : 0x10131d)
         .setOrigin(0).setStrokeStyle(2, selected ? COLORS.accent : usable ? COLORS.border : 0x262c40);
       B.add(bg);
@@ -536,7 +536,7 @@ export class BattleScene extends Phaser.Scene {
         if (this.barDrag?.dragging || !s || !u) return;
         this.showSkillInfo(u, id!);
         if (this.mode === 'select' && usable) {
-          this.previewAction = s;
+          this.previewAction = SKILLS[id!];
           this.drawOverlay();
         }
       });
@@ -557,13 +557,15 @@ export class BattleScene extends Phaser.Scene {
 
   private showSkillInfo(u: Unit, id: string): void {
     const b = this.battle;
-    const s = SKILLS[id];
+    const s = b.skillFor(u, SKILLS[id]);
+    const raw = SKILLS[id];
     const cd = u.cooldowns[id] ?? 0;
     const interactive = (this.mode === 'select' || this.mode === 'target') && b.phase === 'player';
     const usable = interactive && b.canUseSkill(u, id);
     const why = !interactive || usable ? '' : u.mp < s.mana ? `\nNot enough mana (${u.mp}/${s.mana}).`
       : s.target === 'move' && !u.moved ? '\nUse your regular move first.' : !b.canAct(u) ? '\nThis unit\'s turn is over.' : !b.canPay(u, s) ? '\nNot enough AP.' : '';
-    this.hoverText.setText(`${s.name} [${tagNames(s).join(', ') || 'basic'}]\n${skillFormula(s) || s.description}\n${skillDetails(s)}${cd > 0 ? `\nReady ${cd === 1 ? 'next turn' : `in ${cd} turns`}.` : ''}${why}\nDrag to another slot to move it.`);
+    const modeLine = raw.modes ? `\nBow mode: ${b.modeName(u)} (Switch Mode changes it)` : raw.switchMode && b.modesOf(u) ? `\nNow: ${b.modeName(u)}. Next: ${SKILLS[b.modesOf(u)![(u.weaponMode + 1) % b.modesOf(u)!.length]].modeName}` : '';
+    this.hoverText.setText(`${s.name} [${tagNames(s).join(', ') || 'basic'}]\n${skillFormula(s) || s.description}\n${skillDetails(s)}${modeLine}${cd > 0 ? `\nReady ${cd === 1 ? 'next turn' : `in ${cd} turns`}.` : ''}${why}\nDrag to another slot to move it.`);
   }
 
   /** Page up/down. While dragging a skill, ▼ past the last page opens an empty one to drop it on. */
@@ -649,7 +651,9 @@ export class BattleScene extends Phaser.Scene {
     if (u.overwatch) effects.push(`Watching: ${SKILLS[u.overwatch.skillId].name}`);
     const opp = b.opponentOf(u);
     if (opp) effects.push(`Engaged with ${opp.character.name}`);
-    if (u.team === 'enemy') effects.push(`Skills: ${b.skillIds(u).map((id) => SKILLS[id].name).join(', ')}`);
+    const mode = b.modeName(u);
+    if (mode) effects.push(`Bow mode: ${mode}`);
+    if (u.team === 'enemy') effects.push(`Skills: ${b.skillIds(u).map((id) => b.skillFor(u, SKILLS[id]).name).join(', ')}`);
     return [
       `HP ${u.hp}/${u.stats.health}${shield ? ` +${shield} shield` : ''}${u.stats.mana > 0 ? `   MP ${u.mp}/${u.stats.mana}` : ''}   Move ${b.stat(u, 'movement')}`,
       `P.Atk ${b.stat(u, 'pAtk')}  M.Atk ${b.stat(u, 'mAtk')}  Def ${b.stat(u, 'defense')}${terrainDef ? ' (forest)' : ''}  Res ${b.resistChance(u)}%`,
@@ -743,13 +747,18 @@ export class BattleScene extends Phaser.Scene {
     this.previewAction = null;
     this.threat = null;
     this.mode = 'target';
+    // Switch Mode needs no target: do it right away.
+    if (this.action.switchMode) {
+      void this.useSkill(u, this.action, { x: u.x, y: u.y });
+      return;
+    }
     this.renderSidebar();
     this.drawOverlay();
     const how = this.action.target === 'cone' ? 'click to aim the cone'
       : this.action.target === 'move' ? 'click a tile to dash to'
       : this.action.target === 'line' ? 'click a tile to thrust toward'
         : this.action.target === 'self' ? 'click inside the box to use it' : 'click a tile in the box';
-    this.hoverText.setText(`${this.action.name}: ${how} (right-click / Esc to cancel).`);
+    this.hoverText.setText(`${this.battle.skillFor(u, this.action).name}: ${how} (right-click / Esc to cancel).`);
   }
 
   private cancel(): void {
@@ -1151,6 +1160,11 @@ export class BattleScene extends Phaser.Scene {
 
   private showEvent(e: BattleEvent, summary: string[], index: number): void {
     if (e.type === 'move' || e.type === 'overwatch' || e.type === 'escape') return;
+    if (e.type === 'mode') {
+      summary.push(`switches to ${e.name} mode`);
+      this.floatText(this.battle.unit(e.target), e.name, '#e0b44c', index * 120);
+      return;
+    }
     if (e.type === 'disengage') {
       const other = this.battle.unit(e.target).character.name;
       summary.push(e.reason === 'escaped' ? `slips away from ${other}` : e.reason === 'separated' ? 'engagement broken' : `breaks away from ${other}`);
@@ -1161,7 +1175,8 @@ export class BattleScene extends Phaser.Scene {
     const delay = index * 180;
     switch (e.type) {
       case 'damage': {
-        const color = e.cause === 'status' ? '#ffb35c' : '#ff6b6b';
+        // Damage colors: Physical red, Magical violet, status ticks (Burn) orange.
+        const color = e.cause === 'status' ? '#ffb35c' : e.damageType === 'magical' ? '#c18cff' : '#ff6b6b';
         if (e.cause === 'opportunity') this.floatText(t, 'Opportunity!', '#ff9f43', delay);
         if (e.amount > 0) this.floatText(t, `-${e.amount}`, color, delay);
         if (e.absorbed > 0) this.floatText(t, `(${e.absorbed} blocked)`, '#8ecbff', delay + 90);
