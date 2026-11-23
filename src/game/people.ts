@@ -57,13 +57,40 @@ export function lookFromModel(model: BodyModel | string | undefined): Look {
   return { ...(table[model ?? ''] ?? table.m1) };
 }
 
+// Old-world and fantasy names, plus popular modern baby names, so the city rarely repeats a name.
 const NAMES: Record<Sex, string[]> = {
-  male: ['Aldric', 'Corvin', 'Fenwick', 'Halvard', 'Jory', 'Bram', 'Cedric', 'Dorian', 'Edric', 'Garrick', 'Hugo', 'Ivo', 'Kester',
-    'Lucan', 'Marek', 'Nils', 'Osric', 'Piers', 'Quill', 'Roderick', 'Silas', 'Tobin', 'Ulric', 'Vance', 'Wendel', 'Yorick', 'Alaric',
-    'Benedikt', 'Caspian', 'Dunstan', 'Emeric', 'Falk', 'Gideon', 'Hale', 'Ansel', 'Merrick', 'Rowan', 'Tamsin', 'Leof', 'Odo'],
-  female: ['Brienne', 'Dahlia', 'Edda', 'Gwyn', 'Isolde', 'Astrid', 'Beatrix', 'Celandine', 'Delphine', 'Elowen', 'Freya', 'Greta',
+  male: [
+    'Aldric', 'Corvin', 'Fenwick', 'Halvard', 'Jory', 'Bram', 'Cedric', 'Dorian', 'Edric', 'Garrick', 'Hugo', 'Ivo', 'Kester',
+    'Lucan', 'Marek', 'Nils', 'Osric', 'Piers', 'Quill', 'Roderick', 'Silas', 'Tobin', 'Ulric', 'Vance', 'Wendel', 'Yorick',
+    'Alaric', 'Benedikt', 'Caspian', 'Dunstan', 'Emeric', 'Falk', 'Gideon', 'Hale', 'Ansel', 'Merrick', 'Rowan', 'Leof', 'Odo',
+    'Anselm', 'Barnaby', 'Bertram', 'Caedmon', 'Conrad', 'Desmond', 'Eamon', 'Edmund', 'Evander', 'Florian', 'Godric', 'Gunnar',
+    'Hadrian', 'Harald', 'Ingram', 'Isidore', 'Jasper', 'Lambert', 'Leopold', 'Lorcan', 'Magnus', 'Matthias', 'Mordecai',
+    'Norbert', 'Oswin', 'Percival', 'Quentin', 'Ragnar', 'Reinhold', 'Rupert', 'Sebastian', 'Sigmund', 'Stellan', 'Thaddeus',
+    'Theobald', 'Torvald', 'Tristan', 'Ulf', 'Valentin', 'Wilhelm', 'Wolfram', 'Xander', 'Yannick', 'Zoltan', 'Aurelio', 'Bjorn',
+    'Cormac', 'Darius', 'Einar', 'Fergus', 'Gawain', 'Hector', 'Ignatius', 'Kaspar', 'Leander', 'Malachi', 'Niall', 'Oberon',
+    'Pascal', 'Radomir', 'Soren', 'Tybalt', 'Ulysses', 'Viggo', 'Wystan', 'Zephyr', 'Liam', 'Noah', 'Oliver', 'Elijah', 'James',
+    'William', 'Benjamin', 'Lucas', 'Henry', 'Theodore', 'Jack', 'Levi', 'Alexander', 'Mateo', 'Daniel', 'Michael', 'Mason',
+    'Ethan', 'Owen', 'Samuel', 'Asher', 'Leo', 'Wyatt', 'Ezra', 'Luca', 'Hudson', 'Grayson', 'Elias', 'Julian', 'Isaac', 'Aiden',
+    'Caleb', 'Nathan', 'Miles', 'Kai', 'Ryan', 'Arlo', 'Jaxon', 'Enzo', 'Atlas', 'Felix', 'Finn', 'Milo', 'Rhys', 'Theo', 'Axel',
+    'Beckett', 'Bennett', 'Callum', 'Declan', 'Emmett', 'Ezekiel', 'Gael', 'Hayes', 'Jude', 'Kian', 'Landon', 'Maverick',
+    'Nolan', 'Otto', 'Ronan', 'Sawyer', 'Tobias', 'Weston', 'Zane', 'Archer', 'Brooks', 'Cole', 'Dante', 'Eli', 'Ford', 'Graham',
+    'Harrison', 'Jonah', 'Knox', 'Lincoln', 'Micah', 'Nico', 'Oscar', 'Rhett', 'Santiago', 'Thiago', 'Vincent', 'Wade', 'Zion'],
+  female: [
+    'Brienne', 'Dahlia', 'Edda', 'Gwyn', 'Isolde', 'Astrid', 'Beatrix', 'Celandine', 'Delphine', 'Elowen', 'Freya', 'Greta',
     'Hilde', 'Ingrid', 'Juniper', 'Kestrel', 'Liesel', 'Maren', 'Nessa', 'Odette', 'Petra', 'Rosalind', 'Sigrid', 'Thea', 'Ursa',
-    'Vesna', 'Wren', 'Ysolde', 'Alys', 'Briar', 'Cressida', 'Ebba', 'Fenna', 'Ilse', 'Linnea', 'Mira', 'Saoirse', 'Tilde', 'Vala', 'Zora'],
+    'Vesna', 'Wren', 'Ysolde', 'Alys', 'Briar', 'Cressida', 'Ebba', 'Fenna', 'Ilse', 'Linnea', 'Mira', 'Saoirse', 'Tilde',
+    'Vala', 'Zora', 'Adelheid', 'Aveline', 'Brunhild', 'Cordelia', 'Dagny', 'Elspeth', 'Ermengarde', 'Fiora', 'Gisela',
+    'Gwendolyn', 'Helvi', 'Imogen', 'Jessamy', 'Katarina', 'Leocadia', 'Lisbet', 'Matilda', 'Melisande', 'Morwenna', 'Nimue',
+    'Oriana', 'Ottilie', 'Perpetua', 'Rhiannon', 'Rowena', 'Seraphine', 'Solveig', 'Tamsin', 'Thora', 'Ulrika', 'Valeska',
+    'Wilhelmina', 'Yvaine', 'Zelda', 'Agathe', 'Brynja', 'Clemence', 'Desdemona', 'Eira', 'Fianna', 'Guinevere', 'Hesper',
+    'Isaura', 'Jorunn', 'Leonie', 'Mabyn', 'Nerys', 'Ondine', 'Rosamund', 'Sybil', 'Tova', 'Una', 'Verena', 'Winifred', 'Yseult',
+    'Olivia', 'Emma', 'Charlotte', 'Amelia', 'Sophia', 'Mia', 'Isabella', 'Ava', 'Evelyn', 'Luna', 'Harper', 'Sofia', 'Camila',
+    'Eleanor', 'Elizabeth', 'Violet', 'Scarlett', 'Emily', 'Hazel', 'Lily', 'Gianna', 'Aurora', 'Penelope', 'Aria', 'Nora',
+    'Chloe', 'Ellie', 'Mila', 'Avery', 'Layla', 'Abigail', 'Ella', 'Isla', 'Eliana', 'Nova', 'Madison', 'Zoe', 'Ivy', 'Grace',
+    'Lucy', 'Willow', 'Emilia', 'Riley', 'Naomi', 'Stella', 'Maya', 'Paisley', 'Delilah', 'Leah', 'Iris', 'Ember', 'Clara',
+    'Josephine', 'Ruby', 'Alice', 'Eloise', 'Margot', 'Sadie', 'Quinn', 'Cora', 'Hallie', 'Elena', 'Adeline', 'Daisy', 'Esme',
+    'Harlow', 'Jade', 'Kinsley', 'Lyla', 'Maeve', 'Nadia', 'Oaklynn', 'Piper', 'Rosalie', 'Sienna', 'Talia', 'Vivian', 'Yara',
+    'Zara', 'Aspen', 'Bella', 'Celeste', 'Daphne'],
 };
 const PARTY_ADJ = ['Iron', 'Silver', 'Crimson', 'Golden', 'Ashen', 'Verdant', 'Storm', 'Hollow', 'Bright', 'Gilded', 'Black', 'Copper',
   'Wild', 'Seventh', 'Lucky', 'Twin', 'Morning', 'Last', 'Quiet', 'Ember', 'Frost', 'Azure', 'Rusty', 'Wandering'];

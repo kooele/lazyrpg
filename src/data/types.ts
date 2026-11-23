@@ -299,6 +299,10 @@ export interface EnemyDef {
   weaponSkillUse: 'basic' | 'all';
 }
 
+/** Traits an adventurer can have (see traits.ts). */
+export const TRAIT_IDS = ['protagonist'] as const;
+export type TraitId = (typeof TRAIT_IDS)[number];
+
 /** A party member (Adventurer) or an enemy. Adventurers' stats come from level + weapon. */
 export interface Character {
   id: string;
@@ -326,6 +330,8 @@ export interface Character {
   health?: number;
   /** Strategic Layer: 0-100. Missing = the starting morale (guild.json condition.startingMorale). */
   morale?: number;
+  /** Adventurers: lasting traits (the main character is the Protagonist). */
+  traits?: TraitId[];
 }
 
 // ---- management: contracts, the guild, Arch City ----------------------------------------
@@ -339,13 +345,19 @@ export const ADVENTURER_RANKS: readonly AdventurerRank[] = ['S', 'A', 'B', 'C', 
 
 /**
  * main      – the player's own character: permanent, can't be dismissed.
- * mercenary – hired for the next quest only, for a fixed fee (paid up front) or a % of the reward.
+ * mercenary – hired for the next quest only: paid the larger of a fixed fee (up front) and a % of the reward (topped up after a win).
  * companion – permanent member under a negotiated contract (weekly pay, loot cut, food & lodging, term).
  * slave     – permanent member bought at the market or registered from a prisoner: no pay, but needs food & lodging.
  */
 export type Contract =
   | { type: 'main' }
-  | { type: 'mercenary'; pay: 'fixed' | 'cut'; amount: number }
+  | {
+    type: 'mercenary';
+    /** Gold paid up front when hired. */
+    fee: number;
+    /** % of the quest reward. After a win they take whatever their cut is worth beyond the fee. */
+    cutPct: number;
+  }
   | {
     type: 'companion';
     /** Gold paid every 7th day. */
@@ -487,7 +499,10 @@ export interface GameState {
   lineup: string[];
   guild: GuildState;
   market: MarketState;
-  /** Captured bandits waiting for judgement: turn them in for a bounty or register them as slaves. */
+  /**
+   * Enemies taken prisoner on the last quest, waiting at the city gate: each must be registered (turned in for a bounty or
+   * registered as the party's slave) before the party goes on. The party never keeps prisoners.
+   */
   prisoners: Offer[];
   /** The quest the party has accepted and not yet fought. */
   quest: Quest | null;
@@ -496,6 +511,8 @@ export interface GameState {
   questMembers: string[];
   /** What each member does on days they aren't on a quest (by character id; see activityOf for the default). */
   schedule: Record<string, 'recover' | 'training' | 'oddJobs' | 'dayOff'>;
+  /** Food quality for each member the party feeds (by character id; missing = food.default in guild.json). */
+  food: Record<string, 'poor' | 'common' | 'fine' | 'luxury'>;
   /** Day the party last bought a round of drinks (once a day). */
   drinksDay: number;
   /** First day of the current stretch below the rank's renown threshold (0 = not below). A full week drops a rank. */

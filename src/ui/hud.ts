@@ -2,7 +2,7 @@
 import Phaser from 'phaser';
 import { GUILD } from '../data/guild';
 import type { Character, GameState, Rank } from '../data/types';
-import { boarders, isPayday, weeklyWages } from '../game/city';
+import { boarders, foodCost, isPayday, weeklyWages } from '../game/city';
 import { daysLeft, isCompanion } from '../game/contracts';
 import { nextRank, rankThreshold } from '../game/guild';
 import { session } from '../game/session';
@@ -24,7 +24,7 @@ export const MEMBER_COLOR: Record<string, string> = { main: '#e0b44c', mercenary
 export function memberStatus(state: GameState, c: Character): string {
   const k = c.contract;
   if (!k) return '';
-  if (k.type === 'mercenary') return `Mercenary · ${k.pay === 'fixed' ? `paid ${k.amount}g` : `${k.amount}% cut`} · next quest only`;
+  if (k.type === 'mercenary') return `Mercenary · ${k.fee}g or ${k.cutPct}% · 1 quest`;
   if (isCompanion(c)) {
     const left = daysLeft(c.contract, state.day);
     return `Companion · ${left > 0 ? `${left} day${left === 1 ? '' : 's'} left` : 'contract ended!'}`;
@@ -42,7 +42,7 @@ export function cityHeader(scene: Phaser.Scene, state: GameState, title: string)
   const toPay = (7 - (state.day % 7)) % 7;
   const right = [
     `${state.gold} gold`,
-    `Housing ${boarders(state).length} · Wages ${weeklyWages(state)}/week ${isPayday(state.day) ? '(paid today)' : `(payday in ${toPay}d)`}`,
+    `Feeding ${boarders(state).length} (${foodCost(state)}g/day) · Wages ${weeklyWages(state)}/week ${isPayday(state.day) ? '(paid today)' : `(payday in ${toPay}d)`}`,
   ];
   text(scene, WIDTH - 20, 8, right[0], { fontSize: '20px', color: COLORS.gold }).setOrigin(1, 0);
   text(scene, WIDTH - 20, 36, right[1], { fontSize: '12px', color: COLORS.dim }).setOrigin(1, 0);

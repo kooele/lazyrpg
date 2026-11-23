@@ -14,7 +14,7 @@ A small turn-based tactical RPG that runs in the browser, built with [Phaser 4](
 
 The management and simulation side of the game (Arch City, the guild, contracts, days) is the **Strategic Layer**; battles are the **Tactical Layer**.
 
-Time passes in days, and **every day ends with a night somewhere**: an **inn** (1 night, 3 nights or a week), a **residence** the party owns, or **sleeping outside** (free; button in the city's bottom bar). A quest doesn't end the day: the party comes back in the evening and still needs a bed, and you can only go on **one quest a day** (you can accept the next one, but set out tomorrow). A quest that takes several days spends the nights before the last on the road. The party pays food and lodging for the main character, slaves, and companions whose contract includes it:
+Time passes in days, and **every day ends with a night somewhere**: an **inn** (1 night, 3 nights or a week), a **residence** the party owns, or **sleeping outside** (free; button in the city's bottom bar). A quest doesn't end the day: the party comes back in the evening and still needs a bed, and you can only go on **one quest a day** (you can accept the next one, but set out tomorrow). A quest that takes several days spends the nights before the last on the road. The party pays food and lodging for the main character, slaves, and companions whose contract includes it. Lodging:
 
 | Where | Per person per night | Quality |
 |---|---|---|
@@ -23,11 +23,22 @@ Time passes in days, and **every day ends with a night somewhere**: an **inn** (
 | Silver Lantern Inn (Middle Ring, high-end) | 8 gold | 2 |
 | Gilded Crown Inn (Inner Ring, luxury) | 15 gold | 3 |
 | Your residence (Outer / Middle / Inner Ring) | free | 1 / 2 / 3 |
-| On the road (multi-day quests) | 4 gold | doesn't count |
+| On the road (multi-day quests) | 2 gold | doesn't count |
+
+**Food** is paid every day (in the city and on the road) and set per member in **Manage Party** (`food` in `guild.json`):
+
+| Food | Per person per day | Quality |
+|---|---|---|
+| Poor | 1 gold | 0 |
+| Common (default) | 2 gold | 1 |
+| Fine | 4 gold | 2 |
+| Luxury | 8 gold | 3 |
+
+Companions whose contract doesn't include food and lodging find their own (their food buttons are greyed out), as do mercenaries.
 
 **Residences** are bought and sold at the **Estate Office** (Middle Ring): **Outer Ring 2,000 gold**, **Middle Ring 10,000**, **Inner Ring 50,000**; the office buys one back for 70% of its price. Nights there are free and count as good as that ring's inn. Each residence has its own pin on the map, where the party can stay once it owns it.
 
-**Expectations** follow each adventurer's rank (see below): **D**-rank adventurers are fine sleeping outside, **C** expect an inn or Outer Ring residence, **B** a high-end inn or Middle Ring residence, **A** and **S** the luxury inn or Inner Ring residence. Each night, every companion the party houses gains **+2 relationship** if they slept better than they expect, and loses **3 per quality step** worse: an A-rank companion loses 9 for a night outside. (`lodging` and `residences` in `guild.json`.)
+**Expectations** follow each adventurer's rank (see below): **D**-rank adventurers are fine sleeping outside, **C** expect an inn or Outer Ring residence, **B** a high-end inn or Middle Ring residence, **A** and **S** the luxury inn or Inner Ring residence. Each night, every companion the party houses gains **+2 relationship** if they slept better than they expect, and loses **3 per quality step** worse: an A-rank companion loses 9 for a night outside. Food works the same way against the same expectations (D poor, C common, B fine, A and S luxury), at **+1** for better food and **−2 per step** worse; slaves count too. (`lodging`, `food` and `residences` in `guild.json`.)
 
 ### Health, Morale and the schedule
 
@@ -39,6 +50,8 @@ Party members have two Strategic Layer stats, both out of 100 (`condition` and `
 **In battle**, every stat of a party member drops by **1% per 5 Morale below 100** (Morale 50 = −10%), on top of the injury penalty. Slaves also lose **1% per 5 Obedience below 100**. The penalties multiply: Health 70, Morale 50 and Obedience 60 give 0.9 × 0.9 × 0.92 = −25.5%. New members start at 75 Morale (−5%), so keeping spirits up matters. Manage Party shows each member's total (`combat` in `guild.json`).
 
 **Slaves** have a **relationship** (it moves like a companion's: quests completed together, nights better or worse than they expect, low Morale, missed upkeep) and **Obedience** (0–100). Market slaves start at 40–80 Obedience, registered captives at 0–40, both at 40 relationship. Obedience **rises 1 a day while relationship is 60+** and **falls 1 a day below 40**. **Punish** (Manage Party, once a day per slave) gives **+20 Obedience for −20 relationship**: a quick boost that drains away again unless the relationship is repaired. (`slave` in `guild.json`.)
+
+**Traits** are listed under each adventurer's skills in Manage Party (hover one for what it does). For now there's one: **Protagonist**, which your main character has. It **doubles Health recovery** (20 a night, 40 on Recover) and **doubles Morale gains** (drinks, days off). Morale losses aren't doubled. Traits are defined in `src/data/traits.ts`. In Manage Party, hovering **Health**, **Morale**, **Relationship** or **Obedience** (marked ⓘ) shows a tooltip with how that stat works and where the member stands now.
 
 The **schedule** (Manage Party) sets what each member does on days they aren't on a quest. It runs when the day ends; members who went on that day's quest skip it.
 
@@ -84,17 +97,17 @@ The rival parties are simulated day by day. A new game starts them spread over t
 | Type | How you get them | Cost | Notes |
 |---|---|---|---|
 | **Main character** | Created at the start | Food & lodging | Permanent; always goes on quests |
-| **Mercenary** | Guild Hall | A fixed fee up front, **or** a % of the next quest's reward | Leaves after the next quest, win or lose |
+| **Mercenary** | Guild Hall | The **larger** of a fixed fee and a % of the next quest's reward: the fee up front, and if their cut of a won quest is worth more, they take the difference from the reward | Leaves after the next quest, win or lose |
 | **Companion** | Guild Hall, after negotiating a contract | Base pay every 7th day, a % of each reward, food & lodging if included | Permanent while the contract runs |
-| **Slave** | Slave Market, or a captured prisoner registered at the magistrate | Food & lodging only | Permanent; can be sold to the market |
+| **Slave** | Slave Market, or a prisoner registered at the city gate | Food & lodging only | Permanent; can be sold to the market |
 
 **Companion contracts** have four terms: **base pay**, **loot cut** (% of each quest reward), **food and lodging included** (worth 28 gold a week to them), and **term length** (2, 4, 8 or 12 weeks). Candidates ask more the higher their level and the greedier they are, a little more for short terms and less for long ones. They value a loot cut by what a party of your rank usually earns (150 gold a week at D, 2000 at A). An offer close to what they want gets a counter-offer; a low one offends them. Each rejected offer uses up patience, and once it runs out they won't talk to you for a week.
 
 Companions (and slaves, see above) have a **relationship** score (0–100). It goes up by 6 for every quest completed together, drops if you can't pay them, and lowers their demands when you renew: by up to 30% at 100. When a contract ends, they sit out of quests and you have 3 days to **renew** it (Manage Party) before they leave. Walking out of a renewal ends the contract on the spot. Unpaid companions lose 20 relationship each payday, and quit when it reaches 0.
 
-**Prisoners**: human enemies who surrender in battle are taken prisoner when you win. Take them to the magistrate at the Slave Market to turn them in for a bounty (35 gold per level), pay a 60 gold fee to register them as your slave, or **sell them to the market** (half their current market price).
+**Prisoners**: human enemies who surrender in battle are taken prisoner when you win, as many as surrender. The party doesn't keep prisoners: when it comes back, the **city gate** won't let them in until each one is registered, either **turned in for a bounty** (35 gold per level) or **registered as your slave** for a fixed 60 gold fee (only while the party has room). **Turn them all in** settles them at once.
 
-**The Slave Market** is a living market (`market` in `guild.json`). It holds **10–30 slaves**: a few (1–4) are sold to other buyers every day, and a **shipment of 5–12 arrives twice a week** (days 1 and 4 of each week; the screen shows the next one). Slaves are of about your party's rank. **Prices follow supply and demand**: each slave's value (120 gold + 70 per level above 1, × talent) times a price index that drifts a little every day and rises when stock is short (falls when there's a glut), between 70% and 150% of usual. Selling your slaves to the market gets 40% of the current price, captives 50%.
+**The Slave Market** is a living market (`market` in `guild.json`). It holds **10–30 slaves**: a few (1–4) are sold to other buyers every day, and a **shipment of 5–12 arrives twice a week** (days 1 and 4 of each week; the screen shows the next one). Slaves are of about your party's rank. **Prices follow supply and demand**: each slave's value (120 gold + 70 per level above 1, × talent) times a price index that drifts a little every day and rises when stock is short (falls when there's a glut), between 70% and 150% of usual. The market buys your slaves for **80%** of the current price (Slave Market or Manage Party). It doesn't buy prisoners.
 
 All of these numbers are in `src/data/guild.json`.
 
@@ -226,7 +239,7 @@ Each enemy type has a fixed level range and its own stats and skills (`src/data/
 
 - **Beast**: acts alone. It only ever goes for the **nearest** target (never the weakest), barely weighs danger, and **flees** once below 40% health.
 - **Tribal**: fights as a group. Members keep a **loose formation** (no more than 3 tiles from the next one, without bunching up), so a fighter that's out ahead waits for the others, and they pile onto targets their friends are already on. Once **half the group is gone** (and they aren't outnumbering the party) or the survivors are badly hurt, **the whole group runs**, even the unhurt.
-- **Human**: fights tactically: cover, danger, picking off the weak, falling back to regroup with healthy allies. It **flees** when badly hurt (below 35%) or hurt and in reach of a killing blow. If it can't reach the edge this turn and every tile it could get to is in reach of enough damage to kill it, it **surrenders**. Surrendered enemies are taken **prisoner** if you win (only humans can be): take them to the magistrate at the Slave Market for a bounty or register them as slaves. The party holds up to 6 prisoners.
+- **Human**: fights tactically: cover, danger, picking off the weak, falling back to regroup with healthy allies. It **flees** when badly hurt (below 35%) or hurt and in reach of a killing blow. If it can't reach the edge this turn and every tile it could get to is in reach of enough damage to kill it, it **surrenders**. Surrendered enemies are taken **prisoner** if you win (only humans can be): register them at the city gate for a bounty or as slaves.
 - **Evil** (spirits and demons): no self-preservation. It **never flees or disengages**, ignores danger and barely cares about hitting its own side, and goes for **kills**: hurt targets are worth more to it, finishing one off most of all.
 
 Fleeing enemies run for the nearest map edge and escape once they reach it. Healthy beasts, tribals and humans take small risks freely, and danger they can't avoid anyway doesn't hold them back; wounded humans and tribals may hold back from walking into a deadly spot, but never for more than two turns in a row.
@@ -264,7 +277,7 @@ They're drawn in a storybook style (no outlines, simple dot eyes, muted watercol
 
 Saves are **pretty-printed JSON**. You can save to 3 browser slots, or Export a `.json` file and Import it later. Hand edits are validated, with errors that name the exact field (e.g. `party[0].appearance.look.hair must be one of: bobCut, ponytail, ...`). Older saves are upgraded automatically: the first party member becomes your main character, the others companions on a 4-week contract, and the party joins the guild with renown and gold for the stages it had cleared.
 
-A version-3 save holds the whole city: the day, gold, renown and rank, your party with each member's contract, the lineup, the accepted quest, the guild (rival parties, free adventurers in the hall, the quest board, news), the slave market and any prisoners. A party member looks like this:
+A version-3 save holds the whole city: the day, gold, renown and rank, your party with each member's contract, the lineup, the accepted quest, the guild (rival parties, free adventurers in the hall, the quest board, news), the slave market, food choices and any prisoners waiting at the gate. A party member looks like this:
 
 ```json
 {
@@ -292,6 +305,8 @@ A version-3 save holds the whole city: the day, gold, renown and rank, your part
   }
 }
 ```
+
+The main character also has `"traits": ["protagonist"]` (older saves get it on load).
 
 ## Development
 

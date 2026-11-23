@@ -35,7 +35,7 @@ export function talentPriceFactor(c: Pick<Character, 'talents'>): number {
 
 // ---- mercenaries --------------------------------------------------------------------------------
 
-/** What a mercenary asks: a fixed fee up front, or a % of the next quest's reward. */
+/** What a mercenary asks: the larger of a fixed fee (paid up front) and a % of the next quest's reward. */
 export function mercenaryRates(level: number, greed: number, talent = 1): { fee: number; cutPct: number } {
   const m = GUILD.mercenary;
   return {
@@ -118,13 +118,6 @@ export function companionContract(terms: CompanionTerms, day: number, greed: num
   };
 }
 
-/** Weekly cost of a companion: pay plus food and lodging if the party covers it. */
-export function weeklyCost(c: Contract): number {
-  if (c.type === 'companion') return c.basePay + (c.foodLodging ? foodLodgingWeekly() : 0);
-  if (c.type === 'slave' || c.type === 'main') return foodLodgingWeekly();
-  return 0;
-}
-
 /** Days left on a companion contract (negative = in the grace period). */
 export const daysLeft = (c: CompanionContract, day: number) => c.endDay - day;
 export const isExpired = (c: Character, day: number) => isCompanion(c) && c.contract.endDay <= day;
@@ -181,6 +174,7 @@ export function leaveParty(state: GameState, c: Character, greed = 1): void {
   state.party = state.party.filter((m) => m.id !== c.id);
   state.lineup = state.lineup.filter((id) => id !== c.id);
   delete state.schedule[c.id];
+  delete state.food[c.id];
   const { contract: _contract, ...character } = c;
   state.guild.pool.push({ character, greed, patience: GUILD.companion.patience, refusedUntil: state.day + 3 });
 }

@@ -1,9 +1,9 @@
 // Save / load. Saves are pretty-printed JSON so players can read (and edit!) them.
 import { MAX_PARTY_SIZE, NAME_MAX_LENGTH, SKILLS, TREE_SKILLS, WEAPONS, skillPointsForLevel, maxBodyRank } from '../data/content';
-import { ACTIVITIES, GUILD, type Activity } from '../data/guild';
+import { ACTIVITIES, FOOD_TIERS, GUILD, type Activity, type FoodTier } from '../data/guild';
 import { ENEMIES } from '../data/enemies';
 import {
-  BODY_MODELS, ENEMY_MODELS, FACE_COUNT, HAIR_COLORS, HAIR_STYLES, RANKS, SEXES, SKIN_TONES, STAT_KEYS, TALENT_GRADES,
+  BODY_MODELS, ENEMY_MODELS, FACE_COUNT, HAIR_COLORS, HAIR_STYLES, RANKS, SEXES, SKIN_TONES, STAT_KEYS, TALENT_GRADES, TRAIT_IDS,
   type BodyInvestment, type Character, type StatKey, type Talents, type Contract, type GameState, type Look, type NewsItem, type Offer, type Quest, type Rank, type RivalParty,
 } from '../data/types';
 import { bodyStats, makeRng, modelFor } from './character';
@@ -89,8 +89,13 @@ function validateContract(raw: unknown, path: string): Contract {
   const type = oneOf(o.type, ['main', 'mercenary', 'companion', 'slave'] as const, `${path}.type`);
   if (type === 'main') return { type };
   if (type === 'mercenary') {
-    const pay = oneOf(o.pay, ['fixed', 'cut'] as const, `${path}.pay`);
-    return { type, pay, amount: int(o.amount, `${path}.amount`, 0, pay === 'cut' ? 100 : Number.MAX_SAFE_INTEGER) };
+    // Older saves: a mercenary was paid either a fixed fee or a cut.
+    if (o.pay !== undefined) {
+      const pay = oneOf(o.pay, ['fixed', 'cut'] as const, `${path}.pay`);
+      const amount = int(o.amount, `${path}.amount`, 0, pay === 'cut' ? 100 : Number.MAX_SAFE_INTEGER);
+      return { type, fee: pay === 'fixed' ? amount : 0, cutPct: pay === 'cut' ? amount : 0 };
+    }
+    return { type, fee: int(o.fee, `${path}.fee`), cutPct: int(o.cutPct, `${path}.cutPct`, 0, 100) };
   }
   if (type === 'slave') {
     const origin = oneOf(o.origin, ['market', 'prisoner'] as const, `${path}.origin`);
@@ -199,6 +204,10 @@ function validateCharacter(raw: unknown, path: string, opts: { member?: boolean 
   if (r.talents !== undefined) out.talents = validateTalents(r.talents, `${path}.talents`);
   if (r.health !== undefined) out.health = num(r.health, `${path}.health`, 0, 100);
   if (r.morale !== undefined) out.morale = num(r.morale, `${path}.morale`, 0, 100);
+  if (r.traits !== undefined) {
+    const traits = arr(r.traits, `${path}.traits`).map((t, i) => oneOf(t, TRAIT_IDS, `${path}.traits[${i}]`));
+    if (traits.length) out.traits = [...new Set(traits)];
+  }
   if (opts.member) out.contract = validateContract(r.contract, `${path}.contract`);
   return out;
 }
@@ -276,6 +285,17 @@ function validateSchedule(raw: unknown, party: Character[]): GameState['schedule
   return out;
 }
 
+/** Food quality per member (unknown members and tiers are dropped). */
+function validateFood(raw: unknown, party: Character[]): GameState['food'] {
+  if (raw === undefined) return {};
+  const o = obj(raw, 'food');
+  const out: GameState['food'] = {};
+  for (const [id, t] of Object.entries(o)) {
+    if (party.some((c) => c.id === id) && (FOOD_TIERS as readonly unknown[]).includes(t)) out[id] = t as FoodTier;
+  }
+  return out;
+}
+
 const RINGS = ['outer', 'middle', 'inner'] as const;
 
 function validateState(raw: Record<string, unknown>): GameState {
@@ -290,6 +310,8 @@ function validateState(raw: Record<string, unknown>): GameState {
   if (main!.contract?.type !== 'main') bad('mainId', 'must point at the member with contract type "main"');
   const mains = party.filter((c) => c.contract?.type === 'main');
   if (mains.length > 1) bad('party', 'can only have one member with contract type "main"');
+  // The main character is the Protagonist (older saves had no traits).
+  if (!main!.traits?.includes('protagonist')) main!.traits = [...(main!.traits ?? []), 'protagonist'];
   const lineup = arr(raw.lineup, 'lineup').map((id, i) => {
     if (typeof id !== 'string' || !party.some((c) => c.id === id)) bad(`lineup[${i}]`, `"${String(id)}" is not in the party`);
     return id as string;
@@ -331,6 +353,7 @@ function validateState(raw: Record<string, unknown>): GameState {
     lastQuestDay: raw.lastQuestDay === undefined ? 0 : int(raw.lastQuestDay, 'lastQuestDay'),
     questMembers: raw.questMembers === undefined ? [] : arr(raw.questMembers, 'questMembers').filter((id): id is string => typeof id === 'string'),
     schedule: validateSchedule(raw.schedule, party),
+    food: validateFood(raw.food, party),
     drinksDay: raw.drinksDay === undefined ? 0 : int(raw.drinksDay, 'drinksDay'),
     belowRankSince: raw.belowRankSince === undefined ? 0 : int(raw.belowRankSince, 'belowRankSince'),
     residences: raw.residences === undefined ? [] : [...new Set(arr(raw.residences, 'residences').map((r, i) => oneOf(r, RINGS, `residences[${i}]`)))],

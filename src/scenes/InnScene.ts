@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { GUILD, LODGING_QUALITY, isResidence, type InnTier, type Ring } from '../data/guild';
-import { boarders, buyDrinks, dailyUpkeep, drinksCost, isPayday, stayAtHome, stayAtInn, weeklyWages } from '../game/city';
-import { QUALITY_TEXT, lodgingName, lodgingRelationship, moraleOf } from '../game/condition';
+import { boarders, buyDrinks, dailyUpkeep, drinksCost, foodCost, isPayday, lodgingCost, stayAtHome, stayAtInn, weeklyWages } from '../game/city';
+import { QUALITY_TEXT, foodOf, foodRelationship, lodgingName, lodgingRelationship, moraleOf } from '../game/condition';
 import { bondOf, isHoused } from '../game/contracts';
 import { markDirty, requireState, session } from '../game/session';
 import { cityHeader } from '../ui/hud';
@@ -55,7 +55,7 @@ export class InnScene extends Phaser.Scene {
     text(this, 30, 126, BLURB[this.place], { fontSize: '14px', wordWrap: { width: 532 }, lineSpacing: 3 });
     const guests = boarders(state);
     const perNight = dailyUpkeep(state, this.place);
-    const price = home ? (owned ? 'Yours: free nights' : `For sale: ${GUILD.residences[home].price} gold`) : `${inn!.pricePerPerson} gold per person a night`;
+    const price = home ? (owned ? 'Yours: free nights (food still costs)' : `For sale: ${GUILD.residences[home].price} gold`) : `${inn!.pricePerPerson} gold per person a night`;
     text(this, 30, 184, price, { fontSize: '18px', color: COLORS.gold });
     const quality = LODGING_QUALITY[this.place];
     const perks = [
@@ -67,14 +67,14 @@ export class InnScene extends Phaser.Scene {
     text(this, 30, 378, guests.map((c) => c.name).join(', '), { fontSize: '12px', color: COLORS.dim, wordWrap: { width: 532 } });
 
     const toPay = (7 - (state.day % 7)) % 7;
-    text(this, 30, 408, `Tonight: ${perNight} gold for the party.   Gold: ${state.gold}.\nNext payday ${isPayday(state.day) ? 'is today' : `in ${toPay} day${toPay === 1 ? '' : 's'}`}: ${weeklyWages(state)} gold in wages.`, {
+    text(this, 30, 408, `Tonight: ${perNight} gold (lodging ${lodgingCost(state, this.place)} + food ${foodCost(state)}).   Gold: ${state.gold}.\nNext payday ${isPayday(state.day) ? 'is today' : `in ${toPay} day${toPay === 1 ? '' : 's'}`}: ${weeklyWages(state)} gold in wages.`, {
       fontSize: '13px', lineSpacing: 4,
     });
     if (home && !owned) {
       button(this, 30, 452, 530, 46, `For sale at the Estate Office (Middle Ring): ${GUILD.residences[home].price} gold`, () => this.scene.start('Estate'), { fontSize: 15 });
     } else {
       const stays: [number, string][] = [[1, 'Stay the night'], [3, 'Stay 3 nights'], [7, 'Stay a week']];
-      stays.forEach(([n, label], i) => button(this, 30 + i * 180, 452, 170, 46, `${label}\n${home ? 'free' : `${perNight * n} gold`}`, () => this.stay(n), {
+      stays.forEach(([n, label], i) => button(this, 30 + i * 180, 452, 170, 46, `${label}\n${perNight * n} gold${home ? ' (food)' : ''}`, () => this.stay(n), {
         fontSize: 14, enabled: state.gold >= perNight * n, fill: 0x2c4a2f,
       }));
       if (state.gold < perNight) text(this, 30, 502, 'You can\'t afford a night here.', { fontSize: '13px', color: COLORS.bad });
@@ -82,11 +82,11 @@ export class InnScene extends Phaser.Scene {
     const housed = state.party.filter((c) => bondOf(c) && isHoused(c));
     if (housed.length) {
       const mood = housed.map((c) => {
-        const d = lodgingRelationship(c, this.place);
+        const d = lodgingRelationship(c, this.place) + foodRelationship(c, foodOf(state, c));
         const rel = Math.round(bondOf(c)?.relationship ?? 0);
         return `${c.name} ${rel}${d ? ` (${d > 0 ? '+' : ''}${d}/night)` : ''}`;
       });
-      text(this, 30, 520, `Relationship here: ${mood.join(', ')}`, { fontSize: '12px', color: '#e05a9b', wordWrap: { width: 532 } });
+      text(this, 30, 520, `Relationship here (lodging + food): ${mood.join(', ')}`, { fontSize: '12px', color: '#e05a9b', wordWrap: { width: 532 } });
     }
     if (inn) {
       const tier = this.place as InnTier;

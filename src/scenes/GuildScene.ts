@@ -153,11 +153,11 @@ export class GuildScene extends Phaser.Scene {
     row.add(talentTag(this, 64, 47, c, { fontSize: 11, overall: false, sep: '   ' }));
     row.add(text(this, 64, 64, c.skillIds.map((s) => SKILLS[s].name).join(', ') || 'No tree skills yet', { fontSize: '12px', color: COLORS.dim, wordWrap: { width: 300 } }));
     const rates = mercenaryRates(c.level, a.greed, talentPriceFactor(c));
-    row.add(text(this, 392, 16, 'Mercenary (next quest only)', { fontSize: '12px', color: COLORS.dim }));
-    row.add(button(this, 392, 36, 120, 32, `${rates.fee} gold`, () => this.hireMerc(a, 'fixed', rates.fee), {
-      fontSize: 14, enabled: state.gold >= rates.fee,
+    row.add(text(this, 392, 8, 'Mercenary (next quest only)', { fontSize: '12px', color: COLORS.dim }));
+    row.add(button(this, 392, 28, 248, 32, `Hire: ${rates.fee}g or ${rates.cutPct}%, whichever is more`, () => this.hireMerc(a, rates.fee, rates.cutPct), {
+      fontSize: 12, enabled: state.gold >= rates.fee,
     }));
-    row.add(button(this, 520, 36, 120, 32, `${rates.cutPct}% of reward`, () => this.hireMerc(a, 'cut', rates.cutPct), { fontSize: 14 }));
+    row.add(text(this, 392, 64, 'Fee paid now; a bigger cut is taken from the reward.', { fontSize: '11px', color: COLORS.dim }));
     row.add(text(this, 668, 16, 'Companion (permanent)', { fontSize: '12px', color: COLORS.dim }));
     const sulking = a.refusedUntil > state.day;
     row.add(button(this, 668, 36, 220, 32, sulking ? `Won't talk until day ${a.refusedUntil}` : 'Negotiate a contract', () => {
@@ -167,16 +167,14 @@ export class GuildScene extends Phaser.Scene {
     return { obj: row, height: 84 };
   }
 
-  private hireMerc(a: FreeAdventurer, pay: 'fixed' | 'cut', amount: number): void {
+  private hireMerc(a: FreeAdventurer, fee: number, cutPct: number): void {
     const state = requireState();
     if (rosterFull(state)) return toast(this, `Your party is full (${GUILD.maxRoster}).`, COLORS.bad);
-    const terms = pay === 'fixed' ? `${amount} gold now` : `${amount}% of the next quest's reward`;
-    confirmDialog(this, `Hire ${a.character.name} (Lv ${a.character.level}) for ${terms}?\nMercenaries leave after the next quest.`, () => {
-      if (pay === 'fixed') {
-        if (state.gold < amount) return toast(this, 'Not enough gold.', COLORS.bad);
-        state.gold -= amount;
-      }
-      const c = joinParty(state, a, { type: 'mercenary', pay, amount });
+    const msg = `Hire ${a.character.name} (Lv ${a.character.level})?\nPaid the larger of ${fee} gold (now) and ${cutPct}% of the reward.\nMercenaries leave after the next quest.`;
+    confirmDialog(this, msg, () => {
+      if (state.gold < fee) return toast(this, 'Not enough gold.', COLORS.bad);
+      state.gold -= fee;
+      const c = joinParty(state, a, { type: 'mercenary', fee, cutPct });
       const err = toggleLineup(state, c.id);
       markDirty();
       this.render();
