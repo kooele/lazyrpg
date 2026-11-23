@@ -1,54 +1,680 @@
 {
-  "_readme": "Enemy types. Each type always fights within its level range: an encounter at stage N uses the types whose range contains N, at level N (clamped into their range). Past the highest range, the toughest types keep appearing at their top level. stats are at the type's lowest level; growthPerLevel is added per level above that. Resist matches each type's Defense. Stats left out (e.g. mana for monsters) are 0. skills: the first one is the basic attack (also used for opportunity attacks). skillsByLevel adds skills from that level up. Monster art is public/art/monsters/<art.kind>.svg (regenerate it with node tools/generate-art.mjs after changing art.color). Human types pick a body model from art.models (bandits have their own: b1-b4) and can use weapons: they get the weapon's stat multipliers and skills (all of them, or only the basic attack with weaponSkillUse = basic), plus weaponSkills for that weapon. threat is how much of the encounter budget one unit uses (the budget is threatPerAdventurer x party size).",
-
+  "_readme": "Enemy types. Each type always fights within its level range. A quest picks one type whose range contains its level as the main foe; types of the same ai category that fit join in. ai sets how the type fights: beast (acts alone, goes for the nearest target, flees when hurt), tribal (fights as a group in a loose formation, and the whole group may flee), human (fights tactically, flees from danger, surrenders when it can't escape; only humans can be taken prisoner) or evil (spirits and demons: no self-preservation, goes for kills). Past the highest range, the toughest types keep appearing at their top level. stats are at the type's lowest level; growthPerLevel is added per level above that. Resist matches each type's Defense. Stats left out (e.g. mana for monsters) are 0. skills: the first one is the basic attack (also used for opportunity attacks). skillsByLevel adds skills from that level up. Monster art is public/art/monsters/<art.kind>.svg (regenerate it with node tools/generate-art.mjs after changing art.color). Human types pick a body model from art.models (bandits have their own: b1-b4) and can use weapons: they get the weapon's stat multipliers and skills (all of them, or only the basic attack with weaponSkillUse = basic), plus weaponSkills for that weapon. threat is how much of the encounter budget one unit uses (the budget is threatPerAdventurer x party size). questTitle names the quests where the type is the main foe.",
   "encounter": {
     "threatPerAdventurer": 1,
     "maxEnemies": 8
   },
-
   "enemies": {
     "rat": {
       "name": "Giant Rat",
-      "levels": [1, 2],
+      "levels": [
+        1,
+        2
+      ],
       "threat": 0.5,
-      "art": { "kind": "rat", "color": "#8a7a70" },
-      "stats": { "health": 220, "pAtk": 70, "mAtk": 0, "defense": 20, "resist": 20, "movement": 20, "vision": 6 },
-      "growthPerLevel": { "health": 30, "pAtk": 8, "defense": 3, "resist": 3 },
-      "skills": ["gnaw"]
+      "art": {
+        "kind": "rat",
+        "color": "#8a7a70"
+      },
+      "stats": {
+        "health": 220,
+        "pAtk": 70,
+        "mAtk": 0,
+        "defense": 20,
+        "resist": 20,
+        "movement": 20,
+        "vision": 6
+      },
+      "growthPerLevel": {
+        "health": 30,
+        "pAtk": 8,
+        "defense": 3,
+        "resist": 3
+      },
+      "skills": [
+        "gnaw"
+      ],
+      "ai": "beast",
+      "questTitle": "Rat Infestation"
     },
     "slime": {
       "name": "Green Slime",
-      "levels": [2, 3],
+      "levels": [
+        2,
+        3
+      ],
       "threat": 0.75,
-      "art": { "kind": "slime", "color": "#5fcf6a" },
-      "stats": { "health": 420, "pAtk": 80, "mAtk": 80, "defense": 40, "resist": 40, "movement": 12, "vision": 5 },
-      "growthPerLevel": { "health": 50, "pAtk": 8, "mAtk": 10, "defense": 5, "resist": 5 },
-      "skills": ["slam"],
-      "skillsByLevel": { "3": ["sticky_spit"] }
+      "art": {
+        "kind": "slime",
+        "color": "#5fcf6a"
+      },
+      "stats": {
+        "health": 420,
+        "pAtk": 80,
+        "mAtk": 80,
+        "defense": 40,
+        "resist": 40,
+        "movement": 12,
+        "vision": 5
+      },
+      "growthPerLevel": {
+        "health": 50,
+        "pAtk": 8,
+        "mAtk": 10,
+        "defense": 5,
+        "resist": 5
+      },
+      "skills": [
+        "slam"
+      ],
+      "skillsByLevel": {
+        "3": [
+          "sticky_spit"
+        ]
+      },
+      "ai": "beast",
+      "questTitle": "Slime Outbreak"
     },
     "wolf": {
       "name": "Grey Wolf",
-      "levels": [3, 4],
+      "levels": [
+        3,
+        6
+      ],
       "threat": 1,
-      "art": { "kind": "wolf", "color": "#7f8ea3" },
-      "stats": { "health": 460, "pAtk": 120, "mAtk": 0, "defense": 40, "resist": 40, "movement": 24, "vision": 8 },
-      "growthPerLevel": { "health": 50, "pAtk": 10, "defense": 5, "resist": 5 },
-      "skills": ["bite", "pounce"],
-      "skillsByLevel": { "4": ["howl"] }
+      "art": {
+        "kind": "wolf",
+        "color": "#7f8ea3"
+      },
+      "stats": {
+        "health": 460,
+        "pAtk": 120,
+        "mAtk": 0,
+        "defense": 40,
+        "resist": 40,
+        "movement": 24,
+        "vision": 8
+      },
+      "growthPerLevel": {
+        "health": 50,
+        "pAtk": 10,
+        "defense": 5,
+        "resist": 5
+      },
+      "skills": [
+        "bite",
+        "pounce"
+      ],
+      "skillsByLevel": {
+        "4": [
+          "howl"
+        ]
+      },
+      "ai": "beast",
+      "questTitle": "Wolf Pack"
     },
     "bandit": {
       "name": "Bandit",
-      "levels": [4, 5],
+      "levels": [
+        4,
+        8
+      ],
       "threat": 1,
-      "art": { "kind": "human", "models": ["b1", "b2", "b3", "b4"] },
-      "weapons": ["sword_shield", "spear", "bow", "staff"],
-      "weaponNames": { "sword_shield": "Bandit Thug", "spear": "Bandit Lancer", "bow": "Bandit Archer", "staff": "Bandit Hexer" },
-      "stats": { "health": 560, "mana": 260, "pAtk": 130, "mAtk": 110, "defense": 60, "resist": 60, "movement": 16, "vision": 8 },
-      "growthPerLevel": { "health": 50, "mana": 20, "pAtk": 10, "mAtk": 10, "defense": 5, "resist": 5 },
+      "art": {
+        "kind": "human",
+        "models": [
+          "b1",
+          "b2",
+          "b3",
+          "b4"
+        ]
+      },
+      "weapons": [
+        "sword_shield",
+        "spear",
+        "bow",
+        "staff"
+      ],
+      "weaponNames": {
+        "sword_shield": "Bandit Thug",
+        "spear": "Bandit Lancer",
+        "bow": "Bandit Archer",
+        "staff": "Bandit Hexer"
+      },
+      "stats": {
+        "health": 560,
+        "mana": 260,
+        "pAtk": 130,
+        "mAtk": 110,
+        "defense": 60,
+        "resist": 60,
+        "movement": 16,
+        "vision": 8
+      },
+      "growthPerLevel": {
+        "health": 50,
+        "mana": 20,
+        "pAtk": 10,
+        "mAtk": 10,
+        "defense": 5,
+        "resist": 5
+      },
       "weaponSkillUse": "basic",
       "skills": [],
-      "weaponSkills": { "sword_shield": ["shield_up"], "staff": ["fireball"], "bow": ["execute"] },
-      "skillsByLevel": { "5": ["kick"] }
+      "weaponSkills": {
+        "sword_shield": [
+          "shield_up"
+        ],
+        "staff": [
+          "fireball"
+        ],
+        "bow": [
+          "execute"
+        ]
+      },
+      "skillsByLevel": {
+        "5": [
+          "kick"
+        ]
+      },
+      "ai": "human",
+      "questTitle": "Bandit Bounty"
+    },
+    "goblin": {
+      "name": "Goblin",
+      "ai": "tribal",
+      "levels": [
+        3,
+        7
+      ],
+      "threat": 0.6,
+      "art": {
+        "kind": "human",
+        "models": [
+          "g1",
+          "g2"
+        ]
+      },
+      "weapons": [
+        "spear",
+        "bow",
+        "staff"
+      ],
+      "weaponNames": {
+        "spear": "Goblin Spearman",
+        "bow": "Goblin Archer",
+        "staff": "Goblin Shaman"
+      },
+      "stats": {
+        "health": 330,
+        "pAtk": 102,
+        "mAtk": 84,
+        "defense": 36,
+        "resist": 36,
+        "movement": 16,
+        "vision": 8,
+        "mana": 240
+      },
+      "growthPerLevel": {
+        "health": 28,
+        "pAtk": 8,
+        "mAtk": 7,
+        "defense": 3.0,
+        "resist": 3.0,
+        "mana": 20
+      },
+      "weaponSkillUse": "basic",
+      "skills": [],
+      "weaponSkills": {
+        "staff": [
+          "fireball"
+        ]
+      },
+      "skillsByLevel": {
+        "5": [
+          "war_cry"
+        ]
+      },
+      "questTitle": "Goblin Raiders"
+    },
+    "spider": {
+      "name": "Giant Spider",
+      "ai": "beast",
+      "levels": [
+        5,
+        9
+      ],
+      "threat": 0.8,
+      "art": {
+        "kind": "spider",
+        "color": "#5a4a6a"
+      },
+      "stats": {
+        "health": 490,
+        "pAtk": 119,
+        "mAtk": 0,
+        "defense": 42,
+        "resist": 42,
+        "movement": 20,
+        "vision": 6
+      },
+      "growthPerLevel": {
+        "health": 35,
+        "pAtk": 8,
+        "defense": 3.0,
+        "resist": 3.0
+      },
+      "skills": [
+        "poison_bite",
+        "web"
+      ],
+      "questTitle": "Spider Nest"
+    },
+    "skeleton": {
+      "name": "Skeleton",
+      "ai": "evil",
+      "levels": [
+        6,
+        11
+      ],
+      "threat": 0.8,
+      "art": {
+        "kind": "human",
+        "models": [
+          "s1",
+          "s2"
+        ]
+      },
+      "weapons": [
+        "sword_shield",
+        "spear",
+        "bow"
+      ],
+      "weaponNames": {
+        "sword_shield": "Skeleton Warrior",
+        "spear": "Skeleton Spearman",
+        "bow": "Skeleton Archer"
+      },
+      "stats": {
+        "health": 520,
+        "pAtk": 142,
+        "mAtk": 75,
+        "defense": 52,
+        "resist": 52,
+        "movement": 14,
+        "vision": 8,
+        "mana": 300
+      },
+      "growthPerLevel": {
+        "health": 35,
+        "pAtk": 10,
+        "mAtk": 5,
+        "defense": 3.5,
+        "resist": 3.5,
+        "mana": 20
+      },
+      "weaponSkillUse": "basic",
+      "skills": [],
+      "questTitle": "Restless Dead"
+    },
+    "orc": {
+      "name": "Orc",
+      "ai": "tribal",
+      "levels": [
+        7,
+        13
+      ],
+      "threat": 1.1,
+      "art": {
+        "kind": "human",
+        "models": [
+          "o1",
+          "o2"
+        ]
+      },
+      "weapons": [
+        "sword_shield",
+        "spear"
+      ],
+      "weaponNames": {
+        "sword_shield": "Orc Warrior",
+        "spear": "Orc Brute"
+      },
+      "stats": {
+        "health": 800,
+        "pAtk": 176,
+        "mAtk": 96,
+        "defense": 72,
+        "resist": 72,
+        "movement": 16,
+        "vision": 8,
+        "mana": 320
+      },
+      "growthPerLevel": {
+        "health": 50,
+        "pAtk": 11,
+        "mAtk": 6,
+        "defense": 4.5,
+        "resist": 4.5,
+        "mana": 20
+      },
+      "weaponSkillUse": "basic",
+      "skills": [],
+      "weaponSkills": {
+        "sword_shield": [
+          "cleave"
+        ],
+        "spear": [
+          "cleave"
+        ]
+      },
+      "skillsByLevel": {
+        "9": [
+          "war_cry"
+        ]
+      },
+      "questTitle": "Orc Warband"
+    },
+    "sellsword": {
+      "name": "Sellsword",
+      "ai": "human",
+      "levels": [
+        8,
+        14
+      ],
+      "threat": 1.1,
+      "art": {
+        "kind": "human"
+      },
+      "weapons": [
+        "sword_shield",
+        "spear",
+        "bow",
+        "staff"
+      ],
+      "weaponNames": {
+        "sword_shield": "Sellsword",
+        "spear": "Sellsword Lancer",
+        "bow": "Sellsword Archer",
+        "staff": "Hedge Mage"
+      },
+      "stats": {
+        "health": 850,
+        "pAtk": 162,
+        "mAtk": 153,
+        "defense": 85,
+        "resist": 85,
+        "movement": 16,
+        "vision": 8,
+        "mana": 340
+      },
+      "growthPerLevel": {
+        "health": 50,
+        "pAtk": 10,
+        "mAtk": 9,
+        "defense": 5.0,
+        "resist": 5.0,
+        "mana": 20
+      },
+      "weaponSkillUse": "all",
+      "skills": [],
+      "weaponSkills": {
+        "sword_shield": [
+          "kick"
+        ],
+        "spear": [
+          "charge"
+        ],
+        "bow": [
+          "execute"
+        ],
+        "staff": [
+          "fireball",
+          "heal"
+        ]
+      },
+      "questTitle": "Rogue Mercenaries"
+    },
+    "bear": {
+      "name": "Cave Bear",
+      "ai": "beast",
+      "levels": [
+        9,
+        14
+      ],
+      "threat": 1.4,
+      "art": {
+        "kind": "bear",
+        "color": "#7a5a42"
+      },
+      "stats": {
+        "health": 1350,
+        "pAtk": 216,
+        "mAtk": 0,
+        "defense": 81,
+        "resist": 81,
+        "movement": 16,
+        "vision": 8
+      },
+      "growthPerLevel": {
+        "health": 75,
+        "pAtk": 12,
+        "defense": 4.5,
+        "resist": 4.5
+      },
+      "skills": [
+        "maul",
+        "rend"
+      ],
+      "skillsByLevel": {
+        "12": [
+          "roar"
+        ]
+      },
+      "questTitle": "Cave Bear Attacks"
+    },
+    "wraith": {
+      "name": "Wraith",
+      "ai": "evil",
+      "levels": [
+        10,
+        16
+      ],
+      "threat": 1.1,
+      "art": {
+        "kind": "wraith",
+        "color": "#6a7a9a"
+      },
+      "stats": {
+        "health": 760,
+        "pAtk": 95,
+        "mAtk": 228,
+        "defense": 57,
+        "resist": 57,
+        "movement": 20,
+        "vision": 8
+      },
+      "growthPerLevel": {
+        "health": 40,
+        "pAtk": 5,
+        "mAtk": 12,
+        "defense": 3.0,
+        "resist": 3.0
+      },
+      "skills": [
+        "chill_touch",
+        "wail"
+      ],
+      "questTitle": "Haunting"
+    },
+    "troll": {
+      "name": "Troll",
+      "ai": "tribal",
+      "levels": [
+        13,
+        20
+      ],
+      "threat": 1.6,
+      "art": {
+        "kind": "troll",
+        "color": "#6a8a6a"
+      },
+      "stats": {
+        "health": 1480,
+        "pAtk": 253,
+        "mAtk": 110,
+        "defense": 99,
+        "resist": 99,
+        "movement": 12,
+        "vision": 8
+      },
+      "growthPerLevel": {
+        "health": 68,
+        "pAtk": 12,
+        "mAtk": 5,
+        "defense": 4.5,
+        "resist": 4.5
+      },
+      "skills": [
+        "club",
+        "smash",
+        "regenerate"
+      ],
+      "questTitle": "Troll Trouble"
+    },
+    "renegade": {
+      "name": "Renegade",
+      "ai": "human",
+      "levels": [
+        14,
+        25
+      ],
+      "threat": 1.4,
+      "art": {
+        "kind": "human"
+      },
+      "weapons": [
+        "sword_shield",
+        "spear",
+        "bow",
+        "staff"
+      ],
+      "weaponNames": {
+        "sword_shield": "Renegade Knight",
+        "spear": "Renegade Lancer",
+        "bow": "Renegade Ranger",
+        "staff": "Renegade Sorcerer"
+      },
+      "stats": {
+        "health": 1210,
+        "pAtk": 230,
+        "mAtk": 230,
+        "defense": 115,
+        "resist": 115,
+        "movement": 16,
+        "vision": 8,
+        "mana": 460
+      },
+      "growthPerLevel": {
+        "health": 52,
+        "pAtk": 10,
+        "mAtk": 10,
+        "defense": 5.0,
+        "resist": 5.0,
+        "mana": 20
+      },
+      "weaponSkillUse": "all",
+      "skills": [],
+      "weaponSkills": {
+        "sword_shield": [
+          "kick",
+          "double_strike"
+        ],
+        "spear": [
+          "charge",
+          "circle_swing"
+        ],
+        "bow": [
+          "execute",
+          "double_strike"
+        ],
+        "staff": [
+          "fireball",
+          "freeze",
+          "heal"
+        ]
+      },
+      "questTitle": "Renegade Knights"
+    },
+    "wyvern": {
+      "name": "Wyvern",
+      "ai": "beast",
+      "levels": [
+        15,
+        23
+      ],
+      "threat": 1.5,
+      "art": {
+        "kind": "wyvern",
+        "color": "#4f7a6a"
+      },
+      "stats": {
+        "health": 2040,
+        "pAtk": 360,
+        "mAtk": 240,
+        "defense": 108,
+        "resist": 108,
+        "movement": 24,
+        "vision": 10
+      },
+      "growthPerLevel": {
+        "health": 85,
+        "pAtk": 15,
+        "mAtk": 10,
+        "defense": 4.5,
+        "resist": 4.5
+      },
+      "skills": [
+        "wyvern_bite",
+        "dive",
+        "tail_sting"
+      ],
+      "questTitle": "Wyvern Hunt"
+    },
+    "demon": {
+      "name": "Demon",
+      "ai": "evil",
+      "levels": [
+        16,
+        25
+      ],
+      "threat": 2,
+      "art": {
+        "kind": "demon",
+        "color": "#a83a32"
+      },
+      "stats": {
+        "health": 2000,
+        "pAtk": 338,
+        "mAtk": 325,
+        "defense": 125,
+        "resist": 125,
+        "movement": 20,
+        "vision": 8
+      },
+      "growthPerLevel": {
+        "health": 80,
+        "pAtk": 14,
+        "mAtk": 13,
+        "defense": 5.0,
+        "resist": 5.0
+      },
+      "skills": [
+        "demon_claw",
+        "hellfire",
+        "infernal_leap"
+      ],
+      "questTitle": "Demonic Incursion"
     }
   }
 }

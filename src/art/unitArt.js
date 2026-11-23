@@ -42,6 +42,15 @@ export const BANDITS = {
   b3: { bandit: true, female: true, skin: '#f0c8a2', hair: '#2b2220', hairStyle: 'ponytail', headscarf: '#9a3a2e', scar: true, eyes: '#4a3020', outfit: 'leather', cloth: '#8a7a5a', leather: '#4a5a36', accent: '#8a6a3a', legs: '#3b3632', boots: '#3e2a1c' },
   b4: { bandit: true, female: true, skin: '#8a5a3c', hair: '#1c1416', hairStyle: 'hood', hood: '#4a5248', mask: '#3a3a3e', eyes: '#3a2418', outfit: 'leather', cloth: '#6a5a6e', leather: '#34303a', accent: '#8a6a3a', legs: '#33302e', boots: '#3e2a1c' },
 };
+// Other humanoid foes: goblins (small, green, pointy ears), orcs (tusks), skeletons (bone and empty sockets).
+export const HUMANOIDS = {
+  g1: { bandit: true, female: false, skin: '#8fae5a', hair: '#2a2a1e', hairStyle: 'bald', pointyEars: true, eyes: '#c8a020', outfit: 'leather', bareArms: true, cloth: '#7a6a4a', leather: '#5a4a30', accent: '#8a6a3a', legs: '#4a4232', boots: '#3e2a1c' },
+  g2: { bandit: true, female: false, skin: '#9ab866', hair: '#2a2a1e', hairStyle: 'hood', hood: '#5a5040', pointyEars: true, eyes: '#c8a020', outfit: 'leather', cloth: '#6a5a3a', leather: '#4a3a28', accent: '#8a6a3a', legs: '#3e3a2e', boots: '#3e2a1c' },
+  o1: { bandit: true, female: false, skin: '#6f8f5f', hair: '#1c1c1a', hairStyle: 'spiky', tusks: true, eyes: '#a02a1a', outfit: 'leather', bareArms: true, cloth: '#6a3a2a', leather: '#3e3428', accent: '#8a6a3a', legs: '#3a3228', boots: '#2e2218' },
+  o2: { bandit: true, female: false, skin: '#7a8a5a', hair: '#1c1c1a', hairStyle: 'bald', tusks: true, scar: true, eyes: '#a02a1a', outfit: 'armor', cloth: '#5a3a2a', accent: '#6a6a6e', legs: '#3a3228', boots: '#2e2218' },
+  s1: { bandit: true, female: false, skin: '#e6dcc4', hair: '#e6dcc4', hairStyle: 'bald', skull: true, eyes: '#ff5a3a', outfit: 'leather', bareArms: true, cloth: '#4a4a4e', leather: '#3a3430', accent: '#6a6a6e', legs: '#e6dcc4', boots: '#4a4038' },
+  s2: { bandit: true, female: false, skin: '#ddd2b8', hair: '#ddd2b8', hairStyle: 'hood', hood: '#34343a', skull: true, eyes: '#7ad0ff', outfit: 'armor', cloth: '#3a3a40', accent: '#7a7a80', legs: '#ddd2b8', boots: '#3a3430' },
+};
 export const ART_WEAPONS = ['sword_shield', 'spear', 'bow', 'staff'];
 const METAL = '#b9c3cf';
 const WOOD = '#8a5a34';
@@ -238,7 +247,13 @@ export function figureSvg(id, model, weapon, scale = 1) {
   // ---- neck & head ----
   const neckW = hw * 0.36;
   parts.push(path(`M${n(32 - neckW)} ${n(chin - 2.5)} L${n(32 - neckW)} ${n(shoulderY + 0.8)} Q32 ${n(shoulderY + 1.8)} ${n(32 + neckW)} ${n(shoulderY + 0.8)} L${n(32 + neckW)} ${n(chin - 2.5)} Z`, dark(P.skin, 0.12)));
-  if (!female && !['long', 'hood', 'bowl', 'permed'].includes(model.hairStyle)) {
+  if (model.pointyEars) {
+    // Long ears sticking out sideways (drawn behind the head).
+    for (const s of [-1, 1]) {
+      parts.push(path(`M${n(32 + s * hw * 0.9)} ${n(top + H * 0.45)} L${n(32 + s * (hw + H * 0.42))} ${n(top + H * 0.32)} L${n(32 + s * hw * 0.9)} ${n(top + H * 0.72)} Z`, P.skin));
+      parts.push(path(`M${n(32 + s * hw * 0.95)} ${n(top + H * 0.5)} L${n(32 + s * (hw + H * 0.28))} ${n(top + H * 0.4)} L${n(32 + s * hw * 0.95)} ${n(top + H * 0.64)} Z`, dark(P.skin, 0.15)));
+    }
+  } else if (!female && !['long', 'hood', 'bowl', 'permed'].includes(model.hairStyle)) {
     for (const s of [-1, 1]) parts.push(`<ellipse cx="${n(32 + s * hw)}" cy="${n(top + H * 0.58)}" rx="${n(H * 0.07)}" ry="${n(H * 0.11)}" fill="${P.skin}"/>`);
   }
   const jawX = hw * 0.62;
@@ -251,7 +266,22 @@ export function figureSvg(id, model, weapon, scale = 1) {
   // ---- face (dot eyes) ----
   const eyeY = top + H * 0.57;
   if (model.face) drawFace(model.face);
-  for (const s of model.face ? [] : [-1, 1]) {
+  if (model.skull) {
+    // Empty sockets with a faint glow, a nose hole and a row of teeth.
+    for (const s of [-1, 1]) {
+      const x = 32 + s * hw * 0.42;
+      face.push(`<ellipse cx="${n(x)}" cy="${n(eyeY)}" rx="${n(H * 0.11)}" ry="${n(H * 0.1)}" fill="#1a1416"/>`);
+      face.push(circle(x, eyeY + H * 0.01, H * 0.028, P.eyes));
+    }
+    face.push(path(`M32 ${n(eyeY + H * 0.08)} L${n(32 - H * 0.04)} ${n(eyeY + H * 0.17)} L${n(32 + H * 0.04)} ${n(eyeY + H * 0.17)} Z`, '#1a1416'));
+    const ty = top + H * 0.82;
+    face.push(`<path d="M${n(32 - H * 0.13)} ${n(ty)} L${n(32 + H * 0.13)} ${n(ty)}" stroke="#1a1416" stroke-width="${n(H * 0.02)}"/>`);
+    for (const dx of [-0.08, -0.03, 0.02, 0.07]) face.push(`<path d="M${n(32 + H * dx)} ${n(ty - H * 0.04)} L${n(32 + H * dx)} ${n(ty + H * 0.04)}" stroke="#1a1416" stroke-width="${n(H * 0.012)}"/>`);
+  }
+  if (model.tusks) {
+    for (const s of [-1, 1]) face.push(path(`M${n(32 + s * H * 0.12)} ${n(top + H * 0.86)} L${n(32 + s * H * 0.16)} ${n(top + H * 0.68)} L${n(32 + s * H * 0.2)} ${n(top + H * 0.86)} Z`, '#f4ecd8'));
+  }
+  for (const s of model.face || model.skull ? [] : [-1, 1]) {
     const x = 32 + s * hw * 0.42;
     if (model.eyepatch && s === 1) {
       face.push(`<path d="M${at(-1.0, 0.3)} L${at(1.02, 0.72)}" stroke="#1e1a1c" stroke-width="${n(H * 0.035)}"/>`);
@@ -317,8 +347,8 @@ export function figureSvg(id, model, weapon, scale = 1) {
     }
   }
   if (model.scar) face.push(`<path d="M${at(-0.62, 0.42)} L${at(-0.3, 0.8)} M${at(-0.56, 0.58)} L${at(-0.4, 0.55)} M${at(-0.47, 0.7)} L${at(-0.32, 0.66)}" stroke="${dark(P.skin, 0.3)}" stroke-width="${n(H * 0.022)}" stroke-linecap="round" opacity="0.8"/>`);
-  if (!model.mask && !model.face) face.push(circle(32, eyeY + H * 0.12, H * 0.013, dark(P.skin, 0.35)));
-  if (!model.beard && !model.mask && !model.face) {
+  if (!model.mask && !model.face && !model.skull) face.push(circle(32, eyeY + H * 0.12, H * 0.013, dark(P.skin, 0.35)));
+  if (!model.beard && !model.mask && !model.face && !model.skull && !model.tusks) {
     const mw = H * 0.06;
     const my = top + H * 0.8;
     face.push(`<path d="M${n(32 - mw)} ${n(my)} Q32 ${n(my + H * 0.035)} ${n(32 + mw)} ${n(my)}" stroke="${female ? '#b85a64' : dark(P.skin, 0.45)}" stroke-width="${n(H * 0.03)}" fill="none" stroke-linecap="round"/>`);
@@ -598,6 +628,101 @@ export function monsterSvg(kind, color) {
     face.push(`<ellipse cx="86" cy="45" rx="2" ry="1.6" fill="#1a1416"/>`);
     face.push(circle(73, 40.2, 2.1, '#1a1416') + circle(72.3, 39.4, 0.75, '#ffffff'));
     face.push(`<path d="M81.5 50 Q83 51.2 84.6 50" stroke="#2a1e1e" stroke-width="0.6" fill="none" stroke-linecap="round"/>`);
+  } else if (kind === 'spider') {
+    // A fat abdomen behind a small head, eight bent legs, a cluster of shiny eyes.
+    const leg = dark(c, 0.3);
+    for (const [hx, kx, ky, fx] of [[56, 70, 46, 84], [54, 64, 44, 74], [52, 46, 44, 40], [50, 36, 46, 26]]) {
+      body.push(limb([[hx, 60], [kx, ky], [fx, 75]], 2.6, leg));
+    }
+    body.push(`<ellipse cx="36" cy="55" rx="18" ry="14" fill="${c}"/>`);
+    body.push(`<ellipse cx="33" cy="51" rx="9" ry="5" fill="${lt}" opacity="0.35"/>`);
+    body.push(path('M30 46 L36 52 L42 46 M30 58 L36 64 L42 58', 'none', `stroke="${paint('#c8b040')}" stroke-width="1.6" stroke-linecap="round" opacity="0.8"`));
+    for (const [hx, kx, ky, fx] of [[60, 76, 50, 88], [58, 70, 52, 80], [54, 50, 52, 46], [52, 42, 54, 32]]) {
+      body.push(limb([[hx, 62], [kx, ky], [fx, 76]], 2.8, dk));
+    }
+    body.push(`<ellipse cx="61" cy="60" rx="11" ry="9" fill="${dk}"/>`);
+    body.push(path('M68 66 L71 71 L69 66 Z M64 67 L65 72 L66 67 Z', paint('#e8e0d0')));
+    for (const [x, y, r] of [[66, 56, 2.2], [70, 57.5, 1.9], [63, 58, 1.5], [68, 60, 1.4]]) face.push(circle(x, y, r, '#c02a2a') + circle(x - r * 0.35, y - r * 0.35, r * 0.35, '#ffffff'));
+  } else if (kind === 'bear') {
+    // Big and round: heavy body, thick legs, round ears and a long snout.
+    body.push(limb([[32, 62], [31, 74]], 8, dk) + limb([[56, 62], [57, 74]], 8, dk));
+    body.push(`<ellipse cx="44" cy="54" rx="25" ry="16" fill="${c}"/>`);
+    body.push(`<ellipse cx="44" cy="63" rx="16" ry="5" fill="${lt}" opacity="0.6"/>`);
+    body.push(limb([[38, 62], [37, 74.5]], 8.6, c) + limb([[62, 60], [63, 74.5]], 8.6, c));
+    body.push(`<ellipse cx="36.5" cy="75.2" rx="5" ry="2" fill="${dk}"/><ellipse cx="63.5" cy="75.2" rx="5" ry="2" fill="${dk}"/>`);
+    body.push(circle(66, 34, 4.5, c) + circle(66, 34, 2.4, dark(pink, 0.2)));
+    body.push(circle(78, 33, 4.5, c) + circle(78, 33, 2.4, dark(pink, 0.2)));
+    body.push(circle(72, 44, 12, c));
+    body.push(`<ellipse cx="82" cy="49" rx="8" ry="5.6" fill="${lt}"/>`);
+    face.push(`<ellipse cx="88.5" cy="47.5" rx="2.6" ry="2" fill="#1a1416"/>`);
+    face.push(circle(76, 41, 2, '#1a1416') + circle(75.4, 40.3, 0.7, '#ffffff'));
+    face.push(`<path d="M83 52.5 Q85.5 54 88 52.5" stroke="#2a1e1e" stroke-width="0.7" fill="none" stroke-linecap="round"/>`);
+  } else if (kind === 'troll') {
+    // A hulking, stooped giant with long arms, a big nose and a club.
+    const skin = c;
+    body.push(limb([[40, 58], [38, 74]], 7, dark(skin, 0.15)) + limb([[54, 58], [56, 74]], 7, dark(skin, 0.15)));
+    body.push(`<ellipse cx="37.5" cy="75" rx="5" ry="2" fill="${dk}"/><ellipse cx="56.5" cy="75" rx="5" ry="2" fill="${dk}"/>`);
+    body.push(limb([[34, 38], [28, 52], [30, 64]], 6.5, dark(skin, 0.08)) + circle(30, 65, 4, skin));
+    body.push(`<ellipse cx="47" cy="44" rx="16" ry="17" fill="${skin}"/>`);
+    body.push(`<ellipse cx="49" cy="50" rx="10" ry="9" fill="${lt}" opacity="0.4"/>`);
+    body.push(path('M33 52 L61 52 L58 63 Q47 66 36 63 Z', paint('#6a4a30')));
+    body.push(path('M36 63 L39 68 L42 63 L46 68 L50 63 L54 68 L58 63', 'none', `stroke="${paint('#4a3220')}" stroke-width="1.2"`));
+    // Club over the shoulder.
+    body.push(path('M66 56 L76 22 Q80 16 84 22 L72 58 Z', paint('#7a5232')));
+    body.push(circle(78, 24, 1.3, paint('#4a3220')) + circle(81, 30, 1.1, paint('#4a3220')));
+    body.push(limb([[58, 36], [66, 48], [69, 56]], 6.5, skin) + circle(69, 56, 4.2, skin));
+    body.push(path('M42 22 L36 16 L44 19 Z M58 22 L64 15 L57 19 Z', dark(skin, 0.1)));
+    body.push(circle(50, 25, 10, skin));
+    body.push(`<ellipse cx="56" cy="27.5" rx="4" ry="3" fill="${dark(skin, 0.08)}"/>`);
+    face.push(circle(48, 22.5, 1.8, '#1a1416') + circle(54, 22, 1.6, '#1a1416'));
+    face.push(`<path d="M45 19.5 L50 20.5 M52 20 L56.5 19" stroke="#1a1416" stroke-width="1" stroke-linecap="round"/>`);
+    face.push(path('M47 31 L48.5 28 L50 31 Z M53 31 L54.5 28 L56 31 Z', '#f4ecd8'));
+  } else if (kind === 'wraith') {
+    // A floating, tattered hooded cloak with glowing eyes and reaching hands.
+    shadow = '<ellipse cx="48" cy="76.2" rx="16" ry="2" fill="#2a2018" opacity="0.15"/>';
+    body.push(path('M48 10 C62 10 66 26 66 40 C68 52 72 60 70 68 L64 62 L60 70 L55 63 L50 71 L45 63 L40 70 L36 62 L30 68 C28 58 32 50 32 40 C32 26 36 10 48 10 Z', c, 'opacity="0.92"'));
+    body.push(path('M48 12 C58 12 62 24 62 34 L34 34 C34 24 38 12 48 12 Z', dk));
+    body.push(`<ellipse cx="48" cy="30" rx="10" ry="11" fill="#14121c"/>`);
+    body.push(path('M62 38 Q74 40 80 46', 'none', `stroke="${c}" stroke-width="5" stroke-linecap="round" opacity="0.9"`));
+    body.push(path('M80 46 L86 44 M80 46 L86 48 M80 46 L84 51', 'none', `stroke="${lt}" stroke-width="1.4" stroke-linecap="round"`));
+    body.push(path('M38 50 Q44 56 50 52 Q56 58 62 54', 'none', `stroke="${lt}" stroke-width="1" opacity="0.5"`));
+    face.push(`<ellipse cx="44" cy="29" rx="2.4" ry="1.6" fill="#9ef0ff"/><ellipse cx="52" cy="29" rx="2.4" ry="1.6" fill="#9ef0ff"/>`);
+    face.push(`<ellipse cx="44" cy="29" rx="5" ry="3.5" fill="#9ef0ff" opacity="0.25"/><ellipse cx="52" cy="29" rx="5" ry="3.5" fill="#9ef0ff" opacity="0.25"/>`);
+  } else if (kind === 'wyvern') {
+    // Two-legged dragon: wings raised, long neck, horned head, barbed tail.
+    body.push(path('M44 44 L18 8 L30 26 L22 24 L34 36 L28 38 L42 46 Z', dk, 'opacity="0.95"'));
+    body.push(path('M30 60 Q12 66 8 54 Q6 48 12 46 L10 52 Q16 58 30 54 Z', c));
+    body.push(path('M12 46 L6 42 L13 43 Z', dark(c, 0.3)));
+    body.push(limb([[40, 62], [38, 74]], 5.5, dk) + limb([[54, 62], [56, 74]], 5.5, c));
+    body.push(`<ellipse cx="37" cy="75" rx="4" ry="1.6" fill="${dark(c, 0.4)}"/><ellipse cx="57" cy="75" rx="4" ry="1.6" fill="${dark(c, 0.4)}"/>`);
+    body.push(`<ellipse cx="46" cy="54" rx="17" ry="11" fill="${c}"/>`);
+    body.push(`<ellipse cx="48" cy="60" rx="11" ry="4" fill="${paint('#d8c890')}" opacity="0.8"/>`);
+    body.push(path('M58 48 Q66 36 70 28 L76 31 Q70 42 62 54 Z', c));
+    body.push(path('M48 44 L72 8 L66 28 L76 22 L62 40 L70 40 L52 48 Z', light(dk, 0.1), 'opacity="0.95"'));
+    body.push(`<ellipse cx="78" cy="27" rx="9" ry="6" fill="${c}"/>`);
+    body.push(`<ellipse cx="86" cy="29" rx="5" ry="3" fill="${c}"/>`);
+    body.push(path('M72 22 L68 14 L75 21 Z M76 21 L75 12 L79 20 Z', paint('#e8e0d0')));
+    face.push(circle(80, 25, 1.7, '#e8c020') + circle(80, 25, 0.8, '#1a1416'));
+    face.push(`<path d="M82 31 L90 30" stroke="#1a1416" stroke-width="0.7" stroke-linecap="round"/>`);
+  } else if (kind === 'demon') {
+    // Horned, winged and hoofed, with burning eyes.
+    const wing = dark(c, 0.45);
+    body.push(path('M40 36 L14 14 L20 30 L10 30 L22 42 L14 46 L38 48 Z', wing));
+    body.push(path('M56 36 L82 14 L76 30 L86 30 L74 42 L82 46 L58 48 Z', wing));
+    body.push(limb([[42, 56], [40, 66], [43, 74]], 6, dk) + limb([[54, 56], [56, 66], [53, 74]], 6, dk));
+    body.push(`<ellipse cx="43" cy="75" rx="3.4" ry="1.6" fill="#1a1416"/><ellipse cx="53" cy="75" rx="3.4" ry="1.6" fill="#1a1416"/>`);
+    body.push(path('M48 58 Q34 66 30 60 Q32 66 26 64', 'none', `stroke="${dk}" stroke-width="2" stroke-linecap="round"`));
+    body.push(path('M26 64 L22 62 L25 67 Z', dk));
+    body.push(`<ellipse cx="48" cy="45" rx="12" ry="14" fill="${c}"/>`);
+    body.push(`<ellipse cx="48" cy="48" rx="7" ry="7" fill="${lt}" opacity="0.35"/>`);
+    body.push(limb([[37, 38], [32, 48], [34, 56]], 4.6, c) + limb([[59, 38], [66, 46], [70, 44]], 4.6, c));
+    body.push(path('M34 56 L31 60 M34 56 L34 61 M34 56 L37 60 M70 44 L75 42 M70 44 L75 46 M70 44 L73 49', 'none', `stroke="${paint('#f0e0c0')}" stroke-width="1.1" stroke-linecap="round"`));
+    body.push(circle(48, 24, 9, c));
+    body.push(path('M41 19 Q34 12 38 4 Q40 12 44 16 Z M55 19 Q62 12 58 4 Q56 12 52 16 Z', paint('#2a2020')));
+    face.push(path('M43 22 L47 24 L43 25 Z M53 22 L49 24 L53 25 Z', '#ffd040'));
+    face.push(`<ellipse cx="45" cy="23.8" rx="3.5" ry="2" fill="#ffd040" opacity="0.3"/><ellipse cx="51" cy="23.8" rx="3.5" ry="2" fill="#ffd040" opacity="0.3"/>`);
+    face.push(`<path d="M44.5 29 Q48 31 51.5 29" stroke="#1a1416" stroke-width="0.9" fill="none" stroke-linecap="round"/>`);
+    face.push(path('M45.5 29.3 L46.3 31 L47 29.6 Z M49 29.6 L49.7 31 L50.5 29.3 Z', '#f4ecd8'));
   }
   return storybook(96, kind, shadow, body.join(''), face.join(''), 0);
 }

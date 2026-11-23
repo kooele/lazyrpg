@@ -64,8 +64,6 @@ The **Quest Board** always has 6 quests, mostly at your rank, some below and som
 | B | 11–15 | 380–600 | 75 |
 | A | 16–20 | 850–1300 | 170 |
 
-Enemy types only go up to level 5 for now (bandits); higher-level quests use the toughest types at their top level in bigger numbers until new types are added.
-
 XP from a won quest depends on the enemy level against each member's level: 100 XP at an equal level, up to 200 for punching above it, and as little as 15 for easy work.
 
 ### The other parties
@@ -85,7 +83,7 @@ The rival parties are simulated day by day. A new game starts them spread over t
 
 Companions have a **relationship** score (0–100). It goes up by 6 for every quest completed together, drops if you can't pay them, and lowers their demands when you renew: by up to 30% at 100. When a contract ends, they sit out of quests and you have 3 days to **renew** it (Manage Party) before they leave. Walking out of a renewal ends the contract on the spot. Unpaid companions lose 20 relationship each payday, and quit when it reaches 0.
 
-**Prisoners**: a won bandit quest sometimes ends with a captured bandit. Take them to the magistrate at the Slave Market to turn them in for a bounty (35 gold per level), or pay a 60 gold fee to register them as your slave.
+**Prisoners**: human enemies who surrender in battle are taken prisoner when you win. Take them to the magistrate at the Slave Market to turn them in for a bounty (35 gold per level), or pay a 60 gold fee to register them as your slave.
 
 All of these numbers are in `src/data/guild.json`.
 
@@ -193,18 +191,36 @@ Descriptive tags: Melee, Physical, Magical, Projectile, Indirect, Area, Knockbac
 
 ### Enemies
 
-Each enemy type has a fixed level range and its own stats and skills (`src/data/enemies.json`). A battle at stage N uses the types whose range contains N, at level N.
+Each enemy type has a fixed level range and its own stats and skills (`src/data/enemies.json`). A quest picks one **main foe** whose range contains the quest's level; other fitting types that fight the same way can join it (wolves with spiders, bandits with sellswords, skeletons with wraiths). Its name sets the quest's title.
 
-| Type | Levels | Skills |
-|---|---|---|
-| Giant Rat | 1–2 | Gnaw. Fast and weak; comes in packs. |
-| Green Slime | 2–3 | Slam (Engage); Sticky Spit at level 3 (ranged, applies Slow and Corrode: -25% Defense, 2-turn cooldown). Slow-moving and tough. |
-| Grey Wolf | 3–4 | Bite (Engage) and Pounce (leaps in, Engage); Howl at level 4 (Frenzy: +20 P.Atk to nearby allies). Very fast. |
-| Bandit | 4–5 | Carries a random weapon but only uses its basic attack (no Magic Bolt, Shield Up from the shield...; archers do switch bow modes). Thugs also have Shield Up, Hexers Fireball, Archers Execute; all learn Kick at level 5. |
+| Type | Levels | Fights as | Skills |
+|---|---|---|---|
+| Giant Rat | 1–2 | Beast | Gnaw. Fast and weak; comes in packs. |
+| Green Slime | 2–3 | Beast | Slam (Engage); Sticky Spit at level 3 (ranged Slow and Corrode). |
+| Grey Wolf | 3–6 | Beast | Bite (Engage), Pounce (leaps in); Howl at level 4 (Frenzy for nearby allies). |
+| Goblin | 3–7 | Tribal | Spearmen, archers and shamans (Fireball); War Cry at level 5. Small and many. |
+| Bandit | 4–8 | Human | A random weapon, basic attack only; Thugs Shield Up, Hexers Fireball, Archers Execute; Kick at level 5. |
+| Giant Spider | 5–9 | Beast | Poison Bite (Engage, Poison: 3% max HP per stack each turn), Web (ranged Slow). |
+| Skeleton | 6–11 | Evil | Warriors, spearmen and archers; basic attacks only. |
+| Orc | 7–13 | Tribal | Warriors and brutes with Cleave (hits everyone adjacent); War Cry at level 9. |
+| Sellsword | 8–14 | Human | Full weapon kits plus Kick, Charge, Execute, or Fireball and Heal (Hedge Mages). |
+| Cave Bear | 9–14 | Beast | Maul (Engage), Rend (heavy hit); Roar at level 12 (Blinds nearby enemies). |
+| Wraith | 10–16 | Evil | Chill Touch (magic, Engage, Slow), Wail (hurts and Blinds everyone nearby). |
+| Troll | 13–20 | Tribal | Club (Engage), Smash (knockback), Regenerate (heals itself). Slow and huge. |
+| Renegade | 14–25 | Human | Knights, lancers, rangers and sorcerers with Double Strike, Circle Swing, Freeze, Heal... |
+| Wyvern | 15–23 | Beast | Bite (Engage), Dive (swoops in), Tail Sting (Poison x2). Very fast. |
+| Demon | 16–25 | Evil | Claw (Engage), Hellfire (ranged, Burn x2), Infernal Leap. |
 
-**Enemy AI** weighs how dangerous a tile is (how much the party could hit it for next turn) against what it can do from there. Healthy enemies take small risks freely. Danger it can't avoid anyway doesn't hold it back, so a unit that's already in the thick of the fight keeps fighting. Below 35% health, an enemy that can reach the edge of the map this turn **flees the battle** and is removed. Otherwise it falls back to regroup with healthy allies (and may disengage to do it), or, if it's on its own, makes a last stand. Wounded enemies may hold back from walking into a deadly spot, but never for more than two turns in a row.
+**Enemy AI** has four temperaments (`ai` in `enemies.json`):
 
-Encounter size is a threat budget: 1 per Adventurer. Rats cost 0.5 (two per Adventurer), slimes 0.75, wolves and bandits 1. Past stage 5, bandits keep coming at level 5, and the budget grows 25% per stage. Bandits have their own looks (hoods, masks, an eye patch, ragged leather, round wooden shields). Hover an enemy in battle to see its skills. **Click an enemy** to see its reach on its next turn: the tiles it can move to (orange) and, around them, every tile its longest-ranged attack that will be off cooldown can hit (red). Click it again, or anywhere else, to hide it.
+- **Beast**: acts alone. It only ever goes for the **nearest** target (never the weakest), barely weighs danger, and **flees** once below 40% health.
+- **Tribal**: fights as a group. Members keep a **loose formation** (no more than 3 tiles from the next one, without bunching up), so a fighter that's out ahead waits for the others, and they pile onto targets their friends are already on. Once **half the group is gone** (and they aren't outnumbering the party) or the survivors are badly hurt, **the whole group runs**, even the unhurt.
+- **Human**: fights tactically: cover, danger, picking off the weak, falling back to regroup with healthy allies. It **flees** when badly hurt (below 35%) or hurt and in reach of a killing blow. If it can't reach the edge this turn and every tile it could get to is in reach of enough damage to kill it, it **surrenders**. Surrendered enemies are taken **prisoner** if you win (only humans can be): take them to the magistrate at the Slave Market for a bounty or register them as slaves. The party holds up to 6 prisoners.
+- **Evil** (spirits and demons): no self-preservation. It **never flees or disengages**, ignores danger and barely cares about hitting its own side, and goes for **kills**: hurt targets are worth more to it, finishing one off most of all.
+
+Fleeing enemies run for the nearest map edge and escape once they reach it. Healthy beasts, tribals and humans take small risks freely, and danger they can't avoid anyway doesn't hold them back; wounded humans and tribals may hold back from walking into a deadly spot, but never for more than two turns in a row.
+
+Encounter size is a threat budget: 1 per Adventurer (rats cost 0.5, goblins 0.6, demons 2...). Past level 25, the toughest types keep coming at level 25 and the budget grows 25% per level. Hover an enemy in battle to see its skills. **Click an enemy** to see its reach on its next turn: the tiles it can move to (orange) and, around them, every tile its longest-ranged attack that will be off cooldown can hit (red). Click it again, or anywhere else, to hide it.
 
 ### Engagement
 
@@ -231,7 +247,7 @@ Heal and Cleanse work on any unit, enemies included. An attack aimed straight at
 
 Adventurers have a **custom look**: sex (male or female), skin (pale, light, fair, olive, light brown, brown), one of 4 faces per sex, a hairstyle (men: crew cut, bowl cut, permed, tied; women: bob cut, ponytail, crown braid, down with bangs, braided, bun) and a hair colour. Their outfit follows their weapon (armour, tunic or robe) in their chosen colour. Looks are drawn in the browser on first use by `src/art/unitArt.js`, so every combination stays sharp without hundreds of files.
 
-They're drawn in a storybook style (no outlines, simple dot eyes, muted watercolour colours, light paper texture, about 5 heads tall). The static sprites are 8 body models (`m1`–`f4`, available to human enemy types) and 4 bandit models (`b1`–`b4`), each drawn holding each weapon since the pose depends on the weapon: `public/art/units/<model>_<weapon>.svg`, 48 SVGs that stay sharp at 4K. Monsters are `public/art/monsters/<kind>.svg` (rat, slime, wolf) on a wider 96×80 canvas, coloured from `art.color` in `enemies.json`; enemy types choose their body models with `art.models`. They're generated by `node tools/generate-art.mjs` from the shared drawing code in `src/art/unitArt.js`: edit the colours, hair, outfits or proportions there and re-run it, or replace the SVGs with your own art (same 64×80 canvas, or 96×80 for monsters, feet at y = 76).
+They're drawn in a storybook style (no outlines, simple dot eyes, muted watercolour colours, light paper texture, about 5 heads tall). The static sprites are 8 body models (`m1`–`f4`, available to human enemy types) 4 bandit models (`b1`–`b4`) and 6 other humanoid foes (goblins `g1`/`g2` with pointy ears, orcs `o1`/`o2` with tusks, skeletons `s1`/`s2` with empty glowing sockets), each drawn holding each weapon since the pose depends on the weapon: `public/art/units/<model>_<weapon>.svg`, 72 SVGs that stay sharp at 4K. Monsters are `public/art/monsters/<kind>.svg` (rat, slime, wolf, spider, bear, troll, wraith, wyvern, demon) on a wider 96×80 canvas, coloured from `art.color` in `enemies.json`; enemy types choose their body models with `art.models`. They're generated by `node tools/generate-art.mjs` from the shared drawing code in `src/art/unitArt.js`: edit the colours, hair, outfits or proportions there and re-run it, or replace the SVGs with your own art (same 64×80 canvas, or 96×80 for monsters, feet at y = 76).
 
 ## Save files
 

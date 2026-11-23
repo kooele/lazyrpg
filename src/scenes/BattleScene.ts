@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { SKILLS, STATUSES, WEAPONS, hasTag, isFree, isSupport, skillStatText } from '../data/content';
 import type { SkillDef } from '../data/types';
 import { STAT_INFO } from '../data/types';
-import { bestAction, bestFreeAction, planTurn, preferredMode, shouldDisengage, shouldEscape } from '../game/ai';
+import { bestAction, bestFreeAction, planTurn, preferredMode, shouldDisengage, shouldEscape, shouldSurrender } from '../game/ai';
 import {
   AP_PER_TURN, Battle, deploymentTiles, generateEnemies, makeUnit,
   type BattleEvent, type MoveResult, type Unit,
@@ -133,7 +133,7 @@ export class BattleScene extends Phaser.Scene {
     HP_Y = Math.round(21 * K);
     const party = d ? d.party : lineupMembers(requireState());
     const pSpots = deploymentTiles(map, 'player', party.length);
-    const generated = generateEnemies(stage, party.length, rng, d ? d.mobMultiplier : 1);
+    const generated = generateEnemies(stage, party.length, rng, d ? d.mobMultiplier : 1, d ? undefined : requireState().quest?.foes);
     const eSpots = deploymentTiles(map, 'enemy', generated.length);
     const foes = generated.slice(0, eSpots.length); // never more than there is room for
     const units = [
@@ -1059,6 +1059,16 @@ export class BattleScene extends Phaser.Scene {
       this.casterUid = u.uid;
       this.refresh();
       await this.wait(250);
+      if (shouldSurrender(b, u)) {
+        b.surrender(u);
+        this.floatText(u, 'Surrenders', '#e0e0e0');
+        const v = this.views.get(u.uid)!;
+        await this.tween({ targets: v.container, alpha: 0.25, duration: 400 });
+        v.container.setVisible(false);
+        this.addLog(`${u.character.name} throws down their weapons and surrenders!`);
+        this.refreshUnits();
+        continue;
+      }
       if (shouldDisengage(b, u)) {
         await this.showDisengage(u, b.disengage(u));
         if (!u.alive || b.outcome()) continue;
@@ -1203,7 +1213,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private showEvent(e: BattleEvent, summary: string[], index: number): void {
-    if (e.type === 'move' || e.type === 'overwatch' || e.type === 'escape') return;
+    if (e.type === 'move' || e.type === 'overwatch' || e.type === 'escape' || e.type === 'surrender') return;
     if (e.type === 'zone') {
       summary.push(`${e.tiles.length}-tile ${e.name} placed`);
       return;
@@ -1292,7 +1302,8 @@ export class BattleScene extends Phaser.Scene {
     } else {
       const conditions = this.battle.units.filter((u) => u.team === 'player')
         .map((u) => ({ id: u.character.id, lowestHp: u.lowestHp / u.stats.health, fell: !u.alive }));
-      lines = resolveQuest(requireState(), outcome, makeRng(Date.now() & 0xffffffff), conditions);
+      const captives = this.battle.units.filter((u) => u.team === 'enemy' && u.surrendered).map((u) => u.character);
+      lines = resolveQuest(requireState(), outcome, makeRng(Date.now() & 0xffffffff), conditions, captives);
       markDirty();
     }
     const title = this.demo ? (outcome === 'victory' ? 'Victory!' : 'Defeat') : (outcome === 'victory' ? 'Quest complete!' : 'Quest failed');

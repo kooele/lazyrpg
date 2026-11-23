@@ -56,7 +56,8 @@
     "exposed": { "name": "Exposed", "debuff": true, "stacking": false, "tick": "start", "statPct": { "defense": -1 }, "description": "No Defense (forest cover included)." },
     "stealth": { "name": "Stealthed", "debuff": false, "stacking": false, "tick": "start", "stealth": true, "description": "Enemies can't target you directly or trigger overwatch on you; area attacks still hit. Ends early if you attack." },
     "protected": { "name": "Protected", "debuff": false, "stacking": false, "tick": "end", "casterScaled": { "stat": "defense", "mAtk": 0.25 }, "description": "+Defense equal to 25% of the caster's M.Atk." },
-    "corrode": { "name": "Corrode", "debuff": true, "stacking": false, "tick": "end", "statPct": { "defense": -0.25 }, "description": "-25% Defense." }
+    "corrode": { "name": "Corrode", "debuff": true, "stacking": false, "tick": "end", "statPct": { "defense": -0.25 }, "description": "-25% Defense." },
+    "poison": { "name": "Poison", "debuff": true, "stacking": true, "tick": "start", "damagePctMaxHpPerStack": 0.03, "description": "Lose 3% of max Health per stack at the start of each turn. Ignores Defense and shields." }
   },
 
   "skills": {
@@ -296,6 +297,114 @@
       "tags": ["monster", "area", "support"],
       "target": "self", "affects": "ally", "range": 0, "minRange": 0, "aoeRadius": 3, "cooldown": 3,
       "applyStatus": [{ "status": "frenzy", "turns": 2 }]
+    },
+    "war_cry": {
+      "name": "War Cry", "description": "A battle cry that drives nearby allies into a frenzy.",
+      "tags": ["monster", "area", "support"],
+      "target": "self", "affects": "ally", "range": 0, "minRange": 0, "aoeRadius": 3, "cooldown": 3,
+      "applyStatus": [{ "status": "frenzy", "turns": 2 }]
+    },
+    "cleave": {
+      "name": "Cleave", "description": "A wide swing that hits every enemy next to you.",
+      "tags": ["monster", "melee", "area", "physical"],
+      "target": "self", "affects": "enemy", "range": 0, "minRange": 0, "aoeRadius": 1.5, "cooldown": 2,
+      "hits": [{ "pAtk": 0.8 }]
+    },
+    "poison_bite": {
+      "name": "Poison Bite", "description": "Sink venomous fangs into an adjacent enemy.",
+      "tags": ["monster", "melee", "engage", "physical", "debuff"],
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 0,
+      "hits": [{ "pAtk": 1 }], "applyStatus": [{ "status": "poison", "stacks": 1, "turns": 3 }]
+    },
+    "web": {
+      "name": "Web", "description": "Spit a sticky web that slows an enemy.",
+      "tags": ["monster", "projectile", "debuff", "physical"],
+      "target": "unit", "affects": "enemy", "range": 3, "minRange": 1, "los": "sight", "cooldown": 2,
+      "hits": [{ "pAtk": 0.4 }], "applyStatus": [{ "status": "slow", "turns": 2 }]
+    },
+    "maul": {
+      "name": "Maul", "description": "Swipe and grapple an adjacent enemy.",
+      "tags": ["monster", "melee", "engage", "physical"],
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 0,
+      "hits": [{ "pAtk": 1 }]
+    },
+    "rend": {
+      "name": "Rend", "description": "Tear into an adjacent enemy with both claws.",
+      "tags": ["monster", "melee", "physical"],
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 2,
+      "hits": [{ "pAtk": 1.6 }]
+    },
+    "roar": {
+      "name": "Roar", "description": "A terrifying roar that blinds nearby enemies with fear.",
+      "tags": ["monster", "area", "debuff"],
+      "target": "self", "affects": "enemy", "range": 0, "minRange": 0, "aoeRadius": 2, "cooldown": 3,
+      "applyStatus": [{ "status": "blind", "turns": 2 }]
+    },
+    "club": {
+      "name": "Club", "description": "Bash an adjacent enemy with a huge club.",
+      "tags": ["monster", "melee", "engage", "physical"],
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 0,
+      "hits": [{ "pAtk": 1 }]
+    },
+    "smash": {
+      "name": "Smash", "description": "A crushing overhead blow that sends an enemy flying.",
+      "tags": ["monster", "melee", "knockback", "physical"],
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 2,
+      "hits": [{ "pAtk": 1.3 }], "knockback": 1
+    },
+    "regenerate": {
+      "name": "Regenerate", "description": "Troll flesh knits itself back together.",
+      "tags": ["monster", "support"],
+      "target": "self", "affects": "ally", "range": 0, "minRange": 0, "cooldown": 3,
+      "heal": { "mAtk": 2 }
+    },
+    "wyvern_bite": {
+      "name": "Bite", "description": "Snap at an adjacent enemy and hold on.",
+      "tags": ["monster", "melee", "engage", "physical"],
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 0,
+      "hits": [{ "pAtk": 1 }]
+    },
+    "dive": {
+      "name": "Dive", "description": "Swoop down next to an enemy and strike it.",
+      "tags": ["monster", "movement", "melee", "engage", "physical"],
+      "target": "unit", "affects": "enemy", "range": 4, "rangeScale": 1, "minRange": 1, "cooldown": 2,
+      "hits": [{ "pAtk": 1.1 }], "charge": true
+    },
+    "tail_sting": {
+      "name": "Tail Sting", "description": "Lash an adjacent enemy with a venomous tail.",
+      "tags": ["monster", "melee", "physical", "debuff"],
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 2,
+      "hits": [{ "pAtk": 0.6 }], "applyStatus": [{ "status": "poison", "stacks": 2, "turns": 3 }]
+    },
+    "chill_touch": {
+      "name": "Chill Touch", "description": "A freezing touch that drains warmth and slows an adjacent enemy.",
+      "tags": ["monster", "melee", "engage", "magical", "debuff"],
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 0,
+      "hits": [{ "mAtk": 1 }], "applyStatus": [{ "status": "slow", "turns": 1 }]
+    },
+    "wail": {
+      "name": "Wail", "description": "A deathly wail that hurts and blinds every enemy nearby.",
+      "tags": ["monster", "area", "magical", "debuff"],
+      "target": "self", "affects": "enemy", "range": 0, "minRange": 0, "aoeRadius": 2, "cooldown": 3,
+      "hits": [{ "mAtk": 0.6 }], "applyStatus": [{ "status": "blind", "turns": 1 }]
+    },
+    "demon_claw": {
+      "name": "Claw", "description": "Rake an adjacent enemy with burning claws.",
+      "tags": ["monster", "melee", "engage", "physical"],
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 0,
+      "hits": [{ "pAtk": 1.1 }]
+    },
+    "hellfire": {
+      "name": "Hellfire", "description": "Hurl hellfire that sets an enemy ablaze.",
+      "tags": ["monster", "projectile", "debuff", "magical"],
+      "target": "unit", "affects": "enemy", "range": 4, "minRange": 1, "los": "sight", "cooldown": 2,
+      "hits": [{ "mAtk": 1.1 }], "applyStatus": [{ "status": "burn", "stacks": 2, "turns": 2 }]
+    },
+    "infernal_leap": {
+      "name": "Infernal Leap", "description": "Leap through the air to land next to an enemy and strike.",
+      "tags": ["monster", "movement", "melee", "engage", "physical"],
+      "target": "unit", "affects": "enemy", "range": 4, "rangeScale": 1, "minRange": 1, "cooldown": 3,
+      "hits": [{ "pAtk": 1 }], "charge": true
     }
 
   },

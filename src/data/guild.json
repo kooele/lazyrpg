@@ -87,8 +87,7 @@
     "restockDays": 7,
     "sellBackShare": 0.4,
     "registrationFee": 60,
-    "bountyPerLevel": 35,
-    "captureChance": 0.6
+    "bountyPerLevel": 35
   },
   "simulation": {
     "targetAdventurers": 100,

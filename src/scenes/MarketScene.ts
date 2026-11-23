@@ -52,7 +52,7 @@ export class MarketScene extends Phaser.Scene {
       { label: `Bounty ${o.price}g`, enabled: true, act: () => this.turnIn(o) },
       { label: `Register ${GUILD.slave.registrationFee}g`, enabled: state.gold >= GUILD.slave.registrationFee, act: () => this.register(o) },
     ], true)), 'top');
-    if (state.prisoners.length === 0) text(this, 766, 300, 'No prisoners.\nBandit quests sometimes\nend with a capture.', { color: COLORS.dim, align: 'center' }).setOrigin(0.5);
+    if (state.prisoners.length === 0) text(this, 766, 300, 'No prisoners.\nHuman foes who surrender\nare taken prisoner.', { color: COLORS.dim, align: 'center' }).setOrigin(0.5);
   }
 
   private row(o: Offer, w: number, actions: { label: string; enabled: boolean; act: () => void }[], compact = false): ScrollItem {

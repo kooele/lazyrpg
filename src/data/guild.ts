@@ -84,7 +84,6 @@ export interface GuildConfig {
     sellBackShare: number;
     registrationFee: number;
     bountyPerLevel: number;
-    captureChance: number;
   };
   simulation: {
     targetAdventurers: number;
@@ -222,7 +221,7 @@ export function parseGuildConfig(data: unknown): GuildConfig {
       termDemand: termDemand as Record<string, number>,
       expectedWeeklyLoot: perRank(c.expectedWeeklyLoot, 'companion.expectedWeeklyLoot'),
     },
-    slave: numbers(d.slave, 'slave', ['priceBase', 'pricePerLevel', 'marketSize', 'restockDays', 'sellBackShare', 'registrationFee', 'bountyPerLevel', 'captureChance']),
+    slave: numbers(d.slave, 'slave', ['priceBase', 'pricePerLevel', 'marketSize', 'restockDays', 'sellBackShare', 'registrationFee', 'bountyPerLevel']),
     simulation: {
       ...numbers<Omit<GuildConfig['simulation'], 'partySize' | 'rankDifficulty'>>(s, 'simulation',
         ['targetAdventurers', 'targetParties', 'poolTarget', 'questChancePerDay', 'successPerLevel', 'lossChanceOnSuccess',

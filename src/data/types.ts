@@ -218,7 +218,7 @@ export interface SkillTreeDef {
 export const BODY_MODELS = ['m1', 'm2', 'm3', 'm4', 'f1', 'f2', 'f3', 'f4'] as const;
 export type BodyModel = (typeof BODY_MODELS)[number];
 /** Body models only enemies use (bandits). */
-export const ENEMY_MODELS = ['b1', 'b2', 'b3', 'b4'] as const;
+export const ENEMY_MODELS = ['b1', 'b2', 'b3', 'b4', 'g1', 'g2', 'o1', 'o2', 's1', 's2'] as const;
 export type EnemyModel = (typeof ENEMY_MODELS)[number];
 export type UnitModel = BodyModel | EnemyModel;
 
@@ -254,7 +254,17 @@ export interface Appearance {
   look?: Look;
 }
 
-export type MonsterKind = 'rat' | 'slime' | 'wolf' | 'human';
+export type MonsterKind = 'rat' | 'slime' | 'wolf' | 'spider' | 'bear' | 'troll' | 'wraith' | 'wyvern' | 'demon' | 'human';
+
+/**
+ * How an enemy type fights (see ai.ts):
+ *  beast  – acts alone, goes for the nearest target, flees when hurt
+ *  tribal – fights as a group in a loose formation; the whole group may flee
+ *  human  – fights tactically, flees from danger, surrenders when it can't escape (can be taken prisoner)
+ *  evil   – spirits and demons: no self-preservation, goes for kills
+ */
+export type EnemyAi = 'beast' | 'tribal' | 'human' | 'evil';
+export const ENEMY_AIS: readonly EnemyAi[] = ['beast', 'tribal', 'human', 'evil'];
 
 /** An enemy type from enemies.json. */
 export interface EnemyDef {
@@ -264,6 +274,10 @@ export interface EnemyDef {
   levels: [number, number];
   /** Share of the encounter budget one unit uses. */
   threat: number;
+  /** How it fights. */
+  ai: EnemyAi;
+  /** Name of quests where this type is the main foe ("Wolf Pack"). */
+  questTitle: string;
   /** Monsters: public/art/monsters/<kind>.svg (color is used by tools/generate-art.mjs).
    *  Humans: body models to pick from (default: the adventurer models). */
   art: { kind: MonsterKind; color?: string; models?: UnitModel[] };
@@ -407,6 +421,8 @@ export interface Quest {
   description: string;
   /** A promotion quest: completing it raises the party to the quest's rank. */
   promotion?: boolean;
+  /** Enemy types it sends against the party (enemies.json ids, main foe first). Missing = picked when the battle starts. */
+  foes?: string[];
 }
 
 export interface NewsItem {

@@ -3,7 +3,7 @@ import guildJson from '../src/data/guild.json';
 import { GUILD, parseGuildConfig } from '../src/data/guild';
 import type { Character, GameState } from '../src/data/types';
 import { createCharacter, deriveStats, makeRng } from '../src/game/character';
-import { makeUnit } from '../src/game/battle';
+import { makeEnemy, makeUnit } from '../src/game/battle';
 import {
   acceptQuest, advanceDay, advanceDays, buyDrinks, buyResidence, buySlave, makeQuest, sellResidence, stayAtHome, stayAtInn, canTakeQuest, dailyUpkeep, departBlock, lineupMembers, mainCharacter,
   newCampaign, registerPrisoner, resolveQuest, rewardShares, sleepOutside, toggleLineup,
@@ -527,6 +527,23 @@ describe('contracts', () => {
   it('mercenary rates grow with level', () => {
     expect(mercenaryRates(5, 1).fee).toBeGreaterThan(mercenaryRates(1, 1).fee);
     expect(mercenaryRates(5, 1).cutPct).toBeGreaterThan(mercenaryRates(1, 1).cutPct);
+  });
+
+  it('enemies who surrendered are taken prisoner after a win (keeping their level and weapon)', () => {
+    const s = start();
+    acceptQuest(s, s.guild.board.find((x) => canTakeQuest(s, x))!.id);
+    s.quest!.days = 1;
+    const foe = makeEnemy('sellsword', 9, makeRng(3));
+    const lines = resolveQuest(s, 'victory', makeRng(3), [], [foe]);
+    expect(s.prisoners).toHaveLength(1);
+    expect(s.prisoners[0].character).toMatchObject({ level: 9, weaponId: foe.weaponId });
+    expect(s.prisoners[0].character.enemyType).toBeUndefined();
+    expect(lines.some((l) => /surrendered and was taken prisoner/.test(l))).toBe(true);
+    // No prisoners from a lost battle.
+    acceptQuest(s, s.guild.board.find((x) => canTakeQuest(s, x))!.id);
+    s.quest!.days = 1;
+    resolveQuest(s, 'defeat', makeRng(3), [], [makeEnemy('bandit', 5, makeRng(4))]);
+    expect(s.prisoners).toHaveLength(1);
   });
 
   it('prisoners can be registered as slaves for a fee', () => {

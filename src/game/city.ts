@@ -5,7 +5,7 @@ import { ENEMIES } from '../data/enemies';
 import { GUILD, isResidence, type InnTier, type Lodging, type Ring } from '../data/guild';
 import { STAT_CONFIG } from '../data/stats';
 import { RANKS, type Character, type GameState, type Quest, type Rank } from '../data/types';
-import { enemyTypesForStage } from './battle';
+import { enemyTypesForStage, pickFoes } from './battle';
 import { grantXp, newId, type Rng } from './character';
 import { bounty, canFight, isCompanion, isExpired, leaveParty, slavePrice, talentPriceFactor } from './contracts';
 import {
@@ -96,18 +96,17 @@ export function departBlock(state: GameState): string | null {
 
 const PLACES = ['the Old Sewers', 'Mill Road', 'Briar Farm', 'the Eastern Woods', "Gallow's Pass", 'the Salt Marsh', 'Kestrel Ford',
   'the Ruined Chapel', 'Hollow Creek', 'the Quarry', 'Thornfield', 'the North Gate', 'Lantern Hill', 'the Old Watchtower'];
-const KIND_TITLE: Record<string, string> = { rat: 'Rat Infestation', slime: 'Slime Outbreak', wolf: 'Wolf Pack', bandit: 'Bandit Bounty' };
 
 export function makeQuest(rank: Rank, day: number, rng: Rng, promotion = false): Quest {
   const tier = GUILD.quests[rank];
   // A promotion quest is a fair test: the easier half of its rank's levels.
   const stage = promotion ? randInt(tier.stages[0], Math.ceil((tier.stages[0] + tier.stages[1]) / 2), rng) : randInt(tier.stages[0], tier.stages[1], rng);
-  const types = enemyTypesForStage(stage);
-  const main = types[types.length - 1].type;
+  const foes = pickFoes(stage, rng);
+  const levels = new Map(enemyTypesForStage(stage).map((t) => [t.type, t.level]));
   const place = PLACES[Math.floor(rng() * PLACES.length)];
   const top = Math.max(...Object.values(ENEMIES).map((d) => d.levels[1]));
-  const title = stage > top + 1 ? `Bandit Warband at ${place}` : `${KIND_TITLE[main] ?? 'Trouble'} at ${place}`;
-  const names = types.map((t) => `${ENEMIES[t.type].name}s (Lv ${t.level})`);
+  const title = `${ENEMIES[foes[0]].questTitle} at ${place}`;
+  const names = foes.map((t) => `${ENEMIES[t].name}s (Lv ${levels.get(t)})`);
   return {
     id: newId('q'),
     title: promotion ? `Promotion: ${title}` : title,
@@ -119,6 +118,7 @@ export function makeQuest(rank: Rank, day: number, rng: Rng, promotion = false):
     expires: day + (promotion ? 365 : randInt(4, 8, rng)),
     description: `${promotion ? `The guild's ${rank}-rank trial. ` : ''}${names.join(' and ')} reported at ${place}.${stage > top ? ' A large band: expect many of them.' : ''}`,
     ...(promotion ? { promotion: true } : {}),
+    foes,
   };
 }
 
@@ -177,12 +177,17 @@ export function rewardShares(members: Character[], reward: number): { name: stri
   return out;
 }
 
+/** Most prisoners the party can hold at once. */
+export const MAX_PRISONERS = 6;
+
 /**
  * Settle the accepted quest after its battle: injuries and deaths (from `conditions`, one per member who fought),
  * Morale, rewards. Nights on the road pass for multi-day trips; the party gets back in the evening and still needs
- * somewhere to sleep (an inn, or outside). Returns report lines.
+ * somewhere to sleep (an inn, or outside). Enemies who `surrendered` are taken prisoner on a win. Returns report lines.
  */
-export function resolveQuest(state: GameState, outcome: 'victory' | 'defeat', rng: Rng, conditions: BattleCondition[] = []): string[] {
+export function resolveQuest(
+  state: GameState, outcome: 'victory' | 'defeat', rng: Rng, conditions: BattleCondition[] = [], surrendered: Character[] = [],
+): string[] {
   const q = state.quest;
   if (!q) return [];
   const went = lineupMembers(state);
@@ -245,12 +250,16 @@ export function resolveQuest(state: GameState, outcome: 'victory' | 'defeat', rn
       if (levels > 0) lines.push(`${c.name} reached level ${c.level}! +${levels} skill point${levels > 1 ? 's' : ''}.`);
       if (isCompanion(c)) c.contract.relationship = Math.min(100, c.contract.relationship + GUILD.companion.relationshipPerQuest);
     }
-    const fought = enemyTypesForStage(q.stage);
-    const bandits = fought.filter((t) => t.type === 'bandit');
-    if (bandits.length && rng() < GUILD.slave.captureChance && state.prisoners.length < 4) {
-      const p = randomAdventurer(Math.min(...bandits.map((b) => b.level)), rng);
+    // Enemies who surrendered (only humans do) are taken prisoner.
+    for (const foe of surrendered) {
+      if (state.prisoners.length >= MAX_PRISONERS) {
+        lines.push(`${foe.name} surrendered, but you can't hold any more prisoners and let them go.`);
+        continue;
+      }
+      const p = randomAdventurer(foe.level, rng);
+      if (foe.weaponId) p.weaponId = foe.weaponId;
       state.prisoners.push({ character: p, price: bounty(p.level) });
-      lines.push(`You captured a bandit, ${p.name} (Lv ${p.level}). Take them to the market's magistrate.`);
+      lines.push(`${p.name} (Lv ${p.level}, ${foe.name}) surrendered and was taken prisoner. Take them to the market's magistrate.`);
     }
   } else {
     state.progress.defeats += 1;

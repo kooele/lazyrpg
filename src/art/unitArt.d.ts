@@ -13,6 +13,7 @@ export interface FaceSpec {
 export type ArtModel = Record<string, unknown>;
 export const MODELS: Record<string, ArtModel>;
 export const BANDITS: Record<string, ArtModel>;
+export const HUMANOIDS: Record<string, ArtModel>;
 export const ART_WEAPONS: string[];
 export function figureSvg(id: string, model: ArtModel, weapon: string, scale?: number): string;
 export function monsterSvg(kind: string, color: string): string;

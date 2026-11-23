@@ -1,6 +1,7 @@
 // Save / load. Saves are pretty-printed JSON so players can read (and edit!) them.
 import { MAX_PARTY_SIZE, NAME_MAX_LENGTH, SKILLS, TREE_SKILLS, WEAPONS, skillPointsForLevel } from '../data/content';
 import { ACTIVITIES, GUILD, type Activity } from '../data/guild';
+import { ENEMIES } from '../data/enemies';
 import {
   BODY_MODELS, ENEMY_MODELS, FACE_COUNT, HAIR_COLORS, HAIR_STYLES, RANKS, SEXES, SKIN_TONES, STAT_KEYS, TALENT_GRADES,
   type BodyInvestment, type Character, type StatKey, type Talents, type Contract, type GameState, type Look, type NewsItem, type Offer, type Quest, type Rank, type RivalParty,
@@ -210,6 +211,8 @@ function validateQuest(raw: unknown, path: string): Quest {
     expires: int(o.expires, `${path}.expires`),
     description: typeof o.description === 'string' ? o.description : '',
     ...(o.promotion === true ? { promotion: true } : {}),
+    // Enemy types that no longer exist are dropped; the battle picks new ones if none are left.
+    ...(Array.isArray(o.foes) && o.foes.some((f) => typeof f === 'string' && ENEMIES[f]) ? { foes: o.foes.filter((f): f is string => typeof f === 'string' && !!ENEMIES[f]) } : {}),
   };
 }
 

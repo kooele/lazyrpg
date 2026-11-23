@@ -1,9 +1,18 @@
 // Utility-scoring AI. For every reachable tile x every ready skill x every
 // sensible aim point, score the outcome and pick the best. If nothing scores,
 // advance toward the enemy and set up overwatch if the weapon has it.
+//
+// Enemy types fight one of four ways (enemies.json "ai"):
+//  beast  – acts alone: only goes for the nearest target, ignores danger, flees once hurt.
+//  tribal – fights as a group: keeps a loose formation, piles onto targets its allies are on,
+//           and the whole group runs once it's broken.
+//  human  – fights tactically (cover, danger, regrouping), flees from danger, and surrenders
+//           when it can't escape death.
+//  evil   – no self-preservation: never flees, ignores danger and its own allies, finishes off the weak.
 import { SKILLS, STATUSES, hasTag, isFree } from '../data/content';
-import type { SkillDef } from '../data/types';
-import type { Battle, ReachInfo, Unit } from './battle';
+import { ENEMIES } from '../data/enemies';
+import type { EnemyAi, SkillDef } from '../data/types';
+import type { Battle, ReachInfo, Team, Unit } from './battle';
 import { DIRS, MOVEMENT_PER_TILE, TERRAIN, dist, key, passable, type Point } from './grid';
 
 export interface AiAction {
@@ -15,6 +24,51 @@ export interface AiPlan {
   moveTo: Point;
   /** Best main action from the destination (re-check with bestAction after moving). */
   action?: AiAction;
+}
+
+/** How a unit fights. Adventurers (when the AI plays them) and unknown types fight like humans. */
+export function aiTypeOf(u: Unit): EnemyAi {
+  const t = u.character.enemyType;
+  return (t && ENEMIES[t]?.ai) || 'human';
+}
+
+const ratio = (u: Unit) => u.hp / u.stats.health;
+/** Beasts run once they're this hurt. */
+const BEAST_FLEE_AT = 0.4;
+/** Tribal fighters stay within this many tiles of the nearest other member of the group. */
+const TRIBE_SPREAD = 3;
+
+/** The foe closest to `u` (what a beast goes for). */
+function nearestFoe(battle: Battle, u: Unit): Unit | null {
+  const foes = battle.living().filter((f) => f.team !== u.team && !battle.hiddenFrom(u, f));
+  return foes.length ? foes.reduce((a, b) => (dist(a, u) <= dist(b, u) ? a : b)) : null;
+}
+
+/** Other living tribal fighters on `u`'s side. */
+function tribe(battle: Battle, u: Unit): Unit[] {
+  return battle.living(u.team).filter((a) => a !== u && aiTypeOf(a) === 'tribal');
+}
+
+/** Teams whose tribal group has broken and is running (stays broken for the rest of the battle). */
+const routed = new WeakMap<Battle, Set<Team>>();
+
+/**
+ * Has `team`'s tribal group broken? It breaks when half of it is gone (and the other side isn't
+ * outnumbered), or when the survivors are badly hurt overall. Then every tribal fighter runs.
+ */
+export function tribeRouted(battle: Battle, team: Team): boolean {
+  if (routed.get(battle)?.has(team)) return true;
+  const all = battle.units.filter((x) => x.team === team && aiTypeOf(x) === 'tribal');
+  const standing = all.filter((x) => x.alive);
+  if (all.length < 2 || standing.length === 0) return false;
+  const hp = standing.reduce((a, x) => a + x.hp, 0) / standing.reduce((a, x) => a + x.stats.health, 0);
+  const foes = battle.living().filter((f) => f.team !== team).length;
+  const broken = (standing.length <= all.length / 2 && foes >= standing.length) || hp < 0.3;
+  if (broken) {
+    if (!routed.has(battle)) routed.set(battle, new Set());
+    routed.get(battle)!.add(team);
+  }
+  return broken;
 }
 
 /** Aim points worth trying for a skill used from `from`. */
@@ -32,15 +86,27 @@ function aimPoints(battle: Battle, skill: SkillDef, from: Point): Point[] {
 
 function scoreSkill(battle: Battle, u: Unit, skill: SkillDef, from: Point, aim: Point): number {
   skill = battle.skillFor(u, skill);
+  const kind = aiTypeOf(u);
+  // A beast only goes for whoever is closest.
+  const focus = kind === 'beast' ? nearestFoe(battle, u) : null;
+  const pack = kind === 'tribal' ? tribe(battle, u) : [];
   let score = 0;
   for (const t of battle.targetsOf(u, skill, aim, from)) {
     const friendly = t.team === u.team;
+    if (focus && !friendly && t !== focus) continue;
     if (skill.hits?.length) {
       const total = battle.previewHits(u, skill, t).reduce((a, b) => a + b, 0);
       const pool = t.hp + battle.shieldOf(t);
       const dealt = Math.min(total, pool);
-      if (friendly) score -= dealt * 1.5;
-      else score += dealt + (total >= pool ? 400 : 0);
+      if (friendly) score -= dealt * (kind === 'evil' ? 0.5 : 1.5); // evil barely cares who else gets hurt
+      else if (kind === 'evil') {
+        // Evil goes for the kill: big reward for finishing someone, more for hitting the already hurt.
+        score += dealt * (2 - ratio(t)) + (total >= pool ? 900 : 0);
+      } else {
+        score += dealt + (total >= pool ? 400 : 0);
+        // Tribal fighters pile onto a target their friends are already on.
+        if (pack.length) score += dealt * 0.25 * Math.min(2, pack.filter((a) => dist(a, t) <= 2).length);
+      }
     }
     for (const a of skill.applyStatus ?? []) {
       const def = STATUSES[a.status];
@@ -176,28 +242,69 @@ function healthyAllies(battle: Battle, u: Unit): Unit[] {
 /**
  * Should a badly hurt unit fall back? Only if it has healthy allies to regroup with;
  * a unit that is alone (or whose friends are all hurt too) makes a last stand instead,
- * so fights never turn into an endless chase.
+ * so fights never turn into an endless chase. Beasts and evil never regroup.
  */
 export function wantsToRetreat(battle: Battle, u: Unit): boolean {
+  const kind = aiTypeOf(u);
+  if (kind === 'beast' || kind === 'evil') return false;
   return isLow(u) && healthyAllies(battle, u).length > 0;
 }
 
-/** How much a unit cares about danger: a little when healthy, a lot when it wants to retreat. */
+/** How much a unit cares about danger: a little when healthy, a lot when it wants to retreat. Beasts and evil don't. */
 export function caution(battle: Battle, u: Unit): number {
-  const ratio = u.hp / u.stats.health;
+  const kind = aiTypeOf(u);
+  if (kind === 'evil') return 0;
+  if (kind === 'beast') return 0.05;
   if (wantsToRetreat(battle, u)) return 1.3;
   if (isLow(u)) return 0.15; // last stand: nothing left to lose
-  return ratio >= 0.6 ? 0.15 : 0.5;
+  return ratio(u) >= 0.6 ? 0.15 : 0.5;
 }
 
-/** Badly hurt enemies flee the battle when they can reach the map edge. */
-function wantsToFlee(u: Unit): boolean {
-  return u.team === 'enemy' && isLow(u);
+/**
+ * Does this enemy want out of the fight? Beasts once hurt; a tribal fighter when its group has broken;
+ * a human when badly hurt, or hurt and in reach of a blow that could kill it. Evil never.
+ */
+export function wantsToFlee(battle: Battle, u: Unit): boolean {
+  if (u.team !== 'enemy') return false;
+  switch (aiTypeOf(u)) {
+    case 'evil': return false;
+    case 'beast': return ratio(u) < BEAST_FLEE_AT;
+    case 'tribal': return tribeRouted(battle, u.team);
+    default: return isLow(u) || (ratio(u) < 0.6 && threatAt(battle, u, u) >= u.hp);
+  }
 }
 
 /** Has this unit made it to the edge while fleeing? Then it escapes (see Battle.escape). */
 export function shouldEscape(battle: Battle, u: Unit): boolean {
-  return u.alive && wantsToFlee(u) && battle.onEdge(u);
+  return u.alive && wantsToFlee(battle, u) && battle.onEdge(u);
+}
+
+/** Tiles from `p` to the nearest map edge. */
+function edgeDistance(battle: Battle, p: Point): number {
+  return Math.min(p.x, p.y, battle.map.width - 1 - p.x, battle.map.height - 1 - p.y);
+}
+
+/** Tiles a unit can end its move on this turn (just its own tile if it can't move). */
+function reachableTiles(battle: Battle, u: Unit): { reach: Map<string, ReachInfo>; tiles: Point[] } {
+  const reach = battle.canMove(u) ? battle.reachable(u) : new Map([[key(u.x, u.y), { cost: 0, prev: null }]]);
+  const tiles = [...reach.keys()].map((k) => {
+    const [x, y] = k.split(',').map(Number);
+    return { x, y };
+  });
+  return { reach, tiles };
+}
+
+/**
+ * Should a human enemy give up? When it wants to flee, can't reach the edge this turn, and
+ * every tile it could get to is within reach of enough damage to kill it.
+ */
+export function shouldSurrender(battle: Battle, u: Unit): boolean {
+  if (!u.alive || u.team !== 'enemy' || aiTypeOf(u) !== 'human' || !wantsToFlee(battle, u)) return false;
+  const { reach, tiles } = reachableTiles(battle, u);
+  if (battle.canMove(u) && tiles.some((t) => battle.onEdge(t))) return false;
+  const threats = foeThreats(battle, u);
+  const safest = Math.min(...tiles.map((t) => threatAt(battle, u, t, threats) + zoneHazard(battle, u, reach, t)));
+  return safest >= u.hp;
 }
 
 /**
@@ -206,11 +313,12 @@ export function shouldEscape(battle: Battle, u: Unit): boolean {
  */
 export function shouldDisengage(battle: Battle, u: Unit): boolean {
   const opp = battle.opponentOf(u);
-  if (!opp || !battle.canAct(u)) return false;
+  if (!opp || !battle.canAct(u) || aiTypeOf(u) === 'evil') return false;
   // A bow counts as ranged even while engaged forces it into Melee mode.
   const raw = SKILLS[battle.skillIds(u)[0]];
   const ranged = !!raw?.modes?.some((m) => !hasTag(SKILLS[m], 'melee')) || battle.basicAttack(u).range > 1.5 || battle.basicAttack(u).los !== undefined;
   const hit = battle.previewHits(opp, battle.basicAttack(opp), u).reduce((a, b) => a + b, 0);
+  if (wantsToFlee(battle, u)) return u.hp - hit > 0;
   if (ranged) return u.hp - hit > u.stats.health * 0.3;
   return wantsToRetreat(battle, u) && u.hp - hit > u.stats.health * 0.1;
 }
@@ -232,13 +340,14 @@ export function planTurn(battle: Battle, u: Unit): AiPlan {
   const danger = new Map(tiles.map((t) => [key(t.x, t.y), threatAt(battle, u, t, threats)]));
   const hazard = (t: Point) => zoneHazard(battle, u, reach, t);
 
-  // Badly hurt enemies run for the map edge if they can reach it this turn (the safest edge tile).
-  if (wantsToFlee(u)) {
+  // Fleeing enemies run for the map edge: the safest edge tile if they can reach one this turn,
+  // otherwise as close to an edge as they can get (safest first among equals).
+  if (wantsToFlee(battle, u) && battle.canMove(u)) {
+    const risk = (t: Point) => danger.get(key(t.x, t.y))! + hazard(t);
     const exits = tiles.filter((t) => battle.onEdge(t));
-    if (exits.length) {
-      const risk = (t: Point) => danger.get(key(t.x, t.y))! + hazard(t);
-      return { moveTo: exits.reduce((a, b) => (risk(b) < risk(a) ? b : a)) };
-    }
+    if (exits.length) return { moveTo: exits.reduce((a, b) => (risk(b) < risk(a) ? b : a)) };
+    const rank = (t: Point) => edgeDistance(battle, t) * 10000 + risk(t);
+    return { moveTo: tiles.reduce((a, b) => (rank(b) < rank(a) ? b : a)) };
   }
 
   const best = attackPlan(battle, u, tiles, reach, danger, care);
@@ -271,7 +380,8 @@ export function planTurn(battle: Battle, u: Unit): AiPlan {
   const held = holdTurns.get(u) ?? 0;
   const wary = u.hp / u.stats.health < 0.6 && held < MAX_HOLD_TURNS;
   // Zone damage counts as extra distance (5% of max HP ~ one tile), so units walk around Firestorms when they can.
-  const zoneTiles = (t: Point) => hazard(t) / (u.stats.health * 0.05);
+  // Tribal fighters also keep their loose formation: straying from the group counts as extra distance.
+  const zoneTiles = (t: Point) => hazard(t) / (u.stats.health * 0.05) + formation(battle, u, t) / 20;
   let moveTo: Point = { x: u.x, y: u.y };
   let bestDist = (field.get(key(u.x, u.y)) ?? Infinity) + zoneTiles(u);
   for (const tile of tiles) {
@@ -304,7 +414,8 @@ function attackPlan(
     // so a unit that's already in the thick of it still fights instead of freezing.
     const risk = care * (danger.get(key(tile.x, tile.y))! - leastDanger);
     // Zone damage on the way and at the end is certain, so it counts in full.
-    const score = found.score + free * 0.5 + terrain - risk - zoneHazard(battle, u, reach, tile) - reach.get(key(tile.x, tile.y))!.cost * 0.1;
+    const score = found.score + free * 0.5 + terrain - risk - zoneHazard(battle, u, reach, tile) - reach.get(key(tile.x, tile.y))!.cost * 0.1
+      - formation(battle, u, tile);
     if (score > (best?.score ?? 0)) best = { plan: { moveTo: tile, action: found.action }, score };
   }
   return best;
@@ -347,6 +458,19 @@ export function preferredMode(battle: Battle, u: Unit): number | null {
   return bestMode === current ? null : bestMode;
 }
 
+/**
+ * Cost of standing on `tile` for a tribal fighter's loose formation: straying more than TRIBE_SPREAD tiles
+ * from the nearest member of its group, or crowding right next to several of them. 0 for everyone else.
+ */
+function formation(battle: Battle, u: Unit, tile: Point): number {
+  if (aiTypeOf(u) !== 'tribal') return 0;
+  const pack = tribe(battle, u);
+  if (pack.length === 0) return 0;
+  const nearest = Math.min(...pack.map((a) => dist(a, tile)));
+  const crowd = pack.filter((a) => dist(a, tile) <= 1.5).length;
+  return Math.max(0, nearest - TRIBE_SPREAD) * 20 + Math.max(0, crowd - 1) * 10;
+}
+
 /** Damage `u` would take from zones walking to `tile` (each zone tile entered) and ending its turn there. */
 function zoneHazard(battle: Battle, u: Unit, reach: Map<string, ReachInfo>, tile: Point): number {
   if (battle.zones.length === 0) return 0;
@@ -362,6 +486,10 @@ const MAX_HOLD_TURNS = 2;
  * scene runs the same steps with animations).
  */
 export function runAiTurn(battle: Battle, u: Unit): void {
+  if (shouldSurrender(battle, u)) {
+    battle.surrender(u);
+    return;
+  }
   if (shouldDisengage(battle, u)) battle.disengage(u);
   if (!u.alive) return;
   const mode = preferredMode(battle, u);
