@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import skillsJson from '../src/data/skills.json';
 import weaponsJson from '../src/data/weapons.json';
 import { SKILLS, TREE_SKILLS, WEAPONS, parseContent, skillFormula } from '../src/data/content';
@@ -29,6 +29,15 @@ function setup(map: BattleMap, specs: { c: Character; team: Team; at: Point }[])
 }
 
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v));
+
+// Most tests check skill math, so attacks always hit here (hit chance gets its own test with explicit rules).
+const hitChanceOn = STAT_CONFIG.hitChance.enabled;
+beforeAll(() => {
+  STAT_CONFIG.hitChance.enabled = false;
+});
+afterAll(() => {
+  STAT_CONFIG.hitChance.enabled = hitChanceOn;
+});
 
 // Level-1 numbers used below: base Health 500, P.Atk 100, M.Atk 100, Defense 50.
 // Sword & Shield: P.Atk 100, M.Atk 80, Def 75 (x0.571 damage). Others: Def 50 (x0.667 damage).
@@ -615,6 +624,16 @@ describe('engagement', () => {
 
 describe('frameworks (switched off in stats.json)', () => {
   const withRules = (patch: Partial<typeof STAT_CONFIG>) => ({ ...STAT_CONFIG, ...patch });
+
+  it('hit chance is on: 50 + Accuracy - Evasion, so two level-1 adventurers hit 60% of the time', () => {
+    expect(hitChanceOn).toBe(true);
+    expect(STAT_CONFIG.hitChance.base).toBe(50);
+    const a = makeUnit(hero('bow'), 'player', { x: 1, y: 1 });
+    const e = makeUnit(hero('sword_shield'), 'enemy', { x: 4, y: 1 });
+    expect(a.stats).toMatchObject({ accuracy: 20, evasion: 10 });
+    const battle = new Battle(openMap(), [a, e], makeRng(3), { ...STAT_CONFIG, hitChance: { ...STAT_CONFIG.hitChance, enabled: true } });
+    expect(battle.hitChance(a, e, SKILLS.direct_shot)).toBe(60);
+  });
 
   it('hit chance: disabled = always 100%; enabled = base + accuracy - evasion, clamped', () => {
     const { battle, units: [a, e] } = setup(openMap(), [

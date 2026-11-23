@@ -327,15 +327,19 @@ export class CharacterCreatorScene extends Phaser.Scene {
       }));
     }
     const total = deriveStats(d);
-    visibleStatKeys().forEach((k: StatKey, i) => {
-      const y = 418 + i * 24;
+    // Rows shrink to fit however many stats are shown.
+    const keys = visibleStatKeys();
+    const rowH = Math.min(24, Math.floor(134 / keys.length));
+    const fs = rowH >= 20 ? 14 : 13;
+    keys.forEach((k: StatKey, i) => {
+      const y = 410 + i * rowH;
       const m = WEAPONS[d.weaponId].statMultipliers[k] ?? 1;
-      const row = this.add.rectangle(136, y - 3, 172, 22, 0xffffff, 0).setOrigin(0);
+      const row = this.add.rectangle(136, y - 1, 172, rowH, 0xffffff, 0).setOrigin(0);
       L.add(this.tip(row, () => this.statInfo(k)));
-      L.add(text(this, 142, y, STAT_INFO[k].short, { fontSize: '14px' }));
-      this.grade(L, k, 202, y, 14);
-      L.add(text(this, 250, y, String(total[k]), { fontSize: '14px' }).setOrigin(1, 0));
-      if (m !== 1) L.add(text(this, 258, y + 1, mult(m), { fontSize: '12px', color: m > 1 ? COLORS.good : COLORS.bad }));
+      L.add(text(this, 142, y, STAT_INFO[k].short, { fontSize: `${fs}px` }));
+      this.grade(L, k, 202, y, fs);
+      L.add(text(this, 250, y, String(total[k]), { fontSize: `${fs}px` }).setOrigin(1, 0));
+      if (m !== 1) L.add(text(this, 258, y, mult(m), { fontSize: '12px', color: m > 1 ? COLORS.good : COLORS.bad }));
     });
   }
 

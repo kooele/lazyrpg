@@ -478,7 +478,7 @@ export class BattleScene extends Phaser.Scene {
     if (opp) effects.push(`Engaged with ${opp.character.name}`);
     if (u.team === 'enemy') effects.push(`Skills: ${b.skillIds(u).map((id) => SKILLS[id].name).join(', ')}`);
     return [
-      `HP ${u.hp}/${u.stats.health}${shield ? ` +${shield} shield` : ''}   Move ${b.stat(u, 'movement')}`,
+      `HP ${u.hp}/${u.stats.health}${shield ? ` +${shield} shield` : ''}${u.stats.mana > 0 ? `   MP ${u.stats.mana}` : ''}   Move ${b.stat(u, 'movement')}`,
       `P.Atk ${b.stat(u, 'pAtk')}  M.Atk ${b.stat(u, 'mAtk')}  Def ${b.stat(u, 'defense')}${terrainDef ? ' (forest)' : ''}`,
       b.rules.hitChance.enabled ? `Acc ${b.stat(u, 'accuracy')}  Eva ${b.stat(u, 'evasion')}` : '',
       effects.join(', '),

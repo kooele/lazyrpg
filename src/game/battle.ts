@@ -686,9 +686,9 @@ export class Battle {
     return best;
   }
 
-  // ---- hit chance (framework: disabled in stats.json until hit/evasion are designed) ----
+  // ---- hit chance (hitChance in stats.json: base + Accuracy - Evasion) ----
 
-  /** Chance (0-100) that `skill` hits `target`. Always 100 while hit chance is disabled. */
+  /** Chance (0-100) that `skill` hits `target` (100 if hit chance is switched off). */
   hitChance(attacker: Unit, target: Unit, skill: SkillDef, reaction = false): number {
     const r = this.rules.hitChance;
     if (!r.enabled || !skill.hits?.length || attacker.team === target.team) return 100;

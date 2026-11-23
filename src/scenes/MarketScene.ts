@@ -57,18 +57,20 @@ export class MarketScene extends Phaser.Scene {
   private row(o: Offer, w: number, actions: { label: string; enabled: boolean; act: () => void }[], compact = false): ScrollItem {
     const c = o.character;
     const row = this.add.container(0, 0);
-    const h = compact ? 104 : 72;
+    const h = compact ? 104 : 86;
     row.add(this.add.rectangle(0, 0, w - 10, h, COLORS.panelLight, 0.5).setOrigin(0));
-    row.add(figure(this, 30, 66, 60, c.appearance, c.weaponId, { base: false }));
-    row.add(text(this, 64, 6, c.name, { fontSize: '16px' }));
+    row.add(figure(this, 30, compact ? 66 : 74, 60, c.appearance, c.weaponId, { base: false }));
+    const name = text(this, 64, 6, c.name, { fontSize: '16px' });
+    row.add(name);
+    row.add(talentTag(this, 64 + name.width + 12, 9, c, { fontSize: 12, detail: false }));
     row.add(text(this, 64, 26, `Level ${c.level} · ${WEAPONS[c.weaponId].name}`, { fontSize: '13px', color: COLORS.gold }));
-    row.add(talentTag(this, compact ? 160 : 170, 9, c, { fontSize: 11, detail: !compact }));
-    row.add(text(this, 64, 46, c.skillIds.map((s) => SKILLS[s].name).join(', ') || 'No tree skills yet', {
+    if (!compact) row.add(talentTag(this, 64, 45, c, { fontSize: 11, overall: false, sep: '   ' }));
+    row.add(text(this, 64, compact ? 46 : 62, c.skillIds.map((s) => SKILLS[s].name).join(', ') || 'No tree skills yet', {
       fontSize: '12px', color: COLORS.dim, wordWrap: { width: compact ? 260 : 270 },
     }));
     actions.forEach((a, i) => {
       const bx = compact ? 64 + i * 134 : w - 150;
-      const by = compact ? 66 : 18;
+      const by = compact ? 66 : 26;
       row.add(button(this, bx, by, compact ? 126 : 130, 32, a.label, a.act, { fontSize: 13, enabled: a.enabled }));
     });
     return { obj: row, height: h };

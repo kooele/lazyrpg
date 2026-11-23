@@ -37,7 +37,9 @@ export interface MapRules {
 export interface TalentRules {
   /** Growth multiplier per grade (1 = 100%). */
   growthRate: Record<Talent, number>;
-  /** Chance of each grade when a stat's talent is rolled (adds up to 1). */
+  /** Relative weight of each grade when a stat's talent is rolled. */
+  weight: Record<Talent, number>;
+  /** Chance of each grade (0-1): its weight / the sum of the weights. */
   chance: Record<Talent, number>;
 }
 
@@ -75,22 +77,24 @@ function readStats(v: unknown, path: string): Stats {
 
 const DEFAULT_TALENT = {
   growthRate: { S: 1.6, A: 1.4, B: 1.2, C: 1, D: 0.8, F: 0.6 },
-  chance: { S: 0.05, A: 0.1, B: 0.2, C: 0.4, D: 0.2, F: 0.05 },
+  weight: { S: 5, A: 10, B: 20, C: 40, D: 20, F: 5 },
 };
 
 function readTalent(v: unknown): TalentRules {
   const t = obj(v ?? DEFAULT_TALENT, 'talent');
   const rate = obj(t.growthRate, 'talent.growthRate');
-  const chance = obj(t.chance, 'talent.chance');
-  const out: TalentRules = { growthRate: {} as Record<Talent, number>, chance: {} as Record<Talent, number> };
+  const weight = obj(t.weight, 'talent.weight');
+  const out: TalentRules = { growthRate: {} as Record<Talent, number>, weight: {} as Record<Talent, number>, chance: {} as Record<Talent, number> };
   for (const g of TALENT_GRADES) {
     out.growthRate[g] = num(rate[g], `talent.growthRate.${g}`);
-    out.chance[g] = num(chance[g], `talent.chance.${g}`);
+    // A grade left out of weight never comes up.
+    out.weight[g] = weight[g] === undefined ? 0 : num(weight[g], `talent.weight.${g}`);
     if (out.growthRate[g] < 0) throw new Error(`stats.json: "talent.growthRate.${g}" must not be negative`);
-    if (out.chance[g] < 0) throw new Error(`stats.json: "talent.chance.${g}" must not be negative`);
+    if (out.weight[g] < 0) throw new Error(`stats.json: "talent.weight.${g}" must not be negative`);
   }
-  const total = TALENT_GRADES.reduce((s, g) => s + out.chance[g], 0);
-  if (Math.abs(total - 1) > 0.001) throw new Error(`stats.json: "talent.chance" must add up to 1 (it adds up to ${total})`);
+  const total = TALENT_GRADES.reduce((s, g) => s + out.weight[g], 0);
+  if (!(total > 0)) throw new Error('stats.json: "talent.weight" needs at least one grade with a weight above 0');
+  for (const g of TALENT_GRADES) out.chance[g] = out.weight[g] / total;
   return out;
 }
 

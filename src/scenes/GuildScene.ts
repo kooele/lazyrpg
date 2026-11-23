@@ -110,26 +110,28 @@ export class GuildScene extends Phaser.Scene {
     const state = requireState();
     const c = a.character;
     const row = this.add.container(0, 0);
-    row.add(this.add.rectangle(0, 0, WIDTH - 54, 68, COLORS.panelLight, 0.5).setOrigin(0));
-    row.add(figure(this, 30, 64, 60, c.appearance, c.weaponId, { base: false }));
-    row.add(text(this, 64, 6, `${c.name}`, { fontSize: '17px' }));
-    row.add(text(this, 64, 28, `Level ${c.level} · ${WEAPONS[c.weaponId].name}`, { fontSize: '13px', color: COLORS.gold }));
+    row.add(this.add.rectangle(0, 0, WIDTH - 54, 84, COLORS.panelLight, 0.5).setOrigin(0));
+    row.add(figure(this, 30, 72, 64, c.appearance, c.weaponId, { base: false }));
+    const name = text(this, 64, 6, `${c.name}`, { fontSize: '17px' });
+    row.add(name);
     // Talent: a talented adventurer asks more.
-    row.add(talentTag(this, 160, 10, c, { fontSize: 11 }));
-    row.add(text(this, 64, 46, c.skillIds.map((s) => SKILLS[s].name).join(', ') || 'No tree skills yet', { fontSize: '12px', color: COLORS.dim, wordWrap: { width: 300 } }));
+    row.add(talentTag(this, 64 + name.width + 12, 10, c, { fontSize: 12, detail: false }));
+    row.add(text(this, 64, 28, `Level ${c.level} · ${WEAPONS[c.weaponId].name}`, { fontSize: '13px', color: COLORS.gold }));
+    row.add(talentTag(this, 64, 47, c, { fontSize: 11, overall: false, sep: '   ' }));
+    row.add(text(this, 64, 64, c.skillIds.map((s) => SKILLS[s].name).join(', ') || 'No tree skills yet', { fontSize: '12px', color: COLORS.dim, wordWrap: { width: 300 } }));
     const rates = mercenaryRates(c.level, a.greed, talentPriceFactor(c));
-    row.add(text(this, 392, 8, 'Mercenary (next quest only)', { fontSize: '12px', color: COLORS.dim }));
-    row.add(button(this, 392, 28, 120, 32, `${rates.fee} gold`, () => this.hireMerc(a, 'fixed', rates.fee), {
+    row.add(text(this, 392, 16, 'Mercenary (next quest only)', { fontSize: '12px', color: COLORS.dim }));
+    row.add(button(this, 392, 36, 120, 32, `${rates.fee} gold`, () => this.hireMerc(a, 'fixed', rates.fee), {
       fontSize: 14, enabled: state.gold >= rates.fee,
     }));
-    row.add(button(this, 520, 28, 120, 32, `${rates.cutPct}% of reward`, () => this.hireMerc(a, 'cut', rates.cutPct), { fontSize: 14 }));
-    row.add(text(this, 668, 8, 'Companion (permanent)', { fontSize: '12px', color: COLORS.dim }));
+    row.add(button(this, 520, 36, 120, 32, `${rates.cutPct}% of reward`, () => this.hireMerc(a, 'cut', rates.cutPct), { fontSize: 14 }));
+    row.add(text(this, 668, 16, 'Companion (permanent)', { fontSize: '12px', color: COLORS.dim }));
     const sulking = a.refusedUntil > state.day;
-    row.add(button(this, 668, 28, 220, 32, sulking ? `Won't talk until day ${a.refusedUntil}` : 'Negotiate a contract', () => {
+    row.add(button(this, 668, 36, 220, 32, sulking ? `Won't talk until day ${a.refusedUntil}` : 'Negotiate a contract', () => {
       if (rosterFull(state)) return toast(this, `Your party is full (${GUILD.maxRoster}).`, COLORS.bad);
       this.scene.start('Negotiate', { mode: 'hire', id: c.id });
     }, { fontSize: 14, enabled: !sulking }));
-    return { obj: row, height: 68 };
+    return { obj: row, height: 84 };
   }
 
   private hireMerc(a: FreeAdventurer, pay: 'fixed' | 'cut', amount: number): void {

@@ -1,18 +1,19 @@
 // Shared type definitions for game data. Everything here is plain data so it
 // can be written to and read from human-readable JSON save files.
 
-export const STAT_KEYS = ['health', 'pAtk', 'mAtk', 'defense', 'movement', 'accuracy', 'evasion', 'vision'] as const;
+export const STAT_KEYS = ['health', 'mana', 'pAtk', 'mAtk', 'defense', 'movement', 'accuracy', 'evasion', 'vision'] as const;
 export type StatKey = (typeof STAT_KEYS)[number];
 export type Stats = Record<StatKey, number>;
 
 export const STAT_INFO: Record<StatKey, { name: string; short: string; description: string }> = {
   health: { name: 'Health', short: 'HP', description: 'Maximum health. The unit falls at 0.' },
+  mana: { name: 'Mana', short: 'MP', description: 'Maximum mana. (No skill costs mana yet.)' },
   pAtk: { name: 'Physical Attack', short: 'P.Atk', description: 'Power of physical skills. A skill deals a % of this as damage.' },
   mAtk: { name: 'Magic Attack', short: 'M.Atk', description: 'Power of magic skills and healing.' },
   defense: { name: 'Defense', short: 'Def', description: 'Reduces damage taken: every 100 Defense = +100% effective health.' },
   movement: { name: 'Movement', short: 'Move', description: 'Movement points per turn (forest costs 2).' },
-  accuracy: { name: 'Accuracy', short: 'Acc', description: 'Adds to hit chance (when hit chance is enabled).' },
-  evasion: { name: 'Evasion', short: 'Eva', description: "Subtracts from enemies' hit chance (when hit chance is enabled)." },
+  accuracy: { name: 'Accuracy', short: 'Acc', description: 'Adds to hit chance: hit % = 50 + Accuracy - target Evasion.' },
+  evasion: { name: 'Evasion', short: 'Eva', description: "Subtracts from enemies' hit chance against this unit." },
   vision: { name: 'Vision', short: 'Vis', description: 'How far the unit can see (when fog of war is enabled).' },
 };
 

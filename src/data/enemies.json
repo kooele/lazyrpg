@@ -1,5 +1,5 @@
 {
-  "_readme": "Enemy types. Each type always fights within its level range: an encounter at stage N uses the types whose range contains N, at level N (clamped into their range). Past the highest range, the toughest types keep appearing at their top level. stats are at the type's lowest level; growthPerLevel is added per level above that. skills: the first one is the basic attack (also used for opportunity attacks). skillsByLevel adds skills from that level up. Monster art is public/art/monsters/<art.kind>.svg (regenerate it with node tools/generate-art.mjs after changing art.color). Human types pick a body model from art.models (bandits have their own: b1-b4) and can use weapons: they get the weapon's stat multipliers and skills (all of them, or only the basic attack with weaponSkillUse = basic), plus weaponSkills for that weapon. threat is how much of the encounter budget one unit uses (the budget is threatPerAdventurer x party size).",
+  "_readme": "Enemy types. Each type always fights within its level range: an encounter at stage N uses the types whose range contains N, at level N (clamped into their range). Past the highest range, the toughest types keep appearing at their top level. stats are at the type's lowest level; growthPerLevel is added per level above that. Accuracy and Evasion follow the Adventurer curve (20 + 2 and 10 + 1 per level) at each type's level; rats and wolves have +10 Evasion. Stats left out (e.g. mana for monsters) are 0. skills: the first one is the basic attack (also used for opportunity attacks). skillsByLevel adds skills from that level up. Monster art is public/art/monsters/<art.kind>.svg (regenerate it with node tools/generate-art.mjs after changing art.color). Human types pick a body model from art.models (bandits have their own: b1-b4) and can use weapons: they get the weapon's stat multipliers and skills (all of them, or only the basic attack with weaponSkillUse = basic), plus weaponSkills for that weapon. threat is how much of the encounter budget one unit uses (the budget is threatPerAdventurer x party size).",
 
   "encounter": {
     "threatPerAdventurer": 1,
@@ -12,8 +12,8 @@
       "levels": [1, 2],
       "threat": 0.5,
       "art": { "kind": "rat", "color": "#8a7a70" },
-      "stats": { "health": 220, "pAtk": 70, "mAtk": 0, "defense": 20, "movement": 20, "accuracy": 0, "evasion": 10, "vision": 6 },
-      "growthPerLevel": { "health": 30, "pAtk": 8, "defense": 3 },
+      "stats": { "health": 220, "pAtk": 70, "mAtk": 0, "defense": 20, "movement": 20, "accuracy": 20, "evasion": 20, "vision": 6 },
+      "growthPerLevel": { "health": 30, "pAtk": 8, "defense": 3, "accuracy": 2, "evasion": 1 },
       "skills": ["gnaw"]
     },
     "slime": {
@@ -21,8 +21,8 @@
       "levels": [2, 3],
       "threat": 0.75,
       "art": { "kind": "slime", "color": "#5fcf6a" },
-      "stats": { "health": 420, "pAtk": 80, "mAtk": 80, "defense": 40, "movement": 12, "accuracy": 0, "evasion": 0, "vision": 5 },
-      "growthPerLevel": { "health": 50, "pAtk": 8, "mAtk": 10, "defense": 5 },
+      "stats": { "health": 420, "pAtk": 80, "mAtk": 80, "defense": 40, "movement": 12, "accuracy": 22, "evasion": 11, "vision": 5 },
+      "growthPerLevel": { "health": 50, "pAtk": 8, "mAtk": 10, "defense": 5, "accuracy": 2, "evasion": 1 },
       "skills": ["slam"],
       "skillsByLevel": { "3": ["sticky_spit"] }
     },
@@ -31,8 +31,8 @@
       "levels": [3, 4],
       "threat": 1,
       "art": { "kind": "wolf", "color": "#7f8ea3" },
-      "stats": { "health": 460, "pAtk": 120, "mAtk": 0, "defense": 40, "movement": 24, "accuracy": 0, "evasion": 10, "vision": 8 },
-      "growthPerLevel": { "health": 50, "pAtk": 10, "defense": 5 },
+      "stats": { "health": 460, "pAtk": 120, "mAtk": 0, "defense": 40, "movement": 24, "accuracy": 24, "evasion": 22, "vision": 8 },
+      "growthPerLevel": { "health": 50, "pAtk": 10, "defense": 5, "accuracy": 2, "evasion": 1 },
       "skills": ["bite", "pounce"],
       "skillsByLevel": { "4": ["howl"] }
     },
@@ -43,8 +43,8 @@
       "art": { "kind": "human", "models": ["b1", "b2", "b3", "b4"] },
       "weapons": ["sword_shield", "spear", "bow", "staff"],
       "weaponNames": { "sword_shield": "Bandit Thug", "spear": "Bandit Lancer", "bow": "Bandit Archer", "staff": "Bandit Hexer" },
-      "stats": { "health": 560, "pAtk": 130, "mAtk": 110, "defense": 60, "movement": 16, "accuracy": 0, "evasion": 0, "vision": 8 },
-      "growthPerLevel": { "health": 50, "pAtk": 10, "mAtk": 10, "defense": 5 },
+      "stats": { "health": 560, "mana": 260, "pAtk": 130, "mAtk": 110, "defense": 60, "movement": 16, "accuracy": 26, "evasion": 13, "vision": 8 },
+      "growthPerLevel": { "health": 50, "mana": 20, "pAtk": 10, "mAtk": 10, "defense": 5, "accuracy": 2, "evasion": 1 },
       "weaponSkillUse": "basic",
       "skills": [],
       "weaponSkills": { "sword_shield": ["shield_up"], "staff": ["fireball"], "bow": ["execute"] },

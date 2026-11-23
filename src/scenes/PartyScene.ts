@@ -81,12 +81,12 @@ export class PartyScene extends Phaser.Scene {
     text(this, X + 356, 146, `${c.xp}/${XP_PER_LEVEL} XP`, { fontSize: '11px', color: COLORS.dim });
 
     const st = deriveStats(c);
-    text(this, X + 150, 172, `HP ${st.health}   P.Atk ${st.pAtk}   M.Atk ${st.mAtk}\nDef ${st.defense}   Move ${st.movement}`, { fontSize: '14px', lineSpacing: 6 });
+    text(this, X + 150, 166, `HP ${st.health}   MP ${st.mana}   P.Atk ${st.pAtk}   M.Atk ${st.mAtk}\nDef ${st.defense}   Move ${st.movement}   Acc ${st.accuracy}   Eva ${st.evasion}`, { fontSize: '13px', lineSpacing: 4 });
     const w = WEAPONS[c.weaponId];
-    talentTag(this, X + 290, 196, c, { fontSize: 11 });
-    text(this, X + 150, 222, `${w.name}: ${w.skills.map((s) => SKILLS[s].name).join(', ')}`, { fontSize: '12px', color: COLORS.dim, wordWrap: { width: W - 170 } });
+    talentTag(this, X + 150, 207, c, { fontSize: 11 });
+    text(this, X + 150, 226, `${w.name}: ${w.skills.map((s) => SKILLS[s].name).join(', ')}`, { fontSize: '12px', color: COLORS.dim, wordWrap: { width: W - 170 } });
     const free = skillSlots(c) - c.skillIds.length;
-    text(this, X + 150, 244, `Skills ${c.skillIds.length}/${skillSlots(c)}: ${c.skillIds.map((s) => SKILLS[s].name).join(', ') || '—'}`, {
+    text(this, X + 150, 247, `Skills ${c.skillIds.length}/${skillSlots(c)}: ${c.skillIds.map((s) => SKILLS[s].name).join(', ') || '—'}`, {
       fontSize: '12px', color: free > 0 ? COLORS.gold : COLORS.dim, wordWrap: { width: W - 170 },
     });
 

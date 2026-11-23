@@ -66,17 +66,18 @@ export class DemoCampScene extends Phaser.Scene {
     text(this, x + 202, y + 90, `${c.xp}/${XP_PER_LEVEL} XP`, { color: COLORS.dim, fontSize: '11px' }).setOrigin(1, 0);
 
     const lines = [
-      `HP ${stats.health}   Move ${stats.movement}`,
+      `HP ${stats.health}   MP ${stats.mana}`,
       `P.Atk ${stats.pAtk}   M.Atk ${stats.mAtk}`,
-      `Def ${stats.defense}`,
+      `Def ${stats.defense}   Move ${stats.movement}`,
+      `Acc ${stats.accuracy}   Eva ${stats.evasion}`,
     ];
-    text(this, x + 14, y + 112, lines.join('\n'), { fontSize: '14px', lineSpacing: 6 });
+    text(this, x + 14, y + 108, lines.join('\n'), { fontSize: '13px', lineSpacing: 3 });
     const weapon = WEAPONS[c.weaponId];
-    text(this, x + 14, y + 184, 'Weapon', { color: COLORS.dim, fontSize: '12px' });
-    text(this, x + 14, y + 200, weapon.name, { fontSize: '15px' });
-    text(this, x + 14, y + 220, weapon.skills.map((s) => SKILLS[s].name).join(', '), { fontSize: '12px', color: COLORS.dim, wordWrap: { width: 188 } });
-    text(this, x + 14, y + 262, `Skills ${c.skillIds.length}/${skillSlots(c)}`, { color: COLORS.dim, fontSize: '12px' });
-    text(this, x + 14, y + 278, c.skillIds.map((s) => `• ${SKILLS[s].name}`).join('\n') || '—', { fontSize: '14px', lineSpacing: 2 });
+    text(this, x + 14, y + 192, 'Weapon', { color: COLORS.dim, fontSize: '12px' });
+    text(this, x + 14, y + 207, weapon.name, { fontSize: '15px' });
+    text(this, x + 14, y + 226, weapon.skills.map((s) => SKILLS[s].name).join(', '), { fontSize: '12px', color: COLORS.dim, wordWrap: { width: 188 } });
+    text(this, x + 14, y + 266, `Skills ${c.skillIds.length}/${skillSlots(c)}`, { color: COLORS.dim, fontSize: '12px' });
+    text(this, x + 14, y + 282, c.skillIds.map((s) => `• ${SKILLS[s].name}`).join('\n') || '—', { fontSize: '14px', lineSpacing: 2 });
 
     if (freeSlots > 0) {
       text(this, x + 108, y + 356, `${freeSlots} empty skill slot${freeSlots > 1 ? 's' : ''}`, { color: COLORS.gold, fontSize: '13px' }).setOrigin(0.5);

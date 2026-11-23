@@ -497,11 +497,11 @@ export function monsterFigure(scene: Phaser.Scene, x: number, feetY: number, hei
 }
 
 /**
- * "Talent B  HP A · P.Atk C · M.Atk B · Def C" with each grade in its color. (x, y) is the top-left.
- * compact: only the overall grade and the per-stat letters ("Talent B  A C B C").
+ * "Talent B  HP A · P.Atk C · ..." with each grade in its color. (x, y) is the top-left.
+ * detail: false = only the overall grade. overall: false = only the per-stat grades. sep: between stats.
  */
 export function talentTag(
-  scene: Phaser.Scene, x: number, y: number, c: Pick<Character, 'talents'>, opts: { fontSize?: number; detail?: boolean } = {},
+  scene: Phaser.Scene, x: number, y: number, c: Pick<Character, 'talents'>, opts: { fontSize?: number; detail?: boolean; overall?: boolean; sep?: string } = {},
 ): Phaser.GameObjects.Container {
   const size = opts.fontSize ?? 12;
   const box = scene.add.container(x, y);
@@ -511,12 +511,14 @@ export function talentTag(
     box.add(t);
     cx += t.width + gap;
   };
-  const overall = overallTalent(c);
-  put('Talent ', COLORS.dim);
-  put(overall, TALENT_COLORS[overall], true, size * 0.8);
+  if (opts.overall ?? true) {
+    const overall = overallTalent(c);
+    put('Talent ', COLORS.dim);
+    put(overall, TALENT_COLORS[overall], true, size * 0.8);
+  }
   if (opts.detail ?? true) {
     talentStats().forEach((k, i) => {
-      if (i > 0) put(' · ', COLORS.dim);
+      if (i > 0) put(opts.sep ?? ' · ', COLORS.dim);
       put(`${STAT_INFO[k].short} `, COLORS.dim);
       const g = talentOf(c, k);
       put(g, TALENT_COLORS[g], true);
