@@ -1,4 +1,4 @@
-import { BASIC_SKILLS, DEFAULT_WEAPON, PALETTE, TREE_SKILLS, WEAPONS, XP_PER_LEVEL, skillPointsForLevel } from '../data/content';
+import { BASIC_SKILLS, DEFAULT_WEAPON, PALETTE, SKILLS, TREE_SKILLS, WEAPONS, XP_PER_LEVEL, skillPointsForLevel } from '../data/content';
 import { ENEMIES } from '../data/enemies';
 import { STAT_CONFIG } from '../data/stats';
 import { BODY_MODELS, STAT_KEYS, type BodyModel, type BodyInvestment, type Character, type Look, type StatKey, type Stats, type Talents, type UnitModel } from '../data/types';
@@ -66,6 +66,11 @@ export function modelFor(seed: string, models: readonly UnitModel[] = BODY_MODEL
   let h = 0;
   for (const ch of seed) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   return list[h % list.length];
+}
+
+/** Can the character learn this tree skill at its level? (Skills may need a minimum level.) */
+export function isUnlocked(c: Character, skillId: string): boolean {
+  return (SKILLS[skillId]?.level ?? 1) <= c.level;
 }
 
 /** Skill points the unit has at its level. */
@@ -166,7 +171,7 @@ export function cloneCharacter(c: Character): Character {
 /** Ensure weapon/skills are legal for the character's level. */
 export function sanitizeLoadout(c: Character): void {
   if (!WEAPONS[c.weaponId]) c.weaponId = DEFAULT_WEAPON;
-  c.skillIds = [...new Set(c.skillIds)].filter((s) => TREE_SKILLS.includes(s)).slice(0, skillPoints(c));
+  c.skillIds = [...new Set(c.skillIds)].filter((s) => TREE_SKILLS.includes(s) && isUnlocked(c, s)).slice(0, skillPoints(c));
   // Over budget: give back Body investments, last stat first.
   const keys = bodyStats();
   for (let i = keys.length - 1; i >= 0 && freePoints(c) < 0; i--) {

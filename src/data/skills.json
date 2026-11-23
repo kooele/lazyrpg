@@ -10,7 +10,11 @@
     "los": "sight = line of sight (rocks block) | fire = line of fire (rocks AND units block; kept for future skills). Omit for none.",
     "rangeScale": "for 'movement' skills: range in tiles = floor(rangeScale x Movement / movementCosts.grass)",
     "applyStatus": "list of { status, turns, stacks }",
-    "optional": "heal { mAtk }, shield { maxHpPct, turns }, knockback (tiles), cleanse, teleport, charge, aoeRadius, cone { angle, radius, interrupt, los } (radius defaults to the skill's range, so 'weapon' cones reach as far as the weapon; a cone skill without hits attacks with the user's basic attack)",
+    "level": "Skill-tree skills: the character level needed to learn it (default 1).",
+    "basicAttack": "Hit with the user's weapon basic attack this many times (instead of 'hits'). Used by Double Strike and Circle Swing.",
+    "selfStatus": "list of { status, turns } applied to the user before the skill resolves (never resisted)",
+    "recoilIfSurvives": "{ pAtk, mAtk, ... } damage the user takes (after its own Defense) if the target survives the hits",
+    "optional": "heal { mAtk }, shield { maxHpPct, turns }, knockback (tiles), cleanse, teleport, charge (with teleport: appear next to the target instead of dashing), aoeRadius (a 'weapon' self skill without one uses the weapon's range), cone { angle, radius, interrupt, los } (radius defaults to the skill's range, so 'weapon' cones reach as far as the weapon; a cone skill without hits attacks with the user's basic attack)",
     "basicSkills": "abilities every Adventurer has on top of weapon and tree skills"
   },
 
@@ -22,6 +26,9 @@
     "area": { "name": "Area", "description": "Affects several tiles at once." },
     "knockback": { "name": "Knockback", "description": "Pushes targets away. Walls and other units stop the push. A unit pushed out of an engagement takes a free basic attack from its opponent." },
     "reaction": { "name": "Reaction", "description": "Sets a watch that triggers during the enemy's turn when they move into it. Lasts until your next turn." },
+    "disengage": { "name": "Disengage", "description": "Usable while engaged, even on units other than your opponent. Using it ends your engagement with no free attack for your opponent." },
+    "physical": { "name": "Physical", "description": "A physical attack." },
+    "stealth": { "name": "Stealth", "description": "Makes you Stealthed: enemies can't target you directly." },
     "teleport": { "name": "Teleport", "description": "Moves you instantly, ignoring terrain and units in the way." },
     "movement": { "name": "Movement", "description": "Range scales with your Movement: every 4 Movement (one grass tile) = 1 tile, rounded down. Slow shortens it." },
     "weapon": { "name": "Weapon", "description": "Uses your weapon's basic-attack range and line rules. Unusable while your weapon is disabled." },
@@ -35,6 +42,9 @@
     "burn": { "name": "Burn", "debuff": true, "stacking": true, "tick": "start", "damagePctMaxHpPerStack": 0.01, "description": "Lose 1% of max Health per stack at the start of each turn. Ignores Defense and shields." },
     "frenzy": { "name": "Frenzy", "debuff": false, "stacking": false, "tick": "end", "statMods": { "pAtk": 20 }, "description": "+20 P.Atk." },
     "slow": { "name": "Slow", "debuff": true, "stacking": false, "tick": "end", "statMods": { "movement": -4 }, "description": "-4 Movement (one grass tile)." },
+    "blind": { "name": "Blinded", "debuff": true, "stacking": false, "tick": "end", "statPct": { "pAtk": -0.3, "mAtk": -0.3 }, "description": "-30% P.Atk and M.Atk." },
+    "exposed": { "name": "Exposed", "debuff": true, "stacking": false, "tick": "start", "statPct": { "defense": -1 }, "description": "No Defense (forest cover included)." },
+    "stealth": { "name": "Stealthed", "debuff": false, "stacking": false, "tick": "start", "stealth": true, "description": "Enemies can't target you directly or trigger overwatch on you; area attacks still hit. Ends early if you attack." },
     "corrode": { "name": "Corrode", "debuff": true, "stacking": false, "tick": "end", "statPct": { "defense": -0.25 }, "description": "-25% Defense." }
   },
 
@@ -44,12 +54,6 @@
       "tags": ["melee", "engage"],
       "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 0,
       "hits": [{ "pAtk": 1 }]
-    },
-    "slash_and_smash": {
-      "name": "Slash and Smash", "description": "Slash an enemy for 80% P.Atk, then bash it with your shield for 40% P.Atk + 100% Def.",
-      "tags": ["melee", "engage"],
-      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 2, "mana": 20,
-      "hits": [{ "pAtk": 0.8 }, { "pAtk": 0.4, "def": 1 }]
     },
     "shield_up": {
       "name": "Shield Up", "description": "Gain a shield equal to 10% of your max Health until your next turn.",
@@ -62,12 +66,6 @@
       "tags": ["melee"],
       "target": "line", "affects": "enemy", "range": 2, "minRange": 1, "cooldown": 0,
       "hits": [{ "pAtk": 1 }]
-    },
-    "circle_swing": {
-      "name": "Circle Swing", "description": "Sweep the tiles around you, hitting every unit (allies included) for 100% P.Atk and knocking them back 1 tile.",
-      "tags": ["melee", "area", "knockback"],
-      "target": "self", "affects": "any", "range": 0, "minRange": 0, "aoeRadius": 1.5, "cooldown": 2, "mana": 30,
-      "hits": [{ "pAtk": 1 }], "knockback": 1
     },
     "direct_shot": {
       "name": "Direct Shot", "description": "Shoot an enemy for 100% P.Atk.",
@@ -113,14 +111,14 @@
     },
     "arcane_pulse": {
       "name": "Arcane Pulse", "description": "Blast an enemy for 100% M.Atk and knock it back 2 tiles.",
-      "tags": ["projectile", "knockback"],
-      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "los": "sight", "cooldown": 2, "mana": 40,
+      "tags": ["disengage", "knockback"],
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "los": "sight", "cooldown": 2, "mana": 40, "level": 3,
       "hits": [{ "mAtk": 1 }], "knockback": 2
     },
     "arcane_shift": {
       "name": "Arcane Shift", "description": "Teleport to an empty tile.",
-      "tags": ["teleport"],
-      "target": "emptyTile", "affects": "ally", "range": 2, "minRange": 1, "cooldown": 2, "mana": 40,
+      "tags": ["disengage", "teleport"],
+      "target": "emptyTile", "affects": "ally", "range": 2, "minRange": 1, "cooldown": 2, "mana": 40, "level": 3,
       "teleport": true
     },
     "fireball": {
@@ -149,23 +147,65 @@
       "target": "unit", "affects": "any", "range": 5, "minRange": 0, "cooldown": 0, "mana": 20,
       "cleanse": true
     },
+    "engage": {
+      "name": "Engage", "description": "Engage an enemy next to you without attacking it.",
+      "tags": ["engage"],
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 0, "ap": 1, "mana": 10
+    },
     "charge": {
-      "name": "Charge", "description": "Dash next to an enemy and strike it for 80% P.Atk.",
-      "tags": ["movement", "melee", "engage"],
-      "target": "unit", "affects": "enemy", "range": 4, "rangeScale": 1, "minRange": 1, "cooldown": 2, "mana": 30,
-      "hits": [{ "pAtk": 0.8 }], "charge": true
+      "name": "Charge", "description": "Dash next to an enemy and strike it for 100% P.Atk.",
+      "tags": ["movement", "physical", "engage"],
+      "target": "unit", "affects": "enemy", "range": 4, "rangeScale": 1, "minRange": 1, "cooldown": 2, "ap": 1, "mana": 20, "level": 3,
+      "hits": [{ "pAtk": 1 }], "charge": true
     },
     "kick": {
       "name": "Kick", "description": "Kick an enemy for 60% P.Atk.",
-      "tags": ["melee", "engage", "free"],
-      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 1, "mana": 10, "ap": 0,
+      "tags": ["physical", "engage"],
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 2, "mana": 10, "ap": 0,
       "hits": [{ "pAtk": 0.6 }]
+    },
+    "pocket_sand": {
+      "name": "Pocket Sand", "description": "Throw sand in an enemy's eyes: Blinded (-30% P.Atk and M.Atk) for 1 turn.",
+      "tags": ["projectile", "debuff"],
+      "target": "unit", "affects": "enemy", "range": 3, "minRange": 1, "los": "sight", "cooldown": 2, "ap": 1, "mana": 20, "level": 3,
+      "applyStatus": [{ "status": "blind", "turns": 1 }]
+    },
+    "shadow_step": {
+      "name": "Shadow Step", "description": "Teleport up to 1.5 tiles away and become Stealthed until your next turn.",
+      "tags": ["disengage", "teleport", "stealth"],
+      "target": "emptyTile", "affects": "ally", "range": 1.5, "minRange": 1, "cooldown": 3, "ap": 1, "mana": 20,
+      "teleport": true, "selfStatus": [{ "status": "stealth", "turns": 1 }]
+    },
+    "flicker_strike": {
+      "name": "Flicker Strike", "description": "Teleport next to an enemy up to 3 tiles away and strike it for 100% P.Atk.",
+      "tags": ["teleport", "physical", "engage"],
+      "target": "unit", "affects": "enemy", "range": 3, "minRange": 1, "cooldown": 2, "mana": 20, "level": 3,
+      "hits": [{ "pAtk": 1 }], "charge": true, "teleport": true
+    },
+    "life_risking_strike": {
+      "name": "Life-Risking Strike", "description": "Drop your guard (no Defense until your next turn), then strike an enemy for 250% P.Atk. If it survives, you take 100% of your P.Atk as damage.",
+      "tags": ["physical", "engage"],
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 3, "mana": 30, "level": 5,
+      "selfStatus": [{ "status": "exposed", "turns": 1 }],
+      "hits": [{ "pAtk": 2.5 }], "recoilIfSurvives": { "pAtk": 1 }
+    },
+    "double_strike": {
+      "name": "Double Strike", "description": "Hit an enemy with your basic attack twice.",
+      "tags": ["weapon"],
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 2, "mana": 20,
+      "basicAttack": 2
     },
     "execute": {
       "name": "Execute", "description": "Strike an enemy for 100% P.Atk + 15% of its missing Health.",
       "tags": ["weapon"],
-      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 2, "mana": 20,
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 2, "mana": 20, "level": 3,
       "hits": [{ "pAtk": 1, "missingHp": 0.15 }]
+    },
+    "circle_swing": {
+      "name": "Circle Swing", "description": "Hit every enemy within your weapon's range with your basic attack and knock them back 1 tile.",
+      "tags": ["weapon", "area", "knockback"],
+      "target": "self", "affects": "enemy", "range": 0, "minRange": 0, "cooldown": 3, "mana": 30, "level": 5,
+      "basicAttack": 1, "knockback": 1
     },
 
     "_monsters": "Skills used only by monsters (see enemies.json). They are not in any skill tree.",
@@ -220,8 +260,9 @@
     { "id": "arcanist", "name": "Arcanist", "tab": "mage", "skills": ["arcane_bolt", "arcane_pulse", "arcane_shift"] },
     { "id": "elementalist", "name": "Elementalist", "tab": "mage", "skills": ["fireball", "freeze"] },
     { "id": "cleric", "name": "Cleric", "tab": "mage", "skills": ["heal", "cleanse"] },
-    { "id": "vanguard", "name": "Vanguard", "tab": "warrior", "skills": ["charge"] },
-    { "id": "infighter", "name": "Infighter", "tab": "warrior", "skills": ["kick"] },
-    { "id": "assassin", "name": "Assassin", "tab": "warrior", "skills": ["execute"] }
+    { "id": "vanguard", "name": "Vanguard", "tab": "warrior", "skills": ["engage", "charge"] },
+    { "id": "infighter", "name": "Infighter", "tab": "warrior", "skills": ["kick", "pocket_sand"] },
+    { "id": "assassin", "name": "Assassin", "tab": "warrior", "skills": ["shadow_step", "flicker_strike", "life_risking_strike"] },
+    { "id": "weapon_master", "name": "Weapon Master", "tab": "warrior", "skills": ["double_strike", "execute", "circle_swing"] }
   ]
 }

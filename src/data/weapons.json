@@ -6,13 +6,13 @@
       "name": "Sword & Shield", "tag": "SW", "art": "sword_shield",
       "description": "Frontline weapon. High Defense; locks enemies in melee and shields itself.",
       "statMultipliers": { "pAtk": 1.0, "mAtk": 0.8, "defense": 1.5 },
-      "skills": ["sword_slash", "slash_and_smash", "shield_up"]
+      "skills": ["sword_slash", "shield_up"]
     },
     "spear": {
       "name": "Spear", "tag": "SP", "art": "spear",
-      "description": "Reach weapon. Hits from 2 tiles and knocks foes back.",
+      "description": "Reach weapon. Hits from 2 tiles.",
       "statMultipliers": { "pAtk": 1.0, "mAtk": 0.8 },
-      "skills": ["spear_thrust", "circle_swing"]
+      "skills": ["spear_thrust"]
     },
     "bow": {
       "name": "Bow", "tag": "BW", "art": "bow",

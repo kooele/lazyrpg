@@ -155,6 +155,8 @@ function validateCharacter(raw: unknown, path: string, opts: { member?: boolean 
     }
   }
   if (new Set(skills).size !== skills.length) bad(`${path}.skillIds`, 'contains duplicates');
+  // Skills that now need a higher level (level requirements change between versions) are unlearned, refunding the point.
+  skills.splice(0, skills.length, ...skills.filter((s) => SKILLS[s as string].level <= (level as number)));
   const points = skillPointsForLevel(level as number);
   const body = r.body === undefined ? undefined : validateBody(r.body, `${path}.body`);
   const spent = skills.length + Object.values(body ?? {}).reduce((a, n) => a + (n ?? 0), 0);

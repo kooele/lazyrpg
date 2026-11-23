@@ -31,6 +31,7 @@ function aimPoints(battle: Battle, skill: SkillDef, from: Point): Point[] {
 }
 
 function scoreSkill(battle: Battle, u: Unit, skill: SkillDef, from: Point, aim: Point): number {
+  skill = battle.skillFor(u, skill);
   let score = 0;
   for (const t of battle.targetsOf(u, skill, aim, from)) {
     const friendly = t.team === u.team;
@@ -84,7 +85,7 @@ function bestFrom(
   let best: { action: AiAction; score: number } | null = null;
   for (const id of battle.skillIds(u)) {
     const skill = SKILLS[id];
-    if (!battle.isUsable(u, id) || !battle.canPay(u, skill) || isFree(skill) !== wantFree || skill.cone || skill.teleport || skill.target === 'move') continue;
+    if (!battle.isUsable(u, id) || !battle.canPay(u, skill) || isFree(skill) !== wantFree || skill.cone || (skill.teleport && !skill.charge) || skill.target === 'move') continue;
     if (!includeDefensive && skill.shield) continue;
     for (const aim of aimPoints(battle, skill, from)) {
       if (!battle.canTarget(u, skill, aim, from)) continue;
@@ -152,7 +153,7 @@ function foeThreats(battle: Battle, u: Unit): { foe: Unit; reach: number; damage
   return battle.living().filter((f) => f.team !== u.team).map((f) => {
     let range = battle.basicAttack(f).range;
     for (const id of battle.skillIds(f)) {
-      const sk = SKILLS[id];
+      const sk = battle.skillFor(f, SKILLS[id]);
       if (sk.hits?.length && sk.affects !== 'ally') range = Math.max(range, battle.skillRange(f, sk));
     }
     const damage = battle.previewHits(f, battle.basicAttack(f), u).reduce((a, b) => a + b, 0);

@@ -8,7 +8,7 @@ import { STAT_CONFIG, parseStatConfig } from '../src/data/stats';
 import type { Character, SkillDef } from '../src/data/types';
 import { planTurn, runAiTurn, shouldDisengage, threatAt } from '../src/game/ai';
 import { Battle, defenseMultiplier, resistChance, deploymentTiles, enemyTypesForStage, generateEnemies, makeEnemy, makeUnit, victoryXp, type Team } from '../src/game/battle';
-import { allSkills, bodyGain, skillBarLayout, swapBarSlots, bodyPoints as bodyPointsOf, bodyStats, createCharacter, deriveStats, freePoints, grantXp, makeRng, pointsUsed, sanitizeLoadout } from '../src/game/character';
+import { allSkills, bodyGain, skillBarLayout, swapBarSlots, bodyPoints as bodyPointsOf, bodyStats, createCharacter, deriveStats, freePoints, grantXp, isUnlocked, makeRng, pointsUsed, sanitizeLoadout } from '../src/game/character';
 import { randomAdventurer } from '../src/game/people';
 import { generateMap, hasLineOfSight, passable, withinRange, type BattleMap, type Point, type Terrain } from '../src/game/grid';
 import { parseSave, serializeSave } from '../src/game/save';
@@ -64,7 +64,7 @@ describe('stats and content files', () => {
   it('skills.json and weapons.json are validated with precise errors', () => {
     const bad = clone(skillsJson) as Record<string, any>;
     bad.skills.kick.tags.push('flying');
-    expect(() => parseContent(bad, weaponsJson)).toThrow(/skills.kick.tags\[3\].*"flying" is not defined/);
+    expect(() => parseContent(bad, weaponsJson)).toThrow(/skills.kick.tags\[2\].*"flying" is not defined/);
     const bad2 = clone(skillsJson) as Record<string, any>;
     bad2.skills.fireball.applyStatus[0].status = 'poison';
     expect(() => parseContent(bad2, weaponsJson)).toThrow(/fireball.applyStatus\[0\].status/);
@@ -75,7 +75,9 @@ describe('stats and content files', () => {
 
   it('every weapon grants defined skills; formulas are generated from the data', () => {
     for (const w of Object.values(WEAPONS)) for (const s of w.skills) expect(SKILLS[s]).toBeDefined();
-    expect(skillFormula(SKILLS.slash_and_smash)).toBe('80% P.Atk, then 40% P.Atk + 100% Def');
+    expect(skillFormula(SKILLS.execute)).toBe("100% P.Atk + 15% target's missing HP");
+    expect(skillFormula(SKILLS.double_strike)).toBe('basic attack x2');
+    expect(skillFormula(SKILLS.life_risking_strike)).toBe('250% P.Atk · you: Exposed (1 turn) · if it survives, you take 100% P.Atk');
   });
 });
 
@@ -143,7 +145,7 @@ describe('ranges, lines and tags', () => {
       { c: hero(), team: 'enemy', at: { x: 9, y: 6 } },
     ]);
     expect(battle.canTarget(a, SKILLS.sword_slash, { x: 4, y: 4 })).toBe(true);
-    expect(battle.canTarget(a, SKILLS.slash_and_smash, { x: 4, y: 4 })).toBe(true);
+    expect(battle.canTarget(a, SKILLS.kick, { x: 4, y: 4 })).toBe(true);
     expect(withinRange(Math.SQRT2, 1)).toBe(false);
   });
 
@@ -248,14 +250,18 @@ describe('skills', () => {
     expect(e.hp).toBe(500 - 57); // 100 x 100/175
   });
 
-  it('slash and smash hits twice, the second hit scaling with Defense', () => {
-    const { battle, units: [a] } = setup(openMap(), [
-      { c: hero('sword_shield'), team: 'player', at: { x: 1, y: 1 } },
+  it('double strike hits with the weapon basic attack twice, at the weapon range', () => {
+    const { battle, units: [a, e] } = setup(openMap(), [
+      { c: hero('sword_shield', ['double_strike']), team: 'player', at: { x: 1, y: 1 } },
       { c: hero('bow'), team: 'enemy', at: { x: 2, y: 1 } },
     ]);
-    const events = battle.perform(a, 'slash_and_smash', { x: 2, y: 1 });
-    // 80 x 2/3 = 53; (40 + 75) x 2/3 = 77
-    expect(events.filter((e) => e.type === 'damage').map((e) => e.type === 'damage' && e.amount)).toEqual([53, 77]);
+    const events = battle.perform(a, 'double_strike', { x: 2, y: 1 });
+    // Sword Slash: 100 x 2/3 = 67, twice
+    expect(events.filter((ev) => ev.type === 'damage').map((ev) => ev.type === 'damage' && ev.amount)).toEqual([67, 67]);
+    expect(e.hp).toBe(500 - 134);
+    // With a bow it reaches as far as the bow.
+    const archer = setup(openMap(), [{ c: hero('bow', ['double_strike']), team: 'player', at: { x: 1, y: 1 } }]);
+    expect(archer.battle.skillRange(archer.units[0], SKILLS.double_strike)).toBe(5);
   });
 
   it('cooldown 1 means the skill cannot be used on the next turn', () => {
@@ -321,17 +327,19 @@ describe('skills', () => {
     expect(e.hp).toBe(500 - 80); // 120 x 2/3
   });
 
-  it('circle swing hits all 8 neighbours, allies included', () => {
-    const { battle, units: [s, ally, foe] } = setup(openMap(), [
-      { c: hero('spear'), team: 'player', at: { x: 4, y: 3 } },
+  it('circle swing hits every enemy within weapon range with the basic attack and pushes them', () => {
+    const { battle, units: [s, ally, foe, far] } = setup(openMap(), [
+      { c: hero('spear', ['circle_swing']), team: 'player', at: { x: 4, y: 3 } },
       { c: hero('bow'), team: 'player', at: { x: 5, y: 4 } },
       { c: hero('bow'), team: 'enemy', at: { x: 3, y: 3 } },
+      { c: hero('bow'), team: 'enemy', at: { x: 7, y: 3 } },
     ]);
     battle.perform(s, 'circle_swing', { x: 4, y: 3 });
-    expect(ally.hp).toBeLessThan(500);
-    expect(foe.hp).toBeLessThan(500);
-    expect(ally).toMatchObject({ x: 6, y: 5 });
+    expect(ally.hp).toBe(500); // enemies only
+    expect(ally).toMatchObject({ x: 5, y: 4 });
+    expect(foe.hp).toBe(500 - 67); // Spear Thrust's 100% P.Atk
     expect(foe).toMatchObject({ x: 2, y: 3 });
+    expect(far.hp).toBe(500); // 3 tiles away: outside the spear's range 2
   });
 
   it('Overwatch (basic ability): 60° arc to weapon range, fires the basic attack without stopping; ends the turn', () => {
@@ -425,7 +433,8 @@ describe('skills', () => {
     ]);
     battle.perform(v, 'charge', { x: 5, y: 3 });
     expect(Math.hypot(v.x - 5, v.y - 3)).toBeLessThanOrEqual(1.5);
-    expect(e.hp).toBe(500 - 53);
+    expect(e.hp).toBe(500 - 67); // 100% P.Atk
+    expect(v.acted).toBe(false); // 1 AP: the action AP is still there
   });
 
   it('kick is free: the unit can still act afterwards', () => {
@@ -511,7 +520,7 @@ describe('engagement', () => {
 
   it('a successful push breaks the engagement, even if the units stay adjacent', () => {
     const { units: [a, e] } = duel();
-    const spear = makeUnit(hero('spear', [], 'S'), 'player', { x: 5, y: 4 });
+    const spear = makeUnit(hero('spear', ['circle_swing'], 'S'), 'player', { x: 5, y: 4 });
     const b2 = new Battle(openMap(), [a, e, spear], makeRng(2));
     b2.perform(a, 'sword_slash', { x: 4, y: 3 });
     const events = b2.perform(spear, 'circle_swing', { x: 5, y: 4 }); // pushes the enemy to (3,2)
@@ -543,7 +552,7 @@ describe('engagement', () => {
   it('engaged spears can Spear Thrust and Circle Swing their opponent, incl. diagonally', () => {
     for (const opp of [{ x: 4, y: 3 }, { x: 4, y: 4 }]) {
       const { battle, units: [a, e] } = setup(openMap(), [
-        { c: hero('spear'), team: 'player', at: { x: 3, y: 3 } },
+        { c: hero('spear', ['circle_swing']), team: 'player', at: { x: 3, y: 3 } },
         { c: hero(), team: 'enemy', at: opp },
         { c: hero(), team: 'enemy', at: { x: 2, y: 3 } },
       ]);
@@ -1129,5 +1138,145 @@ describe('skill bar', () => {
     const r = parseSave(JSON.stringify(file));
     expect(r.ok && r.state.party[0].skillBar![1]).toBeNull();
     expect(r.ok && skillBarLayout(r.state.party[0])[4]).toBe('direct_shot');
+  });
+});
+
+describe('skill-sheet systems: level locks, Disengage and the new skills', () => {
+  it('tree skills can need a minimum level: locked picks are dropped, NPCs only pick unlocked ones', () => {
+    const c = hero('sword_shield', ['kick', 'charge']);
+    expect(isUnlocked(c, 'kick')).toBe(true);
+    expect(isUnlocked(c, 'charge')).toBe(false); // level 3
+    sanitizeLoadout(c);
+    expect(c.skillIds).toEqual(['kick']);
+    const c3 = hero('sword_shield', ['kick', 'charge']);
+    c3.level = 3;
+    sanitizeLoadout(c3);
+    expect(c3.skillIds).toEqual(['kick', 'charge']);
+    for (let seed = 0; seed < 30; seed++) {
+      for (const s of randomAdventurer(1, makeRng(seed)).skillIds) expect(SKILLS[s].level).toBe(1);
+    }
+  });
+
+  it('saves with a skill above the character level load with that skill unlearned', () => {
+    const state = newCampaign(hero('staff', ['fireball', 'arcane_pulse'], 'Main'), 'Testers', makeRng(5));
+    const parsed = parseSave(serializeSave(state));
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) expect(parsed.state.party[0].skillIds).toEqual(['fireball']);
+  });
+
+  it('Engage locks onto an enemy without hitting it, for 1 AP', () => {
+    const { battle, units: [a, e] } = setup(openMap(), [
+      { c: hero('sword_shield', ['engage']), team: 'player', at: { x: 3, y: 3 } },
+      { c: hero('bow'), team: 'enemy', at: { x: 4, y: 4 } },
+    ]);
+    const events = battle.perform(a, 'engage', { x: 4, y: 4 });
+    expect(events.some((ev) => ev.type === 'damage')).toBe(false);
+    expect(a.engagedWith).toBe(e.uid);
+    expect(e.engagedWith).toBe(a.uid);
+    expect(a.acted).toBe(false);
+    expect(a.mp).toBe(a.stats.mana - 10);
+  });
+
+  it('Disengage skills work while engaged, on anyone, and end the engagement with no free attack', () => {
+    const { battle, units: [a, e, f] } = setup(openMap(), [
+      { c: hero('staff', ['arcane_pulse']), team: 'player', at: { x: 3, y: 3 } },
+      { c: hero('sword_shield'), team: 'enemy', at: { x: 4, y: 3 } },
+      { c: hero('bow'), team: 'enemy', at: { x: 2, y: 3 } },
+    ]);
+    a.engagedWith = e.uid;
+    e.engagedWith = a.uid;
+    expect(battle.canTarget(a, SKILLS.empowered_strike, { x: 2, y: 3 })).toBe(false); // not the opponent
+    expect(battle.canTarget(a, SKILLS.arcane_pulse, { x: 2, y: 3 })).toBe(true);
+    const hp = a.hp;
+    const events = battle.perform(a, 'arcane_pulse', { x: 2, y: 3 });
+    expect(events).toContainEqual(expect.objectContaining({ type: 'disengage', reason: 'escaped' }));
+    expect(events.some((ev) => ev.type === 'damage' && ev.cause === 'opportunity')).toBe(false);
+    expect(a.hp).toBe(hp);
+    expect(a.engagedWith).toBeNull();
+    expect(e.engagedWith).toBeNull();
+    expect(f).toMatchObject({ x: 0, y: 3 });
+  });
+
+  it('Pocket Sand blinds: -30% P.Atk and M.Atk through the enemy turn', () => {
+    const map = openMap();
+    const a = makeUnit(hero('sword_shield', ['pocket_sand']), 'player', { x: 1, y: 3 });
+    const e = makeUnit(hero('bow'), 'enemy', { x: 4, y: 3 });
+    const battle = new Battle(map, [a, e], () => 0.99); // never resisted
+    const before = battle.stat(e, 'pAtk');
+    battle.perform(a, 'pocket_sand', { x: 4, y: 3 });
+    expect(battle.stat(e, 'pAtk')).toBe(Math.round(before * 0.7));
+    expect(a.acted).toBe(false); // 1 AP
+    battle.endPhase(); // enemy turn: still blinded
+    expect(battle.stat(e, 'pAtk')).toBe(Math.round(before * 0.7));
+    battle.endPhase(); // the enemy's turn ended: gone
+    expect(battle.stat(e, 'pAtk')).toBe(before);
+  });
+
+  it('Shadow Step slips out of an engagement and Stealths you until your next turn', () => {
+    const { battle, units: [a, e, archer] } = setup(openMap(), [
+      { c: hero('sword_shield', ['shadow_step']), team: 'player', at: { x: 3, y: 3 } },
+      { c: hero('sword_shield'), team: 'enemy', at: { x: 4, y: 3 } },
+      { c: hero('bow'), team: 'enemy', at: { x: 8, y: 3 } },
+    ]);
+    a.engagedWith = e.uid;
+    e.engagedWith = a.uid;
+    expect(battle.canTarget(a, SKILLS.shadow_step, { x: 1, y: 3 })).toBe(false); // 2 tiles: too far
+    const events = battle.perform(a, 'shadow_step', { x: 2, y: 2 });
+    expect(events.some((ev) => ev.type === 'damage')).toBe(false);
+    expect(a).toMatchObject({ x: 2, y: 2, engagedWith: null, acted: false });
+    expect(battle.isStealthed(a)).toBe(true);
+    battle.endPhase();
+    expect(battle.targetsOf(archer, SKILLS.direct_shot, { x: 2, y: 2 })).toEqual([]);
+    battle.endPhase();
+    expect(battle.isStealthed(a)).toBe(false);
+  });
+
+  it('attacking ends Stealth early', () => {
+    const { battle, units: [a] } = setup(openMap(), [
+      { c: hero('sword_shield', ['shadow_step']), team: 'player', at: { x: 3, y: 3 } },
+      { c: hero('bow'), team: 'enemy', at: { x: 5, y: 3 } },
+    ]);
+    battle.perform(a, 'shadow_step', { x: 4, y: 3 });
+    expect(battle.isStealthed(a)).toBe(true);
+    battle.perform(a, 'sword_slash', { x: 5, y: 3 });
+    expect(battle.isStealthed(a)).toBe(false);
+  });
+
+  it('Flicker Strike teleports next to an enemy up to 3 tiles away and engages it', () => {
+    const { battle, units: [a, e] } = setup(openMap(), [
+      { c: hero('sword_shield', ['flicker_strike']), team: 'player', at: { x: 1, y: 3 } },
+      { c: hero('bow'), team: 'enemy', at: { x: 4, y: 3 } },
+      { c: hero('bow'), team: 'enemy', at: { x: 5, y: 1 } },
+    ]);
+    expect(battle.canTarget(a, SKILLS.flicker_strike, { x: 5, y: 1 })).toBe(false); // 4.5 tiles
+    expect(battle.canTarget(a, SKILLS.flicker_strike, { x: 3, y: 1 })).toBe(false); // nobody there
+    const events = battle.perform(a, 'flicker_strike', { x: 4, y: 3 });
+    expect(events).toContainEqual(expect.objectContaining({ type: 'move', kind: 'teleport' }));
+    expect(a).toMatchObject({ x: 3, y: 3 });
+    expect(e.hp).toBe(500 - 67);
+    expect(a.engagedWith).toBe(e.uid);
+  });
+
+  it('Life-Risking Strike: 250% P.Atk with no Defense until your next turn; costs you if the target survives', () => {
+    const { battle, units: [a, e] } = setup(openMap(), [
+      { c: hero('sword_shield', ['life_risking_strike']), team: 'player', at: { x: 3, y: 3 } },
+      { c: hero('sword_shield'), team: 'enemy', at: { x: 4, y: 3 } },
+    ]);
+    battle.perform(a, 'life_risking_strike', { x: 4, y: 3 });
+    expect(e.hp).toBe(500 - 143); // 250 x 100/175
+    expect(battle.stat(a, 'defense')).toBe(0);
+    expect(a.hp).toBe(500 - 100); // 100% of own P.Atk, no Defense
+    battle.endPhase();
+    battle.endPhase();
+    expect(battle.stat(a, 'defense')).toBe(75);
+
+    const kill = setup(openMap(), [
+      { c: hero('sword_shield', ['life_risking_strike']), team: 'player', at: { x: 3, y: 3 } },
+      { c: hero('bow'), team: 'enemy', at: { x: 4, y: 3 } },
+    ]);
+    kill.units[1].hp = 50;
+    kill.battle.perform(kill.units[0], 'life_risking_strike', { x: 4, y: 3 });
+    expect(kill.units[1].alive).toBe(false);
+    expect(kill.units[0].hp).toBe(500);
   });
 });

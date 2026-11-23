@@ -101,8 +101,8 @@ Weapons **multiply** these stats:
 
 | Weapon | Multipliers | Skills (the first is the basic attack) |
 |---|---|---|
-| Sword & Shield | x1 P.Atk, x0.8 M.Atk, x1.5 Def | Sword Slash, Slash and Smash, Shield Up |
-| Spear | x1 P.Atk, x0.8 M.Atk | Spear Thrust, Circle Swing |
+| Sword & Shield | x1 P.Atk, x0.8 M.Atk, x1.5 Def | Sword Slash, Shield Up |
+| Spear | x1 P.Atk, x0.8 M.Atk | Spear Thrust |
 | Bow | x0.8 P.Atk, x0.8 M.Atk | Direct Shot, Indirect Shot |
 | Staff | x0.5 P.Atk, x1.2 M.Atk | Empowered Strike, Magic Bolt |
 
@@ -119,7 +119,7 @@ Every unit gets **2 AP** each turn: a **movement AP** (the regular move) and an 
 
 Moving after a skill isn't possible once the movement AP is gone. **Undo move** takes back a regular move as long as nothing else happened since.
 
-Skills can cost **mana** (`mana` in `skills.json`), which doesn't come back during a battle: Kick 10, Slash and Smash 20, Arcane Bolt 20, Cleanse 20, Execute 20, Circle Swing 30, Charge 30, Arcane Pulse 40, Arcane Shift 40, Heal 40. Skill buttons show the cost; without enough mana a skill is greyed out.
+Skills can cost **mana** (`mana` in `skills.json`), which doesn't come back during a battle: Engage 10, Kick 10, Arcane Bolt 20, Charge 20, Cleanse 20, Double Strike 20, Execute 20, Flicker Strike 20, Pocket Sand 20, Shadow Step 20, Circle Swing 30, Life-Risking Strike 30, Arcane Pulse 40, Arcane Shift 40, Heal 40. Skill buttons show the cost; without enough mana a skill is greyed out.
 
 **Basic abilities** (every Adventurer, listed under the weapon in the creator):
 
@@ -131,19 +131,24 @@ Skills can cost **mana** (`mana` in `skills.json`), which doesn't come back duri
 Adventurers have **skill points**: 2 at level 1 and 1 more every level. Each point either learns a skill-tree skill (mix trees freely) or goes into the **Body** tab, where it trains a stat by twice its base growth per level: +100 Health, +40 Mana, +20 P.Atk or M.Atk, +10 Defense or Resist per point (before weapon multipliers; talent doesn't change it). Points can be moved around freely in Customize / Loadout.
 
 
-- **Mage**: Arcanist (Arcane Bolt, Arcane Pulse, Arcane Shift), Elementalist (Fireball, Freeze), Cleric (Heal, Cleanse)
-- **Warrior**: Vanguard (Charge), Infighter (Kick), Assassin (Execute)
+Some skills need a **minimum level** (`level` in `skills.json`; shown as "Lv 3" in the skill tree). Until then they're greyed out and can't be learned. A loaded save with a skill above the character's level unlearns it and refunds the point. Random adventurers only pick skills their level has unlocked.
+
+- **Mage**: Arcanist (Arcane Bolt, Arcane Pulse Lv 3, Arcane Shift Lv 3), Elementalist (Fireball, Freeze), Cleric (Heal, Cleanse)
+- **Warrior**: Vanguard (Engage, Charge Lv 3), Infighter (Kick, Pocket Sand Lv 3), Assassin (Shadow Step, Flicker Strike Lv 3, Life-Risking Strike Lv 5), Weapon Master (Double Strike, Execute Lv 3, Circle Swing Lv 5)
+
+Status effects: Burn, Slow, Corrode, Frenzy, **Blinded** (Pocket Sand: −30% P.Atk and M.Atk), **Exposed** (Life-Risking Strike: no Defense until your next turn) and **Stealthed** (Shadow Step: enemies can't target you directly or trigger overwatch on you until your next turn; area attacks still hit, and attacking ends it).
 
 ### Tags
 
-Every skill has tags that explain how it behaves. These four change the rules:
+Every skill has tags that explain how it behaves. These five change the rules:
 
 - **Movement**: range in tiles = rangeScale × Movement ÷ 4 (the grass cost), rounded down. Charge uses 100% (4 tiles at Movement 16), and Slow (−4 Movement) shortens it. Arcane Shift has a fixed range of 2.
-- **Weapon**: uses your weapon's basic-attack range and line rules (Execute with a Bow reaches 5 tiles). Unusable while the weapon is disabled (nothing disables weapons yet).
-- **Engage**: see below. Sword Slash, Slash and Smash, Empowered Strike, Kick, Charge.
+- **Weapon**: uses your weapon's basic-attack range and line rules (Execute with a Bow reaches 5 tiles). Double Strike hits with the basic attack twice, and Circle Swing hits every enemy within the weapon's range with it. Unusable while the weapon is disabled (nothing disables weapons yet).
+- **Engage**: see below. Sword Slash, Empowered Strike, Engage, Kick, Charge, Flicker Strike, Life-Risking Strike.
+- **Disengage**: usable while engaged, on anyone, and it ends your engagement with no free attack for your opponent. Arcane Pulse, Arcane Shift, Shadow Step.
 - **Free Action**: costs 0 AP (Kick). Usable any time until the unit's turn ends, so after a move or a 1/2-AP skill, but not after a turn-ending one. The turn doesn't end automatically while a unit still has a free action with a target in reach; press **End Turn** when done.
 
-Descriptive tags: Melee, Projectile, Indirect, Area, Knockback, Reaction, Teleport, Debuff, Support.
+Descriptive tags: Melee, Physical, Projectile, Indirect, Area, Knockback, Reaction, Teleport, Stealth, Debuff, Support.
 
 ### Enemies
 
@@ -154,7 +159,7 @@ Each enemy type has a fixed level range and its own stats and skills (`src/data/
 | Giant Rat | 1–2 | Gnaw. Fast and weak; comes in packs. |
 | Green Slime | 2–3 | Slam (Engage); Sticky Spit at level 3 (ranged, applies Slow and Corrode: -25% Defense, 2-turn cooldown). Slow-moving and tough. |
 | Grey Wolf | 3–4 | Bite (Engage) and Pounce (leaps in, Engage); Howl at level 4 (Frenzy: +20 P.Atk to nearby allies). Very fast. |
-| Bandit | 4–5 | Carries a random weapon but only uses its basic attack (no Slash and Smash, Circle Swing...). Thugs also have Shield Up, Hexers Fireball, Archers Execute; all learn Kick at level 5. |
+| Bandit | 4–5 | Carries a random weapon but only uses its basic attack (no Indirect Shot, Magic Bolt...). Thugs also have Shield Up, Hexers Fireball, Archers Execute; all learn Kick at level 5. |
 
 **Enemy AI** weighs how dangerous a tile is (how much the party could hit it for next turn) against what it can do from there. Healthy enemies take small risks freely. Danger it can't avoid anyway doesn't hold it back, so a unit that's already in the thick of the fight keeps fighting. Below 35% health, an enemy that can reach the edge of the map this turn **flees the battle** and is removed. Otherwise it falls back to regroup with healthy allies (and may disengage to do it), or, if it's on its own, makes a last stand. Wounded enemies may hold back from walking into a deadly spot, but never for more than two turns in a row.
 
@@ -166,7 +171,7 @@ Hitting a unit with an **Engage** skill locks you both together, unless the targ
 - You can't move, you can only attack your opponent, and you can only heal or cleanse yourself.
   - Attacks are fine as long as they hit your opponent: Spear Thrust aimed through them (diagonals included), Circle Swing (even if it also catches others), and Charge on the opponent itself (no dash, just the strike).
 - **Disengage** (button in the battle sidebar) breaks free, but your opponent gets a free basic attack on you (an opportunity attack). You can then move and act normally.
-- **Arcane Shift** (Teleport) slips out of an engagement with no opportunity attack.
+- **Disengage** skills (Arcane Shift, Shadow Step, Arcane Pulse) slip out of an engagement with no opportunity attack. Other teleports and moves need you to disengage first.
 - Engagement also ends if either unit falls, or if either one is successfully pushed by a knockback (Circle Swing, Arcane Pulse), even if they still end up next to each other. The pushed unit takes a free basic attack from its old opponent, just like disengaging. A push that's blocked doesn't break it.
 
 Heal and Cleanse work on any unit, enemies included. An attack aimed straight at an ally hits them normally (lines like Spear Thrust pass by allies they aren't aimed at). In battle, the game asks for confirmation before you attack an empty tile or an ally, or heal or cleanse an enemy. The battle log keeps the whole fight: scroll it with the mouse wheel or the bar on its right.

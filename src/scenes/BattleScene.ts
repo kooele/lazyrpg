@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { SKILLS, STATUSES, WEAPONS, isFree, isSupport, skillDetails, skillFormula, tagNames } from '../data/content';
+import { SKILLS, STATUSES, WEAPONS, hasTag, isFree, isSupport, skillDetails, skillFormula, tagNames } from '../data/content';
 import type { SkillDef } from '../data/types';
 import { bestAction, bestFreeAction, planTurn, shouldDisengage, shouldEscape } from '../game/ai';
 import {
@@ -848,15 +848,16 @@ export class BattleScene extends Phaser.Scene {
   private targetWarning(u: Unit, s: SkillDef, tile: Point): string | null {
     const b = this.battle;
     const occupant = b.unitAt(tile.x, tile.y);
+    s = b.skillFor(u, s);
     const targets = b.targetsOf(u, s, tile);
-    const offensive = s.affects !== 'ally' && !s.cone && (!!s.hits?.length || !!s.applyStatus?.length);
+    const offensive = s.affects !== 'ally' && !s.cone && (!!s.hits?.length || !!s.applyStatus?.length || hasTag(s, 'engage'));
     if (offensive) {
       const allies = targets.filter((t) => t.team === u.team);
       const also = allies.length < targets.length ? 'also ' : '';
       if (allies.length) return `${s.name} will ${also}hit your own ${allies.length > 1 ? 'allies' : 'ally'} ${allies.map((a) => a.character.name).join(', ')}.\nUse it anyway?`;
       if (targets.length === 0) {
         if (occupant && occupant.team === u.team && occupant !== u) return `${occupant.character.name} is your ally: ${s.name} won't affect them and will be wasted.\nUse it anyway?`;
-        return `No enemy there: ${s.name} will hit nothing${s.charge ? ' (you will only dash)' : ''}.\nUse it anyway?`;
+        return `No enemy there: ${s.name} will hit nothing${s.charge && !s.teleport ? ' (you will only dash)' : ''}.\nUse it anyway?`;
       }
     }
     if ((s.heal || s.cleanse) && occupant && occupant.team !== u.team) {
@@ -962,11 +963,14 @@ export class BattleScene extends Phaser.Scene {
     const b = this.battle;
     if (s.target === 'move') return `→ Dash here (${s.mana} MP, uses your last AP)`;
     if (s.cone) return '→ Watch this cone until your next turn';
-    if (s.teleport) return '→ Teleport here';
+    s = b.skillFor(u, s);
     const lines: string[] = [];
+    if (hasTag(s, 'disengage') && b.opponentOf(u)) lines.push(`→ Breaks away from ${b.opponentOf(u)!.character.name} (no free attack)`);
+    for (const a of s.selfStatus ?? []) lines.push(`→ You: ${STATUSES[a.status].name} (${STATUSES[a.status].description})`);
+    if (s.teleport && !s.charge) return [...lines, '→ Teleport here'].join('\n');
     if (s.charge) {
       const land = b.chargeDestination(u, tile, u, s);
-      if (land && (land.x !== u.x || land.y !== u.y)) lines.push('→ Dash in, then strike');
+      if (land && (land.x !== u.x || land.y !== u.y)) lines.push(s.teleport ? '→ Teleport in, then strike' : '→ Dash in, then strike');
     }
     const targets = b.targetsOf(u, s, tile);
     if (targets.length === 0 && lines.length === 0) return '→ Nobody affected (action will be spent)';
@@ -977,13 +981,15 @@ export class BattleScene extends Phaser.Scene {
         const total = hits.reduce((a, c) => a + c, 0);
         const kills = total >= t.hp + b.shieldOf(t);
         lines.push(`→ ${who}: ${hits.join(' + ')} dmg${kills ? ' (defeats!)' : ''}`);
+        if (s.recoilIfSurvives && !kills) lines.push(`   If it survives, you take ${b.recoilDamage(u, s)} dmg`);
       }
+      if (hasTag(s, 'engage') && t.team !== u.team && !u.engagedWith && !t.engagedWith && !s.hits?.length) lines.push(`→ ${who}: engaged`);
       if (s.heal) lines.push(`→ ${who}: +${Math.min(b.healAmount(u, s), t.stats.health - t.hp)} HP`);
       if (s.shield) lines.push(`→ ${who}: +${Math.round(t.stats.health * s.shield.maxHpPct)} shield`);
       if (s.cleanse) lines.push(`→ ${who}: cleanse ${t.statuses.filter((x) => x.debuff).length} debuff(s)`);
       const debuffs = (s.applyStatus ?? []).filter((a) => STATUSES[a.status]?.debuff).map((a) => STATUSES[a.status].name);
       if (debuffs.length) lines.push(`   ${debuffs.join(', ')}: ${b.resistChance(t)}% chance ${t.character.name} resists`);
-      if (s.knockback) lines.push('   knocked back 1 tile');
+      if (s.knockback) lines.push(`   knocked back ${s.knockback} tile${s.knockback > 1 ? 's' : ''}`);
     }
     return lines.join('\n');
   }
@@ -1094,6 +1100,7 @@ export class BattleScene extends Phaser.Scene {
   private async resolve(u: Unit, s: SkillDef, target: Point): Promise<void> {
     const before = { x: u.x, y: u.y };
     const events = this.battle.perform(u, s.id, target);
+    s = this.battle.skillFor(u, s);
     const view = this.views.get(u.uid)!;
     // Small lunge toward the target for attacks that don't move the caster.
     if (s.hits?.length && !s.charge && (target.x !== before.x || target.y !== before.y)) {
@@ -1134,6 +1141,7 @@ export class BattleScene extends Phaser.Scene {
   /** Brief flash over the tiles the skill covered (also shows when it hits empty ground). */
   private flashArea(s: SkillDef, caster: Unit, target: Point): void {
     if (s.cone) return;
+    s = this.battle.skillFor(caster, s);
     const g = this.add.graphics().setDepth(400);
     const color = isSupport(s) ? 0x6fdc8c : 0xffd166;
     const tiles = s.target === 'self' && !s.aoeRadius ? [{ x: caster.x, y: caster.y }] : this.battle.areaTiles(caster, s, target);

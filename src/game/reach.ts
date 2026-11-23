@@ -43,10 +43,13 @@ export function skillShape(s: SkillDef, ctx: ReachContext): { kind: 'targets' | 
     }
   };
   switch (s.target) {
-    case 'self':
-      if (!s.aoeRadius) return { kind: 'self', tiles };
-      scan(s.aoeRadius, (_p, d) => withinRange(d, s.aoeRadius!));
+    case 'self': {
+      // A 'weapon' area without its own radius (Circle Swing) reaches as far as the weapon.
+      const r = s.aoeRadius ?? (hasTag(s, 'weapon') ? ctx.basic.range : 0);
+      if (!r) return { kind: 'self', tiles };
+      scan(r, (_p, d) => withinRange(d, r));
       return { kind: 'area', tiles };
+    }
     case 'move': {
       // Dash: tiles within the unit's Movement on open grass.
       const r = Math.floor(ctx.movement / MOVEMENT_PER_TILE);

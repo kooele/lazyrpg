@@ -199,6 +199,29 @@ export class Battle {
     return SKILLS[allSkills(u.character)[0] ?? WEAPONS[DEFAULT_WEAPON].skills[0]];
   }
 
+  private resolved = new Map<string, SkillDef>();
+
+  /**
+   * The skill as `u` uses it: 'basicAttack' skills take their hits from the user's weapon,
+   * and a 'weapon' self-centered area without its own radius reaches as far as the weapon.
+   */
+  skillFor(u: Unit, s: SkillDef): SkillDef {
+    const needsWeapon = !!s.basicAttack || (s.target === 'self' && hasTag(s, 'weapon') && s.aoeRadius === undefined);
+    if (!needsWeapon) return s;
+    const cacheKey = `${u.uid}:${s.id}`;
+    let out = this.resolved.get(cacheKey);
+    if (!out) {
+      const basic = this.basicAttack(u);
+      out = {
+        ...s,
+        hits: s.basicAttack ? Array.from({ length: s.basicAttack }, () => basic.hits ?? []).flat() : s.hits,
+        aoeRadius: s.target === 'self' && hasTag(s, 'weapon') && s.aoeRadius === undefined ? basic.range : s.aoeRadius,
+      };
+      this.resolved.set(cacheKey, out);
+    }
+    return out;
+  }
+
   /** What the unit's tag-dependent skills scale from (Movement, weapon). */
   reachContext(u: Unit): ReachContext {
     return { movement: this.stat(u, 'movement'), basic: this.basicAttack(u) };
@@ -259,7 +282,7 @@ export class Battle {
 
   /** Is this skill an attack on enemies (as opposed to healing/buffing)? */
   private isAttack(s: SkillDef): boolean {
-    return s.affects !== 'ally' && (!!s.hits?.length || !!s.cone || !!s.applyStatus?.length);
+    return s.affects !== 'ally' && (!!s.hits?.length || !!s.basicAttack || !!s.cone || !!s.applyStatus?.length || hasTag(s, 'engage'));
   }
 
   /**
@@ -269,7 +292,10 @@ export class Battle {
   engagementBlock(caster: Unit, skill: SkillDef, tile: Point, from: Point = caster): string | null {
     const opp = this.opponentOf(caster);
     if (!opp) return null;
-    // Teleports (Arcane Shift) are the exception: they slip out of the engagement for free.
+    // Disengage skills (Arcane Shift, Shadow Step, Arcane Pulse) work anyway: they end the engagement for free.
+    if (hasTag(skill, 'disengage')) return null;
+    skill = this.skillFor(caster, skill);
+    if (skill.teleport && !skill.charge) return `Engaged with ${opp.character.name}: disengage before moving.`;
     const busy = `Engaged with ${opp.character.name}: you can't target anyone else until you disengage.`;
     const targets = this.targetsOf(caster, skill, tile, from);
     // Charge still works on the opponent itself (you're already next to them, so there's no dash).
@@ -458,6 +484,7 @@ export class Battle {
 
   /** How far a skill reaches from where the user stands (cones and self-centered areas included). */
   maxReach(u: Unit, s: SkillDef): number {
+    s = this.skillFor(u, s);
     if (s.target === 'self') return s.aoeRadius ?? 0;
     if (s.target === 'cone') return this.coneRadius(u, s);
     return this.skillRange(u, s);
@@ -465,7 +492,7 @@ export class Battle {
 
   /** Skills that can hurt or hinder the other team (damage, a debuff or a push). */
   isHostile(s: SkillDef): boolean {
-    return s.affects !== 'ally' && (!!s.hits?.length || !!s.knockback || (s.applyStatus ?? []).some((a) => STATUSES[a.status]?.debuff));
+    return s.affects !== 'ally' && (!!s.hits?.length || !!s.basicAttack || !!s.knockback || (s.applyStatus ?? []).some((a) => STATUSES[a.status]?.debuff));
   }
 
   /**
@@ -577,7 +604,7 @@ export class Battle {
     let interrupted = false;
     for (const w of this.living()) {
       if (w.team === mover.team || !w.overwatch || !mover.alive) continue;
-      if (!w.overwatch.tiles.has(key(mover.x, mover.y))) continue;
+      if (!w.overwatch.tiles.has(key(mover.x, mover.y)) || this.isStealthed(mover)) continue;
       if (w.overwatch.los && !this.clearLine(w, mover, w.overwatch.los, w)) continue;
       const ow = w.overwatch;
       w.overwatch = null;
@@ -626,6 +653,7 @@ export class Battle {
   /** Range / line / landing checks only (ignores engagement). */
   private inReach(caster: Unit, skill: SkillDef, tile: Point, from: Point): boolean {
     if (!this.inMap(tile)) return false;
+    skill = this.skillFor(caster, skill);
     const d = dist(from, tile);
     const range = this.skillRange(caster, skill);
     const minRange = this.skillMinRange(caster, skill);
@@ -705,6 +733,7 @@ export class Battle {
 
   /** Tiles the skill would cover if aimed at `tile` (for previews). */
   areaTiles(caster: Unit, skill: SkillDef, tile: Point, from: Point = caster): Point[] {
+    skill = this.skillFor(caster, skill);
     switch (skill.target) {
       case 'self': {
         const r = skill.aoeRadius ?? 0;
@@ -740,6 +769,15 @@ export class Battle {
     return u === caster ? undefined : u;
   }
 
+  /** Stealthed units can't be targeted directly by the other team (see the Stealthed status). */
+  isStealthed(u: Unit): boolean {
+    return u.statuses.some((s) => STATUSES[s.id]?.stealth);
+  }
+
+  private hiddenFrom(caster: Unit, t: Unit): boolean {
+    return t.team !== caster.team && this.isStealthed(t);
+  }
+
   private matches(caster: Unit, skill: SkillDef, t: Unit): boolean {
     // 'any' = friend or foe. Single-target skills may also be used on yourself; area skills never hit you.
     if (skill.affects === 'any') return t !== caster || skill.target === 'unit';
@@ -753,6 +791,7 @@ export class Battle {
 
   /** Units the skill would affect if aimed at `tile`. */
   targetsOf(caster: Unit, skill: SkillDef, tile: Point, from: Point = caster): Unit[] {
+    skill = this.skillFor(caster, skill);
     switch (skill.target) {
       case 'cone':
       case 'emptyTile':
@@ -769,6 +808,7 @@ export class Battle {
         for (const p of this.areaTiles(caster, skill, tile, from)) {
           if (TERRAIN[this.map.tiles[p.y][p.x]].blocksSight) break;
           const t = this.occupantFrom(caster, from, p);
+          if (t && this.hiddenFrom(caster, t)) continue;
           // Passes allies in the way; hits one only if it's the unit aimed at.
           const aimed = p.x === tile.x && p.y === tile.y;
           if (t && (this.matches(caster, skill, t) || (aimed && this.aimedHit(caster, skill, t)))) return [t];
@@ -777,6 +817,7 @@ export class Battle {
       }
       case 'unit': {
         const t = this.occupantFrom(caster, from, tile);
+        if (t && this.hiddenFrom(caster, t)) return [];
         return t && (this.matches(caster, skill, t) || this.aimedHit(caster, skill, t)) ? [t] : [];
       }
     }
@@ -797,9 +838,12 @@ export class Battle {
       if (dist(from, tile) <= 1.5 + EPS) return { x: from.x, y: from.y };
       goals = DIRS8.map((d) => ({ x: tile.x + d.x, y: tile.y + d.y })).filter((p) => this.inMap(p) && free(p));
     } else {
-      goals = free(tile) ? [tile] : [];
+      // A teleport strike needs someone to appear next to; a dash can just run to the tile.
+      goals = free(tile) && !chargeSkill.teleport ? [tile] : [];
     }
     if (goals.length === 0) return null;
+    // Teleport strike (Flicker Strike): appear on the free tile next to the target closest to you.
+    if (chargeSkill.teleport) return goals.reduce((a, b) => (dist(from, b) < dist(from, a) - EPS ? b : a));
     const goalKeys = new Set(goals.map((p) => key(p.x, p.y)));
     const maxSteps = Math.floor(this.skillRange(caster, chargeSkill));
     const seen = new Map<string, number>([[key(from.x, from.y), 0]]);
@@ -867,6 +911,7 @@ export class Battle {
 
   /** Predicted damage of each hit of `skill` on `target` (accounts for missing health growing). */
   previewHits(attacker: Unit, skill: SkillDef, target: Unit): number[] {
+    skill = this.skillFor(attacker, skill);
     let hp = target.hp;
     let shield = this.shieldOf(target);
     const out: number[] = [];
@@ -881,6 +926,22 @@ export class Battle {
       hp = Math.max(0, hp - (amount - absorbed));
     }
     return out;
+  }
+
+  /** What the user would take from the skill's recoil (with its own self statuses, e.g. Exposed, applied). */
+  recoilDamage(u: Unit, s: SkillDef): number {
+    if (!s.recoilIfSurvives) return 0;
+    const saved = u.statuses;
+    const extra = (s.selfStatus ?? []).filter((a) => !saved.some((x) => x.id === a.status)).map((a) => {
+      const def = STATUSES[a.status];
+      return { id: a.status, name: def.name, debuff: def.debuff, stacks: 1, amount: 0, turns: a.turns, tick: def.tick };
+    });
+    u.statuses = [...saved, ...extra];
+    try {
+      return this.hitDamage(u, u, s.recoilIfSurvives);
+    } finally {
+      u.statuses = saved;
+    }
   }
 
   healAmount(caster: Unit, skill: SkillDef): number {
@@ -926,21 +987,26 @@ export class Battle {
 
     const events: BattleEvent[] = [];
     const origin = { x: u.x, y: u.y };
-    if (skill.charge) {
-      const dest = this.chargeDestination(u, tile, u, skill)!;
-      if (dest.x !== u.x || dest.y !== u.y) {
-        u.x = dest.x;
-        u.y = dest.y;
-        events.push({ type: 'move', target: u.uid, from: origin, to: dest, kind: 'charge' });
-      }
-    }
-    if (skill.teleport) {
-      // Teleporting out of an engagement breaks it with no opportunity attack.
+    // Aim first (Flicker Strike picks its victim before it moves), then resolve.
+    const aimed = skill.charge ? this.targetsOf(u, skill, tile) : null;
+    const used = this.skillFor(u, skill);
+    // Disengage skills end the user's engagement first, with no opportunity attack.
+    if (hasTag(skill, 'disengage')) {
       const opp = this.opponentOf(u);
       if (opp) {
         this.breakEngagement(u);
         events.push({ type: 'disengage', source: u.uid, target: opp.uid, reason: 'escaped' });
       }
+    }
+    for (const a of skill.selfStatus ?? []) events.push(this.applyStatus(u, u, a.status, a.turns, 1, true));
+    if (skill.charge) {
+      const dest = this.chargeDestination(u, tile, u, skill)!;
+      if (dest.x !== u.x || dest.y !== u.y) {
+        u.x = dest.x;
+        u.y = dest.y;
+        events.push({ type: 'move', target: u.uid, from: origin, to: dest, kind: skill.teleport ? 'teleport' : 'charge' });
+      }
+    } else if (skill.teleport) {
       u.x = tile.x;
       u.y = tile.y;
       events.push({ type: 'move', target: u.uid, from: origin, to: { ...tile }, kind: 'teleport' });
@@ -957,15 +1023,20 @@ export class Battle {
       events.push({ type: 'overwatch', source: u.uid, skillId });
     }
 
-    const targets = this.targetsOf(u, skill, tile);
+    const targets = aimed ?? this.targetsOf(u, skill, tile);
     for (const t of targets) {
-      for (const part of skill.hits ?? []) {
+      for (const part of used.hits ?? []) {
         if (!t.alive) break;
         events.push(this.dealDamage(t, this.hitDamage(u, t, part), u.uid, 'skill'));
       }
+      // Life-Risking Strike: the user pays if the target is still standing.
+      if (skill.recoilIfSurvives && t.alive && u.alive) {
+        events.push(this.dealDamage(u, this.hitDamage(u, u, skill.recoilIfSurvives), u.uid, 'skill'));
+        if (!u.alive) u.acted = true;
+      }
       if (!t.alive) continue;
-      // Engage: a hit locks both units together, unless either is already engaged.
-      if (hasTag(skill, 'engage') && t.team !== u.team && skill.hits?.length && u.alive && !u.engagedWith && !t.engagedWith) {
+      // Engage: locks both units together, unless either is already engaged.
+      if (hasTag(skill, 'engage') && t.team !== u.team && u.alive && !u.engagedWith && !t.engagedWith) {
         this.engage(u, t);
         events.push({ type: 'engage', source: u.uid, target: t.uid });
       }
@@ -990,12 +1061,12 @@ export class Battle {
 
     // Knockback: push each surviving target away from the attacker, if there is room.
     // A unit that actually gets pushed breaks free of its engagement.
-    if (skill.knockback) {
+    if (used.knockback) {
       for (const t of targets) {
         if (!t.alive) continue;
         const dir = { x: Math.sign(t.x - u.x), y: Math.sign(t.y - u.y) };
         let moved = false;
-        for (let i = 0; i < skill.knockback; i++) {
+        for (let i = 0; i < used.knockback; i++) {
           const to = { x: t.x + dir.x, y: t.y + dir.y };
           if (!passable(this.map, to.x, to.y) || this.unitAt(to.x, to.y)) break;
           events.push({ type: 'move', target: t.uid, from: { x: t.x, y: t.y }, to, kind: 'knockback' });
@@ -1014,14 +1085,16 @@ export class Battle {
     }
 
     events.push(...this.separationEvents());
+    // Attacking gives a Stealthed unit away.
+    if (this.isAttack(used) && used.affects !== 'ally') u.statuses = u.statuses.filter((st) => !STATUSES[st.id]?.stealth);
     this.payFor(u, skillId);
     return events;
   }
 
   /** Apply a status. Debuffs can be shrugged off: a Resist roll (see resistChance). */
-  private applyStatus(source: Unit, t: Unit, id: string, turns: number, stacks: number): BattleEvent {
+  private applyStatus(source: Unit, t: Unit, id: string, turns: number, stacks: number, unresisted = false): BattleEvent {
     const def = STATUSES[id];
-    if (def.debuff) {
+    if (def.debuff && !unresisted) {
       const chance = resistChance(this.stat(t, 'resist'), this.rules.defenseScale);
       if (chance > 0 && this.rng() < chance) return { type: 'resist', source: source.uid, target: t.uid, name: def.name, chance: Math.round(chance * 100) };
     }

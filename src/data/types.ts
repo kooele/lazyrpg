@@ -66,6 +66,8 @@ export interface StatusDef {
   statMods?: Partial<Stats>;
   /** Percent stat changes while active (-0.25 = -25%), applied after flat changes and terrain. */
   statPct?: Partial<Stats>;
+  /** Enemies can't target the unit directly or trigger overwatch on it (area attacks still hit). Ends when it attacks. */
+  stealth?: boolean;
 }
 
 /** One hit of a damaging skill. Values are fractions (0.8 = 80%). */
@@ -142,8 +144,16 @@ export interface SkillDef {
   aoeRadius?: number;
   cone?: ConeDef;
   teleport?: boolean;
-  /** Dash next to the target (path of at most `range` steps, diagonals allowed) before hitting it. */
+  /** Dash next to the target (path of at most `range` steps, diagonals allowed) before hitting it. With `teleport`: appear next to it instead. */
   charge?: boolean;
+  /** Skill-tree skills: the character level needed to learn it (1 = from the start). */
+  level: number;
+  /** Hit with the user's weapon basic attack this many times (in place of `hits`). */
+  basicAttack?: number;
+  /** Statuses put on the user before the skill resolves (never resisted). */
+  selfStatus?: { status: string; turns: number }[];
+  /** Damage the user takes (after its own Defense) when the target survives the hits. */
+  recoilIfSurvives?: DamagePart;
 }
 
 export type SkillTab = string;

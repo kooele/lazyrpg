@@ -7,7 +7,7 @@ import {
   FACE_COUNT, HAIR_COLORS, HAIR_STYLES, SEXES, SKIN_TONES, STAT_INFO, STAT_KEYS, TALENT_GRADES, type Character, type Look, type SkillDef, type SkillTab, type StatKey,
 } from '../data/types';
 import { HAIR_COLORS as HAIR_HEX, SKIN_TONES as SKIN_HEX } from '../art/unitArt';
-import { bodyGain, bodyStats, cloneCharacter, createCharacter, deriveStats, freePoints, levelStats, pointsUsed, skillPoints } from '../game/character';
+import { bodyGain, bodyStats, cloneCharacter, createCharacter, deriveStats, freePoints, isUnlocked, levelStats, pointsUsed, skillPoints } from '../game/character';
 import { newCampaign } from '../game/city';
 import { PARTY_NAME_MAX_LENGTH } from '../game/save';
 import { FACE_NAMES, HAIR_COLOR_NAMES, HAIR_NAMES, SEX_NAMES, SKIN_NAMES, fixLook, randomLook, randomName, randomPartyName } from '../game/people';
@@ -270,16 +270,24 @@ export class CharacterCreatorScene extends Phaser.Scene {
   private skillTab(L: Phaser.GameObjects.Container): void {
     const d = this.draft;
     let ty = 130;
-    for (const tree of SKILL_TREES.filter((t) => t.tab === this.tab)) {
+    const trees = SKILL_TREES.filter((t) => t.tab === this.tab);
+    // Squeeze the rows when a tab has many skills so everything fits above the bottom buttons.
+    const count = trees.reduce((n, t) => n + t.skills.length, 0);
+    // The main character's screen also has the party name field from y=478.
+    const bottom = this.mode === 'main' ? 474 : 550;
+    const rowH = Math.max(22, Math.min(34, Math.floor((bottom - ty - trees.length * 18) / Math.max(1, count))));
+    for (const tree of trees) {
       L.add(text(this, 636, ty, tree.name, { fontSize: '13px', color: COLORS.gold }));
-      ty += 20;
+      ty += 18;
       for (const sid of tree.skills) {
         const s = SKILLS[sid];
         const on = d.skillIds.includes(sid);
-        L.add(button(this, 636, ty, 300, 30, `${on ? '✔ ' : ''}${s.name}`, () => this.toggleSkill(sid), {
-          selected: on, fontSize: 14, onHover: () => this.showSkill(s), onOut: () => this.tooltip.hide(),
+        const locked = !isUnlocked(d, sid);
+        const label = locked ? `${s.name}  (needs Lv ${s.level})` : `${on ? '✔ ' : ''}${s.name}${s.level > 1 ? ` (Lv ${s.level})` : ''}`;
+        L.add(button(this, 636, ty, 300, rowH - 4, label, () => this.toggleSkill(sid), {
+          selected: on, enabled: !locked, fontSize: rowH < 30 ? 13 : 14, onHover: () => this.showSkill(s), onOut: () => this.tooltip.hide(),
         }));
-        ty += 34;
+        ty += rowH;
       }
     }
     // Picks from the other tab, so mixing is visible.
@@ -423,6 +431,9 @@ export class CharacterCreatorScene extends Phaser.Scene {
     const d = this.draft;
     if (d.skillIds.includes(id)) {
       d.skillIds = d.skillIds.filter((s) => s !== id);
+    } else if (!isUnlocked(d, id)) {
+      toast(this, `${SKILLS[id].name} unlocks at level ${SKILLS[id].level}.`, COLORS.bad);
+      return;
     } else if (freePoints(d) > 0) {
       d.skillIds.push(id);
     } else {
