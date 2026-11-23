@@ -564,6 +564,18 @@ describe('engagement', () => {
     expect(e.engagedWith).toBe(a.uid);
   });
 
+  it('Engage is a free action, and does nothing once either side is engaged', () => {
+    const { battle, units: [a, e] } = duel();
+    a.character.skillIds = ['engage'];
+    expect(battle.usableFreeActions(a)).toContain('engage');
+    battle.perform(a, 'engage', { x: 4, y: 3 });
+    expect(a.engagedWith).toBe(e.uid);
+    expect(a.ap).toBe(2); // 0 AP
+    expect(a.moved).toBe(false);
+    expect(battle.usableFreeActions(a)).not.toContain('engage'); // already engaged
+    expect(battle.targetsOf(a, SKILLS.engage, { x: 4, y: 3 })).toEqual([]);
+  });
+
   it('engagement does not change Defense or damage', () => {
     const { battle, units: [a, e] } = duel();
     battle.perform(a, 'sword_slash', { x: 4, y: 3 });

@@ -977,6 +977,8 @@ export class Battle {
       case 'unit': {
         const t = this.occupantFrom(caster, from, tile);
         if (t && this.hiddenFrom(caster, t)) return [];
+        // Engage (engaging without attacking) does nothing once either side is already engaged.
+        if (t && hasTag(skill, 'engage') && !skill.hits?.length && !skill.basicAttack && (caster.engagedWith || t.engagedWith)) return [];
         return t && (this.matches(caster, skill, t) || this.aimedHit(caster, skill, t)) ? [t] : [];
       }
     }

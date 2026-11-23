@@ -40,7 +40,7 @@ const INFO_H = 150;
 const HOTKEYS = ['ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE', 'ZERO'];
 /** Where a unit's feet are, relative to its tile center; the HP bar sits just below. */
 let FEET_Y = 14;
-let HP_Y = 21;
+let HP_Y = 18;
 
 /**
  * busy   – animating or enemy turn, no input
@@ -130,7 +130,7 @@ export class BattleScene extends Phaser.Scene {
     TILE = Math.floor(Math.min(BOARD_W / map.width, BOARD_H / map.height));
     K = TILE / 56;
     FEET_Y = Math.round(14 * K);
-    HP_Y = Math.round(21 * K);
+    HP_Y = Math.round(18 * K);
     const party = d ? d.party : lineupMembers(requireState());
     const pSpots = deploymentTiles(map, 'player', party.length);
     const generated = generateEnemies(stage, party.length, rng, d ? d.mobMultiplier : (quest?.threat ?? 1), quest?.foes);
@@ -267,7 +267,7 @@ export class BattleScene extends Phaser.Scene {
     this.drawHp(u);
   }
 
-  /** HP bar (green/yellow/red) with the shield as a light-blue extension, plus status tags. */
+  /** HP bar (green/yellow/red) with the shield as a light-blue extension, a mana bar under it (units with mana), plus status tags. */
   private drawHp(u: Unit): void {
     const view = this.views.get(u.uid);
     if (!view) return;
@@ -281,6 +281,10 @@ export class BattleScene extends Phaser.Scene {
     if (this.battle.shieldOf(u) > 0) {
       view.hpBar.fillStyle(0x8ecbff).fillRect(-w / 2 + w * pct, HP_Y + 1, Math.max(2, w * shield), 4);
       view.hpBar.lineStyle(1, 0x8ecbff).strokeRect(-w / 2 - 1, HP_Y, w + 2, 6);
+    }
+    if (u.stats.mana > 0) {
+      view.hpBar.fillStyle(0x000000, 0.7).fillRect(-w / 2 - 1, HP_Y + 6, w + 2, 4);
+      view.hpBar.fillStyle(0x4d7cff).fillRect(-w / 2, HP_Y + 6, w * Math.max(0, u.mp / u.stats.mana), 3);
     }
     const tags: string[] = [];
     for (const st of u.statuses) {
