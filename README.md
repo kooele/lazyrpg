@@ -154,10 +154,10 @@ Weapons **multiply** these stats:
 
 | Weapon | Multipliers | Skills (the first is the basic attack) |
 |---|---|---|
-| Sword & Shield | x1 P.Atk, x0.8 M.Atk, x1.5 Def | Sword Slash, Shield Up |
+| Sword & Shield | x1 P.Atk, x0.8 M.Atk, x1.25 Def | Sword Slash, Shield Up |
 | Spear | x1 P.Atk, x0.8 M.Atk | Spear Thrust |
-| Bow | x0.8 P.Atk, x0.8 M.Atk, range 5 | Bow Attack (by mode), Switch Mode |
-| Staff | x0.5 P.Atk, x1.2 M.Atk | Empowered Strike, Magic Bolt |
+| Bow | x1 P.Atk, x0.8 M.Atk, x0.8 Def, range 5 | Bow Attack (by mode), Switch Mode |
+| Staff | x0.6 P.Atk, x1.2 M.Atk, x0.8 Def | Empowered Strike, Magic Bolt |
 
 ### Action points and mana
 
