@@ -62,8 +62,35 @@ export class CharacterCreatorScene extends Phaser.Scene {
   }
 
   /** Talents can be rerolled while making a new character (main character or Quick Battle recruit). */
+  /** Talent grades can be rerolled or set by hand when creating a character and in Quick Battle (not in the campaign's Customize). */
   private get canReroll(): boolean {
-    return this.mode === 'main' || this.mode === 'demo';
+    return this.mode === 'main' || this.mode === 'demo' || this.mode === 'demoEdit';
+  }
+
+  /** Raise (+1) or lower (-1) one stat's talent grade, F to S. */
+  private stepTalent(k: StatKey, delta: number): void {
+    const i = TALENT_GRADES.indexOf(talentOf(this.draft, k));
+    const next = TALENT_GRADES[Math.max(0, Math.min(TALENT_GRADES.length - 1, i + delta))];
+    this.draft.talents = { ...(this.draft.talents ?? {}), [k]: next };
+    this.render();
+  }
+
+  /** Small ‹ › arrows beside a grade to change it. */
+  private gradeArrows(L: Phaser.GameObjects.Container, k: StatKey, x: number, y: number, size: number): void {
+    if (!this.canReroll || !talentStats().includes(k)) return;
+    const g = talentOf(this.draft, k);
+    const arrow = (ax: number, label: string, delta: number, enabled: boolean) => {
+      const t = text(this, ax, y - 1, label, { fontSize: `${size + 2}px`, color: enabled ? COLORS.gold : '#3a4058', fontStyle: 'bold' }).setOrigin(0.5, 0);
+      if (enabled) {
+        t.setInteractive({ useHandCursor: true });
+        t.on('pointerup', () => this.stepTalent(k, delta));
+        t.on('pointerover', () => this.tooltip.show(`${delta > 0 ? 'Raise' : 'Lower'} ${STAT_INFO[k].name} talent (now ${g}).\n${this.gradeTable()}`));
+        t.on('pointerout', () => this.tooltip.hide());
+      }
+      L.add(t);
+    };
+    arrow(x - 15, '‹', -1, g !== TALENT_GRADES[0]);
+    arrow(x + 15, '›', 1, g !== TALENT_GRADES[TALENT_GRADES.length - 1]);
   }
 
   /** Tooltip text for a stat row: what it does, where the number comes from, and how its talent grows it. */
@@ -379,7 +406,7 @@ export class CharacterCreatorScene extends Phaser.Scene {
     L.add(text(this, 140, 388, `Level ${d.level} · ${WEAPONS[d.weaponId].name}`, { color: COLORS.dim, fontSize: '12px', wordWrap: { width: 168 } }));
     if (this.canReroll) {
       L.add(button(this, 30, 362, 100, 22, 'Reroll talent', () => this.reroll(), {
-        fontSize: 12, ...this.hoverTip(() => `Roll new talent grades (F to S) for every growing stat.\nTalent sets how fast a stat grows with level:\n${this.gradeTable()}\n\nOverall talent now: ${overallTalent(d)}`),
+        fontSize: 12, ...this.hoverTip(() => `Roll new talent grades (F to S) for every growing stat.\nOr set each one with the ‹ › arrows next to it.\nTalent sets how fast a stat grows with level:\n${this.gradeTable()}\n\nOverall talent now: ${overallTalent(d)}`),
       }));
     }
     const total = deriveStats(d);
@@ -393,9 +420,10 @@ export class CharacterCreatorScene extends Phaser.Scene {
       const row = this.add.rectangle(136, y - 1, 172, rowH, 0xffffff, 0).setOrigin(0);
       L.add(this.tip(row, () => this.statInfo(k)));
       L.add(text(this, 142, y, STAT_INFO[k].short, { fontSize: `${fs}px` }));
-      this.grade(L, k, 202, y, fs);
-      L.add(text(this, 250, y, String(total[k]), { fontSize: `${fs}px` }).setOrigin(1, 0));
-      if (m !== 1) L.add(text(this, 258, y, mult(m), { fontSize: '12px', color: m > 1 ? COLORS.good : COLORS.bad }));
+      this.grade(L, k, 198, y, fs);
+      this.gradeArrows(L, k, 198, y, fs);
+      L.add(text(this, 256, y, String(total[k]), { fontSize: `${fs}px` }).setOrigin(1, 0));
+      if (m !== 1) L.add(text(this, 262, y, mult(m), { fontSize: '12px', color: m > 1 ? COLORS.good : COLORS.bad }));
     });
   }
 

@@ -1283,14 +1283,16 @@ export function makeEnemy(type: string, level: number, rng: Rng): Character {
  * threat budget (threatPerAdventurer x party size) is spent. Weak types come in bigger packs.
  * Past the last level range, the budget keeps growing by 25% of a party per stage.
  */
-export function generateEnemies(stage: number, partySize: number, rng: Rng): Character[] {
+export function generateEnemies(stage: number, partySize: number, rng: Rng, mobMultiplier = 1): Character[] {
   const options = enemyTypesForStage(stage);
   const top = Math.max(...Object.values(ENEMIES).map((d) => d.levels[1]));
   const party = Math.max(1, partySize);
-  const budget = party * ENCOUNTER.threatPerAdventurer * (1 + Math.max(0, stage - top) * 0.25);
+  // Quick Battle's difficulty slider multiplies the budget (and the cap on how many come).
+  const budget = party * ENCOUNTER.threatPerAdventurer * (1 + Math.max(0, stage - top) * 0.25) * mobMultiplier;
+  const cap = Math.round(ENCOUNTER.maxEnemies * mobMultiplier);
   const out: Character[] = [];
   let spent = 0;
-  while (spent < budget - 1e-9 && out.length < ENCOUNTER.maxEnemies) {
+  while (spent < budget - 1e-9 && out.length < cap) {
     const pick = options[Math.floor(rng() * options.length)];
     out.push(makeEnemy(pick.type, pick.level, rng));
     spent += ENEMIES[pick.type].threat;
@@ -1300,7 +1302,10 @@ export function generateEnemies(stage: number, partySize: number, rng: Rng): Cha
 
 /** Deployment spots near the left (player) or right (enemy) edge. */
 export function deploymentTiles(map: BattleMap, team: Team, count: number): Point[] {
-  const cols = team === 'player' ? [1, 0, 2] : [map.width - 2, map.width - 1, map.width - 3];
+  // The usual three columns at the edge; big encounters spill further in (up to the middle).
+  const half = Math.floor(map.width / 2);
+  const inner = [...Array(Math.max(0, half - 3)).keys()].map((i) => i + 3);
+  const cols = team === 'player' ? [1, 0, 2, ...inner] : [map.width - 2, map.width - 1, map.width - 3, ...inner.map((c) => map.width - 1 - c)];
   const mid = Math.floor(map.height / 2);
   // Spread units out: even offsets from the middle row first, then odd ones.
   const offsets = [...Array(map.height).keys()].map((r) => r - mid);

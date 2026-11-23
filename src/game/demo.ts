@@ -13,12 +13,17 @@ export interface DemoState {
   defeats: number;
   /** All 5 stages cleared. */
   complete: boolean;
+  /** Difficulty: enemy count multiplier (1x to 5x), set with the slider at camp. */
+  mobMultiplier: number;
 }
+
+export const MOB_MULTIPLIER = { min: 1, max: 5, step: 0.5 } as const;
 
 export const demo: { state: DemoState | null } = { state: null };
 
 export function newDemo(): DemoState {
-  demo.state = { party: [], stage: 1, victories: 0, defeats: 0, complete: false };
+  // A restart keeps the chosen difficulty.
+  demo.state = { party: [], stage: 1, victories: 0, defeats: 0, complete: false, mobMultiplier: demo.state?.mobMultiplier ?? 1 };
   return demo.state;
 }
 

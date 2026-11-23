@@ -1418,3 +1418,19 @@ describe('bow mode memory, engagement and enemy archers', () => {
     expect(open.battle.skillFor(archer, SKILLS.bow_attack).name).toBe('Bow Strike');
   });
 });
+
+describe('quick battle difficulty', () => {
+  it('the enemy count multiplier scales the encounter, and big ones deploy further in', () => {
+    const base = generateEnemies(1, 4, makeRng(3));
+    const five = generateEnemies(1, 4, makeRng(3), 5);
+    expect(five.length).toBeGreaterThanOrEqual(base.length * 4);
+    expect(five.length).toBeLessThanOrEqual(Math.round(8 * 5));
+    const map = generateMap(makeRng(3));
+    const spots = deploymentTiles(map, 'enemy', five.length);
+    expect(spots).toHaveLength(five.length);
+    expect(new Set(spots.map((p) => `${p.x},${p.y}`)).size).toBe(spots.length);
+    expect(spots.every((p) => p.x >= Math.floor(map.width / 2) && passable(map, p.x, p.y))).toBe(true);
+    // Normal encounters still use only the three edge columns.
+    expect(deploymentTiles(map, 'enemy', 4).every((p) => p.x >= map.width - 3)).toBe(true);
+  });
+});

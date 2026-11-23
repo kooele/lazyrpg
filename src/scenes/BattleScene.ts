@@ -121,9 +121,10 @@ export class BattleScene extends Phaser.Scene {
     FEET_Y = Math.round(14 * K);
     HP_Y = Math.round(21 * K);
     const party = d ? d.party : lineupMembers(requireState());
-    const foes = generateEnemies(stage, party.length, rng);
     const pSpots = deploymentTiles(map, 'player', party.length);
-    const eSpots = deploymentTiles(map, 'enemy', foes.length);
+    const generated = generateEnemies(stage, party.length, rng, d ? d.mobMultiplier : 1);
+    const eSpots = deploymentTiles(map, 'enemy', generated.length);
+    const foes = generated.slice(0, eSpots.length); // never more than there is room for
     const units = [
       ...party.map((c, i) => makeUnit(c, 'player', pSpots[i])),
       ...foes.map((c, i) => makeUnit(c, 'enemy', eSpots[i])),
