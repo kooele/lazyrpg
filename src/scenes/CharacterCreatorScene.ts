@@ -1,13 +1,13 @@
 import Phaser from 'phaser';
 import {
-  BASIC_SKILLS, NAME_MAX_LENGTH, PALETTE, isSupport, SKILLS, SKILL_TABS, SKILL_TREES, WEAPONS, XP_PER_LEVEL, skillDetails, skillFormula, tagNames,
+  BASIC_SKILLS, NAME_MAX_LENGTH, PALETTE, isSupport, SKILLS, SKILL_TABS, SKILL_TREES, WEAPONS, XP_PER_LEVEL, resolveWeaponSkill, skillDetails, skillFormula, tagNames,
 } from '../data/content';
 import { STAT_CONFIG, visibleStatKeys } from '../data/stats';
 import {
   FACE_COUNT, HAIR_COLORS, HAIR_STYLES, SEXES, SKIN_TONES, STAT_INFO, STAT_KEYS, TALENT_GRADES, type Character, type Look, type SkillDef, type SkillTab, type StatKey,
 } from '../data/types';
 import { HAIR_COLORS as HAIR_HEX, SKIN_TONES as SKIN_HEX } from '../art/unitArt';
-import { bodyGain, bodyStats, cloneCharacter, createCharacter, deriveStats, freePoints, levelStats, pointsUsed, skillPoints } from '../game/character';
+import { bodyGain, bodyStats, cloneCharacter, createCharacter, deriveStats, freePoints, isUnlocked, levelStats, pointsUsed, skillPoints } from '../game/character';
 import { newCampaign } from '../game/city';
 import { PARTY_NAME_MAX_LENGTH } from '../game/save';
 import { FACE_NAMES, HAIR_COLOR_NAMES, HAIR_NAMES, SEX_NAMES, SKIN_NAMES, fixLook, randomLook, randomName, randomPartyName } from '../game/people';
@@ -62,8 +62,35 @@ export class CharacterCreatorScene extends Phaser.Scene {
   }
 
   /** Talents can be rerolled while making a new character (main character or Quick Battle recruit). */
+  /** Talent grades can be rerolled or set by hand when creating a character and in Quick Battle (not in the campaign's Customize). */
   private get canReroll(): boolean {
-    return this.mode === 'main' || this.mode === 'demo';
+    return this.mode === 'main' || this.mode === 'demo' || this.mode === 'demoEdit';
+  }
+
+  /** Raise (+1) or lower (-1) one stat's talent grade, F to S. */
+  private stepTalent(k: StatKey, delta: number): void {
+    const i = TALENT_GRADES.indexOf(talentOf(this.draft, k));
+    const next = TALENT_GRADES[Math.max(0, Math.min(TALENT_GRADES.length - 1, i + delta))];
+    this.draft.talents = { ...(this.draft.talents ?? {}), [k]: next };
+    this.render();
+  }
+
+  /** Small ‹ › arrows beside a grade to change it. */
+  private gradeArrows(L: Phaser.GameObjects.Container, k: StatKey, x: number, y: number, size: number): void {
+    if (!this.canReroll || !talentStats().includes(k)) return;
+    const g = talentOf(this.draft, k);
+    const arrow = (ax: number, label: string, delta: number, enabled: boolean) => {
+      const t = text(this, ax, y - 1, label, { fontSize: `${size + 2}px`, color: enabled ? COLORS.gold : '#3a4058', fontStyle: 'bold' }).setOrigin(0.5, 0);
+      if (enabled) {
+        t.setInteractive({ useHandCursor: true });
+        t.on('pointerup', () => this.stepTalent(k, delta));
+        t.on('pointerover', () => this.tooltip.show(`${delta > 0 ? 'Raise' : 'Lower'} ${STAT_INFO[k].name} talent (now ${g}).\n${this.gradeTable()}`));
+        t.on('pointerout', () => this.tooltip.hide());
+      }
+      L.add(t);
+    };
+    arrow(x - 15, '‹', -1, g !== TALENT_GRADES[0]);
+    arrow(x + 15, '›', 1, g !== TALENT_GRADES[TALENT_GRADES.length - 1]);
   }
 
   /** Tooltip text for a stat row: what it does, where the number comes from, and how its talent grows it. */
@@ -146,7 +173,8 @@ export class CharacterCreatorScene extends Phaser.Scene {
 
   /** What this adventurer's Movement / weapon-scaled skills reach. */
   private reachContext(): ReachContext {
-    return { movement: deriveStats(this.draft).movement, basic: SKILLS[WEAPONS[this.draft.weaponId].skills[0]] };
+    const weapon = WEAPONS[this.draft.weaponId];
+    return { movement: deriveStats(this.draft).movement, basic: resolveWeaponSkill(SKILLS[weapon.skills[0]], weapon) };
   }
 
   private isSupport(s: SkillDef): boolean {
@@ -270,16 +298,24 @@ export class CharacterCreatorScene extends Phaser.Scene {
   private skillTab(L: Phaser.GameObjects.Container): void {
     const d = this.draft;
     let ty = 130;
-    for (const tree of SKILL_TREES.filter((t) => t.tab === this.tab)) {
+    const trees = SKILL_TREES.filter((t) => t.tab === this.tab);
+    // Squeeze the rows when a tab has many skills so everything fits above the bottom buttons.
+    const count = trees.reduce((n, t) => n + t.skills.length, 0);
+    // The main character's screen also has the party name field from y=478.
+    const bottom = this.mode === 'main' ? 474 : 550;
+    const rowH = Math.max(22, Math.min(34, Math.floor((bottom - ty - trees.length * 18) / Math.max(1, count))));
+    for (const tree of trees) {
       L.add(text(this, 636, ty, tree.name, { fontSize: '13px', color: COLORS.gold }));
-      ty += 20;
+      ty += 18;
       for (const sid of tree.skills) {
         const s = SKILLS[sid];
         const on = d.skillIds.includes(sid);
-        L.add(button(this, 636, ty, 300, 30, `${on ? '✔ ' : ''}${s.name}`, () => this.toggleSkill(sid), {
-          selected: on, fontSize: 14, onHover: () => this.showSkill(s), onOut: () => this.tooltip.hide(),
+        const locked = !isUnlocked(d, sid);
+        const label = locked ? `${s.name}  (needs Lv ${s.level})` : `${on ? '✔ ' : ''}${s.name}${s.level > 1 ? ` (Lv ${s.level})` : ''}`;
+        L.add(button(this, 636, ty, 300, rowH - 4, label, () => this.toggleSkill(sid), {
+          selected: on, enabled: !locked, fontSize: rowH < 30 ? 13 : 14, onHover: () => this.showSkill(s), onOut: () => this.tooltip.hide(),
         }));
-        ty += 34;
+        ty += rowH;
       }
     }
     // Picks from the other tab, so mixing is visible.
@@ -370,7 +406,7 @@ export class CharacterCreatorScene extends Phaser.Scene {
     L.add(text(this, 140, 388, `Level ${d.level} · ${WEAPONS[d.weaponId].name}`, { color: COLORS.dim, fontSize: '12px', wordWrap: { width: 168 } }));
     if (this.canReroll) {
       L.add(button(this, 30, 362, 100, 22, 'Reroll talent', () => this.reroll(), {
-        fontSize: 12, ...this.hoverTip(() => `Roll new talent grades (F to S) for every growing stat.\nTalent sets how fast a stat grows with level:\n${this.gradeTable()}\n\nOverall talent now: ${overallTalent(d)}`),
+        fontSize: 12, ...this.hoverTip(() => `Roll new talent grades (F to S) for every growing stat.\nOr set each one with the ‹ › arrows next to it.\nTalent sets how fast a stat grows with level:\n${this.gradeTable()}\n\nOverall talent now: ${overallTalent(d)}`),
       }));
     }
     const total = deriveStats(d);
@@ -384,9 +420,10 @@ export class CharacterCreatorScene extends Phaser.Scene {
       const row = this.add.rectangle(136, y - 1, 172, rowH, 0xffffff, 0).setOrigin(0);
       L.add(this.tip(row, () => this.statInfo(k)));
       L.add(text(this, 142, y, STAT_INFO[k].short, { fontSize: `${fs}px` }));
-      this.grade(L, k, 202, y, fs);
-      L.add(text(this, 250, y, String(total[k]), { fontSize: `${fs}px` }).setOrigin(1, 0));
-      if (m !== 1) L.add(text(this, 258, y, mult(m), { fontSize: '12px', color: m > 1 ? COLORS.good : COLORS.bad }));
+      this.grade(L, k, 198, y, fs);
+      this.gradeArrows(L, k, 198, y, fs);
+      L.add(text(this, 256, y, String(total[k]), { fontSize: `${fs}px` }).setOrigin(1, 0));
+      if (m !== 1) L.add(text(this, 262, y, mult(m), { fontSize: '12px', color: m > 1 ? COLORS.good : COLORS.bad }));
     });
   }
 
@@ -423,6 +460,9 @@ export class CharacterCreatorScene extends Phaser.Scene {
     const d = this.draft;
     if (d.skillIds.includes(id)) {
       d.skillIds = d.skillIds.filter((s) => s !== id);
+    } else if (!isUnlocked(d, id)) {
+      toast(this, `${SKILLS[id].name} unlocks at level ${SKILLS[id].level}.`, COLORS.bad);
+      return;
     } else if (freePoints(d) > 0) {
       d.skillIds.push(id);
     } else {

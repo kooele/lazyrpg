@@ -1,24 +1,25 @@
 {
-  "_readme": "Weapons. statMultipliers scale the Adventurer's base stats (1.5 = 150%); stats not listed stay at 100%. skills are granted while equipped; the first one is the basic attack (also used for opportunity attacks and by 'weapon'-tagged skills). tag is the short label drawn on battle tokens; art is the weapon sprite (public/art/weapons/<art>.svg).",
+  "_readme": "Weapons. statMultipliers scale the Adventurer's base stats (1.5 = 150%); stats not listed stay at 100%. skills are granted while equipped; the first one is the basic attack (also used for opportunity attacks and by 'weapon'-tagged skills). tag is the short label drawn on battle tokens; range is the weapon's range in tiles, for skills with a \"weaponRange\" (the bow's modes); art is the weapon sprite (public/art/weapons/<art>.svg).",
 
   "weapons": {
     "sword_shield": {
       "name": "Sword & Shield", "tag": "SW", "art": "sword_shield",
       "description": "Frontline weapon. High Defense; locks enemies in melee and shields itself.",
       "statMultipliers": { "pAtk": 1.0, "mAtk": 0.8, "defense": 1.5 },
-      "skills": ["sword_slash", "slash_and_smash", "shield_up"]
+      "skills": ["sword_slash", "shield_up"]
     },
     "spear": {
       "name": "Spear", "tag": "SP", "art": "spear",
-      "description": "Reach weapon. Hits from 2 tiles and knocks foes back.",
+      "description": "Reach weapon. Hits from 2 tiles.",
       "statMultipliers": { "pAtk": 1.0, "mAtk": 0.8 },
-      "skills": ["spear_thrust", "circle_swing"]
+      "skills": ["spear_thrust"]
     },
     "bow": {
       "name": "Bow", "tag": "BW", "art": "bow",
-      "description": "Ranged weapon. Shoots from afar and lobs arrows over cover.",
+      "description": "Ranged weapon with three modes: Direct (weapon range, 100% P.Atk), Indirect (1.5x range over cover, 70%) and Melee (1.5 tiles, 80%). Switch Mode is a free action.",
       "statMultipliers": { "pAtk": 0.8, "mAtk": 0.8 },
-      "skills": ["direct_shot", "indirect_shot"]
+      "range": 5,
+      "skills": ["bow_attack", "switch_mode"]
     },
     "staff": {
       "name": "Staff", "tag": "ST", "art": "staff",

@@ -1,8 +1,8 @@
 // Pure battle rules (no rendering). BattleScene drives this and animates the events it returns.
-import { DEFAULT_WEAPON, ENEMY_COLOR, SKILLS, STATUSES, WEAPONS, hasTag, isFree } from '../data/content';
+import { DEFAULT_WEAPON, ENEMY_COLOR, SKILLS, STATUSES, WEAPONS, hasTag, isFree, modeWithTag, resolveWeaponSkill } from '../data/content';
 import { ENCOUNTER, ENEMIES } from '../data/enemies';
 import { STAT_CONFIG, type StatConfig } from '../data/stats';
-import type { Character, DamagePart, LosRule, SkillDef, StatKey, Stats } from '../data/types';
+import { DAMAGE_TYPES, type Character, type DamagePart, type DamageType, type LosRule, type SkillDef, type StatKey, type Stats } from '../data/types';
 import { allSkills, deriveStats, modelFor, newId, type Rng } from './character';
 import { losFor, minRangeFor, rangeFor, type ReachContext } from './reach';
 import {
@@ -70,6 +70,8 @@ export interface Unit {
   engagedWith: string | null;
   /** 'weapon'-tagged skills are unusable while true (nothing sets it yet). */
   weaponDisabled: boolean;
+  /** Selected mode of a weapon with modes (the Bow): index into its basic attack's modes. Kept on the character between battles. */
+  weaponMode: number;
   /** Fled off the edge of the map (counts as gone, not dead). */
   escaped?: boolean;
 }
@@ -78,7 +80,7 @@ export interface Unit {
 export type DamageCause = 'skill' | 'status' | 'overwatch' | 'opportunity';
 
 export type BattleEvent =
-  | { type: 'damage'; source?: string; target: string; amount: number; absorbed: number; killed: boolean; cause: DamageCause }
+  | { type: 'damage'; source?: string; target: string; amount: number; absorbed: number; killed: boolean; cause: DamageCause; damageType?: DamageType }
   | { type: 'engage'; source: string; target: string }
   | { type: 'disengage'; source: string; target: string; reason: 'disengage' | 'separated' | 'displaced' | 'escaped' }
   | { type: 'heal'; source: string; target: string; amount: number }
@@ -88,7 +90,8 @@ export type BattleEvent =
   | { type: 'cleanse'; source: string; target: string; removed: string[] }
   | { type: 'move'; target: string; from: Point; to: Point; kind: 'knockback' | 'teleport' | 'charge' }
   | { type: 'overwatch'; source: string; skillId: string }
-  | { type: 'escape'; target: string };
+  | { type: 'escape'; target: string }
+  | { type: 'mode'; target: string; name: string };
 
 export interface MoveResult {
   /** Tiles actually walked (may stop early if intercepted or killed). */
@@ -131,7 +134,14 @@ export function makeUnit(character: Character, team: Team, pos: Point): Unit {
     overwatch: null,
     engagedWith: null,
     weaponDisabled: false,
+    weaponMode: initialMode(character),
   };
+}
+
+/** The character's last selected weapon mode (index), or 0 (the default mode). */
+function initialMode(c: Character): number {
+  const modes = SKILLS[allSkills(c)[0]]?.modes;
+  return modes && c.weaponMode ? Math.max(0, modes.indexOf(c.weaponMode)) : 0;
 }
 
 /** Damage multiplier from Defense: each `defenseScale` points = +100% effective health. */
@@ -196,7 +206,81 @@ export class Battle {
 
   /** The weapon's basic attack (first weapon skill). */
   basicAttack(u: Unit): SkillDef {
+    return this.skillFor(u, this.rawBasic(u));
+  }
+
+  /** The basic attack as listed (a bow's is 'Bow Attack', whatever its mode). */
+  private rawBasic(u: Unit): SkillDef {
     return SKILLS[allSkills(u.character)[0] ?? WEAPONS[DEFAULT_WEAPON].skills[0]];
+  }
+
+  /**
+   * The mode the weapon actually attacks in: the selected one, except that an engaged
+   * unit always fights in Melee mode (its selection is kept for when it breaks free).
+   */
+  activeMode(u: Unit): number {
+    const modes = this.rawBasic(u).modes;
+    if (!modes) return 0;
+    if (u.engagedWith) {
+      const melee = modes.findIndex((m) => hasTag(SKILLS[m], 'melee'));
+      if (melee >= 0) return melee;
+    }
+    return u.weaponMode;
+  }
+
+  /** Select a weapon mode (a free action; Switch Mode cycles through them). Saved on the character. */
+  setWeaponMode(u: Unit, index: number): BattleEvent[] {
+    const modes = this.modesOf(u);
+    if (!modes) throw new Error(`${u.character.name}'s weapon has no modes`);
+    u.weaponMode = ((index % modes.length) + modes.length) % modes.length;
+    u.character.weaponMode = modes[u.weaponMode];
+    return [{ type: 'mode', target: u.uid, name: this.modeName(u)! }];
+  }
+
+  /** Does the unit's weapon have modes (Switch Mode)? */
+  modesOf(u: Unit): string[] | undefined {
+    return this.rawBasic(u).modes;
+  }
+
+  /** Name of the unit's current weapon mode (e.g. "Indirect"), or null for weapons without modes. */
+  modeName(u: Unit, mode = u.weaponMode): string | null {
+    const raw = this.rawBasic(u);
+    if (!raw.modes) return null;
+    const m = resolveWeaponSkill(raw, WEAPONS[u.character.weaponId], mode);
+    return m.modeName ?? m.name;
+  }
+
+  /** skillFor results per skill object, then per unit and weapon mode. */
+  private resolved = new WeakMap<SkillDef, Map<string, SkillDef>>();
+
+  /**
+   * The skill as `u` uses it: 'basicAttack' skills take their hits from the user's weapon,
+   * and a 'weapon' self-centered area without its own radius reaches as far as the weapon.
+   */
+  skillFor(u: Unit, s: SkillDef): SkillDef {
+    const areaFromWeapon = s.target === 'self' && hasTag(s, 'weapon') && s.aoeRadius === undefined;
+    if (!s.modes && s.weaponRange === undefined && !s.basicAttack && !areaFromWeapon) return s;
+    const mode = this.activeMode(u);
+    const cacheKey = `${u.uid}:${mode}`;
+    let perSkill = this.resolved.get(s);
+    if (!perSkill) this.resolved.set(s, (perSkill = new Map()));
+    let out = perSkill.get(cacheKey);
+    if (!out) {
+      const weapon = WEAPONS[u.character.weaponId];
+      out = resolveWeaponSkill(s, weapon, mode);
+      if (out.basicAttack || areaFromWeapon) {
+        // Circle Swing always swings a bow in Melee mode ('basicMode').
+        const forced = out.basicMode ? modeWithTag(this.rawBasic(u), out.basicMode) : undefined;
+        const basic = forced ? resolveWeaponSkill(forced, weapon) : this.basicAttack(u);
+        out = {
+          ...out,
+          hits: out.basicAttack ? Array.from({ length: out.basicAttack }, () => basic.hits ?? []).flat() : out.hits,
+          aoeRadius: areaFromWeapon ? basic.range : out.aoeRadius,
+        };
+      }
+      perSkill.set(cacheKey, out);
+    }
+    return out;
   }
 
   /** What the unit's tag-dependent skills scale from (Movement, weapon). */
@@ -206,15 +290,15 @@ export class Battle {
 
   /** Effective range: 'movement' skills scale with Movement, 'weapon' skills use the weapon's range. */
   skillRange(u: Unit, s: SkillDef): number {
-    return rangeFor(s, this.reachContext(u));
+    return rangeFor(this.skillFor(u, s), this.reachContext(u));
   }
 
   skillMinRange(u: Unit, s: SkillDef): number {
-    return minRangeFor(s, this.reachContext(u));
+    return minRangeFor(this.skillFor(u, s), this.reachContext(u));
   }
 
   skillLos(u: Unit, s: SkillDef): LosRule | undefined {
-    return losFor(s, this.reachContext(u));
+    return losFor(this.skillFor(u, s), this.reachContext(u));
   }
 
   /** Off cooldown, enough mana, and not blocked by a disabled weapon. */
@@ -259,7 +343,7 @@ export class Battle {
 
   /** Is this skill an attack on enemies (as opposed to healing/buffing)? */
   private isAttack(s: SkillDef): boolean {
-    return s.affects !== 'ally' && (!!s.hits?.length || !!s.cone || !!s.applyStatus?.length);
+    return s.affects !== 'ally' && (!!s.hits?.length || !!s.basicAttack || !!s.cone || !!s.applyStatus?.length || hasTag(s, 'engage'));
   }
 
   /**
@@ -269,7 +353,10 @@ export class Battle {
   engagementBlock(caster: Unit, skill: SkillDef, tile: Point, from: Point = caster): string | null {
     const opp = this.opponentOf(caster);
     if (!opp) return null;
-    // Teleports (Arcane Shift) are the exception: they slip out of the engagement for free.
+    // Disengage skills (Arcane Shift, Shadow Step, Arcane Pulse) work anyway: they end the engagement for free.
+    if (hasTag(skill, 'disengage')) return null;
+    skill = this.skillFor(caster, skill);
+    if (skill.teleport && !skill.charge) return `Engaged with ${opp.character.name}: disengage before moving.`;
     const busy = `Engaged with ${opp.character.name}: you can't target anyone else until you disengage.`;
     const targets = this.targetsOf(caster, skill, tile, from);
     // Charge still works on the opponent itself (you're already next to them, so there's no dash).
@@ -295,7 +382,7 @@ export class Battle {
     const events: BattleEvent[] = [];
     for (const part of basic.hits ?? []) {
       if (!victim.alive) break;
-      events.push(this.dealDamage(victim, this.hitDamage(attacker, victim, part), attacker.uid, 'opportunity'));
+      events.push(...this.dealHit(attacker, victim, part, 'opportunity'));
     }
     return events;
   }
@@ -383,6 +470,7 @@ export class Battle {
     if (!this.canAct(u) || !this.skillIds(u).includes(skillId) || !this.isUsable(u, skillId) || !this.canPay(u, skill)) return false;
     // Dash: a second move with the action AP, only once the regular move is spent.
     if (skill.target === 'move') return u.moved && !u.engagedWith;
+    if (skill.switchMode) return !!this.modesOf(u);
     return true;
   }
 
@@ -403,7 +491,7 @@ export class Battle {
   usableFreeActions(u: Unit): string[] {
     return this.skillIds(u).filter((id) => {
       const s = SKILLS[id];
-      if (!isFree(s) || !this.canUseSkill(u, id)) return false;
+      if (!isFree(s) || s.switchMode || !this.canUseSkill(u, id)) return false;
       return this.rangeTiles(u, s).some((t) => this.targetsOf(u, s, t).length > 0);
     });
   }
@@ -458,6 +546,7 @@ export class Battle {
 
   /** How far a skill reaches from where the user stands (cones and self-centered areas included). */
   maxReach(u: Unit, s: SkillDef): number {
+    s = this.skillFor(u, s);
     if (s.target === 'self') return s.aoeRadius ?? 0;
     if (s.target === 'cone') return this.coneRadius(u, s);
     return this.skillRange(u, s);
@@ -465,7 +554,7 @@ export class Battle {
 
   /** Skills that can hurt or hinder the other team (damage, a debuff or a push). */
   isHostile(s: SkillDef): boolean {
-    return s.affects !== 'ally' && (!!s.hits?.length || !!s.knockback || (s.applyStatus ?? []).some((a) => STATUSES[a.status]?.debuff));
+    return s.affects !== 'ally' && (!!s.hits?.length || !!s.basicAttack || !!s.knockback || (s.applyStatus ?? []).some((a) => STATUSES[a.status]?.debuff));
   }
 
   /**
@@ -577,13 +666,13 @@ export class Battle {
     let interrupted = false;
     for (const w of this.living()) {
       if (w.team === mover.team || !w.overwatch || !mover.alive) continue;
-      if (!w.overwatch.tiles.has(key(mover.x, mover.y))) continue;
+      if (!w.overwatch.tiles.has(key(mover.x, mover.y)) || this.isStealthed(mover)) continue;
       if (w.overwatch.los && !this.clearLine(w, mover, w.overwatch.los, w)) continue;
       const ow = w.overwatch;
       w.overwatch = null;
       for (const part of ow.hits) {
         if (!mover.alive) break;
-        events.push(this.dealDamage(mover, this.hitDamage(w, mover, part), w.uid, 'overwatch'));
+        events.push(...this.dealHit(w, mover, part, 'overwatch'));
       }
       if (ow.interrupt) interrupted = true;
     }
@@ -626,6 +715,7 @@ export class Battle {
   /** Range / line / landing checks only (ignores engagement). */
   private inReach(caster: Unit, skill: SkillDef, tile: Point, from: Point): boolean {
     if (!this.inMap(tile)) return false;
+    skill = this.skillFor(caster, skill);
     const d = dist(from, tile);
     const range = this.skillRange(caster, skill);
     const minRange = this.skillMinRange(caster, skill);
@@ -705,6 +795,7 @@ export class Battle {
 
   /** Tiles the skill would cover if aimed at `tile` (for previews). */
   areaTiles(caster: Unit, skill: SkillDef, tile: Point, from: Point = caster): Point[] {
+    skill = this.skillFor(caster, skill);
     switch (skill.target) {
       case 'self': {
         const r = skill.aoeRadius ?? 0;
@@ -740,6 +831,15 @@ export class Battle {
     return u === caster ? undefined : u;
   }
 
+  /** Stealthed units can't be targeted directly by the other team (see the Stealthed status). */
+  isStealthed(u: Unit): boolean {
+    return u.statuses.some((s) => STATUSES[s.id]?.stealth);
+  }
+
+  private hiddenFrom(caster: Unit, t: Unit): boolean {
+    return t.team !== caster.team && this.isStealthed(t);
+  }
+
   private matches(caster: Unit, skill: SkillDef, t: Unit): boolean {
     // 'any' = friend or foe. Single-target skills may also be used on yourself; area skills never hit you.
     if (skill.affects === 'any') return t !== caster || skill.target === 'unit';
@@ -753,6 +853,7 @@ export class Battle {
 
   /** Units the skill would affect if aimed at `tile`. */
   targetsOf(caster: Unit, skill: SkillDef, tile: Point, from: Point = caster): Unit[] {
+    skill = this.skillFor(caster, skill);
     switch (skill.target) {
       case 'cone':
       case 'emptyTile':
@@ -769,6 +870,7 @@ export class Battle {
         for (const p of this.areaTiles(caster, skill, tile, from)) {
           if (TERRAIN[this.map.tiles[p.y][p.x]].blocksSight) break;
           const t = this.occupantFrom(caster, from, p);
+          if (t && this.hiddenFrom(caster, t)) continue;
           // Passes allies in the way; hits one only if it's the unit aimed at.
           const aimed = p.x === tile.x && p.y === tile.y;
           if (t && (this.matches(caster, skill, t) || (aimed && this.aimedHit(caster, skill, t)))) return [t];
@@ -777,6 +879,7 @@ export class Battle {
       }
       case 'unit': {
         const t = this.occupantFrom(caster, from, tile);
+        if (t && this.hiddenFrom(caster, t)) return [];
         return t && (this.matches(caster, skill, t) || this.aimedHit(caster, skill, t)) ? [t] : [];
       }
     }
@@ -797,9 +900,12 @@ export class Battle {
       if (dist(from, tile) <= 1.5 + EPS) return { x: from.x, y: from.y };
       goals = DIRS8.map((d) => ({ x: tile.x + d.x, y: tile.y + d.y })).filter((p) => this.inMap(p) && free(p));
     } else {
-      goals = free(tile) ? [tile] : [];
+      // A teleport strike needs someone to appear next to; a dash can just run to the tile.
+      goals = free(tile) && !chargeSkill.teleport ? [tile] : [];
     }
     if (goals.length === 0) return null;
+    // Teleport strike (Flicker Strike): appear on the free tile next to the target closest to you.
+    if (chargeSkill.teleport) return goals.reduce((a, b) => (dist(from, b) < dist(from, a) - EPS ? b : a));
     const goalKeys = new Set(goals.map((p) => key(p.x, p.y)));
     const maxSteps = Math.floor(this.skillRange(caster, chargeSkill));
     const seen = new Map<string, number>([[key(from.x, from.y), 0]]);
@@ -855,18 +961,46 @@ export class Battle {
 
   // ---- damage -----------------------------------------------------------------------
 
-  /** Damage of one hit after the target's Defense (before shields). */
+  /**
+   * One hit split by damage type, after the target's mitigation (before shields):
+   * P.Atk, Def and missing Health are Physical, M.Atk is Magical. A hybrid hit
+   * (Empowered Strike) deals one portion of each.
+   */
+  hitPortions(attacker: Unit, target: Unit, part: DamagePart): { type: DamageType; amount: number }[] {
+    const raw: Record<DamageType, number> = {
+      physical: (part.pAtk ?? 0) * this.stat(attacker, 'pAtk') + (part.def ?? 0) * this.stat(attacker, 'defense') + (part.missingHp ?? 0) * (target.stats.health - target.hp),
+      magical: (part.mAtk ?? 0) * this.stat(attacker, 'mAtk'),
+    };
+    const out = DAMAGE_TYPES.filter((t) => raw[t] > 0).map((type) => ({ type, amount: Math.max(1, Math.round(raw[type] * this.mitigation(attacker, target, type))) }));
+    return out.length ? out : [{ type: 'physical', amount: 1 }];
+  }
+
+  /**
+   * Damage multiplier for a hit of `type` on `target`. Both types use Defense for now;
+   * this is where magic resistance and physical / magic penetration will go.
+   */
+  mitigation(_attacker: Unit, target: Unit, _type: DamageType): number {
+    return defenseMultiplier(this.stat(target, 'defense'));
+  }
+
+  /** Total damage of one hit (all damage types). */
   hitDamage(attacker: Unit, target: Unit, part: DamagePart): number {
-    const raw =
-      (part.pAtk ?? 0) * this.stat(attacker, 'pAtk') +
-      (part.mAtk ?? 0) * this.stat(attacker, 'mAtk') +
-      (part.def ?? 0) * this.stat(attacker, 'defense') +
-      (part.missingHp ?? 0) * (target.stats.health - target.hp);
-    return Math.max(1, Math.round(raw * defenseMultiplier(this.stat(target, 'defense'))));
+    return this.hitPortions(attacker, target, part).reduce((a, p) => a + p.amount, 0);
+  }
+
+  /** Deal one hit: a damage event per damage type in it. */
+  private dealHit(attacker: Unit, target: Unit, part: DamagePart, cause: DamageCause): BattleEvent[] {
+    const events: BattleEvent[] = [];
+    for (const p of this.hitPortions(attacker, target, part)) {
+      if (!target.alive) break;
+      events.push(this.dealDamage(target, p.amount, attacker.uid, cause, false, p.type));
+    }
+    return events;
   }
 
   /** Predicted damage of each hit of `skill` on `target` (accounts for missing health growing). */
   previewHits(attacker: Unit, skill: SkillDef, target: Unit): number[] {
+    skill = this.skillFor(attacker, skill);
     let hp = target.hp;
     let shield = this.shieldOf(target);
     const out: number[] = [];
@@ -883,11 +1017,27 @@ export class Battle {
     return out;
   }
 
+  /** What the user would take from the skill's recoil (with its own self statuses, e.g. Exposed, applied). */
+  recoilDamage(u: Unit, s: SkillDef): number {
+    if (!s.recoilIfSurvives) return 0;
+    const saved = u.statuses;
+    const extra = (s.selfStatus ?? []).filter((a) => !saved.some((x) => x.id === a.status)).map((a) => {
+      const def = STATUSES[a.status];
+      return { id: a.status, name: def.name, debuff: def.debuff, stacks: 1, amount: 0, turns: a.turns, tick: def.tick };
+    });
+    u.statuses = [...saved, ...extra];
+    try {
+      return this.hitDamage(u, u, s.recoilIfSurvives);
+    } finally {
+      u.statuses = saved;
+    }
+  }
+
   healAmount(caster: Unit, skill: SkillDef): number {
     return Math.round((skill.heal?.mAtk ?? 0) * this.stat(caster, 'mAtk'));
   }
 
-  private dealDamage(target: Unit, amount: number, source: string | undefined, cause: DamageCause, bypassShield = false): BattleEvent {
+  private dealDamage(target: Unit, amount: number, source: string | undefined, cause: DamageCause, bypassShield = false, damageType?: DamageType): BattleEvent {
     let absorbed = 0;
     if (!bypassShield) {
       for (const s of target.statuses) {
@@ -905,7 +1055,7 @@ export class Battle {
       target.overwatch = null;
       this.breakEngagement(target);
     }
-    return { type: 'damage', source, target: target.uid, amount: amount - absorbed, absorbed, killed, cause };
+    return { type: 'damage', source, target: target.uid, amount: amount - absorbed, absorbed, killed, cause, ...(damageType ? { damageType } : {}) };
   }
 
   // ---- actions -------------------------------------------------------------------------
@@ -926,21 +1076,27 @@ export class Battle {
 
     const events: BattleEvent[] = [];
     const origin = { x: u.x, y: u.y };
-    if (skill.charge) {
-      const dest = this.chargeDestination(u, tile, u, skill)!;
-      if (dest.x !== u.x || dest.y !== u.y) {
-        u.x = dest.x;
-        u.y = dest.y;
-        events.push({ type: 'move', target: u.uid, from: origin, to: dest, kind: 'charge' });
-      }
-    }
-    if (skill.teleport) {
-      // Teleporting out of an engagement breaks it with no opportunity attack.
+    // Aim first (Flicker Strike picks its victim before it moves), then resolve.
+    const aimed = skill.charge ? this.targetsOf(u, skill, tile) : null;
+    const used = this.skillFor(u, skill);
+    // Disengage skills end the user's engagement first, with no opportunity attack.
+    if (hasTag(skill, 'disengage')) {
       const opp = this.opponentOf(u);
       if (opp) {
         this.breakEngagement(u);
         events.push({ type: 'disengage', source: u.uid, target: opp.uid, reason: 'escaped' });
       }
+    }
+    for (const a of skill.selfStatus ?? []) events.push(this.applyStatus(u, u, a.status, a.turns, 1, true));
+    if (skill.switchMode) events.push(...this.setWeaponMode(u, u.weaponMode + 1));
+    if (skill.charge) {
+      const dest = this.chargeDestination(u, tile, u, skill)!;
+      if (dest.x !== u.x || dest.y !== u.y) {
+        u.x = dest.x;
+        u.y = dest.y;
+        events.push({ type: 'move', target: u.uid, from: origin, to: dest, kind: skill.teleport ? 'teleport' : 'charge' });
+      }
+    } else if (skill.teleport) {
       u.x = tile.x;
       u.y = tile.y;
       events.push({ type: 'move', target: u.uid, from: origin, to: { ...tile }, kind: 'teleport' });
@@ -957,15 +1113,20 @@ export class Battle {
       events.push({ type: 'overwatch', source: u.uid, skillId });
     }
 
-    const targets = this.targetsOf(u, skill, tile);
+    const targets = aimed ?? this.targetsOf(u, skill, tile);
     for (const t of targets) {
-      for (const part of skill.hits ?? []) {
+      for (const part of used.hits ?? []) {
         if (!t.alive) break;
-        events.push(this.dealDamage(t, this.hitDamage(u, t, part), u.uid, 'skill'));
+        events.push(...this.dealHit(u, t, part, 'skill'));
+      }
+      // Life-Risking Strike: the user pays if the target is still standing.
+      if (skill.recoilIfSurvives && t.alive && u.alive) {
+        events.push(...this.dealHit(u, u, skill.recoilIfSurvives, 'skill'));
+        if (!u.alive) u.acted = true;
       }
       if (!t.alive) continue;
-      // Engage: a hit locks both units together, unless either is already engaged.
-      if (hasTag(skill, 'engage') && t.team !== u.team && skill.hits?.length && u.alive && !u.engagedWith && !t.engagedWith) {
+      // Engage: locks both units together, unless either is already engaged.
+      if (hasTag(used, 'engage') && t.team !== u.team && u.alive && !u.engagedWith && !t.engagedWith) {
         this.engage(u, t);
         events.push({ type: 'engage', source: u.uid, target: t.uid });
       }
@@ -990,12 +1151,12 @@ export class Battle {
 
     // Knockback: push each surviving target away from the attacker, if there is room.
     // A unit that actually gets pushed breaks free of its engagement.
-    if (skill.knockback) {
+    if (used.knockback) {
       for (const t of targets) {
         if (!t.alive) continue;
         const dir = { x: Math.sign(t.x - u.x), y: Math.sign(t.y - u.y) };
         let moved = false;
-        for (let i = 0; i < skill.knockback; i++) {
+        for (let i = 0; i < used.knockback; i++) {
           const to = { x: t.x + dir.x, y: t.y + dir.y };
           if (!passable(this.map, to.x, to.y) || this.unitAt(to.x, to.y)) break;
           events.push({ type: 'move', target: t.uid, from: { x: t.x, y: t.y }, to, kind: 'knockback' });
@@ -1014,14 +1175,16 @@ export class Battle {
     }
 
     events.push(...this.separationEvents());
+    // Attacking gives a Stealthed unit away.
+    if (this.isAttack(used) && used.affects !== 'ally') u.statuses = u.statuses.filter((st) => !STATUSES[st.id]?.stealth);
     this.payFor(u, skillId);
     return events;
   }
 
   /** Apply a status. Debuffs can be shrugged off: a Resist roll (see resistChance). */
-  private applyStatus(source: Unit, t: Unit, id: string, turns: number, stacks: number): BattleEvent {
+  private applyStatus(source: Unit, t: Unit, id: string, turns: number, stacks: number, unresisted = false): BattleEvent {
     const def = STATUSES[id];
-    if (def.debuff) {
+    if (def.debuff && !unresisted) {
       const chance = resistChance(this.stat(t, 'resist'), this.rules.defenseScale);
       if (chance > 0 && this.rng() < chance) return { type: 'resist', source: source.uid, target: t.uid, name: def.name, chance: Math.round(chance * 100) };
     }
@@ -1120,14 +1283,16 @@ export function makeEnemy(type: string, level: number, rng: Rng): Character {
  * threat budget (threatPerAdventurer x party size) is spent. Weak types come in bigger packs.
  * Past the last level range, the budget keeps growing by 25% of a party per stage.
  */
-export function generateEnemies(stage: number, partySize: number, rng: Rng): Character[] {
+export function generateEnemies(stage: number, partySize: number, rng: Rng, mobMultiplier = 1): Character[] {
   const options = enemyTypesForStage(stage);
   const top = Math.max(...Object.values(ENEMIES).map((d) => d.levels[1]));
   const party = Math.max(1, partySize);
-  const budget = party * ENCOUNTER.threatPerAdventurer * (1 + Math.max(0, stage - top) * 0.25);
+  // Quick Battle's difficulty slider multiplies the budget (and the cap on how many come).
+  const budget = party * ENCOUNTER.threatPerAdventurer * (1 + Math.max(0, stage - top) * 0.25) * mobMultiplier;
+  const cap = Math.round(ENCOUNTER.maxEnemies * mobMultiplier);
   const out: Character[] = [];
   let spent = 0;
-  while (spent < budget - 1e-9 && out.length < ENCOUNTER.maxEnemies) {
+  while (spent < budget - 1e-9 && out.length < cap) {
     const pick = options[Math.floor(rng() * options.length)];
     out.push(makeEnemy(pick.type, pick.level, rng));
     spent += ENEMIES[pick.type].threat;
@@ -1137,7 +1302,10 @@ export function generateEnemies(stage: number, partySize: number, rng: Rng): Cha
 
 /** Deployment spots near the left (player) or right (enemy) edge. */
 export function deploymentTiles(map: BattleMap, team: Team, count: number): Point[] {
-  const cols = team === 'player' ? [1, 0, 2] : [map.width - 2, map.width - 1, map.width - 3];
+  // The usual three columns at the edge; big encounters spill further in (up to the middle).
+  const half = Math.floor(map.width / 2);
+  const inner = [...Array(Math.max(0, half - 3)).keys()].map((i) => i + 3);
+  const cols = team === 'player' ? [1, 0, 2, ...inner] : [map.width - 2, map.width - 1, map.width - 3, ...inner.map((c) => map.width - 1 - c)];
   const mid = Math.floor(map.height / 2);
   // Spread units out: even offsets from the middle row first, then odd ones.
   const offsets = [...Array(map.height).keys()].map((r) => r - mid);

@@ -41,6 +41,8 @@ export interface WeaponDef {
   statMultipliers: Partial<Stats>;
   /** Skills granted by the weapon. The first one is the basic attack. */
   skills: string[];
+  /** The weapon's range in tiles, for skills with a `weaponRange` (the bow's modes). */
+  range?: number;
 }
 
 export interface TagDef {
@@ -66,7 +68,17 @@ export interface StatusDef {
   statMods?: Partial<Stats>;
   /** Percent stat changes while active (-0.25 = -25%), applied after flat changes and terrain. */
   statPct?: Partial<Stats>;
+  /** Enemies can't target the unit directly or trigger overwatch on it (area attacks still hit). Ends when it attacks. */
+  stealth?: boolean;
 }
+
+/**
+ * Damage types. A hit is split by what it scales with: P.Atk, Def and missing Health deal
+ * Physical damage, M.Atk deals Magical damage. Both are reduced by Defense for now; the split is
+ * where type-specific rules (magic resistance, physical / magic penetration) will hook in.
+ */
+export const DAMAGE_TYPES = ['physical', 'magical'] as const;
+export type DamageType = (typeof DAMAGE_TYPES)[number];
 
 /** One hit of a damaging skill. Values are fractions (0.8 = 80%). */
 export interface DamagePart {
@@ -142,8 +154,26 @@ export interface SkillDef {
   aoeRadius?: number;
   cone?: ConeDef;
   teleport?: boolean;
-  /** Dash next to the target (path of at most `range` steps, diagonals allowed) before hitting it. */
+  /** Dash next to the target (path of at most `range` steps, diagonals allowed) before hitting it. With `teleport`: appear next to it instead. */
   charge?: boolean;
+  /** Skill-tree skills: the character level needed to learn it (1 = from the start). */
+  level: number;
+  /** Hit with the user's weapon basic attack this many times (in place of `hits`). */
+  basicAttack?: number;
+  /** Statuses put on the user before the skill resolves (never resisted). */
+  selfStatus?: { status: string; turns: number }[];
+  /** Damage the user takes (after its own Defense) when the target survives the hits. */
+  recoilIfSurvives?: DamagePart;
+  /** A basic attack with switchable modes (the Bow): skill ids, the first is the default. */
+  modes?: string[];
+  /** Short name of a mode skill (Direct, Indirect, Melee). */
+  modeName?: string;
+  /** Range as a multiple of the weapon's range (needs `range` on the weapon). */
+  weaponRange?: number;
+  /** For `basicAttack` skills: use the weapon mode with this tag (e.g. 'melee') instead of the current mode. */
+  basicMode?: string;
+  /** Cycles the user's weapon to its next mode. */
+  switchMode?: boolean;
 }
 
 export type SkillTab = string;
@@ -240,6 +270,8 @@ export interface Character {
   body?: BodyInvestment;
   /** Adventurers: the battle skill bar, slot by slot (10 per page, hotkeys 1-0; null = empty slot). */
   skillBar?: (string | null)[];
+  /** Last selected mode of a weapon with modes (a mode skill id, e.g. "indirect_shot"). Kept between battles. */
+  weaponMode?: string;
   /** Party members only: how they are bound to the party. */
   contract?: Contract;
 }

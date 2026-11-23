@@ -1,5 +1,5 @@
 // Random people for Arch City: names, looks, and ready-to-fight adventurers.
-import { PALETTE, SKILL_TREES, WEAPONS, skillPointsForLevel } from '../data/content';
+import { PALETTE, SKILLS, SKILL_TREES, WEAPONS, skillPointsForLevel } from '../data/content';
 import {
   FACE_COUNT, HAIR_COLORS, HAIR_STYLES, SEXES, SKIN_TONES,
   type BodyInvestment, type BodyModel, type Character, type HairColor, type HairStyle, type Look, type Sex, type SkinTone,
@@ -96,8 +96,10 @@ export function randomAdventurer(level: number, rng: Rng, opts: { name?: string;
   const weaponId = pick(Object.keys(WEAPONS), rng);
   // Picks lean on one tab (warrior or mage), like a real build.
   const tab = pick([...new Set(SKILL_TREES.map((t) => t.tab))], rng);
-  const preferred = SKILL_TREES.filter((t) => t.tab === tab).flatMap((t) => t.skills);
-  const others = SKILL_TREES.filter((t) => t.tab !== tab).flatMap((t) => t.skills);
+  // Only skills their level has unlocked.
+  const open = (id: string) => SKILLS[id].level <= level;
+  const preferred = SKILL_TREES.filter((t) => t.tab === tab).flatMap((t) => t.skills).filter(open);
+  const others = SKILL_TREES.filter((t) => t.tab !== tab).flatMap((t) => t.skills).filter(open);
   const pool = [...shuffle(preferred, rng), ...shuffle(others, rng)];
   // Points: mostly skills, now and then a Body investment in a stat that suits the build.
   const points = skillPointsForLevel(level);

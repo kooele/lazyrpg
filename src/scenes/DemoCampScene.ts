@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { MAX_PARTY_SIZE, SKILLS, WEAPONS, XP_PER_LEVEL } from '../data/content';
 import type { Character } from '../data/types';
 import { bodyPoints, deriveStats, freePoints, skillPoints } from '../game/character';
-import { DEMO_STAGES, newDemo, requireDemo } from '../game/demo';
+import { DEMO_STAGES, MOB_MULTIPLIER, newDemo, requireDemo } from '../game/demo';
 import { COLORS, HEIGHT, WIDTH, button, confirmDialog, figure, panel, talentTag, text, setupCamera } from '../ui/widgets';
 
 /** Quick Battle (demo) camp: recruit, customize and dismiss up to 4 Adventurers, then fight stages 1 to 5. */
@@ -11,10 +11,59 @@ export class DemoCampScene extends Phaser.Scene {
     super('DemoCamp');
   }
 
+  /** Is the difficulty slider being dragged? */
+  private sliding = false;
+
   create(): void {
     setupCamera(this);
     this.input.keyboard?.on('keydown-ESC', () => this.scene.start('MainMenu'));
+    this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
+      if (this.sliding) this.slideTo(p.worldX);
+    });
+    this.input.on('pointerup', () => {
+      this.sliding = false;
+    });
     this.render();
+  }
+
+  // ---- difficulty slider (enemy count 1x-5x) --------------------------------------------
+
+  private static readonly SLIDER = { x: 640, y: 66, w: 270 };
+
+  /** Set the multiplier from a pointer x position (snaps to 0.5 steps). */
+  private slideTo(px: number): void {
+    const { x, w } = DemoCampScene.SLIDER;
+    const { min, max, step } = MOB_MULTIPLIER;
+    const t = Math.max(0, Math.min(1, (px - x) / w));
+    const value = Math.round((min + t * (max - min)) / step) * step;
+    const d = requireDemo();
+    if (value !== d.mobMultiplier) {
+      d.mobMultiplier = value;
+      this.render();
+    }
+  }
+
+  private difficultySlider(): void {
+    const d = requireDemo();
+    const { x, y, w } = DemoCampScene.SLIDER;
+    const { min, max, step } = MOB_MULTIPLIER;
+    const pos = (v: number) => x + ((v - min) / (max - min)) * w;
+    text(this, x - 12, y - 8, 'Enemies', { color: COLORS.dim, fontSize: '13px' }).setOrigin(1, 0.5);
+    text(this, x - 12, y + 8, `${d.mobMultiplier}x`, { color: d.mobMultiplier > 1 ? COLORS.bad : COLORS.text, fontSize: '15px', fontStyle: 'bold' }).setOrigin(1, 0.5);
+    const g = this.add.graphics();
+    g.fillStyle(0x0b0d14).fillRect(x, y - 3, w, 6);
+    g.fillStyle(0xc0392b).fillRect(x, y - 3, pos(d.mobMultiplier) - x, 6);
+    for (let v: number = min; v <= max + 1e-9; v += step) {
+      g.fillStyle(Number.isInteger(v) ? 0x9aa3bd : 0x3a4566).fillRect(pos(v) - 1, y + 6, 2, Number.isInteger(v) ? 6 : 3);
+      if (Number.isInteger(v)) text(this, pos(v), y + 13, `${v}x`, { color: COLORS.dim, fontSize: '10px' }).setOrigin(0.5, 0);
+    }
+    this.add.circle(pos(d.mobMultiplier), y, 9, 0xe0b44c).setStrokeStyle(2, 0x0b0d14);
+    // A generous hit area so the slider is easy to grab.
+    const hit = this.add.rectangle(x - 10, y - 14, w + 20, 28, 0xffffff, 0).setOrigin(0).setInteractive({ useHandCursor: true });
+    hit.on('pointerdown', (p: Phaser.Input.Pointer) => {
+      this.sliding = true;
+      this.slideTo(p.worldX);
+    });
   }
 
   private render(): void {
@@ -24,7 +73,8 @@ export class DemoCampScene extends Phaser.Scene {
 
     text(this, 24, 18, 'Quick Battle: Camp', { fontSize: '32px', color: COLORS.gold });
     text(this, 24, 58, `${d.complete ? 'Demo complete!' : `Stage ${d.stage} of ${DEMO_STAGES}`}   ·   Victories ${d.victories}   ·   Defeats ${d.defeats}`, { color: d.complete ? COLORS.gold : COLORS.dim });
-    text(this, WIDTH - 24, 28, 'Demo: progress is not saved', { color: COLORS.dim, fontSize: '13px' }).setOrigin(1, 0);
+    text(this, WIDTH - 24, 14, 'Demo: progress is not saved', { color: COLORS.dim, fontSize: '12px' }).setOrigin(1, 0);
+    this.difficultySlider();
 
     for (let i = 0; i < MAX_PARTY_SIZE; i++) {
       const x = 24 + i * 232;

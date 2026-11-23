@@ -4,7 +4,7 @@ A small turn-based tactical RPG that runs in the browser, built with [Phaser 4](
 
 ## How the game works
 
-1. **Main menu**: New Game, Continue, Save Game, Load Game, and **Quick Battle (Demo)**: the original game on its own. Recruit up to 4 Adventurers for free at a camp (any look, weapon and skills), then fight stages 1 to 5; every victory is worth a level, and clearing stage 5 completes the demo. The demo is separate from your Arch City campaign and isn't saved.
+1. **Main menu**: New Game, Continue, Save Game, Load Game, and **Quick Battle (Demo)**: the original game on its own. Recruit up to 4 Adventurers for free at a camp (any look, weapon and skills), then fight stages 1 to 5; every victory is worth a level, and clearing stage 5 completes the demo. The **Enemies** slider at camp raises the difficulty: it multiplies the encounter's size from 1x to 5x in 0.5 steps (5x at stage 1 with 4 heroes is 40 rats). Big encounters deploy further toward the middle of the map. The demo is separate from your Arch City campaign and isn't saved.
 2. **Your character**: a new game starts by creating your main character (name, sex, skin, face, hair, hair colour, clothes colour, weapon, skills) and naming your party. The main character is permanent: they can't be dismissed and always lead the party on quests.
 3. **Arch City**: the hub is a map of the walled city (`public/art/city/arch-city.webp`) with three tabs: **Outer Ring** (Adventurer Guild, Docks, Marketplace, Slave Market, Slums, Customs Office, Sleeping Griffin Inn), **Middle Ring** (Tailor, Auction House, Library, Church) and **Inner Ring** (Lord's Manor, Central Government Office, Central Church, Gilded Crown Inn). Click a pin on the map or a button below it. Open so far: the **Adventurer Guild**, the **Slave Market** and the two **inns**; the rest are greyed out. **Manage Party** (bottom bar) handles your members, and the side panel sets out on an accepted quest. See [Arch City and the guild](#arch-city-and-the-adventurer-guild).
 4. **Adventurers**: There are no fixed classes. Every party member is an Adventurer, and you build them by mixing a weapon with picks from the skill trees. Up to 4 go on each quest (the lineup); the party can have up to 8 members.
@@ -93,7 +93,7 @@ Stats grow automatically on level up (100 XP per level), at a speed set by the A
 | Growth | 160% | 140% | 120% | 100% | 80% | 60% |
 | Chance | 5% | 10% | 20% | 40% | 20% | 5% |
 
-An S-talent P.Atk grows +16 a level instead of +10. Talent doesn't change level-1 stats. An Adventurer's overall talent is the grade nearest the average of their six. When you create your main character (or a Quick Battle recruit), **Reroll talent** rolls new grades. Talented Adventurers cost more: mercenary fees and cuts, companion wages and slave prices are multiplied by `1 + 2 × (average growth rate − 1)` (at least ×0.4; `talentPrice` in `guild.json`), so all-S costs ×2.2 and all-F ×0.4. Growth rates and roll weights are in `stats.json` (`talent`): a grade's chance is its weight divided by the total of all weights, so the weights can be any non-negative numbers (a grade with weight 0 never comes up). Enemies always grow at 100%.
+An S-talent P.Atk grows +16 a level instead of +10. Talent doesn't change level-1 stats. An Adventurer's overall talent is the grade nearest the average of their six. When you create your main character, or create or customize a Quick Battle recruit, **Reroll talent** rolls new grades, and the **‹ ›** arrows beside each grade set it by hand (F to S). Party members in the campaign keep the talent they have. Talented Adventurers cost more: mercenary fees and cuts, companion wages and slave prices are multiplied by `1 + 2 × (average growth rate − 1)` (at least ×0.4; `talentPrice` in `guild.json`), so all-S costs ×2.2 and all-F ×0.4. Growth rates and roll weights are in `stats.json` (`talent`): a grade's chance is its weight divided by the total of all weights, so the weights can be any non-negative numbers (a grade with weight 0 never comes up). Enemies always grow at 100%.
 
 A won quest gives each member in the lineup `xpPerVictory` (100, in `stats.json`) when their level equals the quest's stage, more when they're below it and less when above, so a party that keeps winning stays close to the level of the quests it takes.
 
@@ -101,9 +101,9 @@ Weapons **multiply** these stats:
 
 | Weapon | Multipliers | Skills (the first is the basic attack) |
 |---|---|---|
-| Sword & Shield | x1 P.Atk, x0.8 M.Atk, x1.5 Def | Sword Slash, Slash and Smash, Shield Up |
-| Spear | x1 P.Atk, x0.8 M.Atk | Spear Thrust, Circle Swing |
-| Bow | x0.8 P.Atk, x0.8 M.Atk | Direct Shot, Indirect Shot |
+| Sword & Shield | x1 P.Atk, x0.8 M.Atk, x1.5 Def | Sword Slash, Shield Up |
+| Spear | x1 P.Atk, x0.8 M.Atk | Spear Thrust |
+| Bow | x0.8 P.Atk, x0.8 M.Atk, range 5 | Bow Attack (by mode), Switch Mode |
 | Staff | x0.5 P.Atk, x1.2 M.Atk | Empowered Strike, Magic Bolt |
 
 ### Action points and mana
@@ -119,31 +119,46 @@ Every unit gets **2 AP** each turn: a **movement AP** (the regular move) and an 
 
 Moving after a skill isn't possible once the movement AP is gone. **Undo move** takes back a regular move as long as nothing else happened since.
 
-Skills can cost **mana** (`mana` in `skills.json`), which doesn't come back during a battle: Kick 10, Slash and Smash 20, Arcane Bolt 20, Cleanse 20, Execute 20, Circle Swing 30, Charge 30, Arcane Pulse 40, Arcane Shift 40, Heal 40. Skill buttons show the cost; without enough mana a skill is greyed out.
+Skills can cost **mana** (`mana` in `skills.json`), which doesn't come back during a battle: Engage 10, Kick 10, Arcane Bolt 20, Charge 20, Cleanse 20, Double Strike 20, Execute 20, Flicker Strike 20, Pocket Sand 20, Shadow Step 20, Circle Swing 30, Life-Risking Strike 30, Arcane Pulse 40, Arcane Shift 40, Heal 40. Skill buttons show the cost; without enough mana a skill is greyed out.
+
+**Bow modes**: the bow's basic attack depends on its mode. **Switch Mode** (a free action) cycles Direct → Indirect → Melee → Direct. The bow keeps the selected mode between battles (saved as `weaponMode` on the character). Overwatch, opportunity attacks and Weapon skills (Execute, Double Strike) use the current mode. Circle Swing always swings in Melee mode without changing the selection. Bow Strike (Melee) engages, and a bow user that is engaged always fights in Melee mode; its selected mode comes back once it breaks free. Enemy archers fight at range: each turn they pick Direct or Indirect, whichever gives the better attack (Indirect when cover is in the way), and only fight in Melee when engaged. Modes are set in `skills.json` (`bow_attack.modes`), with ranges relative to the weapon's `range` in `weapons.json`.
+
+| Mode | Skill | Range | Damage |
+|---|---|---|---|
+| Direct | Direct Shot | Weapon range (5), needs line of sight | 100% P.Atk |
+| Indirect | Indirect Shot | Weapon range x 1.5 (7.5), arcs over cover | 70% P.Atk |
+| Melee | Bow Strike | 1.5 | 80% P.Atk |
+
+**Damage types**: every hit is split by what it scales with. P.Atk, Defense and missing Health deal **Physical** damage (red numbers); M.Atk deals **Magical** damage (violet numbers), so a hybrid hit like Magic Bolt shows one of each. Both are reduced by Defense for now; `Battle.mitigation` is where magic resistance and physical / magic penetration will go. Skills are tagged Physical / Magical to match their hits (a test checks this).
 
 **Basic abilities** (every Adventurer, listed under the weapon in the creator):
 
 - **Dash** (1 AP, 20 MP, cooldown 1): only after the regular move. Spends the action AP to move again, up to your Movement. Overwatch can still fire on the way; it can't be undone.
-- **Overwatch** (ends turn): watch a 60° arc in any direction, as far as your weapon reaches (Bow 5, Spear 2, sword and staff 1.5). The first enemy to move into it takes your basic attack and keeps moving. Bow and Spear no longer have their own Overwatch / Intercept.
+- **Overwatch** (ends turn): watch a 60° arc in any direction, as far as your weapon reaches (Bow 5 in Direct mode, 7.5 in Indirect, 1.5 in Melee; Spear 2; sword and staff 1.5). The first enemy to move into it takes your basic attack and keeps moving. Bow and Spear no longer have their own Overwatch / Intercept.
 
 ### Skill points, skill trees and the Body tab
 
 Adventurers have **skill points**: 2 at level 1 and 1 more every level. Each point either learns a skill-tree skill (mix trees freely) or goes into the **Body** tab, where it trains a stat by twice its base growth per level: +100 Health, +40 Mana, +20 P.Atk or M.Atk, +10 Defense or Resist per point (before weapon multipliers; talent doesn't change it). Points can be moved around freely in Customize / Loadout.
 
 
-- **Mage**: Arcanist (Arcane Bolt, Arcane Pulse, Arcane Shift), Elementalist (Fireball, Freeze), Cleric (Heal, Cleanse)
-- **Warrior**: Vanguard (Charge), Infighter (Kick), Assassin (Execute)
+Some skills need a **minimum level** (`level` in `skills.json`; shown as "Lv 3" in the skill tree). Until then they're greyed out and can't be learned. A loaded save with a skill above the character's level unlearns it and refunds the point. Random adventurers only pick skills their level has unlocked.
+
+- **Mage**: Arcanist (Arcane Bolt, Arcane Pulse Lv 3, Arcane Shift Lv 3), Elementalist (Fireball, Freeze), Cleric (Heal, Cleanse)
+- **Warrior**: Vanguard (Engage, Charge Lv 3), Infighter (Kick, Pocket Sand Lv 3), Assassin (Shadow Step, Flicker Strike Lv 3, Life-Risking Strike Lv 5), Weapon Master (Double Strike, Execute Lv 3, Circle Swing Lv 5)
+
+Status effects: Burn, Slow, Corrode, Frenzy, **Blinded** (Pocket Sand: −30% P.Atk and M.Atk), **Exposed** (Life-Risking Strike: no Defense until your next turn) and **Stealthed** (Shadow Step: enemies can't target you directly or trigger overwatch on you until your next turn; area attacks still hit, and attacking ends it).
 
 ### Tags
 
-Every skill has tags that explain how it behaves. These four change the rules:
+Every skill has tags that explain how it behaves. These five change the rules:
 
 - **Movement**: range in tiles = rangeScale × Movement ÷ 4 (the grass cost), rounded down. Charge uses 100% (4 tiles at Movement 16), and Slow (−4 Movement) shortens it. Arcane Shift has a fixed range of 2.
-- **Weapon**: uses your weapon's basic-attack range and line rules (Execute with a Bow reaches 5 tiles). Unusable while the weapon is disabled (nothing disables weapons yet).
-- **Engage**: see below. Sword Slash, Slash and Smash, Empowered Strike, Kick, Charge.
+- **Weapon**: uses your weapon's basic-attack range and line rules (Execute with a Bow reaches 5 tiles). Double Strike hits with the basic attack twice, and Circle Swing hits every unit within the weapon's range with it, allies included (a bow uses its Melee mode for both the reach and the hit). Unusable while the weapon is disabled (nothing disables weapons yet).
+- **Engage**: see below. Sword Slash, Bow Strike (bow in Melee mode), Empowered Strike, Engage, Kick, Charge, Flicker Strike, Life-Risking Strike.
+- **Disengage**: usable while engaged, on anyone, and it ends your engagement with no free attack for your opponent. Arcane Pulse, Arcane Shift, Shadow Step.
 - **Free Action**: costs 0 AP (Kick). Usable any time until the unit's turn ends, so after a move or a 1/2-AP skill, but not after a turn-ending one. The turn doesn't end automatically while a unit still has a free action with a target in reach; press **End Turn** when done.
 
-Descriptive tags: Melee, Projectile, Indirect, Area, Knockback, Reaction, Teleport, Debuff, Support.
+Descriptive tags: Melee, Physical, Magical, Projectile, Indirect, Area, Knockback, Reaction, Teleport, Stealth, Debuff, Support.
 
 ### Enemies
 
@@ -154,7 +169,7 @@ Each enemy type has a fixed level range and its own stats and skills (`src/data/
 | Giant Rat | 1–2 | Gnaw. Fast and weak; comes in packs. |
 | Green Slime | 2–3 | Slam (Engage); Sticky Spit at level 3 (ranged, applies Slow and Corrode: -25% Defense, 2-turn cooldown). Slow-moving and tough. |
 | Grey Wolf | 3–4 | Bite (Engage) and Pounce (leaps in, Engage); Howl at level 4 (Frenzy: +20 P.Atk to nearby allies). Very fast. |
-| Bandit | 4–5 | Carries a random weapon but only uses its basic attack (no Slash and Smash, Circle Swing...). Thugs also have Shield Up, Hexers Fireball, Archers Execute; all learn Kick at level 5. |
+| Bandit | 4–5 | Carries a random weapon but only uses its basic attack (no Magic Bolt, Shield Up from the shield...; archers do switch bow modes). Thugs also have Shield Up, Hexers Fireball, Archers Execute; all learn Kick at level 5. |
 
 **Enemy AI** weighs how dangerous a tile is (how much the party could hit it for next turn) against what it can do from there. Healthy enemies take small risks freely. Danger it can't avoid anyway doesn't hold it back, so a unit that's already in the thick of the fight keeps fighting. Below 35% health, an enemy that can reach the edge of the map this turn **flees the battle** and is removed. Otherwise it falls back to regroup with healthy allies (and may disengage to do it), or, if it's on its own, makes a last stand. Wounded enemies may hold back from walking into a deadly spot, but never for more than two turns in a row.
 
@@ -166,16 +181,16 @@ Hitting a unit with an **Engage** skill locks you both together, unless the targ
 - You can't move, you can only attack your opponent, and you can only heal or cleanse yourself.
   - Attacks are fine as long as they hit your opponent: Spear Thrust aimed through them (diagonals included), Circle Swing (even if it also catches others), and Charge on the opponent itself (no dash, just the strike).
 - **Disengage** (button in the battle sidebar) breaks free, but your opponent gets a free basic attack on you (an opportunity attack). You can then move and act normally.
-- **Arcane Shift** (Teleport) slips out of an engagement with no opportunity attack.
+- **Disengage** skills (Arcane Shift, Shadow Step, Arcane Pulse) slip out of an engagement with no opportunity attack. Other teleports and moves need you to disengage first.
 - Engagement also ends if either unit falls, or if either one is successfully pushed by a knockback (Circle Swing, Arcane Pulse), even if they still end up next to each other. The pushed unit takes a free basic attack from its old opponent, just like disengaging. A push that's blocked doesn't break it.
 
 Heal and Cleanse work on any unit, enemies included. An attack aimed straight at an ally hits them normally (lines like Spear Thrust pass by allies they aren't aimed at). In battle, the game asks for confirmation before you attack an empty tile or an ally, or heal or cleanse an enemy. The battle log keeps the whole fight: scroll it with the mouse wheel or the bar on its right.
 
 ### Lines, cooldowns, and prepared systems
 
-- *Line of sight* (no rock in between): Direct Shot, Magic Bolt, Arcane Bolt, Arcane Pulse, Fireball, and Overwatch with a weapon that needs it (Bow).
+- *Line of sight* (no rock in between): Direct Shot (bow in Direct mode), Magic Bolt, Arcane Bolt, Arcane Pulse, Fireball, and Overwatch with a weapon that needs it (Bow).
 - *Line of fire* (no rock **or unit** in between): no skill uses it right now; set `"los": "fire"` on a skill to use it.
-- No line needed: melee skills, Spear Thrust (it stops at the first enemy in the way), Indirect Shot, Freeze, Heal, Cleanse, Arcane Shift.
+- No line needed: melee skills, Spear Thrust (it stops at the first enemy in the way), Indirect Shot (bow in Indirect mode), Freeze, Heal, Cleanse, Arcane Shift.
 - **Ranges** use Euclidean distance. Ranges of 2 or more round the distance to the nearest tile, so range 2 also reaches 2-over-1-up and shapes are rounder. Ranges 1 and 1.5 stay exact: 1 is the 4 neighbours, 1.5 adds the diagonals. Set `rangeRounding.fromRange` in `stats.json` to change the cut-off.
 - Skill tooltips and the weapon panel show a **tile diagram** of what each skill covers, with you in gold, rather than describing range in words.
 - A cooldown of N means the skill can't be used during your next N turns.

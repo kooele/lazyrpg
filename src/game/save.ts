@@ -155,6 +155,8 @@ function validateCharacter(raw: unknown, path: string, opts: { member?: boolean 
     }
   }
   if (new Set(skills).size !== skills.length) bad(`${path}.skillIds`, 'contains duplicates');
+  // Skills that now need a higher level (level requirements change between versions) are unlearned, refunding the point.
+  skills.splice(0, skills.length, ...skills.filter((s) => SKILLS[s as string].level <= (level as number)));
   const points = skillPointsForLevel(level as number);
   const body = r.body === undefined ? undefined : validateBody(r.body, `${path}.body`);
   const spent = skills.length + Object.values(body ?? {}).reduce((a, n) => a + (n ?? 0), 0);
@@ -181,6 +183,8 @@ function validateCharacter(raw: unknown, path: string, opts: { member?: boolean 
     if (bar.length > 100) bad(`${path}.skillBar`, 'can have at most 100 slots');
     out.skillBar = bar.map((s) => (typeof s === 'string' && SKILLS[s] ? s : null));
   }
+  // An unknown mode (modes change between versions) just falls back to the weapon's default.
+  if (typeof r.weaponMode === 'string' && SKILLS[r.weaponMode]) out.weaponMode = r.weaponMode;
   if (r.talents !== undefined) out.talents = validateTalents(r.talents, `${path}.talents`);
   if (opts.member) out.contract = validateContract(r.contract, `${path}.contract`);
   return out;
