@@ -6,7 +6,7 @@ import enemiesJson from '../src/data/enemies.json';
 import { parseEnemies } from '../src/data/enemies';
 import { STAT_CONFIG, parseStatConfig } from '../src/data/stats';
 import type { Character, SkillDef } from '../src/data/types';
-import { planTurn, runAiTurn, shouldDisengage, threatAt } from '../src/game/ai';
+import { planTurn, preferredMode, runAiTurn, shouldDisengage, threatAt } from '../src/game/ai';
 import { Battle, defenseMultiplier, resistChance, deploymentTiles, enemyTypesForStage, generateEnemies, makeEnemy, makeUnit, victoryXp, type Team } from '../src/game/battle';
 import { allSkills, bodyGain, skillBarLayout, swapBarSlots, bodyPoints as bodyPointsOf, bodyStats, createCharacter, deriveStats, freePoints, grantXp, isUnlocked, makeRng, pointsUsed, sanitizeLoadout } from '../src/game/character';
 import { randomAdventurer } from '../src/game/people';
@@ -714,7 +714,7 @@ describe('enemies', () => {
       expect(b.name).toMatch(/^Bandit /);
       // Only the weapon's basic attack: no Slash and Smash, Circle Swing, Intercept, Overwatch...
       const others = WEAPONS[b.weaponId].skills.slice(1);
-      for (const s of others) if (s !== 'shield_up') expect(allSkills(b)).not.toContain(s);
+      for (const s of others) if (s !== 'shield_up' && s !== 'switch_mode') expect(allSkills(b)).not.toContain(s);
     }
   });
 
@@ -1325,6 +1325,7 @@ describe('bow modes and damage types', () => {
     expect(battle.areaTiles(a, SKILLS.circle_swing, a)).toHaveLength(8);
     const events = battle.perform(a, 'circle_swing', { x: 3, y: 3 });
     expect(events.filter((ev) => ev.type === 'damage')).toEqual([expect.objectContaining({ target: foe.uid, amount: 37, damageType: 'physical' })]);
+    expect(battle.modeName(a)).toBe('Indirect'); // the selected mode is kept
   });
 
   it('hits are split into Physical (P.Atk, Def, missing HP) and Magical (M.Atk) damage', () => {
@@ -1353,5 +1354,67 @@ describe('bow modes and damage types', () => {
       expect([s.id, s.tags.includes('physical')]).toEqual([s.id, physical]);
       expect([s.id, s.tags.includes('magical')]).toEqual([s.id, magical]);
     }
+  });
+});
+
+describe('bow mode memory, engagement and enemy archers', () => {
+  it('the bow keeps its selected mode between battles (and in saves)', () => {
+    const c = hero('bow');
+    const first = setup(openMap(), [{ c, team: 'player', at: { x: 1, y: 1 } }]);
+    first.battle.perform(first.units[0], 'switch_mode', { x: 1, y: 1 });
+    expect(c.weaponMode).toBe('indirect_shot');
+    const second = setup(openMap(), [{ c, team: 'player', at: { x: 1, y: 1 } }]);
+    expect(second.battle.modeName(second.units[0])).toBe('Indirect');
+    const state = newCampaign(c, 'Testers', makeRng(5));
+    const parsed = parseSave(serializeSave(state));
+    expect(parsed.ok && parsed.state.party[0].weaponMode).toBe('indirect_shot');
+  });
+
+  it('an engaged bow user fights in Melee mode, keeping its selection for later; Bow Strike engages', () => {
+    const { battle, units: [a, e] } = setup(openMap(), [
+      { c: hero('bow'), team: 'player', at: { x: 3, y: 3 } },
+      { c: hero('sword_shield'), team: 'enemy', at: { x: 4, y: 3 } },
+      { c: hero('sword_shield'), team: 'enemy', at: { x: 7, y: 3 } },
+    ]);
+    // Melee mode, not engaged: Bow Strike engages.
+    battle.setWeaponMode(a, 2);
+    battle.perform(a, 'bow_attack', { x: 4, y: 3 });
+    expect(a.engagedWith).toBe(e.uid);
+    battle.endPhase();
+    battle.endPhase();
+    battle.setWeaponMode(a, 0); // select Direct...
+    expect(battle.modeName(a)).toBe('Direct');
+    expect(battle.skillFor(a, SKILLS.bow_attack).name).toBe('Bow Strike'); // ...but engaged: Melee
+    expect(battle.skillRange(a, SKILLS.bow_attack)).toBe(1.5);
+    expect(battle.canTarget(a, SKILLS.bow_attack, { x: 7, y: 3 })).toBe(false);
+    battle.disengage(a);
+    expect(battle.skillFor(a, SKILLS.bow_attack).name).toBe('Direct Shot');
+  });
+
+  it('enemy archers play at range: Indirect behind cover, Direct in the open, never Melee by choice', () => {
+    const walled = openMap(12, 7);
+    for (let y = 0; y < 7; y++) walled.tiles[y][4] = 'rock';
+    const covered = setup(walled, [
+      { c: hero('sword_shield'), team: 'player', at: { x: 7, y: 3 } },
+      { c: hero('bow'), team: 'enemy', at: { x: 1, y: 3 } },
+    ]);
+    covered.battle.endPhase();
+    expect(preferredMode(covered.battle, covered.units[1])).toBe(1); // Indirect: arcs over the wall
+
+    const open = setup(openMap(12, 7), [
+      { c: hero('sword_shield'), team: 'player', at: { x: 6, y: 3 } },
+      { c: hero('bow'), team: 'enemy', at: { x: 1, y: 3 } },
+    ]);
+    open.battle.endPhase();
+    const archer = open.units[1];
+    archer.weaponMode = 2; // left in Melee mode
+    expect(preferredMode(open.battle, archer)).toBe(0); // back to Direct (100% beats 70%)
+    archer.weaponMode = 0;
+    expect(preferredMode(open.battle, archer)).toBeNull();
+    // Engaged: no choice to make; it fights in Melee.
+    archer.engagedWith = open.units[0].uid;
+    open.units[0].engagedWith = archer.uid;
+    expect(preferredMode(open.battle, archer)).toBeNull();
+    expect(open.battle.skillFor(archer, SKILLS.bow_attack).name).toBe('Bow Strike');
   });
 });

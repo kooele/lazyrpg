@@ -70,7 +70,7 @@ export interface Unit {
   engagedWith: string | null;
   /** 'weapon'-tagged skills are unusable while true (nothing sets it yet). */
   weaponDisabled: boolean;
-  /** Current mode of a weapon with modes (the Bow): index into its basic attack's modes. Starts at 0 (Direct). */
+  /** Selected mode of a weapon with modes (the Bow): index into its basic attack's modes. Kept on the character between battles. */
   weaponMode: number;
   /** Fled off the edge of the map (counts as gone, not dead). */
   escaped?: boolean;
@@ -134,8 +134,14 @@ export function makeUnit(character: Character, team: Team, pos: Point): Unit {
     overwatch: null,
     engagedWith: null,
     weaponDisabled: false,
-    weaponMode: 0,
+    weaponMode: initialMode(character),
   };
+}
+
+/** The character's last selected weapon mode (index), or 0 (the default mode). */
+function initialMode(c: Character): number {
+  const modes = SKILLS[allSkills(c)[0]]?.modes;
+  return modes && c.weaponMode ? Math.max(0, modes.indexOf(c.weaponMode)) : 0;
 }
 
 /** Damage multiplier from Defense: each `defenseScale` points = +100% effective health. */
@@ -208,16 +214,39 @@ export class Battle {
     return SKILLS[allSkills(u.character)[0] ?? WEAPONS[DEFAULT_WEAPON].skills[0]];
   }
 
+  /**
+   * The mode the weapon actually attacks in: the selected one, except that an engaged
+   * unit always fights in Melee mode (its selection is kept for when it breaks free).
+   */
+  activeMode(u: Unit): number {
+    const modes = this.rawBasic(u).modes;
+    if (!modes) return 0;
+    if (u.engagedWith) {
+      const melee = modes.findIndex((m) => hasTag(SKILLS[m], 'melee'));
+      if (melee >= 0) return melee;
+    }
+    return u.weaponMode;
+  }
+
+  /** Select a weapon mode (a free action; Switch Mode cycles through them). Saved on the character. */
+  setWeaponMode(u: Unit, index: number): BattleEvent[] {
+    const modes = this.modesOf(u);
+    if (!modes) throw new Error(`${u.character.name}'s weapon has no modes`);
+    u.weaponMode = ((index % modes.length) + modes.length) % modes.length;
+    u.character.weaponMode = modes[u.weaponMode];
+    return [{ type: 'mode', target: u.uid, name: this.modeName(u)! }];
+  }
+
   /** Does the unit's weapon have modes (Switch Mode)? */
   modesOf(u: Unit): string[] | undefined {
     return this.rawBasic(u).modes;
   }
 
   /** Name of the unit's current weapon mode (e.g. "Indirect"), or null for weapons without modes. */
-  modeName(u: Unit): string | null {
+  modeName(u: Unit, mode = u.weaponMode): string | null {
     const raw = this.rawBasic(u);
     if (!raw.modes) return null;
-    const m = resolveWeaponSkill(raw, WEAPONS[u.character.weaponId], u.weaponMode);
+    const m = resolveWeaponSkill(raw, WEAPONS[u.character.weaponId], mode);
     return m.modeName ?? m.name;
   }
 
@@ -231,13 +260,14 @@ export class Battle {
   skillFor(u: Unit, s: SkillDef): SkillDef {
     const areaFromWeapon = s.target === 'self' && hasTag(s, 'weapon') && s.aoeRadius === undefined;
     if (!s.modes && s.weaponRange === undefined && !s.basicAttack && !areaFromWeapon) return s;
-    const cacheKey = `${u.uid}:${u.weaponMode}`;
+    const mode = this.activeMode(u);
+    const cacheKey = `${u.uid}:${mode}`;
     let perSkill = this.resolved.get(s);
     if (!perSkill) this.resolved.set(s, (perSkill = new Map()));
     let out = perSkill.get(cacheKey);
     if (!out) {
       const weapon = WEAPONS[u.character.weaponId];
-      out = resolveWeaponSkill(s, weapon, u.weaponMode);
+      out = resolveWeaponSkill(s, weapon, mode);
       if (out.basicAttack || areaFromWeapon) {
         // Circle Swing always swings a bow in Melee mode ('basicMode').
         const forced = out.basicMode ? modeWithTag(this.rawBasic(u), out.basicMode) : undefined;
@@ -1058,12 +1088,7 @@ export class Battle {
       }
     }
     for (const a of skill.selfStatus ?? []) events.push(this.applyStatus(u, u, a.status, a.turns, 1, true));
-    if (skill.switchMode) {
-      const modes = this.modesOf(u);
-      if (!modes) throw new Error(`${u.character.name}'s weapon has no modes`);
-      u.weaponMode = (u.weaponMode + 1) % modes.length;
-      events.push({ type: 'mode', target: u.uid, name: this.modeName(u)! });
-    }
+    if (skill.switchMode) events.push(...this.setWeaponMode(u, u.weaponMode + 1));
     if (skill.charge) {
       const dest = this.chargeDestination(u, tile, u, skill)!;
       if (dest.x !== u.x || dest.y !== u.y) {
@@ -1101,7 +1126,7 @@ export class Battle {
       }
       if (!t.alive) continue;
       // Engage: locks both units together, unless either is already engaged.
-      if (hasTag(skill, 'engage') && t.team !== u.team && u.alive && !u.engagedWith && !t.engagedWith) {
+      if (hasTag(used, 'engage') && t.team !== u.team && u.alive && !u.engagedWith && !t.engagedWith) {
         this.engage(u, t);
         events.push({ type: 'engage', source: u.uid, target: t.uid });
       }

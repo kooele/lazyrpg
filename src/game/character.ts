@@ -88,7 +88,8 @@ export function allSkills(c: Character): string[] {
   if (c.enemyType) {
     const def = ENEMIES[c.enemyType];
     const byLevel = Object.entries(def.skillsByLevel).filter(([lvl]) => c.level >= Number(lvl)).flatMap(([, s]) => s);
-    const fromWeapon = def.weaponSkillUse === 'basic' ? weaponSkills.slice(0, 1) : weaponSkills;
+    // 'basic': only the basic attack (and Switch Mode, so archers can pick their bow mode).
+    const fromWeapon = def.weaponSkillUse === 'basic' ? weaponSkills.filter((id, i) => i === 0 || SKILLS[id].switchMode) : weaponSkills;
     return [...new Set([...fromWeapon, ...def.skills, ...(def.weaponSkills[c.weaponId] ?? []), ...byLevel])];
   }
   return [...weaponSkills, ...c.skillIds.slice(0, skillPoints(c)), ...BASIC_SKILLS];

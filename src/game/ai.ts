@@ -1,7 +1,7 @@
 // Utility-scoring AI. For every reachable tile x every ready skill x every
 // sensible aim point, score the outcome and pick the best. If nothing scores,
 // advance toward the enemy and set up overwatch if the weapon has it.
-import { SKILLS, STATUSES, isFree } from '../data/content';
+import { SKILLS, STATUSES, hasTag, isFree } from '../data/content';
 import type { SkillDef } from '../data/types';
 import type { Battle, Unit } from './battle';
 import { DIRS, MOVEMENT_PER_TILE, TERRAIN, dist, key, passable, type Point } from './grid';
@@ -207,7 +207,9 @@ export function shouldEscape(battle: Battle, u: Unit): boolean {
 export function shouldDisengage(battle: Battle, u: Unit): boolean {
   const opp = battle.opponentOf(u);
   if (!opp || !battle.canAct(u)) return false;
-  const ranged = battle.basicAttack(u).range > 1.5 || battle.basicAttack(u).los !== undefined;
+  // A bow counts as ranged even while engaged forces it into Melee mode.
+  const raw = SKILLS[battle.skillIds(u)[0]];
+  const ranged = !!raw?.modes?.some((m) => !hasTag(SKILLS[m], 'melee')) || battle.basicAttack(u).range > 1.5 || battle.basicAttack(u).los !== undefined;
   const hit = battle.previewHits(opp, battle.basicAttack(opp), u).reduce((a, b) => a + b, 0);
   if (ranged) return u.hp - hit > u.stats.health * 0.3;
   return wantsToRetreat(battle, u) && u.hp - hit > u.stats.health * 0.1;
@@ -237,26 +239,8 @@ export function planTurn(battle: Battle, u: Unit): AiPlan {
     }
   }
 
-  const leastDanger = Math.min(...danger.values());
-  let best: AiPlan | null = null;
-  let bestScore = 0;
-  // Choose where to go based on attacks and support only: defensive self-buffs
-  // shouldn't make a unit stand still instead of advancing.
-  for (const tile of tiles) {
-    const found = bestFrom(battle, u, tile, false, false);
-    if (!found) continue;
-    const free = bestFrom(battle, u, tile, true)?.score ?? 0;
-    const terrain = TERRAIN[battle.map.tiles[tile.y][tile.x]].defense * 2;
-    // Danger that can't be avoided anyway (even the safest reachable tile has it) costs nothing,
-    // so a unit that's already in the thick of it still fights instead of freezing.
-    const risk = care * (danger.get(key(tile.x, tile.y))! - leastDanger);
-    const score = found.score + free * 0.5 + terrain - risk - reach.get(key(tile.x, tile.y))!.cost * 0.1;
-    if (score > bestScore) {
-      bestScore = score;
-      best = { moveTo: tile, action: found.action };
-    }
-  }
-  if (best) return best;
+  const best = attackPlan(battle, u, tiles, reach, danger, care);
+  if (best) return best.plan;
 
   // Badly hurt with nothing worth the risk: regroup with healthy allies, on the safest
   // tile available (ties: closer to an ally).
@@ -298,6 +282,66 @@ export function planTurn(battle: Battle, u: Unit): AiPlan {
   return { moveTo };
 }
 
+/**
+ * The best place to move and act from (attacks and support only: defensive self-buffs
+ * shouldn't make a unit stand still instead of advancing), with its score. Null if nothing scores.
+ */
+function attackPlan(
+  battle: Battle, u: Unit, tiles: Point[], reach: Map<string, { cost: number }>, danger: Map<string, number>, care: number,
+): { plan: AiPlan; score: number } | null {
+  const leastDanger = Math.min(...danger.values());
+  let best: { plan: AiPlan; score: number } | null = null;
+  for (const tile of tiles) {
+    const found = bestFrom(battle, u, tile, false, false);
+    if (!found) continue;
+    const free = bestFrom(battle, u, tile, true)?.score ?? 0;
+    const terrain = TERRAIN[battle.map.tiles[tile.y][tile.x]].defense * 2;
+    // Danger that can't be avoided anyway (even the safest reachable tile has it) costs nothing,
+    // so a unit that's already in the thick of it still fights instead of freezing.
+    const risk = care * (danger.get(key(tile.x, tile.y))! - leastDanger);
+    const score = found.score + free * 0.5 + terrain - risk - reach.get(key(tile.x, tile.y))!.cost * 0.1;
+    if (score > (best?.score ?? 0)) best = { plan: { moveTo: tile, action: found.action }, score };
+  }
+  return best;
+}
+
+/**
+ * Which bow mode the unit should be in this turn (index), or null to leave it. Archers fight
+ * at range: they pick whichever ranged mode (Direct or Indirect) gives the best turn, and
+ * only fight in Melee when engaged (which happens on its own; see Battle.activeMode).
+ */
+export function preferredMode(battle: Battle, u: Unit): number | null {
+  const modes = battle.modesOf(u);
+  if (!modes || battle.opponentOf(u) || !battle.skillIds(u).some((id) => SKILLS[id].switchMode)) return null;
+  const ranged = modes.map((m, i) => ({ m, i })).filter(({ m }) => !hasTag(SKILLS[m], 'melee')).map(({ i }) => i);
+  if (ranged.length === 0) return null;
+  const reach = battle.canMove(u) ? battle.reachable(u) : new Map([[key(u.x, u.y), { cost: 0, prev: null }]]);
+  const tiles = [...reach.keys()].map((k) => {
+    const [x, y] = k.split(',').map(Number);
+    return { x, y };
+  });
+  const threats = foeThreats(battle, u);
+  const danger = new Map(tiles.map((t) => [key(t.x, t.y), threatAt(battle, u, t, threats)]));
+  const care = caution(battle, u);
+  const current = u.weaponMode;
+  // Ties keep the current mode if it's a ranged one, otherwise the first ranged mode (Direct).
+  let bestMode = ranged.includes(current) ? current : ranged[0];
+  let bestScore = -Infinity;
+  try {
+    for (const i of [bestMode, ...ranged.filter((i) => i !== bestMode)]) {
+      u.weaponMode = i;
+      const score = attackPlan(battle, u, tiles, reach, danger, care)?.score ?? 0;
+      if (score > bestScore) {
+        bestScore = score;
+        bestMode = i;
+      }
+    }
+  } finally {
+    u.weaponMode = current;
+  }
+  return bestMode === current ? null : bestMode;
+}
+
 /** Turns in a row a unit has held back instead of advancing (so it never waits forever). */
 const holdTurns = new WeakMap<Unit, number>();
 const MAX_HOLD_TURNS = 2;
@@ -309,6 +353,8 @@ const MAX_HOLD_TURNS = 2;
 export function runAiTurn(battle: Battle, u: Unit): void {
   if (shouldDisengage(battle, u)) battle.disengage(u);
   if (!u.alive) return;
+  const mode = preferredMode(battle, u);
+  if (mode !== null) battle.setWeaponMode(u, mode);
   const plan = planTurn(battle, u);
   if (battle.canMove(u) && (plan.moveTo.x !== u.x || plan.moveTo.y !== u.y)) battle.move(u, plan.moveTo);
   if (shouldEscape(battle, u)) {

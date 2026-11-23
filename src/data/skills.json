@@ -91,13 +91,13 @@
       "hits": [{ "pAtk": 0.7 }]
     },
     "bow_strike": {
-      "name": "Bow Strike", "modeName": "Melee", "description": "Strike an enemy next to you with the bow for 80% P.Atk.",
-      "tags": ["melee", "physical"],
+      "name": "Bow Strike", "modeName": "Melee", "description": "Strike an enemy next to you with the bow for 80% P.Atk. A bow user that is engaged always attacks this way.",
+      "tags": ["melee", "engage", "physical"],
       "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 0,
       "hits": [{ "pAtk": 0.8 }]
     },
     "switch_mode": {
-      "name": "Switch Mode", "description": "Switch the bow to its next mode: Direct, then Indirect, then Melee, then back to Direct.",
+      "name": "Switch Mode", "description": "Switch the bow to its next mode: Direct, then Indirect, then Melee, then back to Direct. The bow keeps its mode between battles.",
       "tags": ["free"],
       "target": "self", "affects": "ally", "range": 0, "minRange": 0, "cooldown": 0, "ap": 0,
       "switchMode": true

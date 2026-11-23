@@ -270,6 +270,8 @@ export interface Character {
   body?: BodyInvestment;
   /** Adventurers: the battle skill bar, slot by slot (10 per page, hotkeys 1-0; null = empty slot). */
   skillBar?: (string | null)[];
+  /** Last selected mode of a weapon with modes (a mode skill id, e.g. "indirect_shot"). Kept between battles. */
+  weaponMode?: string;
   /** Party members only: how they are bound to the party. */
   contract?: Contract;
 }

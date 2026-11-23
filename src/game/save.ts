@@ -183,6 +183,8 @@ function validateCharacter(raw: unknown, path: string, opts: { member?: boolean 
     if (bar.length > 100) bad(`${path}.skillBar`, 'can have at most 100 slots');
     out.skillBar = bar.map((s) => (typeof s === 'string' && SKILLS[s] ? s : null));
   }
+  // An unknown mode (modes change between versions) just falls back to the weapon's default.
+  if (typeof r.weaponMode === 'string' && SKILLS[r.weaponMode]) out.weaponMode = r.weaponMode;
   if (r.talents !== undefined) out.talents = validateTalents(r.talents, `${path}.talents`);
   if (opts.member) out.contract = validateContract(r.contract, `${path}.contract`);
   return out;

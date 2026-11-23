@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { SKILLS, STATUSES, WEAPONS, hasTag, isFree, isSupport, skillDetails, skillFormula, tagNames } from '../data/content';
 import type { SkillDef } from '../data/types';
-import { bestAction, bestFreeAction, planTurn, shouldDisengage, shouldEscape } from '../game/ai';
+import { bestAction, bestFreeAction, planTurn, preferredMode, shouldDisengage, shouldEscape } from '../game/ai';
 import {
   AP_PER_TURN, Battle, deploymentTiles, generateEnemies, makeUnit,
   type BattleEvent, type MoveResult, type Unit,
@@ -652,7 +652,7 @@ export class BattleScene extends Phaser.Scene {
     const opp = b.opponentOf(u);
     if (opp) effects.push(`Engaged with ${opp.character.name}`);
     const mode = b.modeName(u);
-    if (mode) effects.push(`Bow mode: ${mode}`);
+    if (mode) effects.push(`Bow mode: ${mode}${b.activeMode(u) !== u.weaponMode ? ` (${b.modeName(u, b.activeMode(u))} while engaged)` : ''}`);
     if (u.team === 'enemy') effects.push(`Skills: ${b.skillIds(u).map((id) => b.skillFor(u, SKILLS[id]).name).join(', ')}`);
     return [
       `HP ${u.hp}/${u.stats.health}${shield ? ` +${shield} shield` : ''}${u.stats.mana > 0 ? `   MP ${u.mp}/${u.stats.mana}` : ''}   Move ${b.stat(u, 'movement')}`,
@@ -1028,6 +1028,12 @@ export class BattleScene extends Phaser.Scene {
       if (shouldDisengage(b, u)) {
         await this.showDisengage(u, b.disengage(u));
         if (!u.alive || b.outcome()) continue;
+      }
+      const mode = preferredMode(b, u);
+      if (mode !== null) {
+        b.setWeaponMode(u, mode);
+        this.addLog(`${u.character.name} switches to ${b.modeName(u)} mode.`);
+        this.floatText(u, b.modeName(u)!, '#e0b44c');
       }
       const plan = planTurn(b, u);
       if (b.canMove(u) && (plan.moveTo.x !== u.x || plan.moveTo.y !== u.y)) {
