@@ -47,9 +47,15 @@ export function skillShape(s: SkillDef, ctx: ReachContext): { kind: 'targets' | 
       if (!s.aoeRadius) return { kind: 'self', tiles };
       scan(s.aoeRadius, (_p, d) => withinRange(d, s.aoeRadius!));
       return { kind: 'area', tiles };
+    case 'move': {
+      // Dash: tiles within the unit's Movement on open grass.
+      const r = Math.floor(ctx.movement / MOVEMENT_PER_TILE);
+      scan(r, (p) => Math.abs(p.x) + Math.abs(p.y) <= r);
+      return { kind: 'targets', tiles };
+    }
     case 'cone': {
       const half = ((s.cone?.angle ?? 60) / 2) * (Math.PI / 180) + EPS;
-      const r = s.cone?.radius ?? s.range;
+      const r = s.cone?.radius ?? rangeFor(s, ctx);
       scan(r, (p, d) => withinRange(d, r) && Math.abs(Math.atan2(p.y, p.x)) <= half);
       return { kind: 'cone', tiles };
     }

@@ -1,20 +1,26 @@
 // Shared type definitions for game data. Everything here is plain data so it
 // can be written to and read from human-readable JSON save files.
 
-export const STAT_KEYS = ['health', 'pAtk', 'mAtk', 'defense', 'movement', 'accuracy', 'evasion', 'vision'] as const;
+export const STAT_KEYS = ['health', 'mana', 'pAtk', 'mAtk', 'defense', 'resist', 'movement', 'vision'] as const;
 export type StatKey = (typeof STAT_KEYS)[number];
 export type Stats = Record<StatKey, number>;
 
 export const STAT_INFO: Record<StatKey, { name: string; short: string; description: string }> = {
   health: { name: 'Health', short: 'HP', description: 'Maximum health. The unit falls at 0.' },
+  mana: { name: 'Mana', short: 'MP', description: 'Maximum mana. (No skill costs mana yet.)' },
   pAtk: { name: 'Physical Attack', short: 'P.Atk', description: 'Power of physical skills. A skill deals a % of this as damage.' },
   mAtk: { name: 'Magic Attack', short: 'M.Atk', description: 'Power of magic skills and healing.' },
   defense: { name: 'Defense', short: 'Def', description: 'Reduces damage taken: every 100 Defense = +100% effective health.' },
+  resist: { name: 'Resist', short: 'Res', description: 'Chance to shrug off debuffs (Burn, Slow...): Resist / (100 + Resist), so 50 = 33%, 100 = 50%.' },
   movement: { name: 'Movement', short: 'Move', description: 'Movement points per turn (forest costs 2).' },
-  accuracy: { name: 'Accuracy', short: 'Acc', description: 'Adds to hit chance (when hit chance is enabled).' },
-  evasion: { name: 'Evasion', short: 'Eva', description: "Subtracts from enemies' hit chance (when hit chance is enabled)." },
   vision: { name: 'Vision', short: 'Vis', description: 'How far the unit can see (when fog of war is enabled).' },
 };
+
+/** Talent grades, worst to best. A stat's talent sets how fast it grows with level. */
+export const TALENT_GRADES = ['F', 'D', 'C', 'B', 'A', 'S'] as const;
+export type Talent = (typeof TALENT_GRADES)[number];
+export type Talents = Partial<Record<StatKey, Talent>>;
+export type BodyInvestment = Partial<Record<StatKey, number>>;
 
 /**
  * What must be clear between attacker and target:
@@ -79,14 +85,25 @@ export interface DamagePart {
  *  line      – aim at a tile in range; hits the first matching unit on the straight path to it
  *  cone      – pick a direction; sets up an overwatch cone
  *  emptyTile – an empty, walkable tile (e.g. teleport)
+ *  move      – a tile the unit can walk to (Dash)
  */
-export type SkillTarget = 'unit' | 'self' | 'line' | 'cone' | 'emptyTile';
+export type SkillTarget = 'unit' | 'self' | 'line' | 'cone' | 'emptyTile' | 'move';
+
+/**
+ * Action points a skill costs. Units have 2 AP a turn: a movement AP and an action AP.
+ *  0     – free action
+ *  1     – uses the movement AP if unspent, else the action AP; the turn goes on while AP remain
+ *  2     – uses both AP; the turn goes on (free actions still allowed)
+ *  'end' – uses all remaining AP and ends the unit's turn
+ */
+export type ApCost = 0 | 1 | 2 | 'end';
+export const AP_COSTS: readonly ApCost[] = [0, 1, 2, 'end'];
 
 export interface ConeDef {
   /** Full width of the cone in degrees. */
   angle: number;
-  /** Reach in tiles (Euclidean). */
-  radius: number;
+  /** Reach in tiles (Euclidean). Omitted = the skill's range (for 'weapon' skills, the weapon's). */
+  radius?: number;
   /** Stop the enemy's movement on the tile where it is hit. */
   interrupt: boolean;
   los?: LosRule;
@@ -104,10 +121,12 @@ export interface SkillDef {
   minRange: number;
   /** Line requirement for the target tile (omit for melee / no requirement). */
   los?: LosRule;
-  /** Added to hit chance (when hit chance is enabled). */
-  accuracy?: number;
   /** Turns the skill is unavailable after use (1 = can't be used next turn; 0 = every turn). */
   cooldown: number;
+  /** Action points it costs (see ApCost). */
+  ap: ApCost;
+  /** Mana spent on use. */
+  mana: number;
   /** Classification tags (see skills.json "tags"). engage / movement / weapon / free change behavior. */
   tags: string[];
   /** For 'movement' skills: range = floor(rangeScale x Movement). */
@@ -215,6 +234,12 @@ export interface Character {
   /** Skills picked from the skill trees (weapon skills are always available). */
   skillIds: string[];
   appearance: Appearance;
+  /** Adventurers: talent grade per growing stat (rolled at creation). Missing = C (100% growth). */
+  talents?: Talents;
+  /** Adventurers: skill points invested per stat (Body tab). Each adds 2x the stat's base growth per level. */
+  body?: BodyInvestment;
+  /** Adventurers: the battle skill bar, slot by slot (10 per page, hotkeys 1-0; null = empty slot). */
+  skillBar?: (string | null)[];
   /** Party members only: how they are bound to the party. */
   contract?: Contract;
 }

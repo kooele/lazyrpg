@@ -7,7 +7,7 @@ import { STAT_CONFIG } from '../data/stats';
 import { RANKS, type Character, type GameState, type Quest, type Rank } from '../data/types';
 import { enemyTypesForStage } from './battle';
 import { grantXp, newId, type Rng } from './character';
-import { bounty, canFight, isCompanion, isExpired, leaveParty, slavePrice } from './contracts';
+import { bounty, canFight, isCompanion, isExpired, leaveParty, slavePrice, talentPriceFactor } from './contracts';
 import { createGuild, simulateGuildDay, updateRanks } from './guild';
 import { randInt, randomAdventurer } from './people';
 
@@ -162,7 +162,7 @@ export function resolveQuest(state: GameState, outcome: 'victory' | 'defeat', rn
     lines.push(`XP: ${gains.join(', ')}.`);
     for (const c of members) {
       const levels = grantXp(c, questXp(q.stage, c.level));
-      if (levels > 0) lines.push(`${c.name} reached level ${c.level}!`);
+      if (levels > 0) lines.push(`${c.name} reached level ${c.level}! +${levels} skill point${levels > 1 ? 's' : ''}.`);
       if (isCompanion(c)) c.contract.relationship = Math.min(100, c.contract.relationship + GUILD.companion.relationshipPerQuest);
     }
     const fought = enemyTypesForStage(q.stage);
@@ -291,7 +291,7 @@ export function restockMarket(state: GameState, rng: Rng): void {
   const [lo, hi] = MARKET_LEVELS[state.rank];
   state.market.slaves = Array.from({ length: GUILD.slave.marketSize }, () => {
     const c = randomAdventurer(randInt(lo, hi, rng), rng);
-    return { character: c, price: slavePrice(c.level, rng) };
+    return { character: c, price: slavePrice(c.level, rng, talentPriceFactor(c)) };
   }).sort((a, b) => a.character.level - b.character.level);
   state.market.restockDay = state.day + GUILD.slave.restockDays;
 }
@@ -311,12 +311,12 @@ export function buySlave(state: GameState, id: string): string | null {
 export function sellSlave(state: GameState, id: string, rng: Rng): number {
   const c = state.party.find((m) => m.id === id);
   if (!c || c.contract?.type !== 'slave') return 0;
-  const gold = Math.round(slavePrice(c.level, rng) * GUILD.slave.sellBackShare);
+  const gold = Math.round(slavePrice(c.level, rng, talentPriceFactor(c)) * GUILD.slave.sellBackShare);
   state.gold += gold;
   state.party = state.party.filter((m) => m !== c);
   state.lineup = state.lineup.filter((x) => x !== c.id);
   const { contract: _k, ...character } = c;
-  state.market.slaves.push({ character, price: slavePrice(c.level, rng) });
+  state.market.slaves.push({ character, price: slavePrice(c.level, rng, talentPriceFactor(c)) });
   return gold;
 }
 

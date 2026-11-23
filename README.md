@@ -8,7 +8,7 @@ A small turn-based tactical RPG that runs in the browser, built with [Phaser 4](
 2. **Your character**: a new game starts by creating your main character (name, sex, skin, face, hair, hair colour, clothes colour, weapon, skills) and naming your party. The main character is permanent: they can't be dismissed and always lead the party on quests.
 3. **Arch City**: the hub is a map of the walled city (`public/art/city/arch-city.webp`) with three tabs: **Outer Ring** (Adventurer Guild, Docks, Marketplace, Slave Market, Slums, Customs Office, Sleeping Griffin Inn), **Middle Ring** (Tailor, Auction House, Library, Church) and **Inner Ring** (Lord's Manor, Central Government Office, Central Church, Gilded Crown Inn). Click a pin on the map or a button below it. Open so far: the **Adventurer Guild**, the **Slave Market** and the two **inns**; the rest are greyed out. **Manage Party** (bottom bar) handles your members, and the side panel sets out on an accepted quest. See [Arch City and the guild](#arch-city-and-the-adventurer-guild).
 4. **Adventurers**: There are no fixed classes. Every party member is an Adventurer, and you build them by mixing a weapon with picks from the skill trees. Up to 4 go on each quest (the lineup); the party can have up to 8 members.
-5. **Tactical battle**: XCOM-style alternating turns. On your turn, every Adventurer can move once and act once, in any order (click a unit or press Tab). Hover a skill to see its range box; any tile in range can be targeted. The map is 18×13 tiles (set in `stats.json`). Terrain: grass costs 4 Movement, forest 6 (and gives +20 Defense), river 8. Rock and deep water block movement, and rock blocks line of sight.
+5. **Tactical battle**: XCOM-style alternating turns. On your turn, every Adventurer has **2 AP** (action points), a movement AP and an action AP, and can spend them in any order (click a unit or press Tab). See [Action points and mana](#action-points-and-mana). Skills sit on the **skill bar** under the map: press **1–0** (or click a slot) to use one. By default slot 1 is the basic attack, 2 Overwatch, 3 Dash, and the rest follow; newly learned skills go after the last used slot. **Drag a slot onto another** to swap them (the layout is saved per character). With more than 10 skills the bar gets more pages: flip with ▲ ▼ or **[ ]**, and while dragging, hover ▲ ▼ to carry a skill to another page (or to a new empty one). The battle log is in the sidebar. Hover a skill to see its range box; any tile in range can be targeted. The map is 18×13 tiles (set in `stats.json`). Terrain: grass costs 4 Movement, forest 6 (and gives +20 Defense), river 8. Rock and deep water block movement, and rock blocks line of sight.
 
 ## Arch City and the Adventurer Guild
 
@@ -64,7 +64,7 @@ Everything gameplay-related lives in plain JSON files in `src/data/`. Each file 
 
 | File | What's in it |
 |---|---|
-| `stats.json` | Base stats and per-level growth, Defense scaling, terrain movement costs, forest bonus, map size, hit-chance and vision switches |
+| `stats.json` | Base stats and per-level growth, talent grades (growth rates and roll weights), Defense scaling, terrain movement costs, forest bonus, map size, vision switch |
 | `skills.json` | Every skill (numbers and descriptions), tags, status effects (Burn, Slow), skill trees |
 | `weapons.json` | Weapons: stat multipliers and granted skills |
 | `enemies.json` | Enemy types: level range, stats, skills, art, and how big encounters are |
@@ -77,23 +77,59 @@ Tooltips show a formula line generated from the numbers (e.g. "80% P.Atk, then 4
 | Stat | Default | Meaning |
 |---|---|---|
 | Health | 500 (+50/level) | Max health |
+| Mana | 200 (+20) | Spent by skills; doesn't come back during a battle |
 | P.Atk | 100 (+10) | Physical power; skills deal a % of it |
 | M.Atk | 100 (+10) | Magic power and healing |
 | Defense | 50 (+5) | Damage taken × 100 / (100 + Defense) |
+| Resist | 50 (+5) | Chance to shrug off a debuff: Resist ÷ (100 + Resist) |
 | Movement | 16 | Movement points per turn: grass costs 4, forest 6, river 8 (so 16 = 4 grass tiles) |
 
-Stats grow automatically on level up (100 XP per level). A won quest gives each member in the lineup `xpPerVictory` (100, in `stats.json`) when their level equals the quest's stage, more when they're below it and less when above, so a party that keeps winning stays close to the level of the quests it takes.
+Every attack hits. **Resist** gives a chance to shrug off debuffs (Burn, Slow, Corrode...): Resist ÷ (100 + Resist), the same curve as Defense, so 50 Resist = 33% and 100 = 50%. A resisted debuff shows "Resisted" and doesn't apply; the attack's damage still lands. Targeting shows the chance, and the enemy AI weighs it. Enemies' Resist matches their Defense.
+
+Stats grow automatically on level up (100 XP per level), at a speed set by the Adventurer's **talent**. Every growing stat (Health, Mana, P.Atk, M.Atk, Defense, Resist) has its own talent grade, rolled when the Adventurer is created; the grade multiplies that stat's growth per level (the numbers in brackets above):
+
+| Talent | S | A | B | C | D | F |
+|---|---|---|---|---|---|---|
+| Growth | 160% | 140% | 120% | 100% | 80% | 60% |
+| Chance | 5% | 10% | 20% | 40% | 20% | 5% |
+
+An S-talent P.Atk grows +16 a level instead of +10. Talent doesn't change level-1 stats. An Adventurer's overall talent is the grade nearest the average of their six. When you create your main character (or a Quick Battle recruit), **Reroll talent** rolls new grades. Talented Adventurers cost more: mercenary fees and cuts, companion wages and slave prices are multiplied by `1 + 2 × (average growth rate − 1)` (at least ×0.4; `talentPrice` in `guild.json`), so all-S costs ×2.2 and all-F ×0.4. Growth rates and roll weights are in `stats.json` (`talent`): a grade's chance is its weight divided by the total of all weights, so the weights can be any non-negative numbers (a grade with weight 0 never comes up). Enemies always grow at 100%.
+
+A won quest gives each member in the lineup `xpPerVictory` (100, in `stats.json`) when their level equals the quest's stage, more when they're below it and less when above, so a party that keeps winning stays close to the level of the quests it takes.
 
 Weapons **multiply** these stats:
 
 | Weapon | Multipliers | Skills (the first is the basic attack) |
 |---|---|---|
 | Sword & Shield | x1 P.Atk, x0.8 M.Atk, x1.5 Def | Sword Slash, Slash and Smash, Shield Up |
-| Spear | x1 P.Atk, x0.8 M.Atk | Spear Thrust, Circle Swing, Intercept |
-| Bow | x0.8 P.Atk, x0.8 M.Atk | Direct Shot, Indirect Shot, Overwatch |
+| Spear | x1 P.Atk, x0.8 M.Atk | Spear Thrust, Circle Swing |
+| Bow | x0.8 P.Atk, x0.8 M.Atk | Direct Shot, Indirect Shot |
 | Staff | x0.5 P.Atk, x1.2 M.Atk | Empowered Strike, Magic Bolt |
 
-### Skill trees (mix freely; 2 slots, 3 at Lv 3, 4 at Lv 6)
+### Action points and mana
+
+Every unit gets **2 AP** each turn: a **movement AP** (the regular move) and an **action AP**. Each skill has an AP cost (`ap` in `skills.json`):
+
+| Cost | Effect |
+|---|---|
+| 0 (free) | No AP. Usable until the unit's turn ends (Kick). |
+| 1 AP | Uses the movement AP if it's still unspent, otherwise the action AP. The turn goes on while AP remain. |
+| 2 AP | Uses both AP (so it can't follow a move). The turn goes on: free actions are still allowed. |
+| Ends turn | Uses all remaining AP and ends the unit's turn. The default: every weapon and tree skill, and Overwatch. |
+
+Moving after a skill isn't possible once the movement AP is gone. **Undo move** takes back a regular move as long as nothing else happened since.
+
+Skills can cost **mana** (`mana` in `skills.json`), which doesn't come back during a battle: Kick 10, Slash and Smash 20, Arcane Bolt 20, Cleanse 20, Execute 20, Circle Swing 30, Charge 30, Arcane Pulse 40, Arcane Shift 40, Heal 40. Skill buttons show the cost; without enough mana a skill is greyed out.
+
+**Basic abilities** (every Adventurer, listed under the weapon in the creator):
+
+- **Dash** (1 AP, 20 MP, cooldown 1): only after the regular move. Spends the action AP to move again, up to your Movement. Overwatch can still fire on the way; it can't be undone.
+- **Overwatch** (ends turn): watch a 60° arc in any direction, as far as your weapon reaches (Bow 5, Spear 2, sword and staff 1.5). The first enemy to move into it takes your basic attack and keeps moving. Bow and Spear no longer have their own Overwatch / Intercept.
+
+### Skill points, skill trees and the Body tab
+
+Adventurers have **skill points**: 2 at level 1 and 1 more every level. Each point either learns a skill-tree skill (mix trees freely) or goes into the **Body** tab, where it trains a stat by twice its base growth per level: +100 Health, +40 Mana, +20 P.Atk or M.Atk, +10 Defense or Resist per point (before weapon multipliers; talent doesn't change it). Points can be moved around freely in Customize / Loadout.
+
 
 - **Mage**: Arcanist (Arcane Bolt, Arcane Pulse, Arcane Shift), Elementalist (Fireball, Freeze), Cleric (Heal, Cleanse)
 - **Warrior**: Vanguard (Charge), Infighter (Kick), Assassin (Execute)
@@ -105,7 +141,7 @@ Every skill has tags that explain how it behaves. These four change the rules:
 - **Movement**: range in tiles = rangeScale × Movement ÷ 4 (the grass cost), rounded down. Charge uses 100% (4 tiles at Movement 16), and Slow (−4 Movement) shortens it. Arcane Shift has a fixed range of 2.
 - **Weapon**: uses your weapon's basic-attack range and line rules (Execute with a Bow reaches 5 tiles). Unusable while the weapon is disabled (nothing disables weapons yet).
 - **Engage**: see below. Sword Slash, Slash and Smash, Empowered Strike, Kick, Charge.
-- **Free Action**: doesn't use your action, and can be used before or after it (Kick). The turn doesn't end automatically while a unit still has a free action with a target in reach; press **End Turn** when done.
+- **Free Action**: costs 0 AP (Kick). Usable any time until the unit's turn ends, so after a move or a 1/2-AP skill, but not after a turn-ending one. The turn doesn't end automatically while a unit still has a free action with a target in reach; press **End Turn** when done.
 
 Descriptive tags: Melee, Projectile, Indirect, Area, Knockback, Reaction, Teleport, Debuff, Support.
 
@@ -122,7 +158,7 @@ Each enemy type has a fixed level range and its own stats and skills (`src/data/
 
 **Enemy AI** weighs how dangerous a tile is (how much the party could hit it for next turn) against what it can do from there. Healthy enemies take small risks freely. Danger it can't avoid anyway doesn't hold it back, so a unit that's already in the thick of the fight keeps fighting. Below 35% health, an enemy that can reach the edge of the map this turn **flees the battle** and is removed. Otherwise it falls back to regroup with healthy allies (and may disengage to do it), or, if it's on its own, makes a last stand. Wounded enemies may hold back from walking into a deadly spot, but never for more than two turns in a row.
 
-Encounter size is a threat budget: 1 per Adventurer. Rats cost 0.5 (two per Adventurer), slimes 0.75, wolves and bandits 1. Past stage 5, bandits keep coming at level 5, and the budget grows 25% per stage. Bandits have their own looks (hoods, masks, an eye patch, ragged leather, round wooden shields). Hover an enemy in battle to see its skills.
+Encounter size is a threat budget: 1 per Adventurer. Rats cost 0.5 (two per Adventurer), slimes 0.75, wolves and bandits 1. Past stage 5, bandits keep coming at level 5, and the budget grows 25% per stage. Bandits have their own looks (hoods, masks, an eye patch, ragged leather, round wooden shields). Hover an enemy in battle to see its skills. **Click an enemy** to see its reach on its next turn: the tiles it can move to (orange) and, around them, every tile its longest-ranged attack that will be off cooldown can hit (red). Click it again, or anywhere else, to hide it.
 
 ### Engagement
 
@@ -137,13 +173,13 @@ Heal and Cleanse work on any unit, enemies included. An attack aimed straight at
 
 ### Lines, cooldowns, and prepared systems
 
-- *Line of sight* (no rock in between): Direct Shot, Magic Bolt, Arcane Bolt, Arcane Pulse, Fireball, Overwatch.
+- *Line of sight* (no rock in between): Direct Shot, Magic Bolt, Arcane Bolt, Arcane Pulse, Fireball, and Overwatch with a weapon that needs it (Bow).
 - *Line of fire* (no rock **or unit** in between): no skill uses it right now; set `"los": "fire"` on a skill to use it.
 - No line needed: melee skills, Spear Thrust (it stops at the first enemy in the way), Indirect Shot, Freeze, Heal, Cleanse, Arcane Shift.
 - **Ranges** use Euclidean distance. Ranges of 2 or more round the distance to the nearest tile, so range 2 also reaches 2-over-1-up and shapes are rounder. Ranges 1 and 1.5 stay exact: 1 is the 4 neighbours, 1.5 adds the diagonals. Set `rangeRounding.fromRange` in `stats.json` to change the cut-off.
 - Skill tooltips and the weapon panel show a **tile diagram** of what each skill covers, with you in gold, rather than describing range in words.
 - A cooldown of N means the skill can't be used during your next N turns.
-- `hitChance` and `vision` (fog of war) are built but switched off in `stats.json`.
+- `vision` (fog of war) is built but switched off in `stats.json`.
 
 ### Art
 
@@ -169,6 +205,7 @@ A version-3 save holds the whole city: the day, gold, renown and rank, your part
     "color": "#3d7be0",
     "look": { "sex": "female", "skin": "fair", "face": 2, "hair": "crownBraid", "hairColor": "auburn" }
   },
+  "talents": { "health": "B", "mana": "C", "pAtk": "D", "mAtk": "A", "defense": "C", "resist": "B" },
   "contract": {
     "type": "companion",
     "basePay": 60,

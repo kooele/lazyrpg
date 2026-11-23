@@ -1,9 +1,9 @@
 import Phaser from 'phaser';
 import { MAX_PARTY_SIZE, SKILLS, WEAPONS, XP_PER_LEVEL } from '../data/content';
 import type { Character } from '../data/types';
-import { deriveStats, skillSlots } from '../game/character';
+import { bodyPoints, deriveStats, freePoints, skillPoints } from '../game/character';
 import { DEMO_STAGES, newDemo, requireDemo } from '../game/demo';
-import { COLORS, HEIGHT, WIDTH, button, confirmDialog, figure, panel, text, setupCamera } from '../ui/widgets';
+import { COLORS, HEIGHT, WIDTH, button, confirmDialog, figure, panel, talentTag, text, setupCamera } from '../ui/widgets';
 
 /** Quick Battle (demo) camp: recruit, customize and dismiss up to 4 Adventurers, then fight stages 1 to 5. */
 export class DemoCampScene extends Phaser.Scene {
@@ -52,12 +52,13 @@ export class DemoCampScene extends Phaser.Scene {
 
   private card(c: Character, x: number, y: number): void {
     const stats = deriveStats(c);
-    const freeSlots = skillSlots(c) - c.skillIds.length;
+    const freeSlots = freePoints(c);
     panel(this, x, y, 216, 440);
     const g = this.add.graphics();
     figure(this, x + 40, y + 70, 62, c.appearance, c.weaponId);
     text(this, x + 76, y + 18, c.name, { fontSize: '18px', wordWrap: { width: 134 } });
     text(this, x + 76, y + 44, `Lv ${c.level} Adventurer`, { color: COLORS.dim, fontSize: '14px' });
+    talentTag(this, x + 76, y + 62, c, { fontSize: 12, detail: false });
 
     // XP bar
     g.fillStyle(0x0b0d14).fillRect(x + 14, y + 80, 188, 8);
@@ -65,20 +66,21 @@ export class DemoCampScene extends Phaser.Scene {
     text(this, x + 202, y + 90, `${c.xp}/${XP_PER_LEVEL} XP`, { color: COLORS.dim, fontSize: '11px' }).setOrigin(1, 0);
 
     const lines = [
-      `HP ${stats.health}   Move ${stats.movement}`,
+      `HP ${stats.health}   MP ${stats.mana}`,
       `P.Atk ${stats.pAtk}   M.Atk ${stats.mAtk}`,
-      `Def ${stats.defense}`,
+      `Def ${stats.defense}   Move ${stats.movement}`,
+      `Resist ${stats.resist}`,
     ];
-    text(this, x + 14, y + 112, lines.join('\n'), { fontSize: '14px', lineSpacing: 6 });
+    text(this, x + 14, y + 108, lines.join('\n'), { fontSize: '13px', lineSpacing: 3 });
     const weapon = WEAPONS[c.weaponId];
-    text(this, x + 14, y + 184, 'Weapon', { color: COLORS.dim, fontSize: '12px' });
-    text(this, x + 14, y + 200, weapon.name, { fontSize: '15px' });
-    text(this, x + 14, y + 220, weapon.skills.map((s) => SKILLS[s].name).join(', '), { fontSize: '12px', color: COLORS.dim, wordWrap: { width: 188 } });
-    text(this, x + 14, y + 262, `Skills ${c.skillIds.length}/${skillSlots(c)}`, { color: COLORS.dim, fontSize: '12px' });
-    text(this, x + 14, y + 278, c.skillIds.map((s) => `• ${SKILLS[s].name}`).join('\n') || '—', { fontSize: '14px', lineSpacing: 2 });
+    text(this, x + 14, y + 192, 'Weapon', { color: COLORS.dim, fontSize: '12px' });
+    text(this, x + 14, y + 207, weapon.name, { fontSize: '15px' });
+    text(this, x + 14, y + 226, weapon.skills.map((s) => SKILLS[s].name).join(', '), { fontSize: '12px', color: COLORS.dim, wordWrap: { width: 188 } });
+    text(this, x + 14, y + 266, `Skill points ${skillPoints(c) - freeSlots}/${skillPoints(c)}${bodyPoints(c) ? ` (${bodyPoints(c)} in Body)` : ''}`, { color: COLORS.dim, fontSize: '12px' });
+    text(this, x + 14, y + 282, c.skillIds.map((s) => `• ${SKILLS[s].name}`).join('\n') || '—', { fontSize: '14px', lineSpacing: 2 });
 
     if (freeSlots > 0) {
-      text(this, x + 108, y + 356, `${freeSlots} empty skill slot${freeSlots > 1 ? 's' : ''}`, { color: COLORS.gold, fontSize: '13px' }).setOrigin(0.5);
+      text(this, x + 108, y + 356, `${freeSlots} skill point${freeSlots > 1 ? 's' : ''} to spend`, { color: COLORS.gold, fontSize: '13px' }).setOrigin(0.5);
     }
     button(this, x + 14, y + 380, 110, 44, 'Customize', () => this.scene.start('CharacterCreator', { mode: 'demoEdit', characterId: c.id }), {
       selected: freeSlots > 0, fontSize: 14,

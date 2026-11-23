@@ -1,13 +1,13 @@
 import Phaser from 'phaser';
 import {
-  NAME_MAX_LENGTH, PALETTE, isSupport, SKILLS, SKILL_TABS, SKILL_TREES, WEAPONS, XP_PER_LEVEL, skillDetails, skillFormula, tagNames,
+  BASIC_SKILLS, NAME_MAX_LENGTH, PALETTE, isSupport, SKILLS, SKILL_TABS, SKILL_TREES, WEAPONS, XP_PER_LEVEL, skillDetails, skillFormula, tagNames,
 } from '../data/content';
 import { STAT_CONFIG, visibleStatKeys } from '../data/stats';
 import {
-  FACE_COUNT, HAIR_COLORS, HAIR_STYLES, SEXES, SKIN_TONES, STAT_INFO, STAT_KEYS, type Character, type Look, type SkillDef, type SkillTab, type StatKey,
+  FACE_COUNT, HAIR_COLORS, HAIR_STYLES, SEXES, SKIN_TONES, STAT_INFO, STAT_KEYS, TALENT_GRADES, type Character, type Look, type SkillDef, type SkillTab, type StatKey,
 } from '../data/types';
 import { HAIR_COLORS as HAIR_HEX, SKIN_TONES as SKIN_HEX } from '../art/unitArt';
-import { cloneCharacter, createCharacter, deriveStats, levelStats, skillSlots } from '../game/character';
+import { bodyGain, bodyStats, cloneCharacter, createCharacter, deriveStats, freePoints, levelStats, pointsUsed, skillPoints } from '../game/character';
 import { newCampaign } from '../game/city';
 import { PARTY_NAME_MAX_LENGTH } from '../game/save';
 import { FACE_NAMES, HAIR_COLOR_NAMES, HAIR_NAMES, SEX_NAMES, SKIN_NAMES, fixLook, randomLook, randomName, randomPartyName } from '../game/people';
@@ -16,6 +16,7 @@ import { markDirty, requireState, session } from '../game/session';
 import { COLORS, ScrollList, Tooltip, button, figure, hex, overlayInput, panel, reachDiagram, setupCamera, text, toast, type ScrollItem } from '../ui/widgets';
 import { GUILD } from '../data/guild';
 import { skillShape, type ReachContext } from '../game/reach';
+import { TALENT_COLORS, growthRate, overallTalent, rollTalents, talentGrowth, talentOf, talentStats } from '../game/talent';
 
 interface CreatorData {
   /** main: create the main character for a new game. edit: change a party member's loadout (and the main character's look). */
@@ -55,9 +56,56 @@ export class CharacterCreatorScene extends Phaser.Scene {
       const look = randomLook(Math.random);
       const weapons = Object.keys(WEAPONS);
       const n = this.mode === 'demo' ? requireDemo().party.length : 0;
-      this.draft = createCharacter(randomName(look.sex, Math.random), PALETTE[Math.floor(Math.random() * PALETTE.length)], weapons[n % weapons.length], look);
+      this.draft = createCharacter(randomName(look.sex, Math.random), PALETTE[Math.floor(Math.random() * PALETTE.length)], weapons[n % weapons.length], look, rollTalents(Math.random));
       this.partyName = randomPartyName(Math.random);
     }
+  }
+
+  /** Talents can be rerolled while making a new character (main character or Quick Battle recruit). */
+  private get canReroll(): boolean {
+    return this.mode === 'main' || this.mode === 'demo';
+  }
+
+  /** Tooltip text for a stat row: what it does, where the number comes from, and how its talent grows it. */
+  private statInfo(k: StatKey): string {
+    const d = this.draft;
+    const info = STAT_INFO[k];
+    const total = deriveStats(d);
+    const fromLevel = levelStats(d.level, d.talents);
+    const m = WEAPONS[d.weaponId].statMultipliers[k] ?? 1;
+    const trained = (d.body?.[k] ?? 0) * bodyGain(k);
+    const before = fromLevel[k] + trained;
+    const lines = [`${info.name} (${info.short})`, info.description, '', `Level ${d.level}: ${fromLevel[k]}${trained ? ` + ${trained} Body = ${before}` : ''}${m !== 1 ? ` ${mult(m)} weapon = ${total[k]}` : ''}`];
+    if (talentStats().includes(k)) {
+      const g = talentOf(d, k);
+      const per = talentGrowth(d, k);
+      lines.push(`Talent ${g}: ${Math.round(growthRate(g) * 100)}% growth = +${Number(per.toFixed(1))} per level`);
+    } else {
+      lines.push("Doesn't grow with level.");
+    }
+    return lines.join('\n');
+  }
+
+  /** The talent grade drawn next to a stat (nothing for stats that don't grow). */
+  private grade(L: Phaser.GameObjects.Container, k: StatKey, x: number, y: number, size: number): void {
+    if (!talentStats().includes(k)) return;
+    const g = talentOf(this.draft, k);
+    L.add(text(this, x, y, g, { fontSize: `${size}px`, color: TALENT_COLORS[g], fontStyle: 'bold' }).setOrigin(0.5, 0));
+  }
+
+  private hoverTip(info: () => string) {
+    return { onHover: () => this.tooltip.show(info()), onOut: () => this.tooltip.hide() };
+  }
+
+  /** "S 160% (5%) · A 140% (10%) ..." one grade per line. */
+  private gradeTable(): string {
+    const t = STAT_CONFIG.talent;
+    return [...TALENT_GRADES].reverse().map((g) => `${g}: ${Math.round(t.growthRate[g] * 100)}% growth (${Math.round(t.chance[g] * 100)}% chance)`).join('\n');
+  }
+
+  private reroll(): void {
+    this.draft.talents = rollTalents(Math.random);
+    this.render();
   }
 
   /** Only your own character's look can change. */
@@ -171,10 +219,10 @@ export class CharacterCreatorScene extends Phaser.Scene {
       c.add(text(this, 0, my + 26, 'Weapon skills (always equipped)', { fontSize: '12px', color: COLORS.dim }));
       items.push({ obj: c, height: my + 42 });
     }
-    w.skills.forEach((sid, i) => {
+    const skillItem = (sid: string, note = '') => {
       const s = SKILLS[sid];
       const c = this.add.container(0, 0);
-      const name = text(this, 0, 0, `${s.name}${i === 0 ? '  (basic)' : ''}`, { fontSize: '15px' }).setInteractive();
+      const name = text(this, 0, 0, `${s.name}${note}`, { fontSize: '15px' }).setInteractive();
       name.on('pointerover', () => this.showSkill(s)).on('pointerout', () => this.tooltip.hide());
       c.add(name);
       c.add(text(this, 0, 19, skillDetails(s), { fontSize: '11px', color: COLORS.gold }));
@@ -184,7 +232,10 @@ export class CharacterCreatorScene extends Phaser.Scene {
       mini.container.setPosition(266 - mini.size, 2);
       c.add(mini.container);
       items.push({ obj: c, height: Math.max(40 + desc.height, mini.size + 6) });
-    });
+    };
+    w.skills.forEach((sid, i) => skillItem(sid, i === 0 ? '  (basic attack)' : ''));
+    items.push({ obj: this.add.container(0, 0, [text(this, 0, 4, 'Basic abilities (every Adventurer)', { fontSize: '12px', color: COLORS.dim })]), height: 24 });
+    BASIC_SKILLS.forEach((sid) => skillItem(sid));
     this.weaponList?.destroy();
     this.weaponList = new ScrollList(this, 342, 182, 272, 358, 10);
     this.weaponList.setItems(items, 'top');
@@ -195,14 +246,29 @@ export class CharacterCreatorScene extends Phaser.Scene {
     };
 
     // ---- Right: skill trees (hover a skill for details) --------------------------------
-    const slots = skillSlots(d);
-    L.add(text(this, 636, 66, `Skills  ${d.skillIds.length}/${slots}`, { color: d.skillIds.length < slots ? COLORS.gold : COLORS.dim }));
-    SKILL_TABS.forEach((t, i) => {
-      L.add(button(this, 636 + i * 154, 90, 146, 30, t.name, () => {
+    const points = skillPoints(d);
+    const free = freePoints(d);
+    L.add(text(this, 636, 66, `Skill points  ${pointsUsed(d)}/${points}${free > 0 ? `  (${free} to spend)` : ''}`, { color: free > 0 ? COLORS.gold : COLORS.dim }));
+    L.add(text(this, 936, 68, '+1 every level', { color: COLORS.dim, fontSize: '12px' }).setOrigin(1, 0));
+    [...SKILL_TABS, { id: 'body', name: 'Body' }].forEach((t, i) => {
+      L.add(button(this, 636 + i * 102, 90, 96, 30, t.name, () => {
         this.tab = t.id;
         this.render();
       }, { selected: this.tab === t.id, fontSize: 14 }));
     });
+    if (this.tab === 'body') {
+      this.bodyTab(L);
+    } else {
+      this.skillTab(L);
+    }
+    // ---- Bottom buttons -------------------------------------------------------------
+    L.add(button(this, 330, 560, 290, 50, 'Cancel', () => this.leave()));
+    L.add(button(this, 636, 560, 300, 50, this.mode === 'main' ? `Begin in ${GUILD.city}` : this.mode === 'demo' ? 'Recruit' : 'Save changes', () => this.confirm(), { fill: 0x2c4a2f, fontSize: 18 }));
+  }
+
+  /** A skill tree tab: click a skill to learn it (1 point) or unlearn it. */
+  private skillTab(L: Phaser.GameObjects.Container): void {
+    const d = this.draft;
     let ty = 130;
     for (const tree of SKILL_TREES.filter((t) => t.tab === this.tab)) {
       L.add(text(this, 636, ty, tree.name, { fontSize: '13px', color: COLORS.gold }));
@@ -224,10 +290,37 @@ export class CharacterCreatorScene extends Phaser.Scene {
         fontSize: '12px', color: COLORS.dim, wordWrap: { width: 300 },
       }));
     }
+  }
 
-    // ---- Bottom buttons -------------------------------------------------------------
-    L.add(button(this, 330, 560, 290, 50, 'Cancel', () => this.leave()));
-    L.add(button(this, 636, 560, 300, 50, this.mode === 'main' ? `Begin in ${GUILD.city}` : this.mode === 'demo' ? 'Recruit' : 'Save changes', () => this.confirm(), { fill: 0x2c4a2f, fontSize: 18 }));
+  /** The Body tab: put skill points into stats. Each point adds twice the stat's base growth per level. */
+  private bodyTab(L: Phaser.GameObjects.Container): void {
+    const d = this.draft;
+    L.add(text(this, 636, 128, 'Each point trains a stat by 2 levels of base growth.', { fontSize: '12px', color: COLORS.dim, wordWrap: { width: 300 } }));
+    const free = freePoints(d);
+    bodyStats().forEach((k, i) => {
+      const y = 150 + i * 36;
+      const n = d.body?.[k] ?? 0;
+      const gain = bodyGain(k);
+      const info = STAT_INFO[k];
+      const row = this.add.rectangle(636, y, 300, 32, COLORS.panelLight, n ? 0.9 : 0.4).setOrigin(0).setStrokeStyle(1, n ? COLORS.accent : COLORS.border);
+      L.add(this.tip(row, () => `${info.name} (${info.short})\n${info.description}\n\nEach point: +${gain} ${info.short} (2 x base growth ${STAT_CONFIG.growthPerLevel[k]}).\n${n ? `Invested ${n}: +${gain * n} ${info.short}.` : 'Not trained yet.'}`));
+      L.add(text(this, 646, y + 8, info.name, { fontSize: '14px' }));
+      L.add(text(this, 766, y + 9, `+${gain} each`, { fontSize: '12px', color: COLORS.dim }));
+      L.add(button(this, 836, y + 4, 26, 24, '−', () => this.invest(k, -1), { fontSize: 15, enabled: n > 0 }));
+      L.add(text(this, 880, y + 7, String(n), { fontSize: '15px', color: n ? COLORS.gold : COLORS.dim }).setOrigin(0.5, 0));
+      L.add(button(this, 900, y + 4, 26, 24, '+', () => this.invest(k, 1), { fontSize: 15, enabled: free > 0 }));
+    });
+  }
+
+  private invest(k: StatKey, delta: number): void {
+    const d = this.draft;
+    const n = (d.body?.[k] ?? 0) + delta;
+    if (delta > 0 && freePoints(d) <= 0) return toast(this, 'No skill points left. Unlearn a skill or a Body point first.', COLORS.bad);
+    if (n < 0) return;
+    d.body = { ...(d.body ?? {}), [k]: n };
+    if (!n) delete d.body[k];
+    if (!Object.keys(d.body).length) delete d.body;
+    this.render();
   }
 
   /** Sex, skin, face, hair and colours, then a preview with the stats beside it. */
@@ -275,15 +368,25 @@ export class CharacterCreatorScene extends Phaser.Scene {
     L.add(figure(this, 78, 538, 160, d.appearance, d.weaponId));
     L.add(text(this, 140, 366, d.name.trim() || '(no name)', { fontSize: '16px', wordWrap: { width: 168 } }));
     L.add(text(this, 140, 388, `Level ${d.level} · ${WEAPONS[d.weaponId].name}`, { color: COLORS.dim, fontSize: '12px', wordWrap: { width: 168 } }));
+    if (this.canReroll) {
+      L.add(button(this, 30, 362, 100, 22, 'Reroll talent', () => this.reroll(), {
+        fontSize: 12, ...this.hoverTip(() => `Roll new talent grades (F to S) for every growing stat.\nTalent sets how fast a stat grows with level:\n${this.gradeTable()}\n\nOverall talent now: ${overallTalent(d)}`),
+      }));
+    }
     const total = deriveStats(d);
-    visibleStatKeys().forEach((k: StatKey, i) => {
-      const y = 418 + i * 24;
+    // Rows shrink to fit however many stats are shown.
+    const keys = visibleStatKeys();
+    const rowH = Math.min(24, Math.floor(134 / keys.length));
+    const fs = rowH >= 20 ? 14 : 13;
+    keys.forEach((k: StatKey, i) => {
+      const y = 410 + i * rowH;
       const m = WEAPONS[d.weaponId].statMultipliers[k] ?? 1;
-      const row = this.add.rectangle(136, y - 3, 172, 22, 0xffffff, 0).setOrigin(0);
-      L.add(this.tip(row, () => `${STAT_INFO[k].name} (${STAT_INFO[k].short})\n${STAT_INFO[k].description}`));
-      L.add(text(this, 142, y, STAT_INFO[k].short, { fontSize: '14px' }));
-      L.add(text(this, 250, y, String(total[k]), { fontSize: '14px' }).setOrigin(1, 0));
-      if (m !== 1) L.add(text(this, 258, y + 1, mult(m), { fontSize: '12px', color: m > 1 ? COLORS.good : COLORS.bad }));
+      const row = this.add.rectangle(136, y - 1, 172, rowH, 0xffffff, 0).setOrigin(0);
+      L.add(this.tip(row, () => this.statInfo(k)));
+      L.add(text(this, 142, y, STAT_INFO[k].short, { fontSize: `${fs}px` }));
+      this.grade(L, k, 202, y, fs);
+      L.add(text(this, 250, y, String(total[k]), { fontSize: `${fs}px` }).setOrigin(1, 0));
+      if (m !== 1) L.add(text(this, 258, y, mult(m), { fontSize: '12px', color: m > 1 ? COLORS.good : COLORS.bad }));
     });
   }
 
@@ -299,17 +402,18 @@ export class CharacterCreatorScene extends Phaser.Scene {
     const y0 = top + 132;
     L.add(panel(this, 24, y0, 290, 548 - y0));
     L.add(text(this, 36, y0 + 8, 'Stats', { color: COLORS.dim, fontSize: '14px' }));
-    const total = deriveStats(d);
-    const fromLevel = levelStats(d.level);
+    L.add(text(this, 300, y0 + 8, `Talent ${overallTalent(d)}`, { color: TALENT_COLORS[overallTalent(d)], fontSize: '14px' }).setOrigin(1, 0));
     const shown = visibleStatKeys();
     const rowH = Math.min(36, Math.floor((548 - y0 - 50) / shown.length));
     shown.forEach((k: StatKey, i) => {
       const y = y0 + 36 + i * rowH;
       const info = STAT_INFO[k];
       const m = WEAPONS[d.weaponId].statMultipliers[k] ?? 1;
+      const total = deriveStats(d);
       const row = this.add.rectangle(30, y - 4, 278, rowH - 2, 0xffffff, 0).setOrigin(0);
-      L.add(this.tip(row, () => `${info.name} (${info.short})\n${info.description}\n\nLevel ${d.level}: ${fromLevel[k]}${m !== 1 ? ` ${mult(m)} weapon = ${total[k]}` : ''}\n+${STAT_CONFIG.growthPerLevel[k]} per level`));
+      L.add(this.tip(row, () => this.statInfo(k)));
       L.add(text(this, 40, y, info.name, { fontSize: '15px' }));
+      this.grade(L, k, 166, y, 15);
       L.add(text(this, 220, y, String(total[k]), { fontSize: '16px' }).setOrigin(1, 0));
       if (m !== 1) L.add(text(this, 232, y + 2, mult(m), { fontSize: '13px', color: m > 1 ? COLORS.good : COLORS.bad }));
     });
@@ -319,10 +423,10 @@ export class CharacterCreatorScene extends Phaser.Scene {
     const d = this.draft;
     if (d.skillIds.includes(id)) {
       d.skillIds = d.skillIds.filter((s) => s !== id);
-    } else if (d.skillIds.length < skillSlots(d)) {
+    } else if (freePoints(d) > 0) {
       d.skillIds.push(id);
     } else {
-      toast(this, 'All skill slots are full. Unequip a skill first.', COLORS.bad);
+      toast(this, 'No skill points left. Unlearn a skill or a Body point first.', COLORS.bad);
       return;
     }
     this.render();

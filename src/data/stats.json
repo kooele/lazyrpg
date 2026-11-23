@@ -4,32 +4,38 @@
   "base": {
     "_comment": "Stats every Adventurer (and enemy) has at level 1. Weapons then multiply these (see weapons.json).",
     "health": 500,
+    "mana": 200,
     "pAtk": 100,
     "mAtk": 100,
     "defense": 50,
+    "resist": 50,
     "movement": 16,
-    "accuracy": 0,
-    "evasion": 0,
     "vision": 8
   },
 
   "growthPerLevel": {
-    "_comment": "Added automatically for every level above 1.",
+    "_comment": "Added automatically for every level above 1, times the Adventurer's talent growth rate for that stat (see talent).",
     "health": 50,
+    "mana": 20,
     "pAtk": 10,
     "mAtk": 10,
     "defense": 5,
+    "resist": 5,
     "movement": 0,
-    "accuracy": 0,
-    "evasion": 0,
     "vision": 0
+  },
+
+  "talent": {
+    "_comment": "Every Adventurer has a talent grade (F to S) for each stat that grows with level (growthPerLevel above 0). The grade multiplies that stat's growthPerLevel: C grows at 100%. Grades are rolled when the Adventurer is created. weight sets how common each grade is: a grade's chance is its weight divided by the sum of all weights (so they don't need to add up to anything; 0 = never). Enemies always grow at 100%.",
+    "growthRate": { "S": 1.6, "A": 1.4, "B": 1.2, "C": 1.0, "D": 0.8, "F": 0.6 },
+    "weight": { "S": 5, "A": 10, "B": 20, "C": 40, "D": 20, "F": 5 }
   },
 
   "xpPerVictory": 100,
   "_xpPerVictory": "XP each Adventurer gets for winning a battle (100 XP = 1 level), so a party that keeps winning is about level N at stage N.",
 
   "defenseScale": 100,
-  "_defenseScale": "Damage taken is multiplied by defenseScale / (defenseScale + Defense). With 100: 100 Defense = 2x effective health, 200 = 3x. Negative Defense increases damage taken.",
+  "_defenseScale": "Damage taken is multiplied by defenseScale / (defenseScale + Defense). With 100: 100 Defense = 2x effective health, 200 = 3x. Negative Defense increases damage taken. Resist uses the same scale: the chance to shrug off a debuff is Resist / (defenseScale + Resist), so 50 Resist = 33%, 100 = 50%.",
 
   "forestDefense": 20,
   "_forestDefense": "Extra Defense for a unit standing in forest.",
@@ -50,15 +56,6 @@
     "_comment": "Battlefield size in tiles. Tiles shrink to fit the screen.",
     "width": 18,
     "height": 13
-  },
-
-  "hitChance": {
-    "_comment": "Disabled for now: every attack hits. When enabled: hit% = base + attacker Accuracy + skill accuracy - target Evasion (+ reaction modifier for overwatch), clamped to [min, max]. Heals, shields and cleanses never miss.",
-    "enabled": false,
-    "base": 85,
-    "min": 5,
-    "max": 100,
-    "reactionModifier": -10
   },
 
   "vision": {

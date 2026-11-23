@@ -1,15 +1,16 @@
 import Phaser from 'phaser';
 import { SKILLS, WEAPONS } from '../data/content';
 import { GUILD } from '../data/guild';
-import type { Character, CompanionTerms, FreeAdventurer } from '../data/types';
+import { STAT_INFO, type Character, type CompanionTerms, type FreeAdventurer } from '../data/types';
+import { TALENT_COLORS, talentOf, talentStats } from '../game/talent';
 import { toggleLineup } from '../game/city';
 import {
-  companionContract, evaluateOffer, foodLodgingWeekly, isCompanion, joinParty, leaveParty, lootValue, openingTerms, patienceCost, rosterFull,
+  companionContract, evaluateOffer, talentPriceFactor, foodLodgingWeekly, isCompanion, joinParty, leaveParty, lootValue, openingTerms, patienceCost, rosterFull,
   type CompanionContract,
 } from '../game/contracts';
 import { markDirty, requireState, session } from '../game/session';
 import { cityHeader } from '../ui/hud';
-import { COLORS, ScrollList, WIDTH, button, figure, panel, setupCamera, text, toast } from '../ui/widgets';
+import { COLORS, ScrollList, WIDTH, button, figure, panel, setupCamera, talentTag, text, toast } from '../ui/widgets';
 
 interface NegotiateData {
   /** hire: a free adventurer from the guild hall. renew: a companion whose contract is ending. */
@@ -49,7 +50,7 @@ export class NegotiateScene extends Phaser.Scene {
       this.terms = { basePay: k.basePay, lootPct: k.lootPct, foodLodging: k.foodLodging, termWeeks: k.termWeeks };
       this.talk = [`${who.character.name}: "My contract is up. Let's talk about what comes next."`];
     } else {
-      this.terms = openingTerms(who.character.level, who.greed, state.rank);
+      this.terms = openingTerms(who.character.level, who.greed, state.rank, 0, talentPriceFactor(who.character));
       this.talk = [`${who.character.name}: "Looking for a companion, are you? Let's hear your offer."`];
     }
   }
@@ -107,6 +108,12 @@ export class NegotiateScene extends Phaser.Scene {
     text(this, 170, 126, `Level ${c.level}`, { fontSize: '15px', color: COLORS.gold });
     text(this, 170, 148, WEAPONS[c.weaponId].name, { fontSize: '13px', color: COLORS.dim, wordWrap: { width: 140 } });
     text(this, 170, 170, greedWord(who.greed), { fontSize: '13px', color: COLORS.dim });
+    talentTag(this, 170, 192, c, { fontSize: 13, detail: false });
+    talentStats().forEach((k, i) => {
+      const g = talentOf(c, k);
+      text(this, 170, 212 + i * 16, STAT_INFO[k].short, { fontSize: '12px', color: COLORS.dim });
+      text(this, 220, 212 + i * 16, g, { fontSize: '12px', color: TALENT_COLORS[g], fontStyle: 'bold' });
+    });
     text(this, 30, 290, `Skills: ${c.skillIds.map((s) => SKILLS[s].name).join(', ') || 'none yet'}`, { fontSize: '12px', color: COLORS.dim, wordWrap: { width: 272 } });
     if (this.mode === 'renew') {
       text(this, 30, 330, `Relationship ${Math.round(who.relationship)}/100`, { fontSize: '14px' });
@@ -176,7 +183,7 @@ export class NegotiateScene extends Phaser.Scene {
     if (!who || this.done) return;
     const t = this.terms;
     this.talk.push(`You offer ${t.basePay} gold a week, ${t.lootPct}% of rewards, food & lodging ${t.foodLodging ? 'included' : 'not included'}, for ${t.termWeeks} weeks.`);
-    const res = evaluateOffer({ name: who.character.name, level: who.character.level, greed: who.greed, relationship: who.relationship, patience: this.patience() }, t, state.rank);
+    const res = evaluateOffer({ name: who.character.name, level: who.character.level, greed: who.greed, relationship: who.relationship, patience: this.patience(), talent: talentPriceFactor(who.character) }, t, state.rank);
     this.talk.push(res.message);
     const cost = patienceCost(res);
     if (res.verdict === 'accept') {

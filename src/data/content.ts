@@ -5,7 +5,8 @@
 import skillsRaw from './skills.json';
 import weaponsRaw from './weapons.json';
 import {
-  STAT_KEYS, STAT_INFO,
+  AP_COSTS, STAT_KEYS, STAT_INFO,
+  type ApCost,
   type ConeDef, type DamagePart, type LosRule, type SkillDef, type SkillTab, type SkillTarget, type SkillTreeDef,
   type Stats, type StatusDef, type TagDef, type WeaponDef,
 } from './types';
@@ -17,6 +18,8 @@ export interface GameContent {
   statuses: Record<string, StatusDef>;
   skillTabs: { id: SkillTab; name: string }[];
   skillTrees: SkillTreeDef[];
+  /** Abilities every Adventurer has (Dash, Overwatch). */
+  basicSkills: string[];
 }
 
 /** Tags that change how a skill behaves (the rest are descriptive). */
@@ -84,7 +87,7 @@ export function parseContent(skillsData: unknown, weaponsData: unknown): GameCon
     };
   }
 
-  const TARGETS: readonly SkillTarget[] = ['unit', 'self', 'line', 'cone', 'emptyTile'];
+  const TARGETS: readonly SkillTarget[] = ['unit', 'self', 'line', 'cone', 'emptyTile', 'move'];
   const LOS: readonly LosRule[] = ['sight', 'fire'];
   const skills: Record<string, SkillDef> = {};
   for (const [id, raw] of entries(S.obj(root.skills, 'skills'))) {
@@ -108,7 +111,7 @@ export function parseContent(skillsData: unknown, weaponsData: unknown): GameCon
       const c = S.obj(r.cone, `${p}.cone`);
       cone = {
         angle: S.num(c.angle, `${p}.cone.angle`),
-        radius: S.num(c.radius, `${p}.cone.radius`),
+        radius: S.optNum(c.radius, `${p}.cone.radius`),
         interrupt: S.bool(c.interrupt, `${p}.cone.interrupt`),
         los: c.los === undefined ? undefined : S.oneOf(c.los, `${p}.cone.los`, LOS),
       };
@@ -124,8 +127,11 @@ export function parseContent(skillsData: unknown, weaponsData: unknown): GameCon
       minRange: S.num(r.minRange ?? 0, `${p}.minRange`),
       rangeScale: S.optNum(r.rangeScale, `${p}.rangeScale`),
       los: r.los === undefined ? undefined : S.oneOf(r.los, `${p}.los`, LOS),
-      accuracy: S.optNum(r.accuracy, `${p}.accuracy`),
       cooldown: S.num(r.cooldown ?? 0, `${p}.cooldown`),
+      ap: (AP_COSTS as readonly unknown[]).includes(r.ap ?? (skillTags.includes('free') ? 0 : 'end'))
+        ? (r.ap ?? (skillTags.includes('free') ? 0 : 'end')) as ApCost
+        : fail('skills.json', `${p}.ap`, 'must be 0, 1, 2 or "end"'),
+      mana: S.num(r.mana ?? 0, `${p}.mana`),
       hits,
       heal: r.heal === undefined ? undefined : { mAtk: S.num(S.obj(r.heal, `${p}.heal`).mAtk, `${p}.heal.mAtk`) },
       shield: r.shield === undefined ? undefined : (() => {
@@ -169,6 +175,11 @@ export function parseContent(skillsData: unknown, weaponsData: unknown): GameCon
     };
   });
 
+  const basicSkills = S.arr(root.basicSkills ?? [], 'basicSkills').map((sid, i) => {
+    const id = S.str(sid, `basicSkills[${i}]`);
+    return skills[id] ? id : fail('skills.json', `basicSkills[${i}]`, `"${id}" is not defined in "skills"`);
+  });
+
   const W = reader('weapons.json');
   const weapons: Record<string, WeaponDef> = {};
   for (const [id, raw] of entries(W.obj(W.obj(weaponsData, '(root)').weapons, 'weapons'))) {
@@ -190,7 +201,7 @@ export function parseContent(skillsData: unknown, weaponsData: unknown): GameCon
     };
   }
   if (Object.keys(weapons).length === 0) fail('weapons.json', 'weapons', 'must define at least one weapon');
-  return { weapons, skills, tags, statuses, skillTabs, skillTrees };
+  return { weapons, skills, tags, statuses, skillTabs, skillTrees, basicSkills };
 }
 
 export const CONTENT: GameContent = parseContent(skillsRaw, weaponsRaw);
@@ -200,13 +211,17 @@ export const TAGS = CONTENT.tags;
 export const STATUSES = CONTENT.statuses;
 export const SKILL_TABS = CONTENT.skillTabs;
 export const SKILL_TREES = CONTENT.skillTrees;
+export const BASIC_SKILLS = CONTENT.basicSkills;
 export const DEFAULT_WEAPON = Object.keys(WEAPONS)[0];
 
 /** Every skill that can be picked from a tree. */
 export const TREE_SKILLS: string[] = SKILL_TREES.flatMap((t) => t.skills);
 
 export const hasTag = (s: SkillDef, tag: string) => s.tags.includes(tag);
-export const isFree = (s: SkillDef) => hasTag(s, 'free');
+export const isFree = (s: SkillDef) => s.ap === 0;
+
+/** "Free", "1 AP", "2 AP" or "Ends turn". */
+export const apLabel = (s: SkillDef) => (s.ap === 0 ? 'Free' : s.ap === 'end' ? 'Ends turn' : `${s.ap} AP`);
 /** Helpful skills (heals, cleanses, shields, buffs) are drawn green; attacks red. */
 export const isSupport = (s: SkillDef) => s.affects === 'ally' || !!(s.heal || s.cleanse || s.shield);
 
@@ -236,7 +251,7 @@ export function skillFormula(s: SkillDef): string {
 
 /** One-line summary of a skill's rules: cooldown and line requirement. (Reach is shown as a tile diagram.) */
 export function skillDetails(s: SkillDef): string {
-  const parts = [s.cooldown > 0 ? `Cooldown ${s.cooldown}` : 'No cooldown'];
+  const parts = [apLabel(s), ...(s.mana ? [`${s.mana} MP`] : []), s.cooldown > 0 ? `Cooldown ${s.cooldown}` : 'No cooldown'];
   const los = s.los ?? s.cone?.los;
   if (los === 'fire') parts.push('Needs line of fire');
   else if (los === 'sight') parts.push('Needs line of sight');
@@ -255,9 +270,7 @@ export const MAX_PARTY_SIZE = 4;
 export const XP_PER_LEVEL = 100;
 export const NAME_MAX_LENGTH = 16;
 
-/** Skill-tree slots grow with level: 2 at level 1, 3 at level 3, 4 at level 6. */
-export function skillSlotsForLevel(level: number): number {
-  if (level >= 6) return 4;
-  if (level >= 3) return 3;
-  return 2;
+/** Skill points: 2 at level 1 and 1 more every level. Each one learns a tree skill or buys a Body investment. */
+export function skillPointsForLevel(level: number): number {
+  return level + 1;
 }

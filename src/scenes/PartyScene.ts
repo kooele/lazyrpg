@@ -2,12 +2,12 @@ import Phaser from 'phaser';
 import { MAX_PARTY_SIZE, SKILLS, WEAPONS, XP_PER_LEVEL } from '../data/content';
 import { GUILD } from '../data/guild';
 import type { Character } from '../data/types';
-import { deriveStats, skillSlots } from '../game/character';
+import { bodyPoints, deriveStats, freePoints, skillPoints } from '../game/character';
 import { lineupMembers, sellSlave, toggleLineup } from '../game/city';
 import { daysLeft, isCompanion, leaveParty, weeklyCost } from '../game/contracts';
 import { markDirty, requireState, session } from '../game/session';
 import { MEMBER_COLOR, MEMBER_LABEL, cityHeader, memberStatus } from '../ui/hud';
-import { COLORS, HEIGHT, ScrollList, WIDTH, button, confirmDialog, figure, panel, setupCamera, text, toast } from '../ui/widgets';
+import { COLORS, HEIGHT, ScrollList, WIDTH, button, confirmDialog, figure, panel, setupCamera, talentTag, text, toast } from '../ui/widgets';
 
 /** Manage Party: everyone in the party, the lineup for the next quest, loadouts and contracts. */
 export class PartyScene extends Phaser.Scene {
@@ -81,11 +81,12 @@ export class PartyScene extends Phaser.Scene {
     text(this, X + 356, 146, `${c.xp}/${XP_PER_LEVEL} XP`, { fontSize: '11px', color: COLORS.dim });
 
     const st = deriveStats(c);
-    text(this, X + 150, 172, `HP ${st.health}   P.Atk ${st.pAtk}   M.Atk ${st.mAtk}\nDef ${st.defense}   Move ${st.movement}`, { fontSize: '14px', lineSpacing: 6 });
+    text(this, X + 150, 166, `HP ${st.health}   MP ${st.mana}   P.Atk ${st.pAtk}   M.Atk ${st.mAtk}\nDef ${st.defense}   Resist ${st.resist}   Move ${st.movement}`, { fontSize: '13px', lineSpacing: 4 });
     const w = WEAPONS[c.weaponId];
-    text(this, X + 150, 222, `${w.name}: ${w.skills.map((s) => SKILLS[s].name).join(', ')}`, { fontSize: '12px', color: COLORS.dim, wordWrap: { width: W - 170 } });
-    const free = skillSlots(c) - c.skillIds.length;
-    text(this, X + 150, 244, `Skills ${c.skillIds.length}/${skillSlots(c)}: ${c.skillIds.map((s) => SKILLS[s].name).join(', ') || '—'}`, {
+    talentTag(this, X + 150, 207, c, { fontSize: 11 });
+    text(this, X + 150, 226, `${w.name}: ${w.skills.map((s) => SKILLS[s].name).join(', ')}`, { fontSize: '12px', color: COLORS.dim, wordWrap: { width: W - 170 } });
+    const free = freePoints(c);
+    text(this, X + 150, 247, `Skill points ${skillPoints(c) - free}/${skillPoints(c)}${free > 0 ? ` (${free} to spend)` : ''}: ${c.skillIds.map((s) => SKILLS[s].name).join(', ') || '—'}${bodyPoints(c) ? ` · Body ${bodyPoints(c)}` : ''}`, {
       fontSize: '12px', color: free > 0 ? COLORS.gold : COLORS.dim, wordWrap: { width: W - 170 },
     });
 

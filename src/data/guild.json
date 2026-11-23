@@ -18,6 +18,8 @@
     "standard": { "name": "Sleeping Griffin Inn", "pricePerPerson": 4, "relationshipPerNight": 0 },
     "luxury": { "name": "Gilded Crown Inn", "pricePerPerson": 15, "relationshipPerNight": 2 }
   },
+  "talentPrice": { "weight": 2, "min": 0.4 },
+  "_talentPrice": "Talented adventurers cost more: mercenary fees and cuts, companion wages and slave prices are multiplied by max(min, 1 + weight x (average talent growth rate - 1)). All C = x1; all S (160%) = x2.2 with weight 2; all F = x0.4.",
   "mercenary": { "feePerLevel": 30, "cutBase": 8, "cutPerLevel": 2 },
   "companion": {
     "wageBase": 25,

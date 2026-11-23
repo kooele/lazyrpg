@@ -1,6 +1,7 @@
 // Contracts: mercenary fees, companion negotiations, slaves. Pure logic (no Phaser).
 import { GUILD } from '../data/guild';
 import type { Character, CompanionTerms, Contract, FreeAdventurer, GameState, Rank } from '../data/types';
+import { talentScore } from './talent';
 
 const C = GUILD.companion;
 const round5 = (v: number) => Math.max(0, Math.round(v / 5) * 5);
@@ -8,14 +9,22 @@ const round5 = (v: number) => Math.max(0, Math.round(v / 5) * 5);
 export type CompanionContract = Extract<Contract, { type: 'companion' }>;
 export const isCompanion = (c: Character): c is Character & { contract: CompanionContract } => c.contract?.type === 'companion';
 
+// ---- talent ----------------------------------------------------------------------------------------
+
+/** How much more a talented adventurer costs (1 = all C talents). */
+export function talentPriceFactor(c: Pick<Character, 'talents'>): number {
+  const t = GUILD.talentPrice;
+  return Math.max(t.min, 1 + t.weight * (talentScore(c) - 1));
+}
+
 // ---- mercenaries --------------------------------------------------------------------------------
 
 /** What a mercenary asks: a fixed fee up front, or a % of the next quest's reward. */
-export function mercenaryRates(level: number, greed: number): { fee: number; cutPct: number } {
+export function mercenaryRates(level: number, greed: number, talent = 1): { fee: number; cutPct: number } {
   const m = GUILD.mercenary;
   return {
-    fee: round5(m.feePerLevel * level * greed),
-    cutPct: Math.max(1, Math.round((m.cutBase + m.cutPerLevel * level) * greed)),
+    fee: round5(m.feePerLevel * level * greed * talent),
+    cutPct: Math.max(1, Math.round((m.cutBase + m.cutPerLevel * level) * greed * talent)),
   };
 }
 
@@ -33,19 +42,19 @@ export function offerValue(t: CompanionTerms, rank: Rank): number {
 }
 
 /**
- * What a companion wants per week for a term: grows with level and greed; short terms cost more,
+ * What a companion wants per week for a term: grows with level, greed and talent (talentPriceFactor); short terms cost more,
  * long ones less. On renewal, a good relationship lowers it (up to renewalDiscountAtMax at 100).
  */
-export function companionDemand(level: number, greed: number, termWeeks: number, relationship = 0): number {
-  const base = (C.wageBase + C.wagePerLevel * level) * greed;
+export function companionDemand(level: number, greed: number, termWeeks: number, relationship = 0, talent = 1): number {
+  const base = (C.wageBase + C.wagePerLevel * level) * greed * talent;
   const term = C.termDemand[String(termWeeks)] ?? 1;
   return base * term * (1 - C.renewalDiscountAtMax * Math.max(0, Math.min(100, relationship)) / 100);
 }
 
 /** A reasonable first offer: food and lodging, a small cut, and a little under their asking pay. */
-export function openingTerms(level: number, greed: number, rank: Rank, relationship = 0): CompanionTerms {
+export function openingTerms(level: number, greed: number, rank: Rank, relationship = 0, talent = 1): CompanionTerms {
   const terms: CompanionTerms = { basePay: 0, lootPct: 5, foodLodging: true, termWeeks: 4 };
-  const want = companionDemand(level, greed, terms.termWeeks, relationship);
+  const want = companionDemand(level, greed, terms.termWeeks, relationship, talent);
   terms.basePay = round5(Math.max(0, want * 0.85 - lootValue(terms.lootPct, rank) - foodLodgingWeekly()));
   return terms;
 }
@@ -66,10 +75,10 @@ export interface NegotiationResult {
  * low ones offend (costs 2). Out of patience, they walk away for a week.
  */
 export function evaluateOffer(
-  who: { name: string; level: number; greed: number; relationship?: number; patience: number },
+  who: { name: string; level: number; greed: number; relationship?: number; patience: number; talent?: number },
   terms: CompanionTerms, rank: Rank,
 ): NegotiationResult {
-  const demand = companionDemand(who.level, who.greed, terms.termWeeks, who.relationship ?? 0);
+  const demand = companionDemand(who.level, who.greed, terms.termWeeks, who.relationship ?? 0, who.talent ?? 1);
   const value = offerValue(terms, rank);
   const ratio = value / Math.max(1, demand);
   if (ratio >= 1) return { verdict: 'accept', ratio, message: `"You have a deal." ${who.name} signs the contract.` };
@@ -106,9 +115,9 @@ export const isExpired = (c: Character, day: number) => isCompanion(c) && c.cont
 
 // ---- slaves ---------------------------------------------------------------------------------------
 
-export function slavePrice(level: number, rng: () => number): number {
+export function slavePrice(level: number, rng: () => number, talent = 1): number {
   const s = GUILD.slave;
-  return round5((s.priceBase + s.pricePerLevel * (level - 1)) * (0.85 + rng() * 0.3));
+  return round5((s.priceBase + s.pricePerLevel * (level - 1)) * talent * (0.85 + rng() * 0.3));
 }
 
 export const bounty = (level: number) => GUILD.slave.bountyPerLevel * level;
