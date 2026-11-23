@@ -4,6 +4,7 @@ import { ENCOUNTER, ENEMIES } from '../data/enemies';
 import { STAT_CONFIG, type StatConfig } from '../data/stats';
 import { DAMAGE_TYPES, type Character, type DamagePart, type DamageType, type LosRule, type SkillDef, type StatKey, type Stats, type ZoneDef } from '../data/types';
 import { allSkills, deriveStats, modelFor, newId, type Rng } from './character';
+import { combatPenalty } from './condition';
 import { losFor, minRangeFor, rangeFor, type ReachContext } from './reach';
 import {
   DIRS, DIRS8, EPS, TERRAIN, coneTiles, dist, hasLineOfSight, inBounds, key, passable, tilesBetween, withinRange,
@@ -45,6 +46,8 @@ export interface Unit {
   /** Maximum stats (level + weapon). */
   stats: Stats;
   hp: number;
+  /** Lowest HP the unit was taken down to this battle (Strategic Layer injuries). */
+  lowestHp: number;
   x: number;
   y: number;
   alive: boolean;
@@ -74,6 +77,8 @@ export interface Unit {
   weaponMode: number;
   /** Fled off the edge of the map (counts as gone, not dead). */
   escaped?: boolean;
+  /** Gave up (human enemies that can't escape): out of the fight, and taken prisoner if the party wins. */
+  surrendered?: boolean;
 }
 
 /** Why damage happened: a skill, a status tick (e.g. Burn), overwatch, or an opportunity attack on disengage. */
@@ -91,6 +96,7 @@ export type BattleEvent =
   | { type: 'move'; target: string; from: Point; to: Point; kind: 'knockback' | 'teleport' | 'charge' }
   | { type: 'overwatch'; source: string; skillId: string }
   | { type: 'escape'; target: string }
+  | { type: 'surrender'; target: string }
   | { type: 'mode'; target: string; name: string }
   /** A zone (Firestorm) was placed on these tiles. */
   | { type: 'zone'; source: string; name: string; tiles: Point[] }
@@ -132,12 +138,16 @@ export function victoryXp(_stage: number): number {
 
 export function makeUnit(character: Character, team: Team, pos: Point): Unit {
   const stats = deriveStats(character);
+  // Party members fight with every stat lowered by injuries, low Morale and (slaves) low Obedience.
+  const penalty = character.enemyType ? 0 : combatPenalty(character);
+  if (penalty > 0) for (const k of Object.keys(stats) as StatKey[]) stats[k] = Math.round(stats[k] * (1 - penalty));
   return {
     uid: newId('u'),
     team,
     character,
     stats,
     hp: stats.health,
+    lowestHp: stats.health,
     x: pos.x,
     y: pos.y,
     alive: true,
@@ -454,6 +464,20 @@ export class Battle {
     u.overwatch = null;
     u.acted = true;
     events.push({ type: 'escape', target: u.uid });
+    return events;
+  }
+
+  /** An enemy throws down its arms: it leaves the fight and is taken prisoner if the party wins. Ends its turn. */
+  surrender(u: Unit): BattleEvent[] {
+    if (u.team !== 'enemy' || !u.alive) throw new Error(`${u.character.name} can't surrender`);
+    const events: BattleEvent[] = [];
+    const opp = this.breakEngagement(u);
+    if (opp) events.push({ type: 'disengage', source: u.uid, target: opp.uid, reason: 'separated' });
+    u.alive = false;
+    u.surrendered = true;
+    u.overwatch = null;
+    u.acted = true;
+    events.push({ type: 'surrender', target: u.uid });
     return events;
   }
 
@@ -889,7 +913,7 @@ export class Battle {
     return u.statuses.some((s) => STATUSES[s.id]?.stealth);
   }
 
-  private hiddenFrom(caster: Unit, t: Unit): boolean {
+  hiddenFrom(caster: Unit, t: Unit): boolean {
     return t.team !== caster.team && this.isStealthed(t);
   }
 
@@ -1165,6 +1189,7 @@ export class Battle {
       target.statuses = target.statuses.filter((s) => s.id !== 'shield' || s.amount > 0);
     }
     target.hp = Math.max(0, target.hp - (amount - absorbed));
+    target.lowestHp = Math.min(target.lowestHp, target.hp);
     const killed = target.hp === 0;
     if (killed) {
       target.alive = false;
@@ -1435,8 +1460,21 @@ export function makeEnemy(type: string, level: number, rng: Rng): Character {
  * threat budget (threatPerAdventurer x party size) is spent. Weak types come in bigger packs.
  * Past the last level range, the budget keeps growing by 25% of a party per stage.
  */
-export function generateEnemies(stage: number, partySize: number, rng: Rng, mobMultiplier = 1): Character[] {
-  const options = enemyTypesForStage(stage);
+/**
+ * The foes of an encounter at `stage`: one main type whose level range fits, plus the other fitting types
+ * that fight the same way (so wolves come with wolves and beasts, bandits with other humans). Main type first.
+ */
+export function pickFoes(stage: number, rng: Rng): string[] {
+  const fit = enemyTypesForStage(stage).map((t) => t.type);
+  const main = fit[Math.floor(rng() * fit.length)];
+  return [main, ...fit.filter((t) => t !== main && ENEMIES[t].ai === ENEMIES[main].ai)];
+}
+
+export function generateEnemies(stage: number, partySize: number, rng: Rng, mobMultiplier = 1, foes?: string[]): Character[] {
+  const fitting = enemyTypesForStage(stage);
+  const want = foes?.length ? foes : pickFoes(stage, rng);
+  const themed = fitting.filter((t) => want.includes(t.type));
+  const options = themed.length ? themed : fitting;
   const top = Math.max(...Object.values(ENEMIES).map((d) => d.levels[1]));
   const party = Math.max(1, partySize);
   // Quick Battle's difficulty slider multiplies the budget (and the cap on how many come).

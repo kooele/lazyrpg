@@ -1,14 +1,19 @@
 // Arch City: the calendar, the quest board, upkeep and pay, the slave market and prisoners.
 // Pure logic (no Phaser): scenes call these and show the messages they return.
 import { MAX_PARTY_SIZE } from '../data/content';
-import { ENEMIES } from '../data/enemies';
-import { GUILD, type InnTier } from '../data/guild';
+import { GUILD, isResidence, type InnTier, type Lodging, type Ring } from '../data/guild';
 import { STAT_CONFIG } from '../data/stats';
-import { RANKS, type Character, type GameState, type Quest, type Rank } from '../data/types';
-import { enemyTypesForStage } from './battle';
-import { grantXp, newId, type Rng } from './character';
-import { bounty, canFight, isCompanion, isExpired, leaveParty, slavePrice, talentPriceFactor } from './contracts';
-import { createGuild, simulateGuildDay, updateRanks } from './guild';
+import { RANKS, type Character, type GameState, type Offer, type Quest, type Rank } from '../data/types';
+import { makeQuest, postQuests } from './board';
+import { grantXp, type Rng } from './character';
+import {
+  bondOf, bounty, canFight, changeRelationship, isCompanion, isExpired, isHoused, isSlave, leaveParty, slaveContract, slavePrice, talentPriceFactor,
+} from './contracts';
+import {
+  ACTIVITY_INFO, QUALITY_TEXT, activityOf, changeHealth, changeMorale, expectedQuality, healthLoss, healthOf, lodgingName, lodgingRelationship, moraleOf,
+  type BattleCondition,
+} from './condition';
+import { createGuild, nextRank, promotionReady, rankThreshold, renownLoss, simulateGuildDay, updateRanks } from './guild';
 import { randInt, randomAdventurer } from './people';
 
 // ---- a new campaign -----------------------------------------------------------------------------
@@ -26,14 +31,20 @@ export function newCampaign(main: Character, partyName: string, rng: Rng): GameS
     party: [main],
     lineup: [main.id],
     guild: createGuild(rng),
-    market: { slaves: [], restockDay: 1 },
+    market: { slaves: [], priceIndex: 1 },
     prisoners: [],
     quest: null,
+    lastQuestDay: 0,
+    questMembers: [],
+    schedule: {},
+    drinksDay: 0,
+    belowRankSince: 0,
+    residences: [],
     log: [],
   };
   updateRanks(state);
   restockMarket(state, rng);
-  refillBoard(state, rng);
+  refillBoard(state, rng, true);
   note(state, `Welcome to ${GUILD.city}. ${partyName} is registered at the Adventurer Guild as a ${state.rank}-rank party.`);
   return state;
 }
@@ -69,60 +80,50 @@ export function toggleLineup(state: GameState, id: string): string | null {
   return null;
 }
 
-/** Drop lineup entries for members who left or can't fight. */
+/** Drop lineup entries for members who left or can't fight (lapsed contracts). */
 export function tidyLineup(state: GameState): void {
   const keep = new Set(lineupMembers(state).map((c) => c.id));
   state.lineup = [state.mainId, ...state.lineup.filter((id) => id !== state.mainId && keep.has(id))];
 }
 
+/** Why the party can't set out on its quest right now (null if it can). */
+export function departBlock(state: GameState): string | null {
+  if (!state.quest) return 'Accept a quest at the Adventurer Guild first.';
+  if (state.lastQuestDay === state.day) return 'One quest a day: the party is back from a quest today. Find somewhere to sleep first.';
+  return null;
+}
+
 // ---- quests --------------------------------------------------------------------------------------------
 
-const PLACES = ['the Old Sewers', 'Mill Road', 'Briar Farm', 'the Eastern Woods', "Gallow's Pass", 'the Salt Marsh', 'Kestrel Ford',
-  'the Ruined Chapel', 'Hollow Creek', 'the Quarry', 'Thornfield', 'the North Gate', 'Lantern Hill', 'the Old Watchtower'];
-const KIND_TITLE: Record<string, string> = { rat: 'Rat Infestation', slime: 'Slime Outbreak', wolf: 'Wolf Pack', bandit: 'Bandit Bounty' };
+export { makeQuest } from './board';
 
-export function makeQuest(rank: Rank, day: number, rng: Rng): Quest {
-  const tier = GUILD.quests[rank];
-  const stage = randInt(tier.stages[0], tier.stages[1], rng);
-  const types = enemyTypesForStage(stage);
-  const main = types[types.length - 1].type;
-  const place = PLACES[Math.floor(rng() * PLACES.length)];
-  const top = Math.max(...Object.values(ENEMIES).map((d) => d.levels[1]));
-  const title = stage > top + 1 ? `Bandit Warband at ${place}` : `${KIND_TITLE[main] ?? 'Trouble'} at ${place}`;
-  const names = types.map((t) => `${ENEMIES[t.type].name}s (Lv ${t.level})`);
-  return {
-    id: newId('q'),
-    title,
-    rank,
-    stage,
-    reward: Math.round(randInt(tier.reward[0], tier.reward[1], rng) / 5) * 5,
-    renown: tier.renown,
-    days: randInt(tier.days[0], tier.days[1], rng),
-    expires: day + randInt(4, 8, rng),
-    description: `${names.join(' and ')} reported at ${place}.${stage > top ? ' A large band: expect many of them.' : ''}`,
-  };
-}
-
-/** Keep the board full: mostly quests at the party's rank, some below, some above (locked until promoted). */
-export function refillBoard(state: GameState, rng: Rng): void {
+/**
+ * The day's postings on the shared board (see board.ts), plus the player's promotion quest once they have the
+ * renown for the next rank (until they pass it). Promotion quests first, then by rank and level.
+ */
+export function refillBoard(state: GameState, rng: Rng, fill = false): void {
   const g = state.guild;
-  g.board = g.board.filter((q) => q.expires >= state.day);
-  const own = RANKS.indexOf(state.rank);
-  while (g.board.length < GUILD.boardSize) {
-    const r = rng();
-    const idx = r < 0.25 && own > 0 ? own - 1 : r < 0.5 && own < RANKS.length - 1 ? own + 1 : own;
-    g.board.push(makeQuest(RANKS[idx], state.day, rng));
+  const up = nextRank(state.rank);
+  g.board = g.board.filter((q) => !q.promotion || q.rank === up);
+  postQuests(state, rng, fill ? Infinity : undefined);
+  if (up && promotionReady(state.rank, state.renown) && !g.board.some((q) => q.promotion) && !state.quest?.promotion) {
+    g.board.unshift(makeQuest(up, state.day, rng, true));
   }
-  g.board.sort((a, b) => RANKS.indexOf(b.rank) - RANKS.indexOf(a.rank) || a.stage - b.stage);
+  g.board.sort((a, b) => Number(!!b.promotion) - Number(!!a.promotion) || RANKS.indexOf(b.rank) - RANKS.indexOf(a.rank) || a.stage - b.stage);
 }
 
-export const canTakeQuest = (state: GameState, q: Quest) => RANKS.indexOf(q.rank) >= RANKS.indexOf(state.rank);
+/** Quests at the party's rank or below, and the next rank's promotion quest once the party has the renown for it. */
+export const canTakeQuest = (state: GameState, q: Quest) => (q.promotion
+  ? q.rank === nextRank(state.rank) && promotionReady(state.rank, state.renown)
+  : RANKS.indexOf(q.rank) >= RANKS.indexOf(state.rank));
 
 export function acceptQuest(state: GameState, questId: string): string | null {
   const q = state.guild.board.find((x) => x.id === questId);
   if (!q) return 'That quest is no longer on the board.';
   if (state.quest) return 'You already have a quest. Finish it first.';
-  if (!canTakeQuest(state, q)) return `Your party must be ${q.rank} rank or higher for this quest.`;
+  if (!canTakeQuest(state, q)) {
+    return q.promotion ? `The ${q.rank}-rank promotion quest needs ${rankThreshold(q.rank)} renown.` : `Your party must be ${q.rank} rank or higher for this quest.`;
+  }
   state.guild.board = state.guild.board.filter((x) => x !== q);
   state.quest = q;
   return null;
@@ -144,12 +145,59 @@ export function rewardShares(members: Character[], reward: number): { name: stri
   return out;
 }
 
-/** Settle the accepted quest after its battle. Time passes for the trip. Returns report lines. */
-export function resolveQuest(state: GameState, outcome: 'victory' | 'defeat', rng: Rng): string[] {
+/** Most prisoners the party can hold at once. */
+export const MAX_PRISONERS = 6;
+
+/**
+ * Settle the accepted quest after its battle: injuries and deaths (from `conditions`, one per member who fought),
+ * Morale, rewards. Nights on the road pass for multi-day trips; the party gets back in the evening and still needs
+ * somewhere to sleep (an inn, or outside). Enemies who `surrendered` are taken prisoner on a win. Returns report lines.
+ */
+export function resolveQuest(
+  state: GameState, outcome: 'victory' | 'defeat', rng: Rng, conditions: BattleCondition[] = [], surrendered: Character[] = [],
+): string[] {
   const q = state.quest;
   if (!q) return [];
-  const members = lineupMembers(state);
+  const went = lineupMembers(state);
   const lines: string[] = [];
+  const C = GUILD.condition;
+
+  // Injuries, deaths (Health 0) and Morale.
+  const dead: Character[] = [];
+  for (const c of went) {
+    changeMorale(c, -C.moralePerQuest - (outcome === 'defeat' ? C.moraleFailedQuest : 0));
+    const r = conditions.find((x) => x.id === c.id);
+    if (!r) continue;
+    const loss = r.fell ? C.maxHealthLoss : healthLoss(r.lowestHp);
+    if (loss <= 0) continue;
+    changeHealth(c, -loss);
+    if (healthOf(c) <= 0) {
+      // The main character pulls through at 1 Health; anyone else dies.
+      if (c.id === state.mainId) c.health = 1;
+      else {
+        dead.push(c);
+        continue;
+      }
+    }
+    changeMorale(c, -loss * C.moralePerHealthLost);
+    lines.push(`${c.name} is injured: Health ${healthOf(c)}/100 (-${loss}).`);
+  }
+  for (const c of dead) {
+    state.party = state.party.filter((m) => m !== c);
+    state.lineup = state.lineup.filter((id) => id !== c.id);
+    delete state.schedule[c.id];
+    lines.push(`${c.name}'s wounds were fatal (Health 0). They did not survive.`);
+    note(state, `${c.name} died on "${q.title}".`);
+  }
+  if (dead.length) for (const c of state.party) changeMorale(c, -C.moraleMemberDied * dead.length);
+  // Renown: lost for a failed quest and for every death.
+  const lostRenown = renownLoss(q.renown, outcome === 'defeat', dead.length);
+  if (lostRenown > 0) {
+    state.renown = Math.max(0, state.renown - lostRenown);
+    lines.push(`Renown -${Math.round(lostRenown)}${dead.length ? ` (${outcome === 'defeat' ? 'a failed quest and ' : ''}${dead.length} death${dead.length > 1 ? 's' : ''})` : ' (failed quest)'}.`);
+  }
+  const members = went.filter((c) => !dead.includes(c));
+
   if (outcome === 'victory') {
     state.progress.victories += 1;
     const shares = rewardShares(members, q.reward);
@@ -158,25 +206,36 @@ export function resolveQuest(state: GameState, outcome: 'victory' | 'defeat', rn
     state.renown += q.renown;
     lines.push(`Reward: ${q.reward} gold${paid ? ` (${shares.map((s) => `${s.name} takes ${s.amount}`).join(', ')}; you keep ${q.reward - paid})` : ''}.`);
     lines.push(`Renown +${q.renown}.`);
+    if (q.promotion && q.rank === nextRank(state.rank)) {
+      state.rank = q.rank;
+      state.belowRankSince = 0;
+      lines.push(note(state, `Your party passed the promotion quest and is now ${q.rank} rank!`));
+    }
     const gains = members.map((c) => `${c.name} +${questXp(q.stage, c.level)}`);
     lines.push(`XP: ${gains.join(', ')}.`);
     for (const c of members) {
       const levels = grantXp(c, questXp(q.stage, c.level));
       if (levels > 0) lines.push(`${c.name} reached level ${c.level}! +${levels} skill point${levels > 1 ? 's' : ''}.`);
-      if (isCompanion(c)) c.contract.relationship = Math.min(100, c.contract.relationship + GUILD.companion.relationshipPerQuest);
+      changeRelationship(c, GUILD.companion.relationshipPerQuest);
     }
-    const fought = enemyTypesForStage(q.stage);
-    const bandits = fought.filter((t) => t.type === 'bandit');
-    if (bandits.length && rng() < GUILD.slave.captureChance && state.prisoners.length < 4) {
-      const p = randomAdventurer(Math.min(...bandits.map((b) => b.level)), rng);
+    // Enemies who surrendered (only humans do) are taken prisoner.
+    for (const foe of surrendered) {
+      if (state.prisoners.length >= MAX_PRISONERS) {
+        lines.push(`${foe.name} surrendered, but you can't hold any more prisoners and let them go.`);
+        continue;
+      }
+      const p = randomAdventurer(foe.level, rng);
+      if (foe.weaponId) p.weaponId = foe.weaponId;
       state.prisoners.push({ character: p, price: bounty(p.level) });
-      lines.push(`You captured a bandit, ${p.name} (Lv ${p.level}). Take them to the market's magistrate.`);
+      lines.push(`${p.name} (Lv ${p.level}, ${foe.name}) surrendered and was taken prisoner. Take them to the market's magistrate.`);
     }
   } else {
     state.progress.defeats += 1;
     lines.push('No reward. The party limps home to recover.');
-    for (const c of members) if (isCompanion(c)) c.contract.relationship = Math.max(0, c.contract.relationship - 2);
+    for (const c of members) changeRelationship(c, -2);
   }
+  lines.push(`Morale: ${members.map((c) => `${c.name} ${c.morale}`).join(', ')}.`);
+  lines.push(...moraleDepartures(state));
   // Mercenaries were hired for this quest only.
   for (const c of members.filter((m) => m.contract?.type === 'mercenary')) {
     leaveParty(state, c);
@@ -184,8 +243,52 @@ export function resolveQuest(state: GameState, outcome: 'victory' | 'defeat', rn
   }
   state.quest = null;
   note(state, outcome === 'victory' ? `Completed "${q.title}" (${q.rank} rank): ${q.reward} gold reward.` : `Failed "${q.title}" (${q.rank} rank).`);
-  lines.push(...advanceDays(state, q.days, rng));
+  const ids = members.map((c) => c.id);
+  // Multi-day trips: nights on the road; the members away don't follow their schedule.
+  for (let i = 1; i < q.days; i++) lines.push(...advanceDay(state, rng, 'road', ids));
+  state.lastQuestDay = state.day;
+  state.questMembers = ids.filter((id) => state.party.some((c) => c.id === id));
+  tidyLineup(state);
+  lines.push(...rankNews(state));
+  lines.push(`Back in ${GUILD.city} on day ${state.day}. Find an inn for the night, or sleep outside.`);
   return lines;
+}
+
+/** Slaves' Obedience follows their relationship: up while it's good, down while it's poor. Returns messages for big moves. */
+export function obedienceDrift(state: GameState): string[] {
+  const S = GUILD.slave;
+  const out: string[] = [];
+  for (const c of state.party) {
+    if (!isSlave(c)) continue;
+    const k = c.contract;
+    const before = k.obedience;
+    if (k.relationship >= S.obedienceRiseFrom) k.obedience = Math.min(100, k.obedience + S.obedienceChangePerDay);
+    else if (k.relationship < S.obedienceFallBelow) k.obedience = Math.max(0, k.obedience - S.obedienceChangePerDay);
+    // Only mention it when it crosses a multiple of 10, to keep the log readable.
+    if (Math.floor(before / 10) !== Math.floor(k.obedience / 10)) {
+      out.push(note(state, `${c.name}'s Obedience ${k.obedience > before ? 'rose' : 'fell'} to ${k.obedience}.`));
+    }
+  }
+  return out;
+}
+
+/** Members at 0 Morale leave the party (never the main character). Returns the messages. */
+export function moraleDepartures(state: GameState): string[] {
+  const out: string[] = [];
+  for (const c of state.party.filter((m) => m.id !== state.mainId && moraleOf(m) <= 0)) {
+    leaveParty(state, c, isCompanion(c) ? c.contract.greed : 1);
+    out.push(note(state, `${c.name} has had enough (Morale 0) and left the party.`));
+  }
+  return out;
+}
+
+/** Update the leaderboard ranks; returns the player's promotion or demotion message, if any. */
+function rankNews(state: GameState): string[] {
+  const ranks = updateRanks(state);
+  for (const t of ranks.news) state.guild.news.push({ day: state.day, text: t });
+  if (!ranks.player) return [];
+  const up = RANKS.indexOf(ranks.player.to) < RANKS.indexOf(ranks.player.from);
+  return [note(state, up ? `Your party has been promoted to ${ranks.player.to} rank!` : `Your party has slipped to ${ranks.player.to} rank.`)];
 }
 
 // ---- the calendar ------------------------------------------------------------------------------------
@@ -195,9 +298,12 @@ export function boarders(state: GameState): Character[] {
   return state.party.filter((c) => c.contract?.type === 'main' || c.contract?.type === 'slave' || (isCompanion(c) && c.contract.foodLodging));
 }
 
-/** Food and lodging for one day: on the road (quests), or a night at an inn. */
-export function dailyUpkeep(state: GameState, inn?: InnTier): number {
-  return boarders(state).length * (inn ? GUILD.inns[inn].pricePerPerson : GUILD.upkeep.foodLodgingPerDay);
+/** Food and lodging for one night: on the road (quests), at an inn, or outside. */
+export function dailyUpkeep(state: GameState, lodging: Lodging = 'road'): number {
+  const per = lodging === 'road' ? GUILD.upkeep.foodLodgingPerDay
+    : lodging === 'outside' ? GUILD.lodging.outsidePerPerson
+      : isResidence(lodging) ? 0 : GUILD.inns[lodging].pricePerPerson;
+  return boarders(state).length * per;
 }
 
 /** Stay `nights` nights at an inn: the inn's price replaces the day's food and lodging. Returns the messages. */
@@ -207,38 +313,143 @@ export function stayAtInn(state: GameState, inn: InnTier, nights: number, rng: R
   return out;
 }
 
+/** Buy a residence in a ring. Returns an error message, or null. */
+export function buyResidence(state: GameState, ring: Ring): string | null {
+  const home = GUILD.residences[ring];
+  if (state.residences.includes(ring)) return `You already own the ${home.name}.`;
+  if (state.gold < home.price) return `Not enough gold (${home.price} needed).`;
+  state.gold -= home.price;
+  state.residences.push(ring);
+  note(state, `Bought the ${home.name} for ${home.price} gold.`);
+  return null;
+}
+
+/** What the Estate Office pays for a residence. */
+export const residenceSellPrice = (ring: Ring) => Math.round(GUILD.residences[ring].price * GUILD.residences.sellShare);
+
+/** Sell a residence back to the Estate Office. Returns the gold received (0 if the party doesn't own it). */
+export function sellResidence(state: GameState, ring: Ring): number {
+  if (!state.residences.includes(ring)) return 0;
+  const gold = residenceSellPrice(ring);
+  state.residences = state.residences.filter((r) => r !== ring);
+  state.gold += gold;
+  note(state, `Sold the ${GUILD.residences[ring].name} to the Estate Office for ${gold} gold.`);
+  return gold;
+}
+
+/** Stay `nights` nights at a residence the party owns: free. */
+export function stayAtHome(state: GameState, ring: Ring, nights: number, rng: Rng): string[] {
+  if (!state.residences.includes(ring)) throw new Error(`The party doesn't own the ${GUILD.residences[ring].name}`);
+  const out: string[] = [];
+  for (let i = 0; i < nights; i++) out.push(...advanceDay(state, rng, ring));
+  return out;
+}
+
+/** Sleep outside for the night: free, but housed companions resent it. */
+export function sleepOutside(state: GameState, rng: Rng): string[] {
+  return advanceDay(state, rng, 'outside');
+}
+
+/** A round of drinks at an inn for the whole party (once a day). Returns an error message, or null. */
+export function buyDrinks(state: GameState, inn: InnTier): string | null {
+  const cost = drinksCost(state, inn);
+  if (state.drinksDay === state.day) return 'The party already had a round today.';
+  if (state.gold < cost) return `Not enough gold (${cost} needed).`;
+  state.gold -= cost;
+  state.drinksDay = state.day;
+  for (const c of state.party) changeMorale(c, GUILD.inns[inn].drinksMorale);
+  note(state, `A round of drinks at ${GUILD.inns[inn].name} (${cost} gold): Morale +${GUILD.inns[inn].drinksMorale}.`);
+  return null;
+}
+
+export const drinksCost = (state: GameState, inn: InnTier) => state.party.length * GUILD.inns[inn].drinksPerPerson;
+
+/** Members who follow their schedule today: everyone not on (or just back from) a quest. */
+export function scheduledMembers(state: GameState, away: string[] = []): Character[] {
+  const busy = new Set([...away, ...(state.lastQuestDay === state.day ? state.questMembers : [])]);
+  return state.party.filter((c) => !busy.has(c.id));
+}
+
+/** The day's work: each member's scheduled activity, and everyone's nightly recovery. */
+function runSchedule(state: GameState, away: string[]): string[] {
+  const S = GUILD.schedule;
+  const out: string[] = [];
+  const home = new Set(scheduledMembers(state, away).map((c) => c.id));
+  const done: Record<string, string[]> = {};
+  for (const c of state.party) {
+    const act = home.has(c.id) ? activityOf(state, c) : null;
+    const was = healthOf(c);
+    changeHealth(c, GUILD.condition.healthPerDay * (act === 'recover' ? S.recoverMultiplier : 1));
+    if (was < 100 && healthOf(c) === 100) out.push(`${c.name} has fully recovered.`);
+    if (!act) continue;
+    if (act === 'training') {
+      const levels = grantXp(c, S.trainingXp);
+      if (levels > 0) out.push(`${c.name} reached level ${c.level} through training! +${levels} skill point${levels > 1 ? 's' : ''}.`);
+    } else if (act === 'oddJobs') state.gold += S.oddJobsGold;
+    else if (act === 'dayOff') changeMorale(c, S.dayOffMorale);
+    (done[act] ??= []).push(c.name);
+  }
+  const parts = Object.entries(done).map(([a, names]) => `${ACTIVITY_INFO[a as keyof typeof ACTIVITY_INFO].name}: ${names.join(', ')}`);
+  if (parts.length) out.unshift(`Today: ${parts.join(' · ')}.`);
+  return out;
+}
+
 export function weeklyWages(state: GameState): number {
   return state.party.reduce((s, c) => s + (isCompanion(c) && !isExpired(c, state.day) ? c.contract.basePay : 0), 0);
 }
 
 export const isPayday = (day: number) => day % 7 === 0;
 
-/** Pass `days` days. Returns the messages for the player. */
+/** Pass `days` days (nights on the road). Returns the messages for the player. */
 export function advanceDays(state: GameState, days: number, rng: Rng): string[] {
   const out: string[] = [];
   for (let i = 0; i < days; i++) out.push(...advanceDay(state, rng));
   return out;
 }
 
-/** One day: upkeep (on the road, or at an inn), payday, contracts, the rest of the guild, the board and the market. */
-export function advanceDay(state: GameState, rng: Rng, inn?: InnTier): string[] {
-  state.day += 1;
+/**
+ * End the day with a night at `lodging`, then start the next one: the day's schedule and recovery, upkeep,
+ * housed companions' feelings about where they slept, payday, contracts, the rest of the guild, the board and the market.
+ * `away`: members out on a quest (they don't follow their schedule).
+ */
+export function advanceDay(state: GameState, rng: Rng, lodging: Lodging = 'road', away: string[] = []): string[] {
   const out: string[] = [];
   const say = (t: string) => out.push(note(state, t));
-  state.renown *= 1 - GUILD.renownDecayPerDay;
+  for (const t of runSchedule(state, away)) say(t);
+  state.day += 1;
 
   // Food and lodging.
-  const upkeep = dailyUpkeep(state, inn);
+  const upkeep = dailyUpkeep(state, lodging);
   if (upkeep > state.gold) {
-    say(`Not enough gold for food and lodging (${upkeep} needed). Your companions are unhappy.`);
+    say(`Not enough gold for food and lodging (${upkeep} needed). Your companions and slaves are unhappy.`);
     state.gold = 0;
-    for (const c of state.party) if (isCompanion(c) && c.contract.foodLodging) c.contract.relationship = Math.max(0, c.contract.relationship - 5);
+    for (const c of state.party) if (isHoused(c)) changeRelationship(c, -5);
   } else {
     state.gold -= upkeep;
-    // A comfortable night pleases the companions the party houses.
-    const bonus = inn ? GUILD.inns[inn].relationshipPerNight : 0;
-    for (const c of state.party) if (bonus && isCompanion(c) && c.contract.foodLodging) c.contract.relationship = Math.min(100, c.contract.relationship + bonus);
+    // Housed companions and slaves compare the night with what someone of their rank expects.
+    if (lodging !== 'road') {
+      const moods: string[] = [];
+      for (const c of state.party) {
+        if (!bondOf(c) || !isHoused(c)) continue;
+        const d = lodgingRelationship(c, lodging);
+        if (!d) continue;
+        changeRelationship(c, d);
+        moods.push(`${c.name} ${d > 0 ? '+' : ''}${d} (expects ${QUALITY_TEXT[expectedQuality(c)]})`);
+      }
+      if (moods.length) say(`${lodging === 'outside' ? 'A night outside' : `A night at ${lodgingName(lodging)}`}. Relationship: ${moods.join(', ')}.`);
+    }
   }
+
+  // Low Morale sours companions and slaves a little more every day; at 0 Morale, members leave.
+  const sour: string[] = [];
+  for (const c of state.party) {
+    if (!bondOf(c) || moraleOf(c) >= GUILD.condition.lowMorale) continue;
+    changeRelationship(c, -GUILD.condition.lowMoraleRelationshipPerDay);
+    sour.push(c.name);
+  }
+  if (sour.length) say(`Low morale (below ${GUILD.condition.lowMorale}): ${sour.join(', ')} -${GUILD.condition.lowMoraleRelationshipPerDay} relationship.`);
+  out.push(...obedienceDrift(state));
+  out.push(...moraleDepartures(state));
 
   // Payday every 7th day.
   if (isPayday(state.day)) {
@@ -272,51 +483,110 @@ export function advanceDay(state: GameState, rng: Rng, inn?: InnTier): string[] 
   tidyLineup(state);
 
   simulateGuildDay(state, rng);
-  const ranks = updateRanks(state);
-  for (const t of ranks.news) state.guild.news.push({ day: state.day, text: t });
-  if (ranks.player) {
-    const up = RANKS.indexOf(ranks.player.to) < RANKS.indexOf(ranks.player.from);
-    say(up ? `Your party has been promoted to ${ranks.player.to} rank!` : `Your party has slipped to ${ranks.player.to} rank.`);
-  }
+  out.push(...rankNews(state));
   refillBoard(state, rng);
-  if (state.day >= state.market.restockDay) restockMarket(state, rng);
+  out.push(...marketDay(state, rng));
   return out;
 }
 
 // ---- the slave market and the magistrate --------------------------------------------------------------
 
-const MARKET_LEVELS: Record<Rank, [number, number]> = { D: [1, 3], C: [2, 5], B: [3, 7], A: [5, 9] };
+/** Levels of slaves for sale: around the party's rank's adventurers. */
+const MARKET_LEVELS: Record<Rank, [number, number]> = { D: [1, 5], C: [4, 10], B: [9, 15], A: [14, 20] };
+const round5 = (v: number) => Math.max(5, Math.round(v / 5) * 5);
 
-export function restockMarket(state: GameState, rng: Rng): void {
+/** A slave for sale: a random adventurer near the party's rank, valued by level and talent. */
+function marketSlave(state: GameState, rng: Rng) {
   const [lo, hi] = MARKET_LEVELS[state.rank];
-  state.market.slaves = Array.from({ length: GUILD.slave.marketSize }, () => {
-    const c = randomAdventurer(randInt(lo, hi, rng), rng);
-    return { character: c, price: slavePrice(c.level, rng, talentPriceFactor(c)) };
-  }).sort((a, b) => a.character.level - b.character.level);
-  state.market.restockDay = state.day + GUILD.slave.restockDays;
+  const c = randomAdventurer(randInt(lo, hi, rng), rng);
+  return { character: c, price: slavePrice(c.level, rng, talentPriceFactor(c)) };
 }
 
-export function buySlave(state: GameState, id: string): string | null {
+/** Asking price of a slave for sale: its value x the market's price index. */
+export const askingPrice = (state: GameState, o: Offer) => round5(o.price * state.market.priceIndex);
+
+/** What the market pays for a party slave (sellBackShare) or a captive (captiveSellShare) right now. */
+export function marketBuyPrice(state: GameState, c: Character, captive: boolean): number {
+  const value = slavePrice(c.level, () => 0.5, talentPriceFactor(c));
+  return Math.round(value * state.market.priceIndex * (captive ? GUILD.market.captiveSellShare : GUILD.slave.sellBackShare));
+}
+
+/** Is a shipment due on `day` (market.shipmentWeekdays)? And the next shipment day from `day` on. */
+export const isShipmentDay = (day: number) => GUILD.market.shipmentWeekdays.includes(day % 7);
+export function nextShipmentDay(day: number): number {
+  for (let d = day; d < day + 8; d++) if (isShipmentDay(d)) return d;
+  return day;
+}
+
+/** Stock the market for a new game: somewhere in the middle of its range. */
+export function restockMarket(state: GameState, rng: Rng): void {
+  const [lo, hi] = GUILD.market.stock;
+  const n = randInt(Math.round(lo + (hi - lo) * 0.25), Math.round(lo + (hi - lo) * 0.75), rng);
+  state.market.slaves = Array.from({ length: n }, () => marketSlave(state, rng)).sort((a, b) => a.character.level - b.character.level);
+  state.market.priceIndex = 1;
+}
+
+/** Keep the market's price index in step with supply (stock) and a little random demand. */
+function updatePrices(state: GameState, rng: Rng): void {
+  const M = GUILD.market;
+  const stock = Math.max(1, state.market.slaves.length);
+  const target = Math.sqrt(M.stockReference / stock);
+  let idx = state.market.priceIndex * (1 + (rng() * 2 - 1) * M.drift);
+  idx += (target - idx) * 0.15;
+  state.market.priceIndex = Math.round(Math.max(M.priceIndex[0], Math.min(M.priceIndex[1], idx)) * 1000) / 1000;
+}
+
+/** A day at the slave market: a few slaves sold to other buyers, a shipment twice a week, prices follow supply. */
+export function marketDay(state: GameState, rng: Rng): string[] {
+  const M = GUILD.market;
+  const m = state.market;
+  const sales = randInt(M.dailySales[0], M.dailySales[1], rng);
+  for (let i = 0; i < sales && m.slaves.length > M.stock[0]; i++) m.slaves.splice(Math.floor(rng() * m.slaves.length), 1);
+  const out: string[] = [];
+  if (isShipmentDay(state.day)) {
+    const n = Math.min(randInt(M.shipmentSize[0], M.shipmentSize[1], rng), M.stock[1] - m.slaves.length);
+    for (let i = 0; i < n; i++) m.slaves.push(marketSlave(state, rng));
+    m.slaves.sort((a, b) => a.character.level - b.character.level);
+    if (n > 0) state.guild.news.push({ day: state.day, text: `A shipment of ${n} slaves arrived at the Slave Market.` });
+  }
+  updatePrices(state, rng);
+  return out;
+}
+
+export function buySlave(state: GameState, id: string, rng: Rng = Math.random): string | null {
   const offer = state.market.slaves.find((o) => o.character.id === id);
   if (!offer) return 'No longer for sale.';
   if (state.party.length >= GUILD.maxRoster) return `Your party is full (${GUILD.maxRoster}).`;
-  if (state.gold < offer.price) return `Not enough gold (${offer.price} needed).`;
-  state.gold -= offer.price;
+  const price = askingPrice(state, offer);
+  if (state.gold < price) return `Not enough gold (${price} needed).`;
+  state.gold -= price;
   state.market.slaves = state.market.slaves.filter((o) => o !== offer);
-  state.party.push({ ...offer.character, contract: { type: 'slave', price: offer.price, origin: 'market' } });
+  state.party.push({ ...offer.character, contract: slaveContract('market', price, rng) });
   return null;
 }
 
-/** Sell a slave back to the market. Returns the gold received. */
+/** Sell a party slave to the market (sellBackShare of the current price). Returns the gold received. */
 export function sellSlave(state: GameState, id: string, rng: Rng): number {
   const c = state.party.find((m) => m.id === id);
   if (!c || c.contract?.type !== 'slave') return 0;
-  const gold = Math.round(slavePrice(c.level, rng, talentPriceFactor(c)) * GUILD.slave.sellBackShare);
+  const gold = marketBuyPrice(state, c, false);
   state.gold += gold;
   state.party = state.party.filter((m) => m !== c);
   state.lineup = state.lineup.filter((x) => x !== c.id);
+  delete state.schedule[c.id];
   const { contract: _k, ...character } = c;
   state.market.slaves.push({ character, price: slavePrice(c.level, rng, talentPriceFactor(c)) });
+  return gold;
+}
+
+/** Sell a captive to the slave market (captiveSellShare of the current price). Returns the gold received (0 if unknown). */
+export function sellCaptive(state: GameState, id: string, rng: Rng = Math.random): number {
+  const p = state.prisoners.find((o) => o.character.id === id);
+  if (!p) return 0;
+  const gold = marketBuyPrice(state, p.character, true);
+  state.prisoners = state.prisoners.filter((o) => o !== p);
+  state.gold += gold;
+  state.market.slaves.push({ character: p.character, price: slavePrice(p.character.level, rng, talentPriceFactor(p.character)) });
   return gold;
 }
 
@@ -328,13 +598,13 @@ export function turnInPrisoner(state: GameState, id: string): number {
   return p.price;
 }
 
-export function registerPrisoner(state: GameState, id: string): string | null {
+export function registerPrisoner(state: GameState, id: string, rng: Rng = Math.random): string | null {
   const p = state.prisoners.find((o) => o.character.id === id);
   if (!p) return 'No such prisoner.';
   if (state.party.length >= GUILD.maxRoster) return `Your party is full (${GUILD.maxRoster}).`;
   if (state.gold < GUILD.slave.registrationFee) return `The registration fee is ${GUILD.slave.registrationFee} gold.`;
   state.gold -= GUILD.slave.registrationFee;
   state.prisoners = state.prisoners.filter((o) => o !== p);
-  state.party.push({ ...p.character, contract: { type: 'slave', price: GUILD.slave.registrationFee, origin: 'prisoner' } });
+  state.party.push({ ...p.character, contract: slaveContract('prisoner', GUILD.slave.registrationFee, rng) });
   return null;
 }

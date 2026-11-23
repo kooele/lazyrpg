@@ -1,6 +1,7 @@
 // Save / load. Saves are pretty-printed JSON so players can read (and edit!) them.
 import { MAX_PARTY_SIZE, NAME_MAX_LENGTH, SKILLS, TREE_SKILLS, WEAPONS, skillPointsForLevel } from '../data/content';
-import { GUILD } from '../data/guild';
+import { ACTIVITIES, GUILD, type Activity } from '../data/guild';
+import { ENEMIES } from '../data/enemies';
 import {
   BODY_MODELS, ENEMY_MODELS, FACE_COUNT, HAIR_COLORS, HAIR_STYLES, RANKS, SEXES, SKIN_TONES, STAT_KEYS, TALENT_GRADES,
   type BodyInvestment, type Character, type StatKey, type Talents, type Contract, type GameState, type Look, type NewsItem, type Offer, type Quest, type Rank, type RivalParty,
@@ -92,7 +93,15 @@ function validateContract(raw: unknown, path: string): Contract {
     return { type, pay, amount: int(o.amount, `${path}.amount`, 0, pay === 'cut' ? 100 : Number.MAX_SAFE_INTEGER) };
   }
   if (type === 'slave') {
-    return { type, price: int(o.price, `${path}.price`), origin: oneOf(o.origin, ['market', 'prisoner'] as const, `${path}.origin`) };
+    const origin = oneOf(o.origin, ['market', 'prisoner'] as const, `${path}.origin`);
+    // Older saves had no relationship or Obedience for slaves: start them in the middle of their range.
+    const [lo, hi] = origin === 'market' ? GUILD.slave.obedienceMarket : GUILD.slave.obedienceCaptive;
+    return {
+      type, price: int(o.price, `${path}.price`), origin,
+      relationship: o.relationship === undefined ? GUILD.slave.startingRelationship : num(o.relationship, `${path}.relationship`, 0, 100),
+      obedience: o.obedience === undefined ? Math.round((lo + hi) / 2) : num(o.obedience, `${path}.obedience`, 0, 100),
+      ...(typeof o.punishedDay === 'number' ? { punishedDay: Math.floor(o.punishedDay) } : {}),
+    };
   }
   const startDay = int(o.startDay, `${path}.startDay`, 0);
   return {
@@ -186,6 +195,8 @@ function validateCharacter(raw: unknown, path: string, opts: { member?: boolean 
   // An unknown mode (modes change between versions) just falls back to the weapon's default.
   if (typeof r.weaponMode === 'string' && SKILLS[r.weaponMode]) out.weaponMode = r.weaponMode;
   if (r.talents !== undefined) out.talents = validateTalents(r.talents, `${path}.talents`);
+  if (r.health !== undefined) out.health = num(r.health, `${path}.health`, 0, 100);
+  if (r.morale !== undefined) out.morale = num(r.morale, `${path}.morale`, 0, 100);
   if (opts.member) out.contract = validateContract(r.contract, `${path}.contract`);
   return out;
 }
@@ -207,6 +218,10 @@ function validateQuest(raw: unknown, path: string): Quest {
     days: int(o.days, `${path}.days`, 1, 60),
     expires: int(o.expires, `${path}.expires`),
     description: typeof o.description === 'string' ? o.description : '',
+    ...(o.promotion === true ? { promotion: true } : {}),
+    ...(o.threat !== undefined ? { threat: num(o.threat, `${path}.threat`, 0.1, 5) } : {}),
+    // Enemy types that no longer exist are dropped; the battle picks new ones if none are left.
+    ...(Array.isArray(o.foes) && o.foes.some((f) => typeof f === 'string' && ENEMIES[f]) ? { foes: o.foes.filter((f): f is string => typeof f === 'string' && !!ENEMIES[f]) } : {}),
   };
 }
 
@@ -217,6 +232,7 @@ function validateRival(raw: unknown, path: string): RivalParty {
     name: str(o.name, `${path}.name`, 60),
     renown: num(o.renown, `${path}.renown`),
     rank: oneOf(o.rank, RANKS, `${path}.rank`),
+    ...(typeof o.belowSince === 'number' ? { belowSince: Math.max(0, Math.floor(o.belowSince)) } : {}),
     members: arr(o.members, `${path}.members`).map((m, i) => {
       const mo = obj(m, `${path}.members[${i}]`);
       return {
@@ -247,6 +263,19 @@ function uniqueIds(chars: Character[], path: string): void {
 }
 
 /** Validate a version-3 save. */
+/** Members' daily activities. Unknown activities or members are dropped (they fall back to the default). */
+function validateSchedule(raw: unknown, party: Character[]): GameState['schedule'] {
+  if (raw === undefined) return {};
+  const o = obj(raw, 'schedule');
+  const out: GameState['schedule'] = {};
+  for (const [id, a] of Object.entries(o)) {
+    if (party.some((c) => c.id === id) && (ACTIVITIES as readonly unknown[]).includes(a)) out[id] = a as Activity;
+  }
+  return out;
+}
+
+const RINGS = ['outer', 'middle', 'inner'] as const;
+
 function validateState(raw: Record<string, unknown>): GameState {
   const progress = obj(raw.progress, 'progress');
   const party = arr(raw.party, 'party').map((c, i) => validateCharacter(c, `party[${i}]`, { member: true }));
@@ -292,10 +321,17 @@ function validateState(raw: Record<string, unknown>): GameState {
     },
     market: {
       slaves: arr(market.slaves, 'market.slaves').map((o, i) => validateOffer(o, `market.slaves[${i}]`)),
-      restockDay: int(market.restockDay, 'market.restockDay'),
+      // Older saves had no price index (and a restock day, which is no longer used).
+      priceIndex: market.priceIndex === undefined ? 1 : num(market.priceIndex, 'market.priceIndex', 0.01, 10),
     },
     prisoners: arr(raw.prisoners, 'prisoners').map((o, i) => validateOffer(o, `prisoners[${i}]`)),
     quest: raw.quest === null || raw.quest === undefined ? null : validateQuest(raw.quest, 'quest'),
+    lastQuestDay: raw.lastQuestDay === undefined ? 0 : int(raw.lastQuestDay, 'lastQuestDay'),
+    questMembers: raw.questMembers === undefined ? [] : arr(raw.questMembers, 'questMembers').filter((id): id is string => typeof id === 'string'),
+    schedule: validateSchedule(raw.schedule, party),
+    drinksDay: raw.drinksDay === undefined ? 0 : int(raw.drinksDay, 'drinksDay'),
+    belowRankSince: raw.belowRankSince === undefined ? 0 : int(raw.belowRankSince, 'belowRankSince'),
+    residences: raw.residences === undefined ? [] : [...new Set(arr(raw.residences, 'residences').map((r, i) => oneOf(r, RINGS, `residences[${i}]`)))],
     log: validateNews(raw.log ?? [], 'log'),
   };
   tidyLineup(state);

@@ -11,7 +11,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ART_WEAPONS, BANDITS, MODELS, figureSvg, monsterSvg } from '../src/art/unitArt.js';
+import { ART_WEAPONS, BANDITS, HUMANOIDS, MODELS, figureSvg, monsterSvg } from '../src/art/unitArt.js';
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), '..');
 const root = join(repo, 'public', 'art', 'units');
@@ -19,7 +19,7 @@ const monsterRoot = join(repo, 'public', 'art', 'monsters');
 
 mkdirSync(root, { recursive: true });
 let count = 0;
-for (const [id, model] of Object.entries({ ...MODELS, ...BANDITS })) {
+for (const [id, model] of Object.entries({ ...MODELS, ...BANDITS, ...HUMANOIDS })) {
   for (const weapon of ART_WEAPONS) {
     writeFileSync(join(root, `${id}_${weapon}.svg`), figureSvg(id, model, weapon));
     count++;

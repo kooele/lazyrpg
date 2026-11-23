@@ -1,5 +1,8 @@
 import Phaser from 'phaser';
-import { MAX_PARTY_SIZE, SKILLS, WEAPONS, XP_PER_LEVEL } from '../data/content';
+import { SKILLS, WEAPONS, XP_PER_LEVEL } from '../data/content';
+
+/** Quick Battle keeps 4 recruits (one card each across the camp). */
+const DEMO_PARTY_SIZE = 4;
 import type { Character } from '../data/types';
 import { bodyPoints, deriveStats, freePoints, skillPoints } from '../game/character';
 import { DEMO_STAGES, MOB_MULTIPLIER, newDemo, requireDemo } from '../game/demo';
@@ -76,7 +79,7 @@ export class DemoCampScene extends Phaser.Scene {
     text(this, WIDTH - 24, 14, 'Demo: progress is not saved', { color: COLORS.dim, fontSize: '12px' }).setOrigin(1, 0);
     this.difficultySlider();
 
-    for (let i = 0; i < MAX_PARTY_SIZE; i++) {
+    for (let i = 0; i < DEMO_PARTY_SIZE; i++) {
       const x = 24 + i * 232;
       const y = 92;
       const c = party[i];

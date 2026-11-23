@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { GUILD } from '../data/guild';
-import { lineupMembers } from '../game/city';
-import { requireState, session } from '../game/session';
+import { departBlock, lineupMembers, sleepOutside } from '../game/city';
+import { markDirty, requireState, session } from '../game/session';
 import { cityHeader, rankBadge } from '../ui/hud';
 import { COLORS, HEIGHT, ScrollList, button, confirmDialog, panel, setupCamera, text, toast } from '../ui/widgets';
 
@@ -28,19 +28,24 @@ const PLACES: Record<Ring, Place[]> = {
     { name: 'Slave Market', blurb: 'Buy slaves, and the magistrate: turn in or register captured prisoners.', at: [1266, 585], scene: 'Market' },
     { name: 'Slums', blurb: 'The poorest quarter, inside the outer wall.', at: [330, 650] },
     { name: 'Customs Office', blurb: 'Duties on everything that comes through the harbour.', at: [1352, 455] },
-    { name: GUILD.inns.standard.name, blurb: `Inn: lodging at ${GUILD.inns.standard.pricePerPerson} gold per person a night.`, at: [330, 330], scene: 'Inn', data: { tier: 'standard' } },
+    { name: GUILD.inns.standard.name, blurb: `Inn: lodging at ${GUILD.inns.standard.pricePerPerson} gold per person a night, and drinks. What C-rank adventurers expect.`, at: [330, 330], scene: 'Inn', data: { tier: 'standard' } },
+    { name: GUILD.residences.outer.name, blurb: `A home of your own (${GUILD.residences.outer.price} gold at the Estate Office): free nights, as good as an inn.`, at: [560, 860], scene: 'Inn', data: { ring: 'outer' } },
   ],
   middle: [
     { name: 'Tailor', blurb: 'Clothes and fittings.', at: [520, 380] },
     { name: 'Auction House', blurb: 'Rare goods to the highest bidder.', at: [1010, 420] },
     { name: 'Library', blurb: 'Books, maps and old records.', at: [640, 650] },
     { name: 'Church', blurb: 'Prayer and healing.', at: [905, 640] },
+    { name: 'Estate Office', blurb: 'Buy and sell residences in every ring.', at: [1110, 300], scene: 'Estate' },
+    { name: GUILD.inns.highEnd.name, blurb: `High-end inn: ${GUILD.inns.highEnd.pricePerPerson} gold per person a night, and drinks. What B-rank adventurers expect.`, at: [1060, 560], scene: 'Inn', data: { tier: 'highEnd' } },
+    { name: GUILD.residences.middle.name, blurb: `A Middle Ring home (${GUILD.residences.middle.price} gold at the Estate Office): free nights, as good as a high-end inn.`, at: [470, 560], scene: 'Inn', data: { ring: 'middle' } },
   ],
   inner: [
     { name: "Lord's Manor", blurb: 'Seat of the Lord of Arch City.', at: [765, 392] },
     { name: 'Central Government Office', blurb: 'Permits, taxes and the city\'s business.', at: [650, 470] },
     { name: 'Central Church', blurb: 'The great church at the heart of the city.', at: [885, 470] },
-    { name: GUILD.inns.luxury.name, blurb: `High-end inn: ${GUILD.inns.luxury.pricePerPerson} gold per person a night; companions love it.`, at: [765, 548], scene: 'Inn', data: { tier: 'luxury' } },
+    { name: GUILD.inns.luxury.name, blurb: `Luxury inn: ${GUILD.inns.luxury.pricePerPerson} gold per person a night, and drinks. What A and S-rank adventurers expect.`, at: [765, 548], scene: 'Inn', data: { tier: 'luxury' } },
+    { name: GUILD.residences.inner.name, blurb: `An Inner Ring mansion (${GUILD.residences.inner.price} gold at the Estate Office): free nights, as good as a luxury inn.`, at: [600, 560], scene: 'Inn', data: { ring: 'inner' } },
   ],
 };
 
@@ -113,9 +118,13 @@ export class CityScene extends Phaser.Scene {
       text(this, RX + 44, 106, q.title, { fontSize: '15px', wordWrap: { width: 252 } });
       text(this, RX + 12, 150, `${q.reward} gold · ${q.days} day${q.days > 1 ? 's' : ''} · stage ${q.stage}`, { fontSize: '13px', color: COLORS.gold });
       text(this, RX + 12, 170, `Lineup: ${lineupMembers(state).map((c) => c.name).join(', ')}`, { fontSize: '12px', color: COLORS.dim, wordWrap: { width: 284 } });
-      button(this, RX + 12, 196, 284, 32, 'Set out from the city gate', () => this.depart(), { fill: 0x4a2a22, fontSize: 14 });
+      const block = departBlock(state);
+      button(this, RX + 12, 196, 284, 32, !block ? 'Set out from the city gate' : state.lastQuestDay === state.day ? 'Back from a quest today: rest first' : 'Leader injured: recover first', () => this.depart(), {
+        fill: 0x4a2a22, fontSize: 14, enabled: !block,
+      });
     } else {
-      text(this, RX + 12, 106, 'None. Visit the Adventurer Guild\'s quest board (Outer Ring).', { fontSize: '14px', wordWrap: { width: 284 } });
+      const done = state.lastQuestDay === state.day;
+      text(this, RX + 12, 106, done ? 'Back from a quest today. Accept the next one any time; you can set out tomorrow.' : 'None. Visit the Adventurer Guild\'s quest board (Outer Ring).', { fontSize: '14px', wordWrap: { width: 284 } });
       button(this, RX + 12, 196, 284, 32, 'Go to the Adventurer Guild', () => this.scene.start('Guild'), { fontSize: 14 });
     }
 
@@ -129,9 +138,21 @@ export class CityScene extends Phaser.Scene {
     }), 'top');
 
     // ---- bottom ---------------------------------------------------------------------------------
-    button(this, 16, HEIGHT - 60, 190, 46, 'Main Menu', () => this.scene.start('MainMenu'));
-    button(this, 216, HEIGHT - 60, 190, 46, 'Save Game', () => this.scene.start('SaveLoad', { mode: 'save', returnTo: 'City' }));
-    button(this, 416, HEIGHT - 60, 204, 46, 'Manage Party', () => this.scene.start('Party'), { fontSize: 16 });
+    button(this, 16, HEIGHT - 60, 136, 46, 'Main Menu', () => this.scene.start('MainMenu'), { fontSize: 15 });
+    button(this, 160, HEIGHT - 60, 136, 46, 'Save Game', () => this.scene.start('SaveLoad', { mode: 'save', returnTo: 'City' }), { fontSize: 15 });
+    button(this, 304, HEIGHT - 60, 150, 46, 'Manage Party', () => this.scene.start('Party'), { fontSize: 15 });
+    button(this, 462, HEIGHT - 60, 158, 46, 'Sleep outside\n(free)', () => this.sleepOut(), { fontSize: 13, fill: 0x2a3348 });
+  }
+
+  /** End the day without an inn: free, but housed companions resent it. */
+  private sleepOut(): void {
+    const state = requireState();
+    confirmDialog(this, `Sleep outside tonight?\nIt's free, but companions you house lose relationship (more if they expect a high-end inn). Or find an inn (Outer and Inner Ring).`, () => {
+      const msgs = sleepOutside(state, Math.random);
+      markDirty();
+      this.render();
+      toast(this, `Day ${state.day}. ${msgs.length ? msgs[msgs.length - 1] : 'A cold night under the stars.'}`);
+    }, 'Sleep outside');
   }
 
   /** A map pin: gold for open locations, grey for ones that aren't open yet. */
@@ -171,7 +192,8 @@ export class CityScene extends Phaser.Scene {
   private depart(): void {
     const state = requireState();
     const q = state.quest;
-    if (!q) return toast(this, 'Accept a quest at the Adventurer Guild first.', COLORS.bad);
+    const block = departBlock(state);
+    if (!q || block) return toast(this, block ?? 'Accept a quest at the Adventurer Guild first.', COLORS.bad);
     const members = lineupMembers(state);
     confirmDialog(this, `Set out: ${q.title}?\n${members.map((c) => `${c.name} (Lv ${c.level})`).join(', ')}`, () => this.scene.start('Battle'), 'Set out');
   }

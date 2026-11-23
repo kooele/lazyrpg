@@ -1,22 +1,76 @@
 {
-  "_readme": "Management and simulation numbers for Arch City and its Adventurer Guild. Gold amounts are whole numbers. upkeep.foodLodgingPerDay is what each person the party feeds and houses costs on days spent away (quests); resting in the city means a night at an inn, priced per person by inns (the luxury inn also raises companions' relationship each night). Ranks come from the leaderboard: parties are sorted by renown and the top rankShares.A share are A rank, the next rankShares.B are B, and so on (renown fades by renownDecayPerDay so ranks follow recent success). Quests: stages is the enemy strength range (the same stages battles always used), reward a gold range, days how long the trip takes. companion.expectedWeeklyLoot is how much gold a candidate thinks a party of that rank earns per week; they use it to value a loot cut. simulation tunes the rival parties: the chance a party goes on a quest each day, its chance of success (0.55 + successPerLevel x (average level - rankDifficulty), clamped), and what can go wrong. New adventurers arrive at about the rate adventurers are lost, nudged toward targetAdventurers.",
+  "_readme": "Management and simulation numbers for Arch City and its Adventurer Guild. Gold amounts are whole numbers. upkeep.foodLodgingPerDay is what each person the party feeds and houses costs on days spent away (quests); each day in the city ends with a night at an inn (priced per person by inns) or sleeping outside (see lodging). Party ranks come from renown (see ranks). Quests: stages is the enemy level range (an adventurer rank's levels; see adventurerRanks), reward a gold range, days how long the trip takes. companion.expectedWeeklyLoot is how much gold a candidate thinks a party of that rank earns per week; they use it to value a loot cut. simulation tunes the rival parties: the chance a party goes on a quest each day, its chance of success (0.55 + successPerLevel x (average level - rankDifficulty), clamped), and what can go wrong. Each member levels up after a success with levelUpChanceOnSuccess x levelUpFalloff^(level - 1), so high levels come slowly. A party tries its promotion quest once it has the renown and at least a 50% chance. Experienced adventurers die less: each member's chance to be lost on a quest is multiplied by deathLevelFalloff^(level - 1) (at least minDeathFactor), and a party's wipe chance by the same factor for its average level. Parties recruit from the guild hall only adventurers within recruitLevelGap levels of their average (or anyone, when down to 2 members). New adventurers arrive at about the rate adventurers are lost, nudged toward targetAdventurers.",
   "city": "Arch City",
   "startingGold": 500,
   "startingRenown": 0,
-  "maxRoster": 8,
-  "rankShares": { "A": 0.05, "B": 0.2, "C": 0.6, "D": 0.15 },
-  "renownDecayPerDay": 0.015,
-  "boardSize": 6,
+  "maxRoster": 12,
+  "startingRankShares": { "A": 0.05, "B": 0.2, "C": 0.6, "D": 0.15 },
+  "_startingRankShares": "How the rival parties are spread over the ranks when a new game starts. After that, ranks follow renown (see ranks).",
+  "ranks": {
+    "_comment": "Party ranks. renown: the renown a party needs for each rank (D needs none). Reaching the next rank's renown puts a promotion quest of that rank on the board; completing it promotes the party. A party whose renown stays below its own rank's threshold for demotionDays days in a row drops a rank. Renown doesn't fade: a failed quest loses failedQuestRenown x that quest's renown, and each member who dies loses deathRenown x the quest's renown.",
+    "renown": { "C": 100, "B": 400, "A": 1600 },
+    "demotionDays": 7,
+    "failedQuestRenown": 1,
+    "deathRenown": 0.5
+  },
+  "adventurerRanks": {
+    "_comment": "An adventurer's own rank comes from their level: the level each rank starts at (below C is D). Quests of a rank have enemies of that rank's levels, and parties of a rank are made of adventurers of about that rank.",
+    "C": 6, "B": 11, "A": 16, "S": 21
+  },
+  "boardSize": 24,
+  "board": {
+    "_comment": "The guild's quest board is shared with the rival parties, who take quests from it (see simulation). Each day up to maxPostsPerDay new quests are posted until it holds boardSize; postWeights is how often each rank is posted, and there are always at least minAtPartyRank quests at the player's rank. Quests vary: threat multiplies the enemy group's size (and the pay), and pay is extra luck on the reward, so some quests are much better deals than others.",
+    "maxPostsPerDay": 8,
+    "minAtPartyRank": 6,
+    "postWeights": { "A": 0.15, "B": 0.25, "C": 0.35, "D": 0.25 },
+    "threat": [0.8, 1.35],
+    "pay": [0.75, 1.35]
+  },
   "quests": {
-    "D": { "stages": [1, 2], "reward": [70, 110], "renown": 14, "days": [1, 2] },
-    "C": { "stages": [2, 4], "reward": [170, 280], "renown": 32, "days": [1, 3] },
-    "B": { "stages": [4, 6], "reward": [380, 600], "renown": 75, "days": [2, 3] },
-    "A": { "stages": [6, 8], "reward": [850, 1300], "renown": 170, "days": [2, 4] }
+    "D": { "stages": [1, 5], "reward": [70, 110], "renown": 14, "days": [1, 2] },
+    "C": { "stages": [6, 10], "reward": [170, 280], "renown": 32, "days": [1, 3] },
+    "B": { "stages": [11, 15], "reward": [380, 600], "renown": 75, "days": [2, 3] },
+    "A": { "stages": [16, 20], "reward": [850, 1300], "renown": 170, "days": [2, 4] }
   },
   "upkeep": { "foodLodgingPerDay": 4 },
   "inns": {
-    "standard": { "name": "Sleeping Griffin Inn", "pricePerPerson": 4, "relationshipPerNight": 0 },
-    "luxury": { "name": "Gilded Crown Inn", "pricePerPerson": 15, "relationshipPerNight": 2 }
+    "standard": { "name": "Sleeping Griffin Inn", "pricePerPerson": 4, "drinksPerPerson": 2, "drinksMorale": 8 },
+    "highEnd": { "name": "Silver Lantern Inn", "pricePerPerson": 8, "drinksPerPerson": 4, "drinksMorale": 12 },
+    "luxury": { "name": "Gilded Crown Inn", "pricePerPerson": 15, "drinksPerPerson": 6, "drinksMorale": 15 }
+  },
+  "_inns": "drinksPerPerson / drinksMorale: a round of drinks for the whole party (once a day) costs drinksPerPerson per member and raises everyone's Morale by drinksMorale.",
+  "lodging": {
+    "_comment": "Every day ends with a night somewhere: an inn, a residence the party owns (free), or sleeping outside (free). Night quality: outside 0; the Sleeping Griffin or an Outer Ring residence 1; the Silver Lantern or a Middle Ring residence 2; the Gilded Crown or an Inner Ring residence 3. expectedQuality is what an adventurer of each rank (from their level) expects. Each night, housed companions (food & lodging in their contract) gain relationshipAbove when the party sleeps better than they expect, and lose relationshipBelowPerStep for each step worse. Nights on the road during multi-day quests cost upkeep.foodLodgingPerDay and don't count.",
+    "expectedQuality": { "D": 0, "C": 1, "B": 2, "A": 3, "S": 3 },
+    "relationshipAbove": 2,
+    "relationshipBelowPerStep": 3,
+    "outsidePerPerson": 0
+  },
+  "residences": {
+    "_comment": "Homes the party can buy and sell at the Estate Office (Middle Ring), one per ring. Nights there are free and count as that ring's quality (see lodging). The office buys a residence back for sellShare of its price.",
+    "sellShare": 0.7,
+    "outer": { "name": "Outer Ring Residence", "price": 2000 },
+    "middle": { "name": "Middle Ring Residence", "price": 10000 },
+    "inner": { "name": "Inner Ring Residence", "price": 50000 }
+  },
+  "condition": {
+    "_comment": "Health (0-100, not battle HP) and Morale (0-100) of party members. After a battle, Health drops by maxHealthLoss x the share of HP the unit lost at its lowest point (falling = the full amount). Below 100 Health a member is injured and can't go on quests; everyone recovers healthPerDay each night. A member whose Health reaches 0 dies (the main character is left at 1 instead). Morale changes: moralePerQuest for each member who goes on a quest, moraleFailedQuest more if it fails, moralePerHealthLost per Health point lost to injuries, moraleMemberDied for everyone when a member dies. New members start at startingMorale. Below lowMorale, companions lose lowMoraleRelationshipPerDay relationship each day; a member at 0 Morale leaves the party (not the main character).",
+    "maxHealthLoss": 60,
+    "healthPerDay": 10,
+    "startingMorale": 75,
+    "moralePerQuest": 5,
+    "moraleFailedQuest": 10,
+    "moralePerHealthLost": 0.2,
+    "moraleMemberDied": 15,
+    "lowMorale": 50,
+    "lowMoraleRelationshipPerDay": 2
+  },
+  "schedule": {
+    "_comment": "What members who aren't on a quest do each day (Manage Party). recover: recovers recoverMultiplier x healthPerDay. training: trainingXp XP. oddJobs: oddJobsGold gold. dayOff: dayOffMorale Morale.",
+    "recoverMultiplier": 2,
+    "trainingXp": 25,
+    "oddJobsGold": 10,
+    "dayOffMorale": 10
   },
   "talentPrice": { "weight": 2, "min": 0.4 },
   "_talentPrice": "Talented adventurers cost more: mercenary fees and cuts, companion wages and slave prices are multiplied by max(min, 1 + weight x (average talent growth rate - 1)). All C = x1; all S (160%) = x2.2 with weight 2; all F = x0.4.",
@@ -37,12 +91,33 @@
   "slave": {
     "priceBase": 120,
     "pricePerLevel": 70,
-    "marketSize": 5,
-    "restockDays": 7,
     "sellBackShare": 0.4,
     "registrationFee": 60,
     "bountyPerLevel": 35,
-    "captureChance": 0.6
+    "obedienceMarket": [40, 80],
+    "obedienceCaptive": [0, 40],
+    "startingRelationship": 40,
+    "obedienceRiseFrom": 60,
+    "obedienceFallBelow": 40,
+    "obedienceChangePerDay": 1,
+    "punishObedience": 20,
+    "punishRelationship": 20
+  },
+  "market": {
+    "_comment": "The slave market. It holds between stock[0] and stock[1] slaves: each day dailySales of them are sold to other buyers (never below stock[0]), and on the shipmentWeekdays (day of the week, 0-6) a shipment of shipmentSize arrives (never above stock[1]). Prices are each slave's value (slave.priceBase + pricePerLevel per level above 1, x talent) times the price index, which drifts randomly by up to drift a day and is pulled toward (stockReference / stock)^0.5: scarce slaves cost more, a glut costs less. It stays within priceIndex. The market buys your slaves back for slave.sellBackShare of the current price, and captives for captiveSellShare.",
+    "stock": [10, 30],
+    "shipmentWeekdays": [1, 4],
+    "shipmentSize": [5, 12],
+    "dailySales": [1, 4],
+    "priceIndex": [0.7, 1.5],
+    "drift": 0.04,
+    "stockReference": 20,
+    "captiveSellShare": 0.5
+  },
+  "_slave": "Slaves have a relationship (like companions: quests together, nights better or worse than they expect, low Morale and missed upkeep move it) and Obedience (0-100). Market slaves start with obedienceMarket, registered captives with obedienceCaptive, both at startingRelationship. Each day Obedience rises by obedienceChangePerDay while relationship is at least obedienceRiseFrom, and falls by it while relationship is below obedienceFallBelow. Punishing a slave (Manage Party, once a day) adds punishObedience but costs punishRelationship.",
+  "combat": {
+    "_comment": "Battle stats of party members drop by percentPer5 % for every 5 points of Morale below 100, and (slaves) of Obedience below 100. These multiply with each other and with the injury penalty (1/3 of missing Health).",
+    "percentPer5": 1
   },
   "simulation": {
     "targetAdventurers": 100,
@@ -50,13 +125,17 @@
     "poolTarget": 10,
     "partySize": [3, 6],
     "questChancePerDay": 0.25,
-    "rankDifficulty": { "D": 1.5, "C": 3.5, "B": 5.5, "A": 7.5 },
+    "rankDifficulty": { "D": 2, "C": 7, "B": 12, "A": 17 },
     "successPerLevel": 0.18,
-    "lossChanceOnSuccess": 0.015,
-    "lossChanceOnFailure": 0.12,
-    "wipeChanceOnFailure": 0.1,
-    "levelUpChanceOnSuccess": 0.07,
-    "retireChancePerDay": 0.0005,
-    "maxLevel": 12
+    "lossChanceOnSuccess": 0.004,
+    "lossChanceOnFailure": 0.06,
+    "wipeChanceOnFailure": 0.04,
+    "deathLevelFalloff": 0.88,
+    "minDeathFactor": 0.1,
+    "recruitLevelGap": 4,
+    "levelUpChanceOnSuccess": 0.1,
+    "levelUpFalloff": 0.95,
+    "retireChancePerDay": 0.001,
+    "maxLevel": 25
   }
 }

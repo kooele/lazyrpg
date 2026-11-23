@@ -8,6 +8,7 @@ import {
   companionContract, evaluateOffer, talentPriceFactor, foodLodgingWeekly, isCompanion, joinParty, leaveParty, lootValue, openingTerms, patienceCost, rosterFull,
   type CompanionContract,
 } from '../game/contracts';
+import { adventurerRank } from '../game/guild';
 import { markDirty, requireState, session } from '../game/session';
 import { cityHeader } from '../ui/hud';
 import { COLORS, ScrollList, WIDTH, button, figure, panel, setupCamera, talentTag, text, toast } from '../ui/widgets';
@@ -105,7 +106,7 @@ export class NegotiateScene extends Phaser.Scene {
     panel(this, 16, 76, 300, 488);
     figure(this, 90, 270, 170, c.appearance, c.weaponId);
     text(this, 170, 96, c.name, { fontSize: '22px', wordWrap: { width: 140 } });
-    text(this, 170, 126, `Level ${c.level}`, { fontSize: '15px', color: COLORS.gold });
+    text(this, 170, 126, `Level ${c.level} · ${adventurerRank(c.level)}-rank`, { fontSize: '15px', color: COLORS.gold });
     text(this, 170, 148, WEAPONS[c.weaponId].name, { fontSize: '13px', color: COLORS.dim, wordWrap: { width: 140 } });
     text(this, 170, 170, greedWord(who.greed), { fontSize: '13px', color: COLORS.dim });
     talentTag(this, 170, 192, c, { fontSize: 13, detail: false });

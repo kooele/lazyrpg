@@ -1,7 +1,7 @@
 // Loads and validates enemies.json (enemy types, their level ranges, stats and skills).
 import raw from './enemies.json';
 import { SKILLS, WEAPONS } from './content';
-import { BODY_MODELS, ENEMY_MODELS, STAT_KEYS, type EnemyDef, type MonsterKind, type Stats, type UnitModel } from './types';
+import { BODY_MODELS, ENEMY_AIS, ENEMY_MODELS, STAT_KEYS, type EnemyAi, type EnemyDef, type MonsterKind, type Stats, type UnitModel } from './types';
 
 export interface EncounterRules {
   threatPerAdventurer: number;
@@ -20,7 +20,7 @@ const skillList = (v: unknown, p: string) => list(v, p).map((x, i) => {
   const id = str(x, `${p}[${i}]`);
   return SKILLS[id] ? id : fail(`${p}[${i}]`, `"${id}" is not defined in skills.json`);
 });
-const KINDS: MonsterKind[] = ['rat', 'slime', 'wolf', 'human'];
+const KINDS: MonsterKind[] = ['rat', 'slime', 'wolf', 'spider', 'bear', 'troll', 'wraith', 'wyvern', 'demon', 'human'];
 
 export function parseEnemies(data: unknown): { enemies: Record<string, EnemyDef>; encounter: EncounterRules } {
   const root = obj(data, '(root)');
@@ -70,6 +70,8 @@ export function parseEnemies(data: unknown): { enemies: Record<string, EnemyDef>
       name: str(d.name, `${p}.name`),
       levels: [levels[0], levels[1]],
       threat: num(d.threat ?? 1, `${p}.threat`),
+      questTitle: typeof d.questTitle === 'string' && d.questTitle ? d.questTitle : `${str(d.name, `${p}.name`)} Sighting`,
+      ai: (ENEMY_AIS as readonly unknown[]).includes(d.ai) ? (d.ai as EnemyAi) : fail(`${p}.ai`, `must be one of: ${ENEMY_AIS.join(', ')}`),
       art: { kind, color: typeof art.color === 'string' ? art.color : undefined, models },
       stats,
       growthPerLevel: growth,

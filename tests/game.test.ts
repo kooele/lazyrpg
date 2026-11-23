@@ -3,14 +3,14 @@ import skillsJson from '../src/data/skills.json';
 import weaponsJson from '../src/data/weapons.json';
 import { SKILLS, TREE_SKILLS, WEAPONS, parseContent, skillEffect, skillPointsForLevel, skillStatText, skillStats } from '../src/data/content';
 import enemiesJson from '../src/data/enemies.json';
-import { parseEnemies } from '../src/data/enemies';
+import { ENEMIES, parseEnemies } from '../src/data/enemies';
 import { STAT_CONFIG, parseStatConfig } from '../src/data/stats';
 import type { Character, SkillDef } from '../src/data/types';
-import { planTurn, preferredMode, runAiTurn, shouldDisengage, threatAt } from '../src/game/ai';
-import { Battle, defenseMultiplier, resistChance, deploymentTiles, enemyTypesForStage, generateEnemies, makeEnemy, makeUnit, victoryXp, type Team } from '../src/game/battle';
+import { caution, planTurn, preferredMode, runAiTurn, shouldDisengage, shouldSurrender, threatAt, tribeRouted, wantsToFlee } from '../src/game/ai';
+import { Battle, defenseMultiplier, resistChance, deploymentTiles, enemyTypesForStage, generateEnemies, makeEnemy, pickFoes, makeUnit, victoryXp, type Team } from '../src/game/battle';
 import { allSkills, bodyGain, skillBarLayout, swapBarSlots, bodyPoints as bodyPointsOf, bodyStats, createCharacter, deriveStats, freePoints, grantXp, isUnlocked, makeRng, pointsUsed, sanitizeLoadout } from '../src/game/character';
 import { randomAdventurer } from '../src/game/people';
-import { generateMap, hasLineOfSight, passable, withinRange, type BattleMap, type Point, type Terrain } from '../src/game/grid';
+import { dist, generateMap, hasLineOfSight, passable, withinRange, type BattleMap, type Point, type Terrain } from '../src/game/grid';
 import { parseSave, serializeSave } from '../src/game/save';
 import { advanceDays, newCampaign } from '../src/game/city';
 
@@ -21,6 +21,7 @@ function openMap(w = 10, h = 7): BattleMap {
 function hero(weaponId = 'sword_shield', skillIds: string[] = [], name = 'H'): Character {
   const c = createCharacter(name, '#3d7be0', weaponId);
   c.skillIds = skillIds;
+  c.morale = 100; // full strength: the Morale penalty has its own tests
   return c;
 }
 
@@ -66,7 +67,7 @@ describe('stats and content files', () => {
     bad.skills.kick.tags.push('flying');
     expect(() => parseContent(bad, weaponsJson)).toThrow(/skills.kick.tags\[2\].*"flying" is not defined/);
     const bad2 = clone(skillsJson) as Record<string, any>;
-    bad2.skills.fireball.applyStatus[0].status = 'poison';
+    bad2.skills.fireball.applyStatus[0].status = 'toxin';
     expect(() => parseContent(bad2, weaponsJson)).toThrow(/fireball.applyStatus\[0\].status/);
     const badW = clone(weaponsJson) as Record<string, any>;
     badW.weapons.bow.statMultipliers.luck = 2;
@@ -700,10 +701,30 @@ describe('enemies', () => {
     const at = (stage: number) => enemyTypesForStage(stage).map((t) => `${t.type}:${t.level}`).sort();
     expect(at(1)).toEqual(['rat:1']);
     expect(at(2)).toEqual(['rat:2', 'slime:2']);
-    expect(at(3)).toEqual(['slime:3', 'wolf:3']);
-    expect(at(4)).toEqual(['bandit:4', 'wolf:4']);
-    expect(at(5)).toEqual(['bandit:5']);
-    expect(at(9)).toEqual(['bandit:5']); // past the last range: toughest type, capped level
+    expect(at(3)).toEqual(['goblin:3', 'slime:3', 'wolf:3']);
+    expect(at(4)).toEqual(['bandit:4', 'goblin:4', 'wolf:4']);
+    expect(at(20)).toEqual(['demon:20', 'renegade:20', 'troll:20', 'wyvern:20']);
+    expect(at(30)).toEqual(['demon:25', 'renegade:25']); // past the last range: the toughest types, capped level
+  });
+
+  it('every level from 1 to 25 has enemies, and every category shows up in every quest rank', () => {
+    for (let level = 1; level <= 25; level++) expect(enemyTypesForStage(level).length).toBeGreaterThan(0);
+    const ranks: [number, number][] = [[3, 7], [6, 10], [11, 15], [16, 20]];
+    for (const [lo, hi] of ranks) {
+      const ais = new Set<string>();
+      for (let l = lo; l <= hi; l++) for (const t of enemyTypesForStage(l)) ais.add(ENEMIES[t.type].ai);
+      expect([...ais].sort()).toEqual(['beast', 'evil', 'human', 'tribal']);
+    }
+  });
+
+  it('an encounter has one main foe, joined only by types that fight the same way', () => {
+    for (let seed = 0; seed < 40; seed++) {
+      const foes = pickFoes(10, makeRng(seed));
+      const ai = ENEMIES[foes[0]].ai;
+      expect(foes.every((f) => ENEMIES[f].ai === ai)).toBe(true);
+      const enemies = generateEnemies(10, 5, makeRng(seed), 1, foes);
+      expect(enemies.every((e) => foes.includes(e.enemyType!))).toBe(true);
+    }
   });
 
   it('enemy stats and skills come from enemies.json, growing within the level range', () => {
@@ -760,8 +781,9 @@ describe('enemies', () => {
     const rats = generateEnemies(1, 4, makeRng(3));
     expect(rats).toHaveLength(8); // 0.5 threat each, budget 4
     expect(rats.every((e) => e.enemyType === 'rat' && e.level === 1)).toBe(true);
-    const wolvesOrBandits = generateEnemies(4, 4, makeRng(3));
-    expect(wolvesOrBandits).toHaveLength(4);
+    const wolves = generateEnemies(4, 4, makeRng(3), 1, ['wolf']);
+    expect(wolves).toHaveLength(4);
+    expect(generateEnemies(4, 4, makeRng(3), 1, ['goblin'])).toHaveLength(7); // 0.6 threat each
     expect(generateEnemies(1, 1, makeRng(3))).toHaveLength(2);
   });
 
@@ -812,7 +834,7 @@ describe('progression and enemy behaviour', () => {
     expect(flee.moveTo.x).toBeGreaterThan(9); // backs away toward its friend
   });
 
-  it('a hurt unit with no healthy allies and no way out makes a last stand instead of running', () => {
+  it('human: a badly hurt enemy that can\'t escape death surrenders', () => {
     const map = openMap(30, 21);
     const archer = makeUnit(makeEnemy('bandit', 4, makeRng(5)), 'enemy', { x: 15, y: 10 });
     archer.character.weaponId = 'bow';
@@ -820,9 +842,130 @@ describe('progression and enemy behaviour', () => {
     const battle = new Battle(map, [archer, ...knights], makeRng(1));
     battle.endPhase();
     archer.hp = Math.round(archer.stats.health * 0.2);
-    expect(planTurn(battle, archer).action).toBeDefined();
+    expect(shouldSurrender(battle, archer)).toBe(true);
     runAiTurn(battle, archer);
-    expect(knights.some((k) => k.hp < k.stats.health)).toBe(true); // it fought
+    expect(archer.surrendered).toBe(true);
+    expect(archer.alive).toBe(false);
+    expect(battle.outcome()).toBe('victory');
+  });
+
+  it('human: a hurt enemy that isn\'t in mortal danger runs for the edge instead of surrendering', () => {
+    const map = openMap(30, 21);
+    const bandit = makeUnit(makeEnemy('bandit', 4, makeRng(5)), 'enemy', { x: 15, y: 10 });
+    const far = makeUnit(hero('sword_shield', [], 'Far'), 'player', { x: 3, y: 10 });
+    const battle = new Battle(map, [bandit, far], makeRng(1));
+    battle.endPhase();
+    bandit.hp = Math.round(bandit.stats.health * 0.2);
+    expect(shouldSurrender(battle, bandit)).toBe(false);
+    const before = Math.min(bandit.x, bandit.y, map.width - 1 - bandit.x, map.height - 1 - bandit.y);
+    runAiTurn(battle, bandit);
+    const after = Math.min(bandit.x, bandit.y, map.width - 1 - bandit.x, map.height - 1 - bandit.y);
+    expect(after).toBeLessThan(before);
+    expect(far.hp).toBe(far.stats.health);
+  });
+
+  it('only humans surrender; beasts and evil never do', () => {
+    const map = openMap(30, 21);
+    for (const type of ['wolf', 'skeleton', 'goblin']) {
+      const foe = makeUnit(makeEnemy(type, 6, makeRng(5)), 'enemy', { x: 15, y: 10 });
+      const knights = [9, 10, 11].map((y) => makeUnit(hero('sword_shield', ['charge'], `K${y}`), 'player', { x: 12, y }));
+      const battle = new Battle(map, [foe, ...knights], makeRng(1));
+      battle.endPhase();
+      foe.hp = Math.round(foe.stats.health * 0.1);
+      expect(shouldSurrender(battle, foe)).toBe(false);
+    }
+  });
+
+  it('beast: goes for the nearest target, even when a weaker one is in reach', () => {
+    const wolf = makeUnit(makeEnemy('wolf', 3, makeRng(1)), 'enemy', { x: 5, y: 3 });
+    const near = makeUnit(hero('sword_shield', [], 'Near'), 'player', { x: 6, y: 3 });
+    const weak = makeUnit(hero('staff', [], 'Weak'), 'player', { x: 4, y: 4 });
+    const battle = new Battle(openMap(), [wolf, near, weak], makeRng(1));
+    battle.endPhase();
+    weak.hp = 40; // a human or evil foe would finish this one off
+    runAiTurn(battle, wolf);
+    expect(near.hp).toBeLessThan(near.stats.health);
+    expect(weak.hp).toBe(40);
+    // A bandit in the same spot takes the kill.
+    const bandit = makeUnit(makeEnemy('bandit', 5, makeRng(3)), 'enemy', { x: 5, y: 3 });
+    bandit.character.weaponId = 'sword_shield';
+    const n2 = makeUnit(hero('sword_shield', [], 'Near'), 'player', { x: 6, y: 3 });
+    const w2 = makeUnit(hero('staff', [], 'Weak'), 'player', { x: 4, y: 4 });
+    const b2 = new Battle(openMap(), [bandit, n2, w2], makeRng(1));
+    b2.endPhase();
+    w2.hp = 40;
+    runAiTurn(b2, bandit);
+    expect(w2.alive).toBe(false);
+  });
+
+  it('beast: runs once hurt (below 40%), a human of the same health doesn\'t', () => {
+    const map = openMap(20, 13);
+    const wolf = makeUnit(makeEnemy('wolf', 3, makeRng(1)), 'enemy', { x: 10, y: 6 });
+    const hero1 = makeUnit(hero('sword_shield'), 'player', { x: 3, y: 6 });
+    const battle = new Battle(map, [wolf, hero1], makeRng(1));
+    battle.endPhase();
+    wolf.hp = Math.round(wolf.stats.health * 0.38);
+    expect(wantsToFlee(battle, wolf)).toBe(true);
+    const bandit = makeUnit(makeEnemy('bandit', 4, makeRng(1)), 'enemy', { x: 10, y: 6 });
+    const b2 = new Battle(map, [bandit, makeUnit(hero('sword_shield'), 'player', { x: 3, y: 6 })], makeRng(1));
+    b2.endPhase();
+    bandit.hp = Math.round(bandit.stats.health * 0.38);
+    expect(wantsToFlee(b2, bandit)).toBe(false);
+  });
+
+  it('evil: never flees, ignores danger, and goes for the most hurt target', () => {
+    const map = openMap(20, 13);
+    const skel = makeUnit(makeEnemy('skeleton', 6, makeRng(1)), 'enemy', { x: 0, y: 6 }); // on the edge
+    skel.character.weaponId = 'sword_shield';
+    const a = makeUnit(hero('sword_shield', [], 'Healthy'), 'player', { x: 1, y: 6 });
+    const b = makeUnit(hero('sword_shield', [], 'Hurt'), 'player', { x: 1, y: 7 });
+    const battle = new Battle(map, [skel, a, b], makeRng(1));
+    battle.endPhase();
+    skel.hp = Math.round(skel.stats.health * 0.05);
+    b.hp = Math.round(b.stats.health * 0.45); // can't be killed in one blow, but hurt
+    expect(wantsToFlee(battle, skel)).toBe(false);
+    expect(caution(battle, skel)).toBe(0);
+    runAiTurn(battle, skel);
+    expect(skel.escaped).toBeFalsy();
+    expect(skel.surrendered).toBeFalsy();
+    expect(a.hp).toBe(a.stats.health);
+    expect(b.hp).toBeLessThan(Math.round(b.stats.health * 0.45));
+  });
+
+  it('tribal: the whole group breaks and runs once half of it is gone', () => {
+    const map = openMap(20, 13);
+    const goblins = [4, 5, 6, 7].map((y) => makeUnit(makeEnemy('goblin', 4, makeRng(y)), 'enemy', { x: 14, y }));
+    const heroes = [5, 6, 7].map((y) => makeUnit(hero('sword_shield', [], `H${y}`), 'player', { x: 3, y }));
+    const battle = new Battle(map, [...goblins, ...heroes], makeRng(1));
+    battle.endPhase();
+    expect(tribeRouted(battle, 'enemy')).toBe(false);
+    expect(wantsToFlee(battle, goblins[2])).toBe(false);
+    goblins[0].alive = false;
+    goblins[1].alive = false;
+    expect(tribeRouted(battle, 'enemy')).toBe(true);
+    // Even an unhurt goblin runs now.
+    expect(goblins[2].hp).toBe(goblins[2].stats.health);
+    expect(wantsToFlee(battle, goblins[2])).toBe(true);
+    const plan = planTurn(battle, goblins[2]);
+    expect(plan.moveTo.x).toBeGreaterThan(goblins[2].x - 1); // away from the heroes on the left, toward the edge
+  });
+
+  it('tribal: a fighter out ahead of its group waits for the others instead of charging alone', () => {
+    const map = openMap(30, 13);
+    const lead = makeUnit(makeEnemy('goblin', 4, makeRng(1)), 'enemy', { x: 20, y: 6 });
+    const rear = makeUnit(makeEnemy('goblin', 4, makeRng(2)), 'enemy', { x: 27, y: 6 });
+    const foe = makeUnit(hero('sword_shield'), 'player', { x: 2, y: 6 });
+    lead.character.weaponId = 'spear';
+    const battle = new Battle(map, [lead, rear, foe], makeRng(1));
+    battle.endPhase();
+    const plan = planTurn(battle, lead);
+    expect(dist(plan.moveTo, rear)).toBeLessThanOrEqual(dist(lead, rear));
+    // A lone beast just goes.
+    const wolf = makeUnit(makeEnemy('wolf', 4, makeRng(1)), 'enemy', { x: 20, y: 6 });
+    const wolf2 = makeUnit(makeEnemy('wolf', 4, makeRng(2)), 'enemy', { x: 27, y: 6 });
+    const b2 = new Battle(map, [wolf, wolf2, makeUnit(hero('sword_shield'), 'player', { x: 2, y: 6 })], makeRng(1));
+    b2.endPhase();
+    expect(planTurn(b2, wolf).moveTo.x).toBeLessThan(20);
   });
 
   it('a badly hurt enemy that can reach the map edge flees the battle', () => {

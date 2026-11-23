@@ -9,25 +9,69 @@ export interface QuestTier {
   days: [number, number];
 }
 
-export type InnTier = 'standard' | 'luxury';
-export const INN_TIERS: readonly InnTier[] = ['standard', 'luxury'];
+export type InnTier = 'standard' | 'highEnd' | 'luxury';
+export const INN_TIERS: readonly InnTier[] = ['standard', 'highEnd', 'luxury'];
+/** City rings (where residences are). */
+export type Ring = 'outer' | 'middle' | 'inner';
+export const RINGS: readonly Ring[] = ['outer', 'middle', 'inner'];
 export interface InnConfig {
   name: string;
   pricePerPerson: number;
-  relationshipPerNight: number;
+  /** A round of drinks for the party: gold per member, and Morale for everyone. */
+  drinksPerPerson: number;
+  drinksMorale: number;
 }
+
+/** Where the party spends a night: an inn, a residence (by ring), outside (free), or on the road during a quest. */
+export type Lodging = InnTier | Ring | 'outside' | 'road';
+/** A night in the city (not on the road). */
+export type CityLodging = Exclude<Lodging, 'road'>;
+/** Night quality (for adventurers' expectations): outside 0, then each ring's inn or residence 1-3. */
+export const LODGING_QUALITY: Record<CityLodging, number> = { outside: 0, standard: 1, outer: 1, highEnd: 2, middle: 2, luxury: 3, inner: 3 };
+export const isResidence = (l: Lodging): l is Ring => (RINGS as readonly string[]).includes(l);
+
+export type Activity = 'recover' | 'training' | 'oddJobs' | 'dayOff';
+export const ACTIVITIES: readonly Activity[] = ['recover', 'training', 'oddJobs', 'dayOff'];
 
 export interface GuildConfig {
   city: string;
   startingGold: number;
   startingRenown: number;
   maxRoster: number;
-  rankShares: Record<Rank, number>;
-  renownDecayPerDay: number;
+  startingRankShares: Record<Rank, number>;
+  ranks: { renown: Record<Exclude<Rank, 'D'>, number>; demotionDays: number; failedQuestRenown: number; deathRenown: number };
+  /** First level of each adventurer rank above D. */
+  adventurerRanks: Record<'C' | 'B' | 'A' | 'S', number>;
   boardSize: number;
+  board: { maxPostsPerDay: number; minAtPartyRank: number; postWeights: Record<Rank, number>; threat: [number, number]; pay: [number, number] };
   quests: Record<Rank, QuestTier>;
   upkeep: { foodLodgingPerDay: number };
   inns: Record<InnTier, InnConfig>;
+  lodging: { expectedQuality: Record<'S' | Rank, number>; relationshipAbove: number; relationshipBelowPerStep: number; outsidePerPerson: number };
+  residences: Record<Ring, { name: string; price: number }> & { sellShare: number };
+  condition: {
+    maxHealthLoss: number;
+    healthPerDay: number;
+    lowMorale: number;
+    lowMoraleRelationshipPerDay: number;
+    startingMorale: number;
+    moralePerQuest: number;
+    moraleFailedQuest: number;
+    moralePerHealthLost: number;
+    moraleMemberDied: number;
+  };
+  combat: { percentPer5: number };
+  market: {
+    stock: [number, number];
+    shipmentWeekdays: number[];
+    shipmentSize: [number, number];
+    dailySales: [number, number];
+    priceIndex: [number, number];
+    drift: number;
+    stockReference: number;
+    captiveSellShare: number;
+  };
+  schedule: { recoverMultiplier: number; trainingXp: number; oddJobsGold: number; dayOffMorale: number };
   /** Price multiplier from talent: max(min, 1 + weight x (average growth rate - 1)). */
   talentPrice: { weight: number; min: number };
   mercenary: { feePerLevel: number; cutBase: number; cutPerLevel: number };
@@ -47,12 +91,17 @@ export interface GuildConfig {
   slave: {
     priceBase: number;
     pricePerLevel: number;
-    marketSize: number;
-    restockDays: number;
     sellBackShare: number;
     registrationFee: number;
     bountyPerLevel: number;
-    captureChance: number;
+    obedienceMarket: [number, number];
+    obedienceCaptive: [number, number];
+    startingRelationship: number;
+    obedienceRiseFrom: number;
+    obedienceFallBelow: number;
+    obedienceChangePerDay: number;
+    punishObedience: number;
+    punishRelationship: number;
   };
   simulation: {
     targetAdventurers: number;
@@ -66,6 +115,10 @@ export interface GuildConfig {
     lossChanceOnFailure: number;
     wipeChanceOnFailure: number;
     levelUpChanceOnSuccess: number;
+    levelUpFalloff: number;
+    deathLevelFalloff: number;
+    minDeathFactor: number;
+    recruitLevelGap: number;
     retireChancePerDay: number;
     maxLevel: number;
   };
@@ -106,17 +159,34 @@ function parseInns(v: unknown): Record<InnTier, InnConfig> {
     out[t] = {
       name: inn.name as string,
       pricePerPerson: num(inn.pricePerPerson, `inns.${t}.pricePerPerson`),
-      relationshipPerNight: num(inn.relationshipPerNight, `inns.${t}.relationshipPerNight`, 0, 100),
+      drinksPerPerson: num(inn.drinksPerPerson, `inns.${t}.drinksPerPerson`),
+      drinksMorale: num(inn.drinksMorale, `inns.${t}.drinksMorale`, 0, 100),
     };
+  }
+  return out;
+}
+
+function parseResidences(v: unknown): GuildConfig['residences'] {
+  const o = obj(v, 'residences');
+  const out = { sellShare: num(o.sellShare, 'residences.sellShare', 0, 1) } as GuildConfig['residences'];
+  for (const r of RINGS) {
+    const h = obj(o[r], `residences.${r}`);
+    if (typeof h.name !== 'string' || !h.name) fail(`residences.${r}.name`, 'must be a name');
+    out[r] = { name: h.name as string, price: num(h.price, `residences.${r}.price`) };
   }
   return out;
 }
 
 export function parseGuildConfig(data: unknown): GuildConfig {
   const d = obj(data, '(root)');
-  const rankShares = perRank(d.rankShares, 'rankShares', 1);
-  const total = RANKS.reduce((s, r) => s + rankShares[r], 0);
-  if (Math.abs(total - 1) > 0.001) fail('rankShares', `must add up to 1 (they add up to ${total})`);
+  const startingRankShares = perRank(d.startingRankShares, 'startingRankShares', 1);
+  const total = RANKS.reduce((s, r) => s + startingRankShares[r], 0);
+  if (Math.abs(total - 1) > 0.001) fail('startingRankShares', `must add up to 1 (they add up to ${total})`);
+  const rk = obj(d.ranks, 'ranks');
+  const thresholds = numbers<Record<'C' | 'B' | 'A', number>>(rk.renown, 'ranks.renown', ['C', 'B', 'A']);
+  if (!(thresholds.C < thresholds.B && thresholds.B < thresholds.A)) fail('ranks.renown', 'must grow from C to B to A');
+  const advRanks = numbers<Record<'C' | 'B' | 'A' | 'S', number>>(d.adventurerRanks, 'adventurerRanks', ['C', 'B', 'A', 'S']);
+  if (!(1 < advRanks.C && advRanks.C < advRanks.B && advRanks.B < advRanks.A && advRanks.A < advRanks.S)) fail('adventurerRanks', 'must grow from C to B to A to S (and C above 1)');
   const q = obj(d.quests, 'quests');
   const quests = {} as Record<Rank, QuestTier>;
   for (const r of RANKS) {
@@ -139,12 +209,36 @@ export function parseGuildConfig(data: unknown): GuildConfig {
     startingGold: num(d.startingGold, 'startingGold'),
     startingRenown: num(d.startingRenown, 'startingRenown'),
     maxRoster: num(d.maxRoster, 'maxRoster', 1, 20),
-    rankShares,
-    renownDecayPerDay: num(d.renownDecayPerDay, 'renownDecayPerDay', 0, 1),
-    boardSize: num(d.boardSize, 'boardSize', 1, 20),
+    startingRankShares,
+    ranks: {
+      renown: thresholds,
+      demotionDays: num(rk.demotionDays, 'ranks.demotionDays', 1, 365),
+      failedQuestRenown: num(rk.failedQuestRenown, 'ranks.failedQuestRenown', 0, 10),
+      deathRenown: num(rk.deathRenown, 'ranks.deathRenown', 0, 10),
+    },
+    adventurerRanks: advRanks,
+    boardSize: num(d.boardSize, 'boardSize', 1, 60),
+    board: (() => {
+      const b = obj(d.board, 'board');
+      return {
+        maxPostsPerDay: num(b.maxPostsPerDay, 'board.maxPostsPerDay', 1, 60),
+        minAtPartyRank: num(b.minAtPartyRank, 'board.minAtPartyRank', 0, 60),
+        postWeights: perRank(b.postWeights, 'board.postWeights'),
+        threat: range(b.threat, 'board.threat', 0.1),
+        pay: range(b.pay, 'board.pay', 0.1),
+      };
+    })(),
     quests,
     upkeep: numbers(d.upkeep, 'upkeep', ['foodLodgingPerDay']),
     inns: parseInns(d.inns),
+    lodging: {
+      ...numbers<Omit<GuildConfig['lodging'], 'expectedQuality'>>(d.lodging, 'lodging', ['relationshipAbove', 'relationshipBelowPerStep', 'outsidePerPerson']),
+      expectedQuality: numbers(obj(d.lodging, 'lodging').expectedQuality, 'lodging.expectedQuality', ['S', ...RANKS], 3),
+    },
+    residences: parseResidences(d.residences),
+    condition: numbers<GuildConfig['condition']>(d.condition, 'condition', ['maxHealthLoss', 'healthPerDay', 'startingMorale', 'moralePerQuest',
+      'moraleFailedQuest', 'moralePerHealthLost', 'moraleMemberDied', 'lowMorale', 'lowMoraleRelationshipPerDay'], 100),
+    schedule: numbers(d.schedule, 'schedule', ['recoverMultiplier', 'trainingXp', 'oddJobsGold', 'dayOffMorale']),
     talentPrice: numbers(d.talentPrice ?? { weight: 2, min: 0.4 }, 'talentPrice', ['weight', 'min']),
     mercenary: numbers(d.mercenary, 'mercenary', ['feePerLevel', 'cutBase', 'cutPerLevel']),
     companion: {
@@ -155,11 +249,33 @@ export function parseGuildConfig(data: unknown): GuildConfig {
       termDemand: termDemand as Record<string, number>,
       expectedWeeklyLoot: perRank(c.expectedWeeklyLoot, 'companion.expectedWeeklyLoot'),
     },
-    slave: numbers(d.slave, 'slave', ['priceBase', 'pricePerLevel', 'marketSize', 'restockDays', 'sellBackShare', 'registrationFee', 'bountyPerLevel', 'captureChance']),
+    slave: {
+      ...numbers<Omit<GuildConfig['slave'], 'obedienceMarket' | 'obedienceCaptive'>>(d.slave, 'slave', ['priceBase', 'pricePerLevel',
+        'sellBackShare', 'registrationFee', 'bountyPerLevel', 'startingRelationship', 'obedienceRiseFrom', 'obedienceFallBelow',
+        'obedienceChangePerDay', 'punishObedience', 'punishRelationship']),
+      obedienceMarket: range(obj(d.slave, 'slave').obedienceMarket, 'slave.obedienceMarket'),
+      obedienceCaptive: range(obj(d.slave, 'slave').obedienceCaptive, 'slave.obedienceCaptive'),
+    },
+    combat: numbers(d.combat, 'combat', ['percentPer5'], 20),
+    market: (() => {
+      const m = obj(d.market, 'market');
+      const days = Array.isArray(m.shipmentWeekdays) && m.shipmentWeekdays.length
+        ? m.shipmentWeekdays.map((v, i) => num(v, `market.shipmentWeekdays[${i}]`, 0, 6)) : fail('market.shipmentWeekdays', 'must list days of the week (0-6)');
+      return {
+        stock: range(m.stock, 'market.stock'),
+        shipmentWeekdays: days,
+        shipmentSize: range(m.shipmentSize, 'market.shipmentSize'),
+        dailySales: range(m.dailySales, 'market.dailySales'),
+        priceIndex: range(m.priceIndex, 'market.priceIndex', 0.01),
+        drift: num(m.drift, 'market.drift', 0, 1),
+        stockReference: num(m.stockReference, 'market.stockReference', 1),
+        captiveSellShare: num(m.captiveSellShare, 'market.captiveSellShare', 0, 2),
+      };
+    })(),
     simulation: {
       ...numbers<Omit<GuildConfig['simulation'], 'partySize' | 'rankDifficulty'>>(s, 'simulation',
         ['targetAdventurers', 'targetParties', 'poolTarget', 'questChancePerDay', 'successPerLevel', 'lossChanceOnSuccess',
-          'lossChanceOnFailure', 'wipeChanceOnFailure', 'levelUpChanceOnSuccess', 'retireChancePerDay', 'maxLevel']),
+          'lossChanceOnFailure', 'wipeChanceOnFailure', 'levelUpChanceOnSuccess', 'levelUpFalloff', 'deathLevelFalloff', 'minDeathFactor', 'recruitLevelGap', 'retireChancePerDay', 'maxLevel']),
       partySize: range(s.partySize, 'simulation.partySize', 1),
       rankDifficulty: perRank(s.rankDifficulty, 'simulation.rankDifficulty'),
     },

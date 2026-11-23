@@ -218,7 +218,7 @@ export interface SkillTreeDef {
 export const BODY_MODELS = ['m1', 'm2', 'm3', 'm4', 'f1', 'f2', 'f3', 'f4'] as const;
 export type BodyModel = (typeof BODY_MODELS)[number];
 /** Body models only enemies use (bandits). */
-export const ENEMY_MODELS = ['b1', 'b2', 'b3', 'b4'] as const;
+export const ENEMY_MODELS = ['b1', 'b2', 'b3', 'b4', 'g1', 'g2', 'o1', 'o2', 's1', 's2'] as const;
 export type EnemyModel = (typeof ENEMY_MODELS)[number];
 export type UnitModel = BodyModel | EnemyModel;
 
@@ -254,7 +254,17 @@ export interface Appearance {
   look?: Look;
 }
 
-export type MonsterKind = 'rat' | 'slime' | 'wolf' | 'human';
+export type MonsterKind = 'rat' | 'slime' | 'wolf' | 'spider' | 'bear' | 'troll' | 'wraith' | 'wyvern' | 'demon' | 'human';
+
+/**
+ * How an enemy type fights (see ai.ts):
+ *  beast  – acts alone, goes for the nearest target, flees when hurt
+ *  tribal – fights as a group in a loose formation; the whole group may flee
+ *  human  – fights tactically, flees from danger, surrenders when it can't escape (can be taken prisoner)
+ *  evil   – spirits and demons: no self-preservation, goes for kills
+ */
+export type EnemyAi = 'beast' | 'tribal' | 'human' | 'evil';
+export const ENEMY_AIS: readonly EnemyAi[] = ['beast', 'tribal', 'human', 'evil'];
 
 /** An enemy type from enemies.json. */
 export interface EnemyDef {
@@ -264,6 +274,10 @@ export interface EnemyDef {
   levels: [number, number];
   /** Share of the encounter budget one unit uses. */
   threat: number;
+  /** How it fights. */
+  ai: EnemyAi;
+  /** Name of quests where this type is the main foe ("Wolf Pack"). */
+  questTitle: string;
   /** Monsters: public/art/monsters/<kind>.svg (color is used by tools/generate-art.mjs).
    *  Humans: body models to pick from (default: the adventurer models). */
   art: { kind: MonsterKind; color?: string; models?: UnitModel[] };
@@ -304,12 +318,20 @@ export interface Character {
   weaponMode?: string;
   /** Party members only: how they are bound to the party. */
   contract?: Contract;
+  /** Strategic Layer: 0-100, separate from battle HP. Below 100 = injured (can't go on quests). Missing = 100. */
+  health?: number;
+  /** Strategic Layer: 0-100. Missing = the starting morale (guild.json condition.startingMorale). */
+  morale?: number;
 }
 
 // ---- management: contracts, the guild, Arch City ----------------------------------------
 
+/** Party and quest ranks, best first. */
 export type Rank = 'A' | 'B' | 'C' | 'D';
 export const RANKS: readonly Rank[] = ['A', 'B', 'C', 'D'];
+/** An adventurer's own rank, from their level (S is beyond the party ranks). */
+export type AdventurerRank = 'S' | Rank;
+export const ADVENTURER_RANKS: readonly AdventurerRank[] = ['S', 'A', 'B', 'C', 'D'];
 
 /**
  * main      – the player's own character: permanent, can't be dismissed.
@@ -337,7 +359,17 @@ export type Contract =
     /** How demanding they are (1 = average). */
     greed: number;
   }
-  | { type: 'slave'; price: number; origin: 'market' | 'prisoner' };
+  | {
+    type: 'slave';
+    price: number;
+    origin: 'market' | 'prisoner';
+    /** 0-100, like a companion's: moves with how they're treated, and drives Obedience. */
+    relationship: number;
+    /** 0-100. Below 100, battle stats drop (see combatPenalty). */
+    obedience: number;
+    /** Day they were last punished (once a day). */
+    punishedDay?: number;
+  };
 
 export type MemberType = Contract['type'];
 
@@ -369,6 +401,8 @@ export interface RivalParty {
   /** Day of the last quest, and what happened. */
   lastDay: number;
   last: string;
+  /** First day of the current stretch below its rank's renown threshold (0 = not below). */
+  belowSince?: number;
 }
 
 /** An unaffiliated adventurer at the guild: can be hired as a mercenary or signed as a companion. */
@@ -395,6 +429,12 @@ export interface Quest {
   /** Last day it can be accepted. */
   expires: number;
   description: string;
+  /** A promotion quest: completing it raises the party to the quest's rank. */
+  promotion?: boolean;
+  /** Enemy types it sends against the party (enemies.json ids, main foe first). Missing = picked when the battle starts. */
+  foes?: string[];
+  /** Size of the enemy group (multiplies the encounter budget; 1 = usual). The reward scales with it. */
+  threat?: number;
 }
 
 export interface NewsItem {
@@ -416,9 +456,10 @@ export interface Offer {
 }
 
 export interface MarketState {
+  /** Slaves for sale. Their `price` is their value; the asking price is value x priceIndex. */
   slaves: Offer[];
-  /** Next day the market gets new stock. */
-  restockDay: number;
+  /** Supply and demand: multiplies every price at the market (1 = usual). */
+  priceIndex: number;
 }
 
 export interface Progress {
@@ -446,6 +487,17 @@ export interface GameState {
   prisoners: Offer[];
   /** The quest the party has accepted and not yet fought. */
   quest: Quest | null;
+  /** Day the party last came back from a quest (one quest a day), and who went. */
+  lastQuestDay: number;
+  questMembers: string[];
+  /** What each member does on days they aren't on a quest (by character id; see activityOf for the default). */
+  schedule: Record<string, 'recover' | 'training' | 'oddJobs' | 'dayOff'>;
+  /** Day the party last bought a round of drinks (once a day). */
+  drinksDay: number;
+  /** First day of the current stretch below the rank's renown threshold (0 = not below). A full week drops a rank. */
+  belowRankSince: number;
+  /** City rings where the party owns a residence. */
+  residences: ('outer' | 'middle' | 'inner')[];
   /** Messages for the player (newest last). */
   log: NewsItem[];
 }

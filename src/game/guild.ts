@@ -2,16 +2,61 @@
 // day-by-day simulation of the other adventurers. Pure logic (no Phaser).
 import { WEAPONS } from '../data/content';
 import { GUILD } from '../data/guild';
-import { RANKS, type FreeAdventurer, type GameState, type GuildState, type Rank, type RivalMember, type RivalParty } from '../data/types';
+import { RANKS, type AdventurerRank, type FreeAdventurer, type GameState, type GuildState, type Quest, type Rank, type RivalMember, type RivalParty } from '../data/types';
+import { postQuests } from './board';
 import { newId, type Rng } from './character';
 import { randInt, randomAdventurer, randomName, randomPartyName } from './people';
 
 const SIM = GUILD.simulation;
 export const PLAYER_ID = 'player';
 
-/** How many of `n` parties hold each rank (top 5% A, 20% B, 60% C, 15% D by default). */
+// ---- ranks -----------------------------------------------------------------------------------------
+
+/** Renown a party needs to hold `rank` (D: none). */
+export const rankThreshold = (rank: Rank): number => (rank === 'D' ? 0 : GUILD.ranks.renown[rank]);
+
+/** The rank above (null for A). */
+export const nextRank = (rank: Rank): Rank | null => (rank === 'A' ? null : RANKS[RANKS.indexOf(rank) - 1]);
+
+/** The rank below (null for D). */
+export const lowerRank = (rank: Rank): Rank | null => (rank === 'D' ? null : RANKS[RANKS.indexOf(rank) + 1]);
+
+/** An adventurer's own rank from their level: D 1-5, C 6-10, B 11-15, A 16-20, S 21+ (adventurerRanks in guild.json). */
+export function adventurerRank(level: number): AdventurerRank {
+  const r = GUILD.adventurerRanks;
+  return level >= r.S ? 'S' : level >= r.A ? 'A' : level >= r.B ? 'B' : level >= r.C ? 'C' : 'D';
+}
+
+/** Levels of an adventurer rank (S: from its first level to 5 above). */
+export function rankLevels(rank: AdventurerRank): [number, number] {
+  const r = GUILD.adventurerRanks;
+  const bounds: Record<AdventurerRank, [number, number]> = {
+    D: [1, r.C - 1], C: [r.C, r.B - 1], B: [r.B, r.A - 1], A: [r.A, r.S - 1], S: [r.S, r.S + 4],
+  };
+  return bounds[rank];
+}
+
+/** Can a party with this renown take its next rank's promotion quest? */
+export const promotionReady = (rank: Rank, renown: number) => {
+  const up = nextRank(rank);
+  return !!up && renown >= rankThreshold(up);
+};
+
+/**
+ * Demotion clock: a party below its rank's renown for `ranks.demotionDays` days in a row drops a rank.
+ * Returns the new rank (or the same one) and the updated start of the stretch below (0 = not below).
+ */
+export function demotionCheck(rank: Rank, renown: number, belowSince: number, day: number): { rank: Rank; belowSince: number } {
+  if (renown >= rankThreshold(rank)) return { rank, belowSince: 0 };
+  const since = belowSince || day;
+  if (day - since < GUILD.ranks.demotionDays) return { rank, belowSince: since };
+  const down = lowerRank(rank) ?? rank;
+  return { rank: down, belowSince: renown >= rankThreshold(down) ? 0 : day };
+}
+
+/** How many of `n` parties start at each rank (startingRankShares: 5% A, 20% B, 60% C, 15% D by default). */
 export function rankCounts(n: number): Record<Rank, number> {
-  const s = GUILD.rankShares;
+  const s = GUILD.startingRankShares;
   const A = n > 0 ? Math.max(1, Math.round(n * s.A)) : 0;
   const B = Math.min(n - A, Math.round(n * s.B));
   const D = Math.min(n - A - B, Math.round(n * s.D));
@@ -33,52 +78,44 @@ export interface BoardEntry {
 
 const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
 
-/** All parties (the player's included), best first, with the rank their position gives them. */
+/** All parties (the player's included), by rank, then renown. */
 export function leaderboard(state: GameState): BoardEntry[] {
   const fighters = state.party.filter((c) => c.contract?.type !== 'mercenary');
-  const entries: Omit<BoardEntry, 'rank'>[] = [
+  const entries: BoardEntry[] = [
     ...state.guild.rivals.map((p) => ({
-      id: p.id, name: p.name, renown: p.renown, members: p.members.length, avgLevel: avg(p.members.map((m) => m.level)),
+      id: p.id, name: p.name, renown: p.renown, rank: p.rank, members: p.members.length, avgLevel: avg(p.members.map((m) => m.level)),
       wins: p.wins, losses: p.losses, last: p.last, isPlayer: false,
     })),
     {
-      id: PLAYER_ID, name: state.partyName, renown: state.renown, members: fighters.length, avgLevel: avg(fighters.map((c) => c.level)),
+      id: PLAYER_ID, name: state.partyName, renown: state.renown, rank: state.rank, members: fighters.length, avgLevel: avg(fighters.map((c) => c.level)),
       wins: state.progress.victories, losses: state.progress.defeats, last: '', isPlayer: true,
     },
   ];
   // Ties go to the player's rivals (the guild trusts a known name), then by name for stability.
-  entries.sort((a, b) => b.renown - a.renown || Number(a.isPlayer) - Number(b.isPlayer) || a.name.localeCompare(b.name));
-  const counts = rankCounts(entries.length);
-  const out: BoardEntry[] = [];
-  let i = 0;
-  for (const rank of RANKS) for (let k = 0; k < counts[rank]; k++, i++) out.push({ ...entries[i], rank });
-  return out;
+  return entries.sort((a, b) => RANKS.indexOf(a.rank) - RANKS.indexOf(b.rank) || b.renown - a.renown
+    || Number(a.isPlayer) - Number(b.isPlayer) || a.name.localeCompare(b.name));
 }
 
-/** Re-rank everyone from the leaderboard. Returns news about rank changes. */
+/** The day's demotion check for every party. Returns the player's rank change and news about rivals. */
 export function updateRanks(state: GameState): { player?: { from: Rank; to: Rank }; news: string[] } {
-  const board = leaderboard(state);
   const news: string[] = [];
   let player: { from: Rank; to: Rank } | undefined;
-  for (const e of board) {
-    if (e.isPlayer) {
-      if (e.rank !== state.rank) player = { from: state.rank, to: e.rank };
-      state.rank = e.rank;
-      continue;
-    }
-    const p = state.guild.rivals.find((r) => r.id === e.id)!;
-    if (p.rank !== e.rank) {
-      const up = RANKS.indexOf(e.rank) < RANKS.indexOf(p.rank);
-      if (up && (e.rank === 'A' || e.rank === 'B')) news.push(`${p.name} rose to ${e.rank} rank.`);
-      p.rank = e.rank;
-    }
+  const me = demotionCheck(state.rank, state.renown, state.belowRankSince, state.day);
+  if (me.rank !== state.rank) player = { from: state.rank, to: me.rank };
+  state.rank = me.rank;
+  state.belowRankSince = me.belowSince;
+  for (const p of state.guild.rivals) {
+    const r = demotionCheck(p.rank, p.renown, p.belowSince ?? 0, state.day);
+    if (r.rank !== p.rank && (p.rank === 'A' || p.rank === 'B')) news.push(`${p.name} dropped to ${r.rank} rank.`);
+    p.rank = r.rank;
+    p.belowSince = r.belowSince;
   }
   return { player, news };
 }
 
-/** Typical member level of a party at each rank when the world is made. */
-const LEVELS_BY_RANK: Record<Rank, [number, number]> = { A: [7, 9], B: [5, 7], C: [2, 5], D: [1, 2] };
-const RENOWN_BY_RANK: Record<Rank, [number, number]> = { A: [1300, 1800], B: [500, 800], C: [130, 380], D: [30, 110] };
+/** Typical member level of a party at each rank when the world is made (adventurers of about that rank). */
+const LEVELS_BY_RANK: Record<Rank, [number, number]> = { A: [16, 19], B: [11, 14], C: [6, 9], D: [1, 4] };
+const RENOWN_BY_RANK: Record<Rank, [number, number]> = { A: [1650, 2600], B: [420, 1400], C: [110, 380], D: [0, 90] };
 
 function rivalMember(level: number, rng: Rng, avoid: Set<string>): RivalMember {
   const sex = rng() < 0.5 ? 'male' : 'female';
@@ -104,7 +141,8 @@ function freeAdventurer(level: number, rng: Rng, avoid?: Set<string>): FreeAdven
 
 /** Level of a newcomer to the guild: mostly fresh recruits, now and then a veteran from elsewhere. */
 function newcomerLevel(rng: Rng): number {
-  return rng() < 0.12 ? randInt(4, 7, rng) : randInt(1, 3, rng);
+  const r = rng();
+  return r < 0.03 ? randInt(11, 16, rng) : r < 0.15 ? randInt(5, 10, rng) : randInt(1, 3, rng);
 }
 
 /** A fresh guild: rival parties spread over the ranks (the player fills a D slot), and free adventurers. */
@@ -138,10 +176,48 @@ export function adventurerCount(state: GameState): number {
     + state.party.filter((c) => c.contract?.type !== 'mercenary').length;
 }
 
+/** How much less likely an adventurer of this level is to die on a quest than a fresh recruit (1 at level 1). */
+export function deathFactor(level: number): number {
+  return Math.max(SIM.minDeathFactor, SIM.deathLevelFalloff ** (Math.max(1, level) - 1));
+}
+
 /** A rival party's chance to complete a quest of a rank. */
 export function rivalSuccessChance(p: RivalParty, rank: Rank): number {
   const power = avg(p.members.map((m) => m.level)) + 0.25 * (p.members.length - 4);
   return Math.max(0.1, Math.min(0.95, 0.55 + SIM.successPerLevel * (power - SIM.rankDifficulty[rank])));
+}
+
+/** How hard a board quest is, as the party level it calls for: its enemy level, more for a big group. */
+export function questDifficulty(q: Quest): number {
+  return q.stage - 1 + ((q.threat ?? 1) - 1) * 4;
+}
+
+/** A rival party's chance to complete a board quest. */
+export function rivalQuestChance(p: RivalParty, q: Quest): number {
+  const power = avg(p.members.map((m) => m.level)) + 0.25 * (p.members.length - 4);
+  return Math.max(0.1, Math.min(0.95, 0.55 + SIM.successPerLevel * (power - questDifficulty(q))));
+}
+
+/**
+ * The board quest a rival party takes: at its rank or below (never promotion quests), at least a 55% chance,
+ * and the best expected value: chance x (gold + renown) minus what a failure costs. Null if nothing suits it.
+ */
+export function rivalPickQuest(p: RivalParty, board: Quest[]): Quest | null {
+  const own = RANKS.indexOf(p.rank);
+  let best: Quest | null = null;
+  let bestScore = 0;
+  for (const q of board) {
+    if (q.promotion || RANKS.indexOf(q.rank) < own) continue;
+    const chance = rivalQuestChance(p, q);
+    if (chance < 0.55) continue;
+    const prize = q.reward + q.renown * 5;
+    const score = chance * prize - (1 - chance) * prize;
+    if (score > bestScore) {
+      bestScore = score;
+      best = q;
+    }
+  }
+  return best;
 }
 
 /** Which quest rank a rival takes: the hardest one at or below its rank it is fairly sure of, and now and then one above. */
@@ -159,8 +235,10 @@ export function expectedDailyLosses(state: GameState): number {
     const size = p.members.length;
     const rank = p.rank;
     const ps = rivalSuccessChance(p, rank);
-    const fail = (1 - ps) * (SIM.wipeChanceOnFailure * size + (1 - SIM.wipeChanceOnFailure) * SIM.lossChanceOnFailure * size);
-    e += SIM.questChancePerDay * (ps * SIM.lossChanceOnSuccess * size + fail) + SIM.retireChancePerDay * size;
+    const k = deathFactor(avg(p.members.map((m) => m.level)));
+    const wipe = SIM.wipeChanceOnFailure * k;
+    const fail = (1 - ps) * (wipe * size + (1 - wipe) * SIM.lossChanceOnFailure * k * size);
+    e += SIM.questChancePerDay * (ps * SIM.lossChanceOnSuccess * k * size + fail) + SIM.retireChancePerDay * size;
   }
   return e;
 }
@@ -178,6 +256,11 @@ function poisson(mean: number, rng: Rng): number {
 
 const QUEST_WORDS: Record<Rank, string> = { A: 'an A-rank', B: 'a B-rank', C: 'a C-rank', D: 'a D-rank' };
 
+/** Renown lost: a failed quest, and each member who died on it. */
+export function renownLoss(questRenown: number, failed: boolean, deaths: number): number {
+  return questRenown * ((failed ? GUILD.ranks.failedQuestRenown : 0) + deaths * GUILD.ranks.deathRenown);
+}
+
 /** One day in the life of the guild's other adventurers. Adds news to the guild. */
 export function simulateGuildDay(state: GameState, rng: Rng): void {
   const g = state.guild;
@@ -185,10 +268,12 @@ export function simulateGuildDay(state: GameState, rng: Rng): void {
   const news = (text: string) => g.news.push({ day, text });
   const people = new Set<string>([...g.rivals.flatMap((p) => p.members.map((m) => m.name)), ...g.pool.map((a) => a.character.name)]);
   const expected = expectedDailyLosses(state);
+  // New postings go up before the parties pick their quests.
+  postQuests(state, rng);
 
-  for (const p of [...g.rivals]) {
-    // Fame fades: the leaderboard follows recent success.
-    p.renown *= 1 - GUILD.renownDecayPerDay;
+  // A different party gets first pick of the board each day.
+  const order = [...g.rivals].map((p) => ({ p, k: rng() })).sort((a, b) => a.k - b.k).map((x) => x.p);
+  for (const p of order) {
     // Retirement.
     p.members = p.members.filter((m) => {
       if (rng() >= SIM.retireChancePerDay) return true;
@@ -196,33 +281,51 @@ export function simulateGuildDay(state: GameState, rng: Rng): void {
       return false;
     });
     if (p.members.length > 0 && rng() < SIM.questChancePerDay) {
-      const rank = rivalQuestRank(p, rng);
-      const chance = rivalSuccessChance(p, rank);
-      p.lastDay = day;
-      if (rng() < chance) {
-        const tier = GUILD.quests[rank];
-        p.renown += tier.renown * (0.8 + rng() * 0.4);
-        p.wins += 1;
-        p.last = `Day ${day}: completed ${QUEST_WORDS[rank]} quest`;
-        for (const m of p.members) if (m.level < SIM.maxLevel && rng() < SIM.levelUpChanceOnSuccess) m.level += 1;
-        const lost = p.members.filter(() => rng() < SIM.lossChanceOnSuccess);
-        if (lost.length) {
-          p.members = p.members.filter((m) => !lost.includes(m));
-          news(`${p.name} completed ${QUEST_WORDS[rank]} quest, but ${lost.map((m) => m.name).join(' and ')} did not come back.`);
-        }
-      } else {
-        p.losses += 1;
-        const outmatched = Math.max(0, SIM.rankDifficulty[rank] - avg(p.members.map((m) => m.level)));
-        if (rng() < SIM.wipeChanceOnFailure * (1 + outmatched * 0.5)) {
-          news(`${p.name} were wiped out on ${QUEST_WORDS[rank]} quest. (${p.members.map((m) => m.name).join(', ')})`);
-          p.members = [];
+      // With enough renown, a party tries its promotion quest once it's fairly sure of it;
+      // otherwise it takes the best deal it can handle from the board (or rests if there's none).
+      const up = nextRank(p.rank);
+      const promo = !!up && promotionReady(p.rank, p.renown) && rivalSuccessChance(p, up) >= 0.5;
+      const q = promo ? null : rivalPickQuest(p, g.board);
+      if (promo || q) {
+        if (q) g.board = g.board.filter((x) => x !== q);
+        const rank = q ? q.rank : up!;
+        const chance = q ? rivalQuestChance(p, q) : rivalSuccessChance(p, rank);
+        const renown = q ? q.renown : GUILD.quests[rank].renown;
+        const what = q ? `"${q.title}"` : `${QUEST_WORDS[rank]} promotion quest`;
+        const difficulty = q ? questDifficulty(q) : SIM.rankDifficulty[rank];
+        p.lastDay = day;
+        if (rng() < chance) {
+          p.renown += renown * (0.8 + rng() * 0.4);
+          p.wins += 1;
+          p.last = `Day ${day}: completed ${what}`;
+          if (promo) {
+            p.rank = rank;
+            p.belowSince = 0;
+            p.last = `Day ${day}: promoted to ${rank} rank`;
+            if (rank === 'A' || rank === 'B') news(`${p.name} passed their promotion quest and rose to ${rank} rank.`);
+          }
+          for (const m of p.members) if (m.level < SIM.maxLevel && rng() < SIM.levelUpChanceOnSuccess * SIM.levelUpFalloff ** (m.level - 1)) m.level += 1;
+          const lost = p.members.filter((m) => rng() < SIM.lossChanceOnSuccess * deathFactor(m.level));
+          if (lost.length) {
+            p.members = p.members.filter((m) => !lost.includes(m));
+            p.renown = Math.max(0, p.renown - renownLoss(renown, false, lost.length));
+            news(`${p.name} completed ${what}, but ${lost.map((m) => m.name).join(' and ')} did not come back.`);
+          }
         } else {
-          const lost = p.members.filter(() => rng() < SIM.lossChanceOnFailure * (1 + outmatched * 0.5));
-          p.members = p.members.filter((m) => !lost.includes(m));
-          p.last = `Day ${day}: failed ${QUEST_WORDS[rank]} quest`;
-          news(lost.length
-            ? `${p.name} failed ${QUEST_WORDS[rank]} quest and lost ${lost.map((m) => m.name).join(' and ')}.`
-            : `${p.name} failed ${QUEST_WORDS[rank]} quest and limped home.`);
+          p.losses += 1;
+          const outmatched = Math.max(0, difficulty - avg(p.members.map((m) => m.level)));
+          if (rng() < SIM.wipeChanceOnFailure * deathFactor(avg(p.members.map((m) => m.level))) * (1 + outmatched * 0.5)) {
+            news(`${p.name} were wiped out on ${what}. (${p.members.map((m) => m.name).join(', ')})`);
+            p.members = [];
+          } else {
+            const lost = p.members.filter((m) => rng() < SIM.lossChanceOnFailure * deathFactor(m.level) * (1 + outmatched * 0.5));
+            p.members = p.members.filter((m) => !lost.includes(m));
+            p.renown = Math.max(0, p.renown - renownLoss(renown, true, lost.length));
+            p.last = `Day ${day}: failed ${what}`;
+            news(lost.length
+              ? `${p.name} failed ${what} and lost ${lost.map((m) => m.name).join(' and ')}.`
+              : `${p.name} failed ${what} and limped home.`);
+          }
         }
       }
     }
@@ -241,8 +344,10 @@ export function simulateGuildDay(state: GameState, rng: Rng): void {
     }
     // Short-handed parties recruit from the hall (leaving some for the player); most like to be 4-5 strong.
     const want = p.members.length < 4 ? 0.3 : p.members.length < 5 ? 0.06 : 0;
-    if (g.pool.length > 4 && rng() < want) {
-      const avgLevel = avg(p.members.map((m) => m.level));
+    const avgLevel = avg(p.members.map((m) => m.level));
+    // Only someone near the party's level, unless it's down to the last two.
+    const fits = (a: FreeAdventurer) => p.members.length <= 2 || Math.abs(a.character.level - avgLevel) <= SIM.recruitLevelGap;
+    if (g.pool.length > 4 && rng() < want && g.pool.some(fits)) {
       g.pool.sort((a, b) => Math.abs(a.character.level - avgLevel) - Math.abs(b.character.level - avgLevel));
       const a = g.pool.shift()!;
       p.members.push({ name: a.character.name, level: a.character.level, weaponId: a.character.weaponId });
@@ -253,7 +358,7 @@ export function simulateGuildDay(state: GameState, rng: Rng): void {
 
   // Newcomers arrive at about the rate adventurers are lost, nudged toward the target headcount.
   const total = adventurerCount(state);
-  const nudge = Math.max(0.25, Math.min(4, (SIM.targetAdventurers / Math.max(1, total)) ** 2));
+  const nudge = Math.max(0.1, Math.min(4, (SIM.targetAdventurers / Math.max(1, total)) ** 4));
   const arrivals = poisson(expected * nudge, rng);
   for (let i = 0; i < arrivals; i++) {
     const a = freeAdventurer(newcomerLevel(rng), rng, people);
@@ -264,7 +369,7 @@ export function simulateGuildDay(state: GameState, rng: Rng): void {
 
   // Crowded halls form new parties (and there are fewer parties than usual).
   const formChance = g.rivals.length < SIM.targetParties - 1 ? 0.5
-    : g.pool.length > SIM.poolTarget * 1.5 && g.rivals.length < SIM.targetParties + 2 ? 0.2 : 0;
+    : g.pool.length > SIM.poolTarget * 1.5 && g.rivals.length < SIM.targetParties + 1 ? 0.2 : 0;
   if (g.pool.length >= SIM.poolTarget * 0.6 + 3 && rng() < formChance) {
     const size = Math.min(partySizeRoll(rng), g.pool.length - 3);
     if (size >= SIM.partySize[0]) {
@@ -279,7 +384,7 @@ export function simulateGuildDay(state: GameState, rng: Rng): void {
     }
   }
   // An overfull hall drifts away to other cities.
-  while (g.pool.length > SIM.poolTarget * 2) g.pool.splice(Math.floor(rng() * g.pool.length), 1);
+  while (g.pool.length > SIM.poolTarget * 1.5) g.pool.splice(Math.floor(rng() * g.pool.length), 1);
 
   // Patience recovers overnight.
   for (const a of g.pool) a.patience = Math.min(GUILD.companion.patience, a.patience + 1);
