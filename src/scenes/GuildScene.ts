@@ -4,7 +4,7 @@ import { GUILD } from '../data/guild';
 import type { FreeAdventurer, Quest } from '../data/types';
 import { acceptQuest, canTakeQuest, lineupMembers, toggleLineup } from '../game/city';
 import { joinParty, mercenaryRates, rosterFull, talentPriceFactor } from '../game/contracts';
-import { adventurerCount, leaderboard } from '../game/guild';
+import { adventurerCount, adventurerRank, leaderboard, nextRank, rankThreshold } from '../game/guild';
 import { markDirty, requireState, session } from '../game/session';
 import { cityHeader, rankBadge } from '../ui/hud';
 import { COLORS, HEIGHT, ScrollList, WIDTH, button, confirmDialog, figure, panel, setupCamera, talentTag, text, toast, type ScrollItem } from '../ui/widgets';
@@ -54,9 +54,10 @@ export class GuildScene extends Phaser.Scene {
   private board(): void {
     const state = requireState();
     const lineup = lineupMembers(state);
+    const up = nextRank(state.rank);
     const status = state.quest
       ? `Accepted: ${state.quest.title}. Set out from the city screen.`
-      : `Your party is ${state.rank} rank: it can take ${state.rank}-rank quests and below.`;
+      : `Your party is ${state.rank} rank: it can take ${state.rank}-rank quests and below.${up ? ` ${up}-rank promotion quest at ${rankThreshold(up)} renown (you have ${Math.round(state.renown)}).` : ''}`;
     text(this, 20, 118, status, { fontSize: '14px', color: state.quest ? COLORS.gold : COLORS.text });
     text(this, 20, 138, `Lineup (${lineup.length}/${MAX_PARTY_SIZE}): ${lineup.map((c) => `${c.name} Lv${c.level}`).join(', ')}   (change it in Manage Party)`, {
       fontSize: '12px', color: COLORS.dim,
@@ -72,14 +73,15 @@ export class GuildScene extends Phaser.Scene {
     const state = requireState();
     const allowed = canTakeQuest(state, q);
     panel(this, x, y, 460, 146, allowed ? COLORS.panel : 0x141722);
+    if (q.promotion) this.add.rectangle(x, y, 460, 146).setOrigin(0).setStrokeStyle(2, COLORS.accent);
     rankBadge(this, x + 12, y + 12, q.rank, 28);
     text(this, x + 50, y + 12, q.title, { fontSize: '17px', color: allowed ? COLORS.text : COLORS.dim, wordWrap: { width: 396 } });
-    text(this, x + 50, y + 36, `Stage ${q.stage} · ${q.days} day${q.days > 1 ? 's' : ''} away · on the board until day ${q.expires}`, { fontSize: '12px', color: COLORS.dim });
+    text(this, x + 50, y + 36, `${q.promotion ? 'PROMOTION · ' : ''}Enemy level ${q.stage} · ${q.days} day${q.days > 1 ? 's' : ''} away${q.promotion ? '' : ` · on the board until day ${q.expires}`}`, { fontSize: '12px', color: COLORS.dim });
     text(this, x + 12, y + 58, q.description, { fontSize: '13px', wordWrap: { width: 436 }, color: allowed ? COLORS.text : COLORS.dim });
     text(this, x + 12, y + 110, `${q.reward} gold`, { fontSize: '18px', color: COLORS.gold });
     text(this, x + 120, y + 114, `Renown +${q.renown}`, { fontSize: '13px', color: COLORS.dim });
     if (!allowed) {
-      text(this, x + 448, y + 116, `Requires ${q.rank} rank`, { fontSize: '13px', color: COLORS.bad }).setOrigin(1, 0);
+      text(this, x + 448, y + 116, q.promotion ? `Needs ${rankThreshold(q.rank)} renown` : `Requires ${q.rank} rank`, { fontSize: '13px', color: COLORS.bad }).setOrigin(1, 0);
       return;
     }
     button(this, x + 318, y + 102, 130, 34, 'Accept', () => {
@@ -116,7 +118,7 @@ export class GuildScene extends Phaser.Scene {
     row.add(name);
     // Talent: a talented adventurer asks more.
     row.add(talentTag(this, 64 + name.width + 12, 10, c, { fontSize: 12, detail: false }));
-    row.add(text(this, 64, 28, `Level ${c.level} · ${WEAPONS[c.weaponId].name}`, { fontSize: '13px', color: COLORS.gold }));
+    row.add(text(this, 64, 28, `Level ${c.level} (${adventurerRank(c.level)}-rank) · ${WEAPONS[c.weaponId].name}`, { fontSize: '13px', color: COLORS.gold }));
     row.add(talentTag(this, 64, 47, c, { fontSize: 11, overall: false, sep: '   ' }));
     row.add(text(this, 64, 64, c.skillIds.map((s) => SKILLS[s].name).join(', ') || 'No tree skills yet', { fontSize: '12px', color: COLORS.dim, wordWrap: { width: 300 } }));
     const rates = mercenaryRates(c.level, a.greed, talentPriceFactor(c));
@@ -158,7 +160,7 @@ export class GuildScene extends Phaser.Scene {
     const board = leaderboard(state);
     const counts = { A: 0, B: 0, C: 0, D: 0 };
     for (const e of board) counts[e.rank] += 1;
-    text(this, 20, 118, `${board.length} parties · ${adventurerCount(state)} active adventurers · A ${counts.A}, B ${counts.B}, C ${counts.C}, D ${counts.D}. Ranks follow the leaderboard; renown fades over time.`, {
+    text(this, 20, 118, `${board.length} parties · ${adventurerCount(state)} active adventurers · A ${counts.A}, B ${counts.B}, C ${counts.C}, D ${counts.D}. Rank up at C ${GUILD.ranks.renown.C} / B ${GUILD.ranks.renown.B} / A ${GUILD.ranks.renown.A} renown + a promotion quest.`, {
       fontSize: '13px', wordWrap: { width: 920 },
     });
     panel(this, 16, 144, WIDTH - 32, HEIGHT - 160);

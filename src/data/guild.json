@@ -1,30 +1,48 @@
 {
-  "_readme": "Management and simulation numbers for Arch City and its Adventurer Guild. Gold amounts are whole numbers. upkeep.foodLodgingPerDay is what each person the party feeds and houses costs on days spent away (quests); each day in the city ends with a night at an inn (priced per person by inns) or sleeping outside (see lodging). Ranks come from the leaderboard: parties are sorted by renown and the top rankShares.A share are A rank, the next rankShares.B are B, and so on (renown fades by renownDecayPerDay so ranks follow recent success). Quests: stages is the enemy strength range (the same stages battles always used), reward a gold range, days how long the trip takes. companion.expectedWeeklyLoot is how much gold a candidate thinks a party of that rank earns per week; they use it to value a loot cut. simulation tunes the rival parties: the chance a party goes on a quest each day, its chance of success (0.55 + successPerLevel x (average level - rankDifficulty), clamped), and what can go wrong. New adventurers arrive at about the rate adventurers are lost, nudged toward targetAdventurers.",
+  "_readme": "Management and simulation numbers for Arch City and its Adventurer Guild. Gold amounts are whole numbers. upkeep.foodLodgingPerDay is what each person the party feeds and houses costs on days spent away (quests); each day in the city ends with a night at an inn (priced per person by inns) or sleeping outside (see lodging). Party ranks come from renown (see ranks). Quests: stages is the enemy level range (an adventurer rank's levels; see adventurerRanks), reward a gold range, days how long the trip takes. companion.expectedWeeklyLoot is how much gold a candidate thinks a party of that rank earns per week; they use it to value a loot cut. simulation tunes the rival parties: the chance a party goes on a quest each day, its chance of success (0.55 + successPerLevel x (average level - rankDifficulty), clamped), and what can go wrong. Each member levels up after a success with levelUpChanceOnSuccess x levelUpFalloff^(level - 1), so high levels come slowly. A party tries its promotion quest once it has the renown and at least a 50% chance. New adventurers arrive at about the rate adventurers are lost, nudged toward targetAdventurers.",
   "city": "Arch City",
   "startingGold": 500,
   "startingRenown": 0,
-  "maxRoster": 8,
-  "rankShares": { "A": 0.05, "B": 0.2, "C": 0.6, "D": 0.15 },
-  "renownDecayPerDay": 0.015,
+  "maxRoster": 12,
+  "startingRankShares": { "A": 0.05, "B": 0.2, "C": 0.6, "D": 0.15 },
+  "_startingRankShares": "How the rival parties are spread over the ranks when a new game starts. After that, ranks follow renown (see ranks).",
+  "ranks": {
+    "_comment": "Party ranks. renown: the renown a party needs for each rank (D needs none). Reaching the next rank's renown puts a promotion quest of that rank on the board; completing it promotes the party. A party whose renown stays below its own rank's threshold for demotionDays days in a row drops a rank. Renown doesn't fade: a failed quest loses failedQuestRenown x that quest's renown, and each member who dies loses deathRenown x the quest's renown.",
+    "renown": { "C": 100, "B": 400, "A": 1600 },
+    "demotionDays": 7,
+    "failedQuestRenown": 1,
+    "deathRenown": 0.5
+  },
+  "adventurerRanks": {
+    "_comment": "An adventurer's own rank comes from their level: the level each rank starts at (below C is D). Quests of a rank have enemies of that rank's levels, and parties of a rank are made of adventurers of about that rank.",
+    "C": 6, "B": 11, "A": 16, "S": 21
+  },
   "boardSize": 6,
   "quests": {
-    "D": { "stages": [1, 2], "reward": [70, 110], "renown": 14, "days": [1, 2] },
-    "C": { "stages": [2, 4], "reward": [170, 280], "renown": 32, "days": [1, 3] },
-    "B": { "stages": [4, 6], "reward": [380, 600], "renown": 75, "days": [2, 3] },
-    "A": { "stages": [6, 8], "reward": [850, 1300], "renown": 170, "days": [2, 4] }
+    "D": { "stages": [1, 5], "reward": [70, 110], "renown": 14, "days": [1, 2] },
+    "C": { "stages": [6, 10], "reward": [170, 280], "renown": 32, "days": [1, 3] },
+    "B": { "stages": [11, 15], "reward": [380, 600], "renown": 75, "days": [2, 3] },
+    "A": { "stages": [16, 20], "reward": [850, 1300], "renown": 170, "days": [2, 4] }
   },
   "upkeep": { "foodLodgingPerDay": 4 },
   "inns": {
     "standard": { "name": "Sleeping Griffin Inn", "pricePerPerson": 4, "drinksPerPerson": 2, "drinksMorale": 8 },
+    "highEnd": { "name": "Silver Lantern Inn", "pricePerPerson": 8, "drinksPerPerson": 4, "drinksMorale": 12 },
     "luxury": { "name": "Gilded Crown Inn", "pricePerPerson": 15, "drinksPerPerson": 6, "drinksMorale": 15 }
   },
   "_inns": "drinksPerPerson / drinksMorale: a round of drinks for the whole party (once a day) costs drinksPerPerson per member and raises everyone's Morale by drinksMorale.",
   "lodging": {
-    "_comment": "Every day ends with a night somewhere: an inn, or sleeping outside (free). Adventurers expect a standard inn below luxuryFromLevel and the luxury inn from it. Each night, housed companions (food & lodging in their contract) gain relationshipAbove when the party sleeps better than they expect, and lose relationshipBelowPerStep for each step worse (luxury > standard > outside). Nights on the road during multi-day quests cost upkeep.foodLodgingPerDay and don't count.",
-    "luxuryFromLevel": 6,
+    "_comment": "Every day ends with a night somewhere: an inn, a residence the party owns (free), or sleeping outside (free). Night quality: outside 0; the Sleeping Griffin or an Outer Ring residence 1; the Silver Lantern or a Middle Ring residence 2; the Gilded Crown or an Inner Ring residence 3. expectedQuality is what an adventurer of each rank (from their level) expects. Each night, housed companions (food & lodging in their contract) gain relationshipAbove when the party sleeps better than they expect, and lose relationshipBelowPerStep for each step worse. Nights on the road during multi-day quests cost upkeep.foodLodgingPerDay and don't count.",
+    "expectedQuality": { "D": 0, "C": 1, "B": 2, "A": 3, "S": 3 },
     "relationshipAbove": 2,
     "relationshipBelowPerStep": 3,
     "outsidePerPerson": 0
+  },
+  "residences": {
+    "_comment": "Homes the party can buy, one per ring. Nights there are free and count as that ring's quality (see lodging).",
+    "outer": { "name": "Outer Ring Residence", "price": 2000 },
+    "middle": { "name": "Middle Ring Residence", "price": 10000 },
+    "inner": { "name": "Inner Ring Residence", "price": 50000 }
   },
   "condition": {
     "_comment": "Health (0-100, not battle HP) and Morale (0-100) of party members. After a battle, Health drops by maxHealthLoss x the share of HP the unit lost at its lowest point (falling = the full amount). Below 100 Health a member is injured and can't go on quests; everyone recovers healthPerDay each night. A member whose Health reaches 0 dies (the main character is left at 1 instead). Morale changes: moralePerQuest for each member who goes on a quest, moraleFailedQuest more if it fails, moralePerHealthLost per Health point lost to injuries, moraleMemberDied for everyone when a member dies. New members start at startingMorale. Below lowMorale, companions lose lowMoraleRelationshipPerDay relationship each day; a member at 0 Morale leaves the party (not the main character).",
@@ -77,13 +95,14 @@
     "poolTarget": 10,
     "partySize": [3, 6],
     "questChancePerDay": 0.25,
-    "rankDifficulty": { "D": 1.5, "C": 3.5, "B": 5.5, "A": 7.5 },
+    "rankDifficulty": { "D": 2, "C": 7, "B": 12, "A": 17 },
     "successPerLevel": 0.18,
-    "lossChanceOnSuccess": 0.015,
-    "lossChanceOnFailure": 0.12,
-    "wipeChanceOnFailure": 0.1,
-    "levelUpChanceOnSuccess": 0.07,
-    "retireChancePerDay": 0.0005,
-    "maxLevel": 12
+    "lossChanceOnSuccess": 0.004,
+    "lossChanceOnFailure": 0.06,
+    "wipeChanceOnFailure": 0.04,
+    "levelUpChanceOnSuccess": 0.1,
+    "levelUpFalloff": 0.95,
+    "retireChancePerDay": 0.001,
+    "maxLevel": 25
   }
 }

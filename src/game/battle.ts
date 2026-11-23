@@ -4,6 +4,7 @@ import { ENCOUNTER, ENEMIES } from '../data/enemies';
 import { STAT_CONFIG, type StatConfig } from '../data/stats';
 import { DAMAGE_TYPES, type Character, type DamagePart, type DamageType, type LosRule, type SkillDef, type StatKey, type Stats, type ZoneDef } from '../data/types';
 import { allSkills, deriveStats, modelFor, newId, type Rng } from './character';
+import { injuryPenalty } from './condition';
 import { losFor, minRangeFor, rangeFor, type ReachContext } from './reach';
 import {
   DIRS, DIRS8, EPS, TERRAIN, coneTiles, dist, hasLineOfSight, inBounds, key, passable, tilesBetween, withinRange,
@@ -134,6 +135,9 @@ export function victoryXp(_stage: number): number {
 
 export function makeUnit(character: Character, team: Team, pos: Point): Unit {
   const stats = deriveStats(character);
+  // Injured adventurers (Strategic Layer Health below 100) fight with every stat lowered.
+  const penalty = character.enemyType ? 0 : injuryPenalty(character);
+  if (penalty > 0) for (const k of Object.keys(stats) as StatKey[]) stats[k] = Math.round(stats[k] * (1 - penalty));
   return {
     uid: newId('u'),
     team,

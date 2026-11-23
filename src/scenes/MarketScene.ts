@@ -3,6 +3,7 @@ import { SKILLS, WEAPONS } from '../data/content';
 import { GUILD } from '../data/guild';
 import type { Offer } from '../data/types';
 import { buySlave, registerPrisoner, turnInPrisoner } from '../game/city';
+import { adventurerRank } from '../game/guild';
 import { markDirty, requireState, session } from '../game/session';
 import { cityHeader } from '../ui/hud';
 import { COLORS, HEIGHT, ScrollList, WIDTH, button, confirmDialog, figure, panel, setupCamera, talentTag, text, toast, type ScrollItem } from '../ui/widgets';
@@ -63,7 +64,7 @@ export class MarketScene extends Phaser.Scene {
     const name = text(this, 64, 6, c.name, { fontSize: '16px' });
     row.add(name);
     row.add(talentTag(this, 64 + name.width + 12, 9, c, { fontSize: 12, detail: false }));
-    row.add(text(this, 64, 26, `Level ${c.level} · ${WEAPONS[c.weaponId].name}`, { fontSize: '13px', color: COLORS.gold }));
+    row.add(text(this, 64, 26, `Level ${c.level} (${adventurerRank(c.level)}-rank) · ${WEAPONS[c.weaponId].name}`, { fontSize: '13px', color: COLORS.gold }));
     if (!compact) row.add(talentTag(this, 64, 45, c, { fontSize: 11, overall: false, sep: '   ' }));
     row.add(text(this, 64, compact ? 46 : 62, c.skillIds.map((s) => SKILLS[s].name).join(', ') || 'No tree skills yet', {
       fontSize: '12px', color: COLORS.dim, wordWrap: { width: compact ? 260 : 270 },

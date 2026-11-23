@@ -209,6 +209,7 @@ function validateQuest(raw: unknown, path: string): Quest {
     days: int(o.days, `${path}.days`, 1, 60),
     expires: int(o.expires, `${path}.expires`),
     description: typeof o.description === 'string' ? o.description : '',
+    ...(o.promotion === true ? { promotion: true } : {}),
   };
 }
 
@@ -219,6 +220,7 @@ function validateRival(raw: unknown, path: string): RivalParty {
     name: str(o.name, `${path}.name`, 60),
     renown: num(o.renown, `${path}.renown`),
     rank: oneOf(o.rank, RANKS, `${path}.rank`),
+    ...(typeof o.belowSince === 'number' ? { belowSince: Math.max(0, Math.floor(o.belowSince)) } : {}),
     members: arr(o.members, `${path}.members`).map((m, i) => {
       const mo = obj(m, `${path}.members[${i}]`);
       return {
@@ -259,6 +261,8 @@ function validateSchedule(raw: unknown, party: Character[]): GameState['schedule
   }
   return out;
 }
+
+const RINGS = ['outer', 'middle', 'inner'] as const;
 
 function validateState(raw: Record<string, unknown>): GameState {
   const progress = obj(raw.progress, 'progress');
@@ -313,6 +317,8 @@ function validateState(raw: Record<string, unknown>): GameState {
     questMembers: raw.questMembers === undefined ? [] : arr(raw.questMembers, 'questMembers').filter((id): id is string => typeof id === 'string'),
     schedule: validateSchedule(raw.schedule, party),
     drinksDay: raw.drinksDay === undefined ? 0 : int(raw.drinksDay, 'drinksDay'),
+    belowRankSince: raw.belowRankSince === undefined ? 0 : int(raw.belowRankSince, 'belowRankSince'),
+    residences: raw.residences === undefined ? [] : [...new Set(arr(raw.residences, 'residences').map((r, i) => oneOf(r, RINGS, `residences[${i}]`)))],
     log: validateNews(raw.log ?? [], 'log'),
   };
   tidyLineup(state);

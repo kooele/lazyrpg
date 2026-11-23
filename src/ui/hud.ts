@@ -4,6 +4,7 @@ import { GUILD } from '../data/guild';
 import type { Character, GameState, Rank } from '../data/types';
 import { boarders, isPayday, weeklyWages } from '../game/city';
 import { daysLeft, isCompanion } from '../game/contracts';
+import { nextRank, rankThreshold } from '../game/guild';
 import { session } from '../game/session';
 import { COLORS, WIDTH, panel, text } from './widgets';
 
@@ -35,7 +36,7 @@ export function memberStatus(state: GameState, c: Character): string {
 /** The status bar along the top of every city screen. */
 export function cityHeader(scene: Phaser.Scene, state: GameState, title: string): void {
   panel(scene, 0, 0, WIDTH, 64, 0x131726);
-  text(scene, 20, 10, title, { fontSize: '28px', color: COLORS.gold });
+  text(scene, 20, title.length > 18 ? 14 : 10, title, { fontSize: title.length > 18 ? '22px' : '28px', color: COLORS.gold });
   const sub = `${GUILD.city}  ·  Day ${state.day} (week ${Math.ceil(state.day / 7)})`;
   text(scene, 22, 42, sub, { fontSize: '13px', color: COLORS.dim });
   const toPay = (7 - (state.day % 7)) % 7;
@@ -47,5 +48,8 @@ export function cityHeader(scene: Phaser.Scene, state: GameState, title: string)
   text(scene, WIDTH - 20, 36, right[1], { fontSize: '12px', color: COLORS.dim }).setOrigin(1, 0);
   rankBadge(scene, 330, 16, state.rank, 32);
   text(scene, 372, 12, state.partyName, { fontSize: '15px' });
-  text(scene, 372, 34, `${state.rank}-rank party · Renown ${Math.round(state.renown)}${session.dirty ? ' · unsaved' : ''}`, { fontSize: '12px', color: COLORS.dim });
+  const up = nextRank(state.rank);
+  const below = state.renown < rankThreshold(state.rank);
+  const renown = `Renown ${Math.round(state.renown)}${up ? `/${rankThreshold(up)}` : ''}${below ? ` · below ${state.rank} (${rankThreshold(state.rank)})!` : ''}`;
+  text(scene, 372, 34, `${state.rank}-rank party · ${renown}${session.dirty ? ' · unsaved' : ''}`, { fontSize: '12px', color: below ? COLORS.bad : COLORS.dim });
 }

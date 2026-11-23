@@ -312,8 +312,12 @@ export interface Character {
 
 // ---- management: contracts, the guild, Arch City ----------------------------------------
 
+/** Party and quest ranks, best first. */
 export type Rank = 'A' | 'B' | 'C' | 'D';
 export const RANKS: readonly Rank[] = ['A', 'B', 'C', 'D'];
+/** An adventurer's own rank, from their level (S is beyond the party ranks). */
+export type AdventurerRank = 'S' | Rank;
+export const ADVENTURER_RANKS: readonly AdventurerRank[] = ['S', 'A', 'B', 'C', 'D'];
 
 /**
  * main      – the player's own character: permanent, can't be dismissed.
@@ -373,6 +377,8 @@ export interface RivalParty {
   /** Day of the last quest, and what happened. */
   lastDay: number;
   last: string;
+  /** First day of the current stretch below its rank's renown threshold (0 = not below). */
+  belowSince?: number;
 }
 
 /** An unaffiliated adventurer at the guild: can be hired as a mercenary or signed as a companion. */
@@ -399,6 +405,8 @@ export interface Quest {
   /** Last day it can be accepted. */
   expires: number;
   description: string;
+  /** A promotion quest: completing it raises the party to the quest's rank. */
+  promotion?: boolean;
 }
 
 export interface NewsItem {
@@ -457,6 +465,10 @@ export interface GameState {
   schedule: Record<string, 'recover' | 'training' | 'oddJobs' | 'dayOff'>;
   /** Day the party last bought a round of drinks (once a day). */
   drinksDay: number;
+  /** First day of the current stretch below the rank's renown threshold (0 = not below). A full week drops a rank. */
+  belowRankSince: number;
+  /** City rings where the party owns a residence. */
+  residences: ('outer' | 'middle' | 'inner')[];
   /** Messages for the player (newest last). */
   log: NewsItem[];
 }

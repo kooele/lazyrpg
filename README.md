@@ -6,7 +6,7 @@ A small turn-based tactical RPG that runs in the browser, built with [Phaser 4](
 
 1. **Main menu**: New Game, Continue, Save Game, Load Game, and **Quick Battle (Demo)**: the original game on its own. Recruit up to 4 Adventurers for free at a camp (any look, weapon and skills), then fight stages 1 to 5; every victory is worth a level, and clearing stage 5 completes the demo. The **Enemies** slider at camp raises the difficulty: it multiplies the encounter's size from 1x to 5x in 0.5 steps (5x at stage 1 with 4 heroes is 40 rats). Big encounters deploy further toward the middle of the map. The demo is separate from your Arch City campaign and isn't saved.
 2. **Your character**: a new game starts by creating your main character (name, sex, skin, face, hair, hair colour, clothes colour, weapon, skills) and naming your party. The main character is permanent: they can't be dismissed and always lead the party on quests.
-3. **Arch City**: the hub is a map of the walled city (`public/art/city/arch-city.webp`) with three tabs: **Outer Ring** (Adventurer Guild, Docks, Marketplace, Slave Market, Slums, Customs Office, Sleeping Griffin Inn), **Middle Ring** (Tailor, Auction House, Library, Church) and **Inner Ring** (Lord's Manor, Central Government Office, Central Church, Gilded Crown Inn). Click a pin on the map or a button below it. Open so far: the **Adventurer Guild**, the **Slave Market** and the two **inns**; the rest are greyed out. **Manage Party** (bottom bar) handles your members and their schedule, **Sleep outside** ends the day for free, and the side panel sets out on an accepted quest. See [Arch City and the guild](#arch-city-and-the-adventurer-guild).
+3. **Arch City**: the hub is a map of the walled city (`public/art/city/arch-city.webp`) with three tabs: **Outer Ring** (Adventurer Guild, Docks, Marketplace, Slave Market, Slums, Customs Office, Sleeping Griffin Inn, Outer Ring Residence), **Middle Ring** (Tailor, Auction House, Library, Church, Silver Lantern Inn, Middle Ring Residence) and **Inner Ring** (Lord's Manor, Central Government Office, Central Church, Gilded Crown Inn, Inner Ring Residence). Click a pin on the map or a button below it. Open so far: the **Adventurer Guild**, the **Slave Market**, the three **inns** and the three **residences**; the rest are greyed out. **Manage Party** (bottom bar) handles your members and their schedule, **Sleep outside** ends the day for free, and the side panel sets out on an accepted quest. See [Arch City and the guild](#arch-city-and-the-adventurer-guild).
 4. **Adventurers**: There are no fixed classes. Every party member is an Adventurer, and you build them by mixing a weapon with picks from the skill trees. Up to 4 go on each quest (the lineup); the party can have up to 8 members.
 5. **Tactical battle**: XCOM-style alternating turns. On your turn, every Adventurer has **2 AP** (action points), a movement AP and an action AP, and can spend them in any order (click a unit or press Tab). See [Action points and mana](#action-points-and-mana). Skills sit on the **skill bar** under the map: press **1–0** (or click a slot) to use one. By default slot 1 is the basic attack, 2 Overwatch, 3 Dash, and the rest follow; newly learned skills go after the last used slot. **Drag a slot onto another** to swap them (the layout is saved per character). With more than 10 skills the bar gets more pages: flip with ▲ ▼ or **[ ]**, and while dragging, hover ▲ ▼ to carry a skill to another page (or to a new empty one). The battle log is in the sidebar. Hover a skill to see its range box; any tile in range can be targeted. The map is 18×13 tiles (set in `stats.json`). Terrain: grass costs 4 Movement, forest 6 (and gives +20 Defense), river 8. Rock and deep water block movement, and rock blocks line of sight.
 
@@ -14,23 +14,27 @@ A small turn-based tactical RPG that runs in the browser, built with [Phaser 4](
 
 The management and simulation side of the game (Arch City, the guild, contracts, days) is the **Strategic Layer**; battles are the **Tactical Layer**.
 
-Time passes in days, and **every day ends with a night somewhere**: an **inn** (1 night, 3 nights or a week), or **sleeping outside** (free; button in the city's bottom bar). A quest doesn't end the day: the party comes back in the evening and still needs a bed, and you can only go on **one quest a day** (you can accept the next one, but set out tomorrow). A quest that takes several days spends the nights before the last on the road. The party pays food and lodging for the main character, slaves, and companions whose contract includes it:
+Time passes in days, and **every day ends with a night somewhere**: an **inn** (1 night, 3 nights or a week), a **residence** the party owns, or **sleeping outside** (free; button in the city's bottom bar). A quest doesn't end the day: the party comes back in the evening and still needs a bed, and you can only go on **one quest a day** (you can accept the next one, but set out tomorrow). A quest that takes several days spends the nights before the last on the road. The party pays food and lodging for the main character, slaves, and companions whose contract includes it:
 
-| Where | Per person per night |
-|---|---|
-| Sleeping Griffin Inn (Outer Ring) | 4 gold |
-| Gilded Crown Inn (Inner Ring) | 15 gold |
-| Sleeping outside | free |
-| On the road (multi-day quests) | 4 gold |
+| Where | Per person per night | Quality |
+|---|---|---|
+| Sleeping outside | free | 0 |
+| Sleeping Griffin Inn (Outer Ring) | 4 gold | 1 |
+| Silver Lantern Inn (Middle Ring, high-end) | 8 gold | 2 |
+| Gilded Crown Inn (Inner Ring, luxury) | 15 gold | 3 |
+| Your residence (Outer / Middle / Inner Ring) | free | 1 / 2 / 3 |
+| On the road (multi-day quests) | 4 gold | doesn't count |
 
-**Expectations**: adventurers of level 1–5 expect a regular inn, level 6+ the high-end Gilded Crown. Each night, every companion the party houses gains **+2 relationship** if they slept better than they expect, and loses **3 per step** worse (high-end > regular > outside): a level 6+ companion loses 3 at the Sleeping Griffin and 6 outside. Nights on the road don't count. (`lodging` in `guild.json`.)
+**Residences** can be bought from their pins on the city map: **Outer Ring 2,000 gold**, **Middle Ring 10,000**, **Inner Ring 50,000**. Nights there are free and count as good as that ring's inn.
+
+**Expectations** follow each adventurer's rank (see below): **D**-rank adventurers are fine sleeping outside, **C** expect an inn or Outer Ring residence, **B** a high-end inn or Middle Ring residence, **A** and **S** the luxury inn or Inner Ring residence. Each night, every companion the party houses gains **+2 relationship** if they slept better than they expect, and loses **3 per quality step** worse: an A-rank companion loses 9 for a night outside. (`lodging` and `residences` in `guild.json`.)
 
 ### Health, Morale and the schedule
 
 Party members have two Strategic Layer stats, both out of 100 (`condition` and `schedule` in `guild.json`):
 
-- **Health** is not battle HP. After a battle, each member loses up to **60 Health** depending on the lowest HP they were taken down to (at half HP: −30; falling: the full 60). Below 100 Health a member is **injured** and can't go on quests (an injured leader means no quests at all). Everyone recovers **10 Health a night**. A member whose Health reaches **0 dies**; the main character pulls through at 1 Health instead. (Members only go on quests at full Health, so a battle can only kill when `maxHealthLoss` is 100 or more.)
-- **Morale** drops for each member who goes on a quest (−5), more if it fails (−10), with injuries (−1 per 5 Health lost), and for everyone when a party member dies (−15). It comes back with **drinks** (a round for the whole party at an inn, once a day: Sleeping Griffin 2 gold a head for +8, Gilded Crown 6 gold a head for +15) and **days off**. Below **50 Morale**, a companion loses **2 relationship every day**. At **0 Morale** a member **leaves the party** (companions and slaves go to the guild hall; the main character stays).
+- **Health** is not battle HP. After a battle, each member loses up to **60 Health** depending on the lowest HP they were taken down to (at half HP: −30; falling: the full 60). Below 100 Health a member is **injured**: they can still go on quests, but **every stat drops by 1/3 of their missing Health** in battle (Health 70 = −10%). Everyone recovers **10 Health a night**. A member whose Health reaches **0 dies** (so an injured member who falls again can die); the main character pulls through at 1 Health instead.
+- **Morale** drops for each member who goes on a quest (−5), more if it fails (−10), with injuries (−1 per 5 Health lost), and for everyone when a party member dies (−15). It comes back with **drinks** (a round for the whole party at an inn, once a day: Sleeping Griffin 2 gold a head for +8, Silver Lantern 4 for +12, Gilded Crown 6 for +15) and **days off**. Below **50 Morale**, a companion loses **2 relationship every day**. At **0 Morale** a member **leaves the party** (companions and slaves go to the guild hall; the main character stays).
 
 The **schedule** (Manage Party) sets what each member does on days they aren't on a quest. It runs when the day ends; members who went on that day's quest skip it.
 
@@ -47,22 +51,26 @@ Every 7th day is **payday** for companions.
 
 ### Ranks, the leaderboard and quests
 
-The guild typically has about **100 active adventurers in 20 parties**. The **Leaderboard** lists every party by renown, and your rank comes from your position: the top 5% are **A** rank, the next 20% **B**, the next 60% **C** and the bottom 15% **D**. Your party starts at D. Completing a quest earns renown, and renown fades a little each day (1.5%), so ranks reflect recent success.
+**Adventurer ranks** come from level: **D** 1–5, **C** 6–10, **B** 11–15, **A** 16–20, **S** 21+ (`adventurerRanks` in `guild.json`). They're shown next to every adventurer's level.
 
-The **Quest Board** always has 6 quests, mostly at your rank, some below and some above. You can take quests at your rank or below; the ones above are shown locked so you can see what's coming. Each quest has an enemy strength (the stage), a gold reward, renown, and how many days it takes.
+**Party ranks** (D to A) come from **renown**: **C at 100**, **B at 400**, **A at 1600** (`ranks` in `guild.json`). Reaching the next rank's renown posts that rank's **promotion quest** on the Quest Board (gold frame); completing it promotes the party. Renown doesn't fade: completing a quest earns it, **failing a quest loses that quest's renown**, and **each party member who dies loses half of it**. A party that stays **below its rank's renown for a full week drops a rank**. The **Leaderboard** lists every party by rank, then renown. Your party starts at D. Parties hold up to **12 members** and take up to **5** on a quest.
 
-| Rank | Stages | Reward | Renown |
+The **Quest Board** always has 6 quests, mostly at your rank, some below and some above. You can take quests at your rank or below; the ones above are shown locked so you can see what's coming. Quests of a rank have enemies of that rank's levels:
+
+| Rank | Enemy levels | Reward | Renown |
 |---|---|---|---|
-| D | 1–2 | 70–110 | 14 |
-| C | 2–4 | 170–280 | 32 |
-| B | 4–6 | 380–600 | 75 |
-| A | 6–8 | 850–1300 | 170 |
+| D | 1–5 | 70–110 | 14 |
+| C | 6–10 | 170–280 | 32 |
+| B | 11–15 | 380–600 | 75 |
+| A | 16–20 | 850–1300 | 170 |
 
-XP from a won quest depends on the stage against each member's level: 100 XP at an equal level, up to 200 for punching above it, and as little as 15 for easy work.
+Enemy types only go up to level 5 for now (bandits); higher-level quests use the toughest types at their top level in bigger numbers until new types are added.
+
+XP from a won quest depends on the enemy level against each member's level: 100 XP at an equal level, up to 200 for punching above it, and as little as 15 for easy work.
 
 ### The other parties
 
-The rival parties are simulated day by day. Each day a party has a 25% chance of going on a quest: the hardest rank at or below its own that it's fairly sure of, and now and then one rank up. Success earns renown and sometimes a level. Failure can cost members (they die or quit), and a badly outmatched party can be **wiped out** and removed. Parties of one break up, and the survivor goes back to the guild hall. New adventurers arrive at about the rate adventurers are lost, nudged toward 100. When the hall gets crowded (or there are fewer than usual parties), they band together as a **new D-rank party**. **Guild News** reports all of this.
+The rival parties are simulated day by day. A new game starts them spread over the ranks (5% A, 20% B, 60% C, 15% D), each made of adventurers of about its rank. Each day a party has a 25% chance of going on a quest: the hardest rank at or below its own that it's fairly sure of. Success earns renown and sometimes a level (less often at high levels). With enough renown, a party takes its promotion quest once it has at least an even chance. Failure costs renown and can cost members (they die or quit), and a badly outmatched party can be **wiped out** and removed. Parties of one break up, and the survivor goes back to the guild hall. New adventurers (mostly fresh recruits, now and then a veteran) arrive at about the rate adventurers are lost, nudged toward 100. When the hall gets crowded (or there are fewer than usual parties), they band together as a **new D-rank party**. **Guild News** reports all of this.
 
 ### Party members
 

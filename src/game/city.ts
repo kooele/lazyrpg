@@ -2,17 +2,17 @@
 // Pure logic (no Phaser): scenes call these and show the messages they return.
 import { MAX_PARTY_SIZE } from '../data/content';
 import { ENEMIES } from '../data/enemies';
-import { GUILD, type InnTier, type Lodging } from '../data/guild';
+import { GUILD, isResidence, type InnTier, type Lodging, type Ring } from '../data/guild';
 import { STAT_CONFIG } from '../data/stats';
 import { RANKS, type Character, type GameState, type Quest, type Rank } from '../data/types';
 import { enemyTypesForStage } from './battle';
 import { grantXp, newId, type Rng } from './character';
 import { bounty, canFight, isCompanion, isExpired, leaveParty, slavePrice, talentPriceFactor } from './contracts';
 import {
-  ACTIVITY_INFO, activityOf, changeHealth, changeMorale, expectedInn, healthLoss, healthOf, lodgingRelationship, moraleOf,
+  ACTIVITY_INFO, QUALITY_TEXT, activityOf, changeHealth, changeMorale, expectedQuality, healthLoss, healthOf, lodgingName, lodgingRelationship, moraleOf,
   type BattleCondition,
 } from './condition';
-import { createGuild, simulateGuildDay, updateRanks } from './guild';
+import { createGuild, nextRank, promotionReady, rankThreshold, renownLoss, simulateGuildDay, updateRanks } from './guild';
 import { randInt, randomAdventurer } from './people';
 
 // ---- a new campaign -----------------------------------------------------------------------------
@@ -37,6 +37,8 @@ export function newCampaign(main: Character, partyName: string, rng: Rng): GameS
     questMembers: [],
     schedule: {},
     drinksDay: 0,
+    belowRankSince: 0,
+    residences: [],
     log: [],
   };
   updateRanks(state);
@@ -71,14 +73,13 @@ export function toggleLineup(state: GameState, id: string): string | null {
   }
   const c = state.party.find((m) => m.id === id);
   if (!c) return 'Not in the party.';
-  if (healthOf(c) < 100) return `${c.name} is injured (Health ${healthOf(c)}/100) and can't go on quests until fully recovered.`;
   if (!canFight(state, c)) return `${c.name}'s contract has run out. Renew it first.`;
   if (lineupMembers(state).length >= MAX_PARTY_SIZE) return `At most ${MAX_PARTY_SIZE} members can go on a quest.`;
   state.lineup.push(id);
   return null;
 }
 
-/** Drop lineup entries for members who left or can't fight (lapsed contracts, injuries). */
+/** Drop lineup entries for members who left or can't fight (lapsed contracts). */
 export function tidyLineup(state: GameState): void {
   const keep = new Set(lineupMembers(state).map((c) => c.id));
   state.lineup = [state.mainId, ...state.lineup.filter((id) => id !== state.mainId && keep.has(id))];
@@ -88,8 +89,6 @@ export function tidyLineup(state: GameState): void {
 export function departBlock(state: GameState): string | null {
   if (!state.quest) return 'Accept a quest at the Adventurer Guild first.';
   if (state.lastQuestDay === state.day) return 'One quest a day: the party is back from a quest today. Find somewhere to sleep first.';
-  const main = mainCharacter(state);
-  if (healthOf(main) < 100) return `${main.name} is injured (Health ${healthOf(main)}/100). Your leader must be fully recovered to set out.`;
   return null;
 }
 
@@ -99,9 +98,10 @@ const PLACES = ['the Old Sewers', 'Mill Road', 'Briar Farm', 'the Eastern Woods'
   'the Ruined Chapel', 'Hollow Creek', 'the Quarry', 'Thornfield', 'the North Gate', 'Lantern Hill', 'the Old Watchtower'];
 const KIND_TITLE: Record<string, string> = { rat: 'Rat Infestation', slime: 'Slime Outbreak', wolf: 'Wolf Pack', bandit: 'Bandit Bounty' };
 
-export function makeQuest(rank: Rank, day: number, rng: Rng): Quest {
+export function makeQuest(rank: Rank, day: number, rng: Rng, promotion = false): Quest {
   const tier = GUILD.quests[rank];
-  const stage = randInt(tier.stages[0], tier.stages[1], rng);
+  // A promotion quest is a fair test: the easier half of its rank's levels.
+  const stage = promotion ? randInt(tier.stages[0], Math.ceil((tier.stages[0] + tier.stages[1]) / 2), rng) : randInt(tier.stages[0], tier.stages[1], rng);
   const types = enemyTypesForStage(stage);
   const main = types[types.length - 1].type;
   const place = PLACES[Math.floor(rng() * PLACES.length)];
@@ -110,37 +110,52 @@ export function makeQuest(rank: Rank, day: number, rng: Rng): Quest {
   const names = types.map((t) => `${ENEMIES[t.type].name}s (Lv ${t.level})`);
   return {
     id: newId('q'),
-    title,
+    title: promotion ? `Promotion: ${title}` : title,
     rank,
     stage,
     reward: Math.round(randInt(tier.reward[0], tier.reward[1], rng) / 5) * 5,
     renown: tier.renown,
     days: randInt(tier.days[0], tier.days[1], rng),
-    expires: day + randInt(4, 8, rng),
-    description: `${names.join(' and ')} reported at ${place}.${stage > top ? ' A large band: expect many of them.' : ''}`,
+    expires: day + (promotion ? 365 : randInt(4, 8, rng)),
+    description: `${promotion ? `The guild's ${rank}-rank trial. ` : ''}${names.join(' and ')} reported at ${place}.${stage > top ? ' A large band: expect many of them.' : ''}`,
+    ...(promotion ? { promotion: true } : {}),
   };
 }
 
-/** Keep the board full: mostly quests at the party's rank, some below, some above (locked until promoted). */
+/**
+ * Keep the board full: mostly quests at the party's rank, some below, some above (locked until promoted).
+ * With enough renown for the next rank, its promotion quest is posted too (until the party passes it).
+ */
 export function refillBoard(state: GameState, rng: Rng): void {
   const g = state.guild;
-  g.board = g.board.filter((q) => q.expires >= state.day);
+  const up = nextRank(state.rank);
+  g.board = g.board.filter((q) => q.expires >= state.day && (!q.promotion || q.rank === up));
+  if (up && promotionReady(state.rank, state.renown) && !g.board.some((q) => q.promotion) && !state.quest?.promotion) {
+    g.board.unshift(makeQuest(up, state.day, rng, true));
+    // It takes a regular quest's place on a full board.
+    if (g.board.length > GUILD.boardSize) g.board.splice(g.board.length - 1, 1);
+  }
   const own = RANKS.indexOf(state.rank);
   while (g.board.length < GUILD.boardSize) {
     const r = rng();
     const idx = r < 0.25 && own > 0 ? own - 1 : r < 0.5 && own < RANKS.length - 1 ? own + 1 : own;
     g.board.push(makeQuest(RANKS[idx], state.day, rng));
   }
-  g.board.sort((a, b) => RANKS.indexOf(b.rank) - RANKS.indexOf(a.rank) || a.stage - b.stage);
+  g.board.sort((a, b) => Number(!!b.promotion) - Number(!!a.promotion) || RANKS.indexOf(b.rank) - RANKS.indexOf(a.rank) || a.stage - b.stage);
 }
 
-export const canTakeQuest = (state: GameState, q: Quest) => RANKS.indexOf(q.rank) >= RANKS.indexOf(state.rank);
+/** Quests at the party's rank or below, and the next rank's promotion quest once the party has the renown for it. */
+export const canTakeQuest = (state: GameState, q: Quest) => (q.promotion
+  ? q.rank === nextRank(state.rank) && promotionReady(state.rank, state.renown)
+  : RANKS.indexOf(q.rank) >= RANKS.indexOf(state.rank));
 
 export function acceptQuest(state: GameState, questId: string): string | null {
   const q = state.guild.board.find((x) => x.id === questId);
   if (!q) return 'That quest is no longer on the board.';
   if (state.quest) return 'You already have a quest. Finish it first.';
-  if (!canTakeQuest(state, q)) return `Your party must be ${q.rank} rank or higher for this quest.`;
+  if (!canTakeQuest(state, q)) {
+    return q.promotion ? `The ${q.rank}-rank promotion quest needs ${rankThreshold(q.rank)} renown.` : `Your party must be ${q.rank} rank or higher for this quest.`;
+  }
   state.guild.board = state.guild.board.filter((x) => x !== q);
   state.quest = q;
   return null;
@@ -202,6 +217,12 @@ export function resolveQuest(state: GameState, outcome: 'victory' | 'defeat', rn
     note(state, `${c.name} died on "${q.title}".`);
   }
   if (dead.length) for (const c of state.party) changeMorale(c, -C.moraleMemberDied * dead.length);
+  // Renown: lost for a failed quest and for every death.
+  const lostRenown = renownLoss(q.renown, outcome === 'defeat', dead.length);
+  if (lostRenown > 0) {
+    state.renown = Math.max(0, state.renown - lostRenown);
+    lines.push(`Renown -${Math.round(lostRenown)}${dead.length ? ` (${outcome === 'defeat' ? 'a failed quest and ' : ''}${dead.length} death${dead.length > 1 ? 's' : ''})` : ' (failed quest)'}.`);
+  }
   const members = went.filter((c) => !dead.includes(c));
 
   if (outcome === 'victory') {
@@ -212,6 +233,11 @@ export function resolveQuest(state: GameState, outcome: 'victory' | 'defeat', rn
     state.renown += q.renown;
     lines.push(`Reward: ${q.reward} gold${paid ? ` (${shares.map((s) => `${s.name} takes ${s.amount}`).join(', ')}; you keep ${q.reward - paid})` : ''}.`);
     lines.push(`Renown +${q.renown}.`);
+    if (q.promotion && q.rank === nextRank(state.rank)) {
+      state.rank = q.rank;
+      state.belowRankSince = 0;
+      lines.push(note(state, `Your party passed the promotion quest and is now ${q.rank} rank!`));
+    }
     const gains = members.map((c) => `${c.name} +${questXp(q.stage, c.level)}`);
     lines.push(`XP: ${gains.join(', ')}.`);
     for (const c of members) {
@@ -279,7 +305,9 @@ export function boarders(state: GameState): Character[] {
 
 /** Food and lodging for one night: on the road (quests), at an inn, or outside. */
 export function dailyUpkeep(state: GameState, lodging: Lodging = 'road'): number {
-  const per = lodging === 'road' ? GUILD.upkeep.foodLodgingPerDay : lodging === 'outside' ? GUILD.lodging.outsidePerPerson : GUILD.inns[lodging].pricePerPerson;
+  const per = lodging === 'road' ? GUILD.upkeep.foodLodgingPerDay
+    : lodging === 'outside' ? GUILD.lodging.outsidePerPerson
+      : isResidence(lodging) ? 0 : GUILD.inns[lodging].pricePerPerson;
   return boarders(state).length * per;
 }
 
@@ -287,6 +315,25 @@ export function dailyUpkeep(state: GameState, lodging: Lodging = 'road'): number
 export function stayAtInn(state: GameState, inn: InnTier, nights: number, rng: Rng): string[] {
   const out: string[] = [];
   for (let i = 0; i < nights; i++) out.push(...advanceDay(state, rng, inn));
+  return out;
+}
+
+/** Buy a residence in a ring. Returns an error message, or null. */
+export function buyResidence(state: GameState, ring: Ring): string | null {
+  const home = GUILD.residences[ring];
+  if (state.residences.includes(ring)) return `You already own the ${home.name}.`;
+  if (state.gold < home.price) return `Not enough gold (${home.price} needed).`;
+  state.gold -= home.price;
+  state.residences.push(ring);
+  note(state, `Bought the ${home.name} for ${home.price} gold.`);
+  return null;
+}
+
+/** Stay `nights` nights at a residence the party owns: free. */
+export function stayAtHome(state: GameState, ring: Ring, nights: number, rng: Rng): string[] {
+  if (!state.residences.includes(ring)) throw new Error(`The party doesn't own the ${GUILD.residences[ring].name}`);
+  const out: string[] = [];
+  for (let i = 0; i < nights; i++) out.push(...advanceDay(state, rng, ring));
   return out;
 }
 
@@ -362,7 +409,6 @@ export function advanceDay(state: GameState, rng: Rng, lodging: Lodging = 'road'
   const say = (t: string) => out.push(note(state, t));
   for (const t of runSchedule(state, away)) say(t);
   state.day += 1;
-  state.renown *= 1 - GUILD.renownDecayPerDay;
 
   // Food and lodging.
   const upkeep = dailyUpkeep(state, lodging);
@@ -380,9 +426,9 @@ export function advanceDay(state: GameState, rng: Rng, lodging: Lodging = 'road'
         const d = lodgingRelationship(c, lodging);
         if (!d) continue;
         c.contract.relationship = Math.max(0, Math.min(100, c.contract.relationship + d));
-        moods.push(`${c.name} ${d > 0 ? '+' : ''}${d} (expects ${expectedInn(c) === 'luxury' ? 'a high-end inn' : 'an inn'})`);
+        moods.push(`${c.name} ${d > 0 ? '+' : ''}${d} (expects ${QUALITY_TEXT[expectedQuality(c)]})`);
       }
-      if (moods.length) say(`${lodging === 'outside' ? 'A night outside' : `A night at ${GUILD.inns[lodging].name}`}. Relationship: ${moods.join(', ')}.`);
+      if (moods.length) say(`${lodging === 'outside' ? 'A night outside' : `A night at ${lodgingName(lodging)}`}. Relationship: ${moods.join(', ')}.`);
     }
   }
 
@@ -436,7 +482,8 @@ export function advanceDay(state: GameState, rng: Rng, lodging: Lodging = 'road'
 
 // ---- the slave market and the magistrate --------------------------------------------------------------
 
-const MARKET_LEVELS: Record<Rank, [number, number]> = { D: [1, 3], C: [2, 5], B: [3, 7], A: [5, 9] };
+/** Levels of slaves for sale: around the party's rank's adventurers. */
+const MARKET_LEVELS: Record<Rank, [number, number]> = { D: [1, 5], C: [4, 10], B: [9, 15], A: [14, 20] };
 
 export function restockMarket(state: GameState, rng: Rng): void {
   const [lo, hi] = MARKET_LEVELS[state.rank];
