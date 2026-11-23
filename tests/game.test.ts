@@ -7,7 +7,7 @@ import { parseEnemies } from '../src/data/enemies';
 import { STAT_CONFIG, parseStatConfig } from '../src/data/stats';
 import type { Character } from '../src/data/types';
 import { planTurn, runAiTurn, shouldDisengage, threatAt } from '../src/game/ai';
-import { Battle, defenseMultiplier, deploymentTiles, enemyTypesForStage, generateEnemies, makeEnemy, makeUnit, victoryXp, type Team } from '../src/game/battle';
+import { Battle, defenseMultiplier, diceHitOdds, deploymentTiles, enemyTypesForStage, generateEnemies, makeEnemy, makeUnit, victoryXp, type Team } from '../src/game/battle';
 import { allSkills, createCharacter, deriveStats, grantXp, makeRng } from '../src/game/character';
 import { generateMap, hasLineOfSight, passable, withinRange, type BattleMap, type Point, type Terrain } from '../src/game/grid';
 import { parseSave, serializeSave } from '../src/game/save';
@@ -625,36 +625,74 @@ describe('engagement', () => {
 describe('frameworks (switched off in stats.json)', () => {
   const withRules = (patch: Partial<typeof STAT_CONFIG>) => ({ ...STAT_CONFIG, ...patch });
 
-  it('hit chance is on: 50 + Accuracy - Evasion, so two level-1 adventurers hit 60% of the time', () => {
+  it('hit chance is on: average of 2 dice (0-100) + Accuracy - Evasion must beat 50', () => {
     expect(hitChanceOn).toBe(true);
-    expect(STAT_CONFIG.hitChance.base).toBe(50);
+    expect(STAT_CONFIG.hitChance).toMatchObject({ dice: 2, dieMax: 100, hitAbove: 50 });
     const a = makeUnit(hero('bow'), 'player', { x: 1, y: 1 });
     const e = makeUnit(hero('sword_shield'), 'enemy', { x: 4, y: 1 });
     expect(a.stats).toMatchObject({ accuracy: 20, evasion: 10 });
     const battle = new Battle(openMap(), [a, e], makeRng(3), { ...STAT_CONFIG, hitChance: { ...STAT_CONFIG.hitChance, enabled: true } });
-    expect(battle.hitChance(a, e, SKILLS.direct_shot)).toBe(60);
+    // +10: the dice must average over 40. 3321 of the 10201 rolls sum to 80 or less, so 67% hit.
+    expect(battle.hitBonus(a, e, SKILLS.direct_shot)).toBe(10);
+    expect(battle.hitChance(a, e, SKILLS.direct_shot)).toBe(67);
+    expect(battle.hitChance(a, e, SKILLS.direct_shot, true)).toBe(50); // reaction -10: average over 50 (5100 of 10201)
   });
 
-  it('hit chance: disabled = always 100%; enabled = base + accuracy - evasion, clamped', () => {
+  it('dice odds: two dice make extremes rare; certain and impossible hits show 100 / 0', () => {
+    const r = { dice: 2, dieMax: 100, hitAbove: 50 };
+    expect(diceHitOdds(r, 0)).toBeCloseTo(5100 / 10201);
+    expect(diceHitOdds(r, 30)).toBeCloseTo(1 - (41 * 42) / 2 / 10201); // sum must exceed 40
+    expect(diceHitOdds(r, 50)).toBeCloseTo(1 - 1 / 10201); // only 0 & 0 misses
+    expect(diceHitOdds(r, 51)).toBe(1);
+    expect(diceHitOdds(r, -50)).toBe(0);
+    expect(diceHitOdds({ dice: 1, dieMax: 100, hitAbove: 50 }, 0)).toBeCloseTo(50 / 101);
+    const { units: [a, e] } = setup(openMap(), [
+      { c: hero('bow'), team: 'player', at: { x: 1, y: 1 } },
+      { c: hero(), team: 'enemy', at: { x: 4, y: 1 } },
+    ]);
+    const on = new Battle(openMap(), [a, e], makeRng(3), withRules({ hitChance: { ...STAT_CONFIG.hitChance, enabled: true } }));
+    a.stats.accuracy = 49;
+    e.stats.evasion = 0;
+    expect(on.hitChance(a, e, SKILLS.direct_shot)).toBe(99); // not certain: 0 & 0 or 0 & 1 still miss
+    a.stats.accuracy = 60;
+    expect(on.hitChance(a, e, SKILLS.direct_shot)).toBe(100);
+    a.stats.accuracy = -60;
+    expect(on.hitChance(a, e, SKILLS.direct_shot)).toBe(0);
+  });
+
+  it('actual dice rolls hit about as often as the shown chance', () => {
+    const a = makeUnit(hero('bow'), 'player', { x: 1, y: 1 });
+    const e = makeUnit(hero(), 'enemy', { x: 4, y: 1 });
+    const battle = new Battle(openMap(), [a, e], makeRng(11), withRules({ hitChance: { ...STAT_CONFIG.hitChance, enabled: true } }));
+    const roll = (battle as unknown as { rollHit: (x: unknown, y: unknown, s: unknown) => { hit: boolean } }).rollHit.bind(battle);
+    let hits = 0;
+    for (let i = 0; i < 5000; i++) if (roll(a, e, SKILLS.direct_shot).hit) hits += 1;
+    expect(hits / 5000).toBeCloseTo(battle.hitChance(a, e, SKILLS.direct_shot) / 100, 1);
+  });
+
+  it('hit chance: disabled = always 100%; heals never miss', () => {
     const { battle, units: [a, e] } = setup(openMap(), [
       { c: hero('bow'), team: 'player', at: { x: 1, y: 1 } },
       { c: hero(), team: 'enemy', at: { x: 4, y: 1 } },
     ]);
     expect(battle.hitChance(a, e, SKILLS.direct_shot)).toBe(100);
-    const b2 = new Battle(openMap(), [a, e], makeRng(3), withRules({ hitChance: { enabled: true, base: 70, min: 5, max: 95, reactionModifier: -10 } }));
-    a.stats.accuracy = 10;
-    e.stats.evasion = 30;
-    expect(b2.hitChance(a, e, SKILLS.direct_shot)).toBe(50);
-    expect(b2.hitChance(a, e, SKILLS.direct_shot, true)).toBe(40);
+    const b2 = new Battle(openMap(), [a, e], makeRng(3), withRules({ hitChance: { ...STAT_CONFIG.hitChance, enabled: true } }));
     expect(b2.hitChance(a, e, SKILLS.heal)).toBe(100);
   });
 
   it('misses produce a miss event and deal no damage', () => {
-    const rules = withRules({ hitChance: { enabled: true, base: 0, min: 0, max: 0, reactionModifier: 0 } });
+    // Nothing beats 1000, so every roll misses.
+    const rules = withRules({ hitChance: { ...STAT_CONFIG.hitChance, enabled: true, hitAbove: 1000 } });
     const a = makeUnit(hero('bow'), 'player', { x: 1, y: 1 });
     const e = makeUnit(hero(), 'enemy', { x: 4, y: 1 });
     const battle = new Battle(openMap(), [a, e], makeRng(3), rules);
-    expect(battle.perform(a, 'direct_shot', { x: 4, y: 1 })).toEqual([expect.objectContaining({ type: 'miss' })]);
+    const events = battle.perform(a, 'direct_shot', { x: 4, y: 1 });
+    expect(events).toEqual([expect.objectContaining({ type: 'miss', chance: 0 })]);
+    const roll = (events[0] as Extract<(typeof events)[number], { type: 'miss' }>).roll!;
+    expect(roll.dice).toHaveLength(2);
+    expect(roll.average).toBe((roll.dice[0] + roll.dice[1]) / 2);
+    expect(roll.total).toBe(roll.average + 10);
+    expect(roll.needed).toBe(1000);
     expect(e.hp).toBe(500);
   });
 

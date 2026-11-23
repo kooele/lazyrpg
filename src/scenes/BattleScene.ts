@@ -28,6 +28,8 @@ const MAP_X = 16;
 const MAP_Y = 72;
 const SIDE_X = 704;
 const SIDE_W = 240;
+/** "41" or "40.5": a dice average with at most one decimal. */
+const fmt = (n: number) => String(Math.round(n * 10) / 10);
 /** Where a unit's feet are, relative to its tile center; the HP bar sits just below. */
 let FEET_Y = 14;
 let HP_Y = 21;
@@ -958,7 +960,9 @@ export class BattleScene extends Phaser.Scene {
       }
       case 'miss':
         this.floatText(t, 'MISS', '#c9ced8', delay);
-        summary.push(`${name} dodged (${e.chance}%)`);
+        summary.push(e.roll
+          ? `${name} dodged (rolled ${e.roll.dice.join(' & ')} → ${fmt(e.roll.average)} ${e.roll.bonus >= 0 ? '+' : '−'} ${Math.abs(e.roll.bonus)} = ${fmt(e.roll.total)}, needed over ${e.roll.needed})`
+          : `${name} dodged (${e.chance}%)`);
         break;
       case 'heal':
         this.floatText(t, `+${e.amount}`, '#6fdc8c', delay);

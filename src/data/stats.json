@@ -61,11 +61,11 @@
   },
 
   "hitChance": {
-    "_comment": "hit% = base + attacker Accuracy + skill accuracy - target Evasion (+ reaction modifier for overwatch and intercepts), clamped to [min, max]. Heals, shields and cleanses never miss. enabled false = every attack hits.",
+    "_comment": "Each attack rolls dice dice, each a whole number from 0 to dieMax, and takes their average. roll + attacker Accuracy + skill accuracy - target Evasion (+ reactionModifier for overwatch, intercepts and opportunity attacks) must be greater than hitAbove to hit. Two dice make middling rolls likely and extremes rare. Heals, shields and cleanses never miss. enabled false = every attack hits.",
     "enabled": true,
-    "base": 50,
-    "min": 5,
-    "max": 100,
+    "dice": 2,
+    "dieMax": 100,
+    "hitAbove": 50,
     "reactionModifier": -10
   },
 

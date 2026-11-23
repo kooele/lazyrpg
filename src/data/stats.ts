@@ -6,10 +6,13 @@ import { STAT_KEYS, TALENT_GRADES, type Stats, type Talent } from './types';
 export interface HitChanceRules {
   /** Off = every attack hits. */
   enabled: boolean;
-  base: number;
-  min: number;
-  max: number;
-  /** Added to the hit chance of overwatch / intercept shots. */
+  /** Dice rolled per attack; their average is the roll. */
+  dice: number;
+  /** Each die rolls a whole number from 0 to dieMax. */
+  dieMax: number;
+  /** Hit when roll + Accuracy - Evasion is greater than this. */
+  hitAbove: number;
+  /** Added to the roll of overwatch / intercept shots and opportunity attacks. */
   reactionModifier: number;
 }
 
@@ -100,7 +103,7 @@ function readTalent(v: unknown): TalentRules {
 
 export function parseStatConfig(data: unknown): StatConfig {
   const rec = obj(data, '(root)');
-  const hit = obj(rec.hitChance ?? { enabled: false, base: 100, min: 0, max: 100, reactionModifier: 0 }, 'hitChance');
+  const hit = obj(rec.hitChance ?? { enabled: false }, 'hitChance');
   const vision = obj(rec.vision ?? { enabled: false }, 'vision');
   const map = obj(rec.map ?? { width: 18, height: 13 }, 'map');
   const costs = obj(rec.movementCosts ?? { grass: 4, forest: 6, river: 8 }, 'movementCosts');
@@ -121,9 +124,9 @@ export function parseStatConfig(data: unknown): StatConfig {
     rangeRounding: { fromRange: num(rounding.fromRange, 'rangeRounding.fromRange') },
     hitChance: {
       enabled: hit.enabled === true,
-      base: num(hit.base, 'hitChance.base'),
-      min: num(hit.min, 'hitChance.min'),
-      max: num(hit.max, 'hitChance.max'),
+      dice: Math.round(num(hit.dice ?? 2, 'hitChance.dice')),
+      dieMax: Math.round(num(hit.dieMax ?? 100, 'hitChance.dieMax')),
+      hitAbove: num(hit.hitAbove ?? 50, 'hitChance.hitAbove'),
       reactionModifier: num(hit.reactionModifier ?? 0, 'hitChance.reactionModifier'),
     },
     vision: { enabled: vision.enabled === true },
@@ -133,7 +136,8 @@ export function parseStatConfig(data: unknown): StatConfig {
   if (cfg.base.movement < 1) throw new Error('stats.json: "base.movement" must be at least 1');
   if (!(cfg.movementCosts.grass > 0)) throw new Error('stats.json: "movementCosts.grass" must be positive');
   if (cfg.map.width < 8 || cfg.map.height < 6) throw new Error('stats.json: "map" must be at least 8 x 6 tiles');
-  if (cfg.hitChance.min > cfg.hitChance.max) throw new Error('stats.json: "hitChance.min" must not exceed "hitChance.max"');
+  if (cfg.hitChance.dice < 1 || cfg.hitChance.dice > 10) throw new Error('stats.json: "hitChance.dice" must be from 1 to 10');
+  if (cfg.hitChance.dieMax < 1) throw new Error('stats.json: "hitChance.dieMax" must be at least 1');
   return cfg;
 }
 

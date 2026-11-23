@@ -82,10 +82,10 @@ Tooltips show a formula line generated from the numbers (e.g. "80% P.Atk, then 4
 | M.Atk | 100 (+10) | Magic power and healing |
 | Defense | 50 (+5) | Damage taken × 100 / (100 + Defense) |
 | Movement | 16 | Movement points per turn: grass costs 4, forest 6, river 8 (so 16 = 4 grass tiles) |
-| Accuracy | 20 (+2) | Hit chance = 50 + attacker Accuracy − target Evasion (5% to 100%) |
-| Evasion | 10 (+1) | Subtracts from enemies' hit chance |
+| Accuracy | 20 (+2) | Added to the attack's dice roll |
+| Evasion | 10 (+1) | Subtracted from enemies' dice rolls against this unit |
 
-Attacks can miss: two level-1 Adventurers hit each other 60% of the time. Overwatch and intercept shots get −10. Heals, shields and cleanses never miss. Enemies follow the same Accuracy and Evasion curve at their level (rats and wolves have +10 Evasion). The numbers are under `hitChance` in `stats.json`.
+Attacks can miss. Each attack rolls **2 dice from 0 to 100** and takes their average; the attack hits if **average + attacker Accuracy − target Evasion is greater than 50**. Averaging two dice makes middling rolls common and extreme ones rare, so a small edge in Accuracy matters. Two level-1 Adventurers (+10) need an average over 40: 67% to hit. Overwatch, intercept shots and opportunity attacks get −10 on the roll. Heals, shields and cleanses never miss. Targeting shows the exact odds, and a miss lists the dice in the battle log. Enemies follow the same Accuracy and Evasion curve at their level (rats and wolves have +10 Evasion). The numbers (`dice`, `dieMax`, `hitAbove`, `reactionModifier`) are under `hitChance` in `stats.json`.
 
 Stats grow automatically on level up (100 XP per level), at a speed set by the Adventurer's **talent**. Every growing stat (Health, Mana, P.Atk, M.Atk, Defense, Accuracy, Evasion) has its own talent grade, rolled when the Adventurer is created; the grade multiplies that stat's growth per level (the numbers in brackets above):
 

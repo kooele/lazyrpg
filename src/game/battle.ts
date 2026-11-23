@@ -68,7 +68,7 @@ export type DamageCause = 'skill' | 'status' | 'overwatch' | 'opportunity';
 
 export type BattleEvent =
   | { type: 'damage'; source?: string; target: string; amount: number; absorbed: number; killed: boolean; cause: DamageCause }
-  | { type: 'miss'; source: string; target: string; chance: number; cause: DamageCause }
+  | { type: 'miss'; source: string; target: string; chance: number; cause: DamageCause; roll?: HitRoll }
   | { type: 'engage'; source: string; target: string }
   | { type: 'disengage'; source: string; target: string; reason: 'disengage' | 'separated' | 'displaced' | 'escaped' }
   | { type: 'heal'; source: string; target: string; amount: number }
@@ -124,6 +124,47 @@ export function makeUnit(character: Character, team: Team, pos: Point): Unit {
 export function defenseMultiplier(defense: number): number {
   const k = STAT_CONFIG.defenseScale;
   return defense >= 0 ? k / (k + defense) : 2 - k / (k - defense);
+}
+
+/** One attack's dice: the dice, their average, the Accuracy - Evasion bonus, and the total that had to beat `needed`. */
+export interface HitRoll {
+  dice: number[];
+  average: number;
+  bonus: number;
+  total: number;
+  needed: number;
+}
+
+/** How many ways each sum of `dice` dice (0..dieMax each) can come up. Cached per rule set. */
+const sumWays = new Map<string, number[]>();
+function diceSums(dice: number, dieMax: number): number[] {
+  const id = `${dice}d${dieMax}`;
+  let ways = sumWays.get(id);
+  if (!ways) {
+    ways = [1];
+    for (let d = 0; d < dice; d++) {
+      const next = Array<number>(ways.length + dieMax).fill(0);
+      ways.forEach((w, s) => {
+        for (let f = 0; f <= dieMax; f++) next[s + f] += w;
+      });
+      ways = next;
+    }
+    sumWays.set(id, ways);
+  }
+  return ways;
+}
+
+/** Odds (0-1) that the dice average + bonus is greater than hitAbove. */
+export function diceHitOdds(r: { dice: number; dieMax: number; hitAbove: number }, bonus: number): number {
+  const ways = diceSums(r.dice, r.dieMax);
+  const total = (r.dieMax + 1) ** r.dice;
+  let hits = 0;
+  // average + bonus > hitAbove  <=>  sum > dice x (hitAbove - bonus)
+  const need = r.dice * (r.hitAbove - bonus);
+  ways.forEach((w, sum) => {
+    if (sum > need + 1e-9) hits += w;
+  });
+  return hits / total;
 }
 
 /**
@@ -272,8 +313,8 @@ export class Battle {
   private opportunityAttack(attacker: Unit, victim: Unit): BattleEvent[] {
     if (!attacker.alive || !victim.alive) return [];
     const basic = this.basicAttack(attacker);
-    const chance = this.hitChance(attacker, victim, basic, true);
-    if (!this.rollHit(chance)) return [{ type: 'miss', source: attacker.uid, target: victim.uid, chance, cause: 'opportunity' }];
+    const r = this.rollHit(attacker, victim, basic, true);
+    if (!r.hit) return [{ type: 'miss', source: attacker.uid, target: victim.uid, chance: r.chance, cause: 'opportunity', roll: r.roll }];
     const events: BattleEvent[] = [];
     for (const part of basic.hits ?? []) {
       if (!victim.alive) break;
@@ -458,9 +499,9 @@ export class Battle {
       const skill = SKILLS[w.overwatch.skillId];
       const ow = w.overwatch;
       w.overwatch = null;
-      const chance = this.hitChance(w, mover, skill, true);
-      if (!this.rollHit(chance)) {
-        events.push({ type: 'miss', source: w.uid, target: mover.uid, chance, cause: 'overwatch' });
+      const r = this.rollHit(w, mover, skill, true);
+      if (!r.hit) {
+        events.push({ type: 'miss', source: w.uid, target: mover.uid, chance: r.chance, cause: 'overwatch', roll: r.roll });
         continue;
       }
       for (const part of skill.hits ?? []) {
@@ -686,18 +727,38 @@ export class Battle {
     return best;
   }
 
-  // ---- hit chance (hitChance in stats.json: base + Accuracy - Evasion) ----
+  // ---- hit chance (hitChance in stats.json: dice roll + Accuracy - Evasion > hitAbove) ----
 
-  /** Chance (0-100) that `skill` hits `target` (100 if hit chance is switched off). */
-  hitChance(attacker: Unit, target: Unit, skill: SkillDef, reaction = false): number {
-    const r = this.rules.hitChance;
-    if (!r.enabled || !skill.hits?.length || attacker.team === target.team) return 100;
-    const chance = r.base + this.stat(attacker, 'accuracy') + (skill.accuracy ?? 0) - this.stat(target, 'evasion') + (reaction ? r.reactionModifier : 0);
-    return Math.max(r.min, Math.min(r.max, Math.round(chance)));
+  /** What the dice roll is modified by: attacker Accuracy + skill accuracy - target Evasion (+ the reaction modifier). */
+  hitBonus(attacker: Unit, target: Unit, skill: SkillDef, reaction = false): number {
+    return this.stat(attacker, 'accuracy') + (skill.accuracy ?? 0) - this.stat(target, 'evasion') + (reaction ? this.rules.hitChance.reactionModifier : 0);
   }
 
-  private rollHit(chance: number): boolean {
-    return chance >= 100 || this.rng() * 100 < chance;
+  /** Can `skill` miss `target`? Only damaging skills against the other team, while hit chance is on. */
+  private canMiss(attacker: Unit, target: Unit, skill: SkillDef): boolean {
+    return this.rules.hitChance.enabled && !!skill.hits?.length && attacker.team !== target.team;
+  }
+
+  /**
+   * Chance (0-100, whole number) that `skill` hits `target`: the odds that the dice average + bonus beats hitAbove.
+   * Shown as 1-99 unless the hit is truly certain or impossible. 100 if hit chance is switched off.
+   */
+  hitChance(attacker: Unit, target: Unit, skill: SkillDef, reaction = false): number {
+    if (!this.canMiss(attacker, target, skill)) return 100;
+    const p = diceHitOdds(this.rules.hitChance, this.hitBonus(attacker, target, skill, reaction));
+    return p <= 0 ? 0 : p >= 1 ? 100 : Math.min(99, Math.max(1, Math.round(p * 100)));
+  }
+
+  /** Roll the dice for an attack. */
+  private rollHit(attacker: Unit, target: Unit, skill: SkillDef, reaction = false): { hit: boolean; chance: number; roll?: HitRoll } {
+    const chance = this.hitChance(attacker, target, skill, reaction);
+    if (!this.canMiss(attacker, target, skill)) return { hit: true, chance };
+    const r = this.rules.hitChance;
+    const dice = Array.from({ length: r.dice }, () => Math.floor(this.rng() * (r.dieMax + 1)));
+    const average = dice.reduce((a, b) => a + b, 0) / dice.length;
+    const bonus = this.hitBonus(attacker, target, skill, reaction);
+    const roll: HitRoll = { dice, average, bonus, total: average + bonus, needed: r.hitAbove };
+    return { hit: roll.total > r.hitAbove, chance, roll };
   }
 
   // ---- vision (framework: disabled in stats.json until fog of war is designed) ----
@@ -821,9 +882,9 @@ export class Battle {
     }
 
     const targets = this.targetsOf(u, skill, tile).filter((t) => {
-      const chance = this.hitChance(u, t, skill);
-      if (this.rollHit(chance)) return true;
-      events.push({ type: 'miss', source: u.uid, target: t.uid, chance, cause: 'skill' });
+      const r = this.rollHit(u, t, skill);
+      if (r.hit) return true;
+      events.push({ type: 'miss', source: u.uid, target: t.uid, chance: r.chance, cause: 'skill', roll: r.roll });
       return false;
     });
     for (const t of targets) {
