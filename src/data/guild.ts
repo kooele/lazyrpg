@@ -17,6 +17,8 @@ export interface ThreatConfig {
   goldPerThreat: number;
   renownPerThreat: number;
   standardCount: number;
+  /** Difficulty shown as half a skull (from) and five skulls (to); evenly in between. */
+  skulls: { from: number; to: number };
 }
 
 export type InnTier = 'standard' | 'highEnd' | 'luxury';
@@ -88,6 +90,8 @@ export interface GuildConfig {
     drift: number;
     stockReference: number;
   };
+  /** Quest XP: each member gets schedule.trainingXp plus an equal share of pool, then x the level modifier (levelStep per level). */
+  xp: { pool: number; levelStep: number };
   schedule: { recoverMultiplier: number; trainingXp: number; oddJobsGold: number; dayOffMorale: number };
   /** Price multiplier from talent: max(min, 1 + weight x (average growth rate - 1)). */
   talentPrice: { weight: number; min: number };
@@ -268,6 +272,13 @@ export function parseGuildConfig(data: unknown): GuildConfig {
         goldPerThreat: num(t.goldPerThreat, 'threat.goldPerThreat', 0),
         renownPerThreat: num(t.renownPerThreat, 'threat.renownPerThreat', 0),
         standardCount: num(t.standardCount, 'threat.standardCount', 0.5),
+        skulls: (() => {
+          const k = obj(t.skulls, 'threat.skulls');
+          const from = num(k.from, 'threat.skulls.from', -100);
+          const to = num(k.to, 'threat.skulls.to', -100);
+          if (!(to > from)) fail('threat.skulls.to', 'must be above threat.skulls.from');
+          return { from, to };
+        })(),
       };
     })(),
     upkeep: numbers(d.upkeep, 'upkeep', ['foodLodgingPerDay']),
@@ -280,6 +291,7 @@ export function parseGuildConfig(data: unknown): GuildConfig {
     residences: parseResidences(d.residences),
     condition: numbers<GuildConfig['condition']>(d.condition, 'condition', ['maxHealthLoss', 'healthPerDay', 'startingMorale', 'moralePerQuest',
       'moraleFailedQuest', 'moralePerHealthLost', 'moraleMemberDied', 'lowMorale', 'lowMoraleRelationshipPerDay'], 100),
+    xp: numbers(d.xp, 'xp', ['pool', 'levelStep']),
     schedule: numbers(d.schedule, 'schedule', ['recoverMultiplier', 'trainingXp', 'oddJobsGold', 'dayOffMorale']),
     talentPrice: numbers(d.talentPrice ?? { weight: 2, min: 0.4 }, 'talentPrice', ['weight', 'min']),
     mercenary: numbers(d.mercenary, 'mercenary', ['feePerLevel', 'cutBase', 'cutPerLevel']),

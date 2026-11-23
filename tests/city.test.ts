@@ -6,7 +6,7 @@ import { createCharacter, deriveStats, makeRng } from '../src/game/character';
 import { makeEnemy, makeUnit } from '../src/game/battle';
 import {
   acceptQuest, advanceDay, advanceDays, askingPrice, buyDrinks, isShipmentDay, marketBuyPrice, marketDay, sellSlave, turnInPrisoner, buyResidence, buySlave, makeQuest, sellResidence, stayAtHome, stayAtInn, canTakeQuest, dailyUpkeep, foodCost, departBlock, lineupMembers, mainCharacter,
-  newCampaign, registerPrisoner, resolveQuest, rewardShares, sleepOutside, toggleLineup, weeklyTaxes,
+  newCampaign, questXpShares, registerPrisoner, resolveQuest, rewardShares, sleepOutside, toggleLineup, weeklyTaxes, xpLevelFactor,
 } from '../src/game/city';
 import { activityOf, combatPenalty, expectedQuality, foodRelationship, healthOf, isInjured, moraleOf, moralePenalty, obediencePenalty } from '../src/game/condition';
 import { parseSave, serializeSave } from '../src/game/save';
@@ -186,18 +186,47 @@ describe('ranks and the leaderboard', () => {
     }
   });
 
-  it('quest cards: about how many foes to expect, and danger 1-5 within the rank', () => {
+  it('quest XP: a day of training each, plus an equal share of the pool, then +-25% per level of difference', () => {
+    const train = GUILD.schedule.trainingXp;
+    const pool = GUILD.xp.pool;
+    const q = { stage: 8 };
+    // At the enemies' level: training + pool / party size.
+    expect(questXpShares(q, [{ level: 8 }])).toEqual([train + pool]);
+    expect(questXpShares(q, [{ level: 8 }, { level: 8 }, { level: 8 }, { level: 8 }])).toEqual(Array(4).fill(train + pool / 4));
+    // Level difference: +25% per level below the enemies, -25% per level above, nothing at 4 or more above.
+    expect(xpLevelFactor(8, 6)).toBe(1.5);
+    expect(xpLevelFactor(8, 9)).toBe(0.75);
+    expect(xpLevelFactor(8, 12)).toBe(0);
+    expect(xpLevelFactor(8, 14)).toBe(0);
+    const [vet, mid, rookie] = questXpShares(q, [{ level: 12 }, { level: 8 }, { level: 1 }]);
+    const each = train + pool / 3;
+    expect([vet, mid, rookie]).toEqual([0, Math.round(each), Math.round(each * (1 + 0.25 * 7))]);
+    expect(questXpShares(q, [])).toEqual([]);
+  });
+
+  it('quest cards: about how many foes to expect, and skulls (0.5-5 in halves) on one scale for the whole game', () => {
     // A group of 4 threat points: 4 bandits (threat 1), 8 rats (0.5), 7 goblins (0.6).
     expect(expectedEnemies({ count: 4, foes: ['bandit'] })).toBe(4);
     expect(expectedEnemies({ count: 4, foes: ['rat'] })).toBe(8);
     expect(expectedEnemies({ count: 4, foes: ['goblin'] })).toBe(7);
     expect(expectedEnemies({ count: 20, foes: ['rat'] })).toBe(12); // at most the field's cap
-    // Danger: the weakest quest of a rank is 1, the strongest 5, and it grows with level and group size.
-    const tier = GUILD.quests.C;
-    expect(dangerRating({ rank: 'C', stage: tier.stages[0], count: tier.count[0] })).toBe(1);
-    expect(dangerRating({ rank: 'C', stage: tier.stages[1], count: tier.count[1] })).toBe(5);
-    expect(dangerRating({ rank: 'C', stage: 8, count: 5 })).toBeGreaterThanOrEqual(dangerRating({ rank: 'C', stage: 8, count: 3 }));
-    expect(dangerRating({ rank: 'C', stage: 9, count: 4 })).toBeGreaterThanOrEqual(dangerRating({ rank: 'C', stage: 7, count: 4 }));
+    // Skulls follow actual difficulty, not rank: half a skull at skulls.from, five at skulls.to, evenly between.
+    const { from, to } = GUILD.threat.skulls;
+    // A level-1 group sized so its difficulty is exactly `d` (questDifficulty = log(count / standardCount) / log(growth)).
+    const at = (d: number) => dangerRating({ stage: 1, count: GUILD.threat.standardCount * GUILD.threat.strengthGrowth ** d });
+    expect(at(from)).toBe(0.5);
+    expect(at(to)).toBe(5);
+    expect(at((from + to) / 2)).toBe(3); // 0.5 + 4.5 / 2 = 2.75, rounded to the nearest half
+    expect(at(from + (to - from) / 9)).toBe(1); // each ninth of the scale is another half skull
+    for (const q of Array.from({ length: 200 }, (_, i) => makeQuest((['D', 'C', 'B', 'A'] as const)[i % 4], 1, makeRng(i)))) {
+      expect((dangerRating(q) * 2) % 1).toBe(0); // whole or half skulls
+    }
+    // Harder ranks show more skulls on average; within a rank, a bigger group or higher level never shows fewer.
+    const mean = (r: 'D' | 'C' | 'B' | 'A') => Array.from({ length: 100 }, (_, i) => dangerRating(makeQuest(r, 1, makeRng(i)))).reduce((a, b) => a + b, 0) / 100;
+    expect(mean('D')).toBeLessThan(mean('C'));
+    expect(mean('C')).toBeLessThan(mean('B'));
+    expect(mean('B')).toBeLessThan(mean('A'));
+    expect(dangerRating({ stage: 8, count: 6 })).toBeGreaterThanOrEqual(dangerRating({ stage: 8, count: 3 }));
   });
 
   it('the board is shared and busy: plenty of quests across the ranks, always some at the party\'s rank', () => {

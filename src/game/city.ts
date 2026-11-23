@@ -2,7 +2,6 @@
 // Pure logic (no Phaser): scenes call these and show the messages they return.
 import { MAX_PARTY_SIZE } from '../data/content';
 import { GUILD, isResidence, type InnTier, type Lodging, type Ring } from '../data/guild';
-import { STAT_CONFIG } from '../data/stats';
 import { RANKS, type Character, type GameState, type Offer, type Quest, type Rank } from '../data/types';
 import { makeQuest, postQuests } from './board';
 import { grantXp, type Rng } from './character';
@@ -132,9 +131,17 @@ export function acceptQuest(state: GameState, questId: string): string | null {
   return null;
 }
 
-/** XP for a won battle: full at the quest's level, more for punching up, less for easy work. */
-export function questXp(stage: number, level: number): number {
-  return Math.round(STAT_CONFIG.xpPerVictory * Math.max(0.15, Math.min(2, 1 + (stage - level) * 0.5)));
+/** The level modifier on a member's quest XP: +levelStep per level the enemies are above them, -levelStep per level below (never under 0). */
+export const xpLevelFactor = (stage: number, level: number) => Math.max(0, 1 + GUILD.xp.levelStep * (stage - level));
+
+/**
+ * XP each member who comes back from a won quest gets: a day of training's worth (schedule.trainingXp), plus an
+ * equal share of the xp.pool split among all of them, then x their level modifier (xpLevelFactor). Same order as `members`.
+ */
+export function questXpShares(q: Pick<Quest, 'stage'>, members: Pick<Character, 'level'>[]): number[] {
+  if (members.length === 0) return [];
+  const each = GUILD.schedule.trainingXp + GUILD.xp.pool / members.length;
+  return members.map((c) => Math.round(each * xpLevelFactor(q.stage, c.level)));
 }
 
 /**
@@ -216,10 +223,10 @@ export function resolveQuest(
       state.belowRankSince = 0;
       lines.push(note(state, `Your party passed the promotion quest and is now ${q.rank} rank!`));
     }
-    const gains = members.map((c) => `${c.name} +${questXp(q.stage, c.level)}`);
-    lines.push(`XP: ${gains.join(', ')}.`);
-    for (const c of members) {
-      const levels = grantXp(c, questXp(q.stage, c.level));
+    const xp = questXpShares(q, members);
+    lines.push(`XP: ${members.map((c, i) => `${c.name} +${xp[i]}`).join(', ')}.`);
+    for (const [i, c] of members.entries()) {
+      const levels = grantXp(c, xp[i]);
       if (levels > 0) lines.push(`${c.name} reached level ${c.level}! +${levels} skill point${levels > 1 ? 's' : ''}.`);
       changeRelationship(c, GUILD.companion.relationshipPerQuest);
     }

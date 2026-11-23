@@ -135,11 +135,6 @@ export interface ReachInfo {
   hazards?: number;
 }
 
-/** XP for winning a battle (stats.json xpPerVictory; the same at every stage). */
-export function victoryXp(_stage: number): number {
-  return STAT_CONFIG.xpPerVictory;
-}
-
 export function makeUnit(character: Character, team: Team, pos: Point): Unit {
   const stats = deriveStats(character);
   // Party members fight with every stat lowered by injuries, low Morale and (slaves) low Obedience.

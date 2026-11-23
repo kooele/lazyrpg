@@ -48,15 +48,23 @@ export function expectedEnemies(q: Pick<Quest, 'count' | 'foes'>): number {
 }
 
 /**
- * Danger within the quest's rank, 1-5: where its total threat falls between the rank's weakest possible quest
- * (smallest group at its lowest level) and its strongest (largest group at its highest level), on a log scale.
+ * How hard a quest is, as the average party level it calls for: the level at which a group of
+ * threat.standardCount enemies would have the quest's total threat, minus 1. A usual-sized group at level L is
+ * about L - 1; every ~16.5% more total threat (a level's worth of strength) adds a level.
  */
-export function dangerRating(q: Pick<Quest, 'rank' | 'stage' | 'count'>): number {
-  const tier = GUILD.quests[q.rank];
-  const lo = Math.log(tier.count[0] * strength(tier.stages[0]));
-  const hi = Math.log(tier.count[1] * strength(tier.stages[1]));
-  const f = hi > lo ? (Math.log(totalThreat(q)) - lo) / (hi - lo) : 0.5;
-  return Math.max(1, Math.min(5, 1 + Math.floor(f * 5)));
+export function questDifficulty(q: Pick<Quest, 'stage' | 'count'>): number {
+  const t = GUILD.threat;
+  return Math.log(totalThreat(q) / t.standardCount / strength(1)) / Math.log(t.strengthGrowth);
+}
+
+/**
+ * Danger, shown as skulls: 0.5 to 5 in half steps, rising evenly with the quest's difficulty (questDifficulty)
+ * on one fixed scale for the whole game, from threat.skulls.from (half a skull) to threat.skulls.to (five).
+ */
+export function dangerRating(q: Pick<Quest, 'stage' | 'count'>): number {
+  const { from, to } = GUILD.threat.skulls;
+  const f = (questDifficulty(q) - from) / (to - from);
+  return Math.max(0.5, Math.min(5, Math.round((0.5 + 4.5 * f) * 2) / 2));
 }
 
 const roll = ([lo, hi]: [number, number], rng: Rng) => lo + rng() * (hi - lo);

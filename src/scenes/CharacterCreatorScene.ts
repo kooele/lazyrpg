@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import {
-  NAME_MAX_LENGTH, PALETTE, isSupport, SKILLS, SKILL_TABS, SKILL_TREES, WEAPONS, XP_PER_LEVEL, maxBodyRank, modeWithTag, resolveWeaponSkill, skillStatText,
+  NAME_MAX_LENGTH, PALETTE, isSupport, SKILLS, SKILL_TABS, SKILL_TREES, WEAPONS, xpToNext, maxBodyRank, modeWithTag, resolveWeaponSkill, skillStatText,
 } from '../data/content';
 import { STAT_CONFIG, visibleStatKeys } from '../data/stats';
 import {
@@ -442,7 +442,7 @@ export class CharacterCreatorScene extends Phaser.Scene {
     L.add(panel(this, 24, top, 290, 120));
     L.add(figure(this, 70, top + 108, 100, d.appearance, d.weaponId));
     L.add(text(this, 124, top + 14, d.name, { fontSize: '18px', wordWrap: { width: 182 } }));
-    L.add(text(this, 124, top + 40, `Level ${d.level} · ${d.xp}/${XP_PER_LEVEL} XP`, { color: COLORS.dim, fontSize: '13px' }));
+    L.add(text(this, 124, top + 40, `Level ${d.level} · ${d.xp}/${xpToNext(d.level)} XP`, { color: COLORS.dim, fontSize: '13px' }));
     L.add(text(this, 124, top + 60, WEAPONS[d.weaponId].name, { color: COLORS.dim, fontSize: '13px' }));
     L.add(text(this, 124, top + 84, 'Only your own character\'s look can be changed.', { color: COLORS.dim, fontSize: '11px', wordWrap: { width: 182 } }));
     const y0 = top + 132;

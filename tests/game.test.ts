@@ -1,19 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import skillsJson from '../src/data/skills.json';
 import weaponsJson from '../src/data/weapons.json';
-import { SKILLS, STATUSES, TREE_SKILLS, WEAPONS, maxBodyRank, modeWithTag, parseContent, resolveWeaponSkill, skillEffect, skillPointsForLevel, skillStatText, skillStats } from '../src/data/content';
+import { SKILLS, STATUSES, TREE_SKILLS, WEAPONS, maxBodyRank, modeWithTag, parseContent, resolveWeaponSkill, skillEffect, skillPointsForLevel, skillStatText, skillStats, xpToNext } from '../src/data/content';
 import enemiesJson from '../src/data/enemies.json';
 import { ENEMIES, parseEnemies } from '../src/data/enemies';
 import { STAT_CONFIG, parseStatConfig } from '../src/data/stats';
 import type { Character, SkillDef } from '../src/data/types';
 import { bestAction, caution, planTurn, preferredMode, runAiTurn, shouldDisengage, shouldSurrender, threatAt, tribeRouted, wantsToFlee } from '../src/game/ai';
-import { Battle, defenseMultiplier, resistChance, deploymentTiles, enemyTypesForStage, generateEnemies, makeEnemy, pickFoes, makeUnit, victoryXp, type Team } from '../src/game/battle';
+import { Battle, defenseMultiplier, resistChance, deploymentTiles, enemyTypesForStage, generateEnemies, makeEnemy, pickFoes, makeUnit, type Team } from '../src/game/battle';
 import { allSkills, bodyGain, skillBarLayout, swapBarSlots, bodyPoints as bodyPointsOf, bodyStats, createCharacter, deriveStats, freePoints, grantXp, isUnlocked, makeRng, pointsUsed, sanitizeLoadout } from '../src/game/character';
 import { randomAdventurer } from '../src/game/people';
 import { dist, generateMap, hasLineOfSight, passable, withinRange, type BattleMap, type Point, type Terrain } from '../src/game/grid';
 import { parseSave, serializeSave } from '../src/game/save';
 import { skillShape } from '../src/game/reach';
 import { advanceDays, newCampaign } from '../src/game/city';
+import { newDemo, resolveDemoBattle } from '../src/game/demo';
 import { makeQuest, rankForStage, usualCount } from '../src/game/board';
 import { GUILD } from '../src/data/guild';
 
@@ -886,10 +887,20 @@ describe('enemies', () => {
 });
 
 describe('progression and enemy behaviour', () => {
-  it('each victory is worth a level, so a winning party is level 3 at stage 3', () => {
+  it('each level needs 25 more XP than the last: 100, 125, 150 ...', () => {
+    expect([1, 2, 3, 10].map(xpToNext)).toEqual([100, 125, 150, 325]);
     const c = hero();
-    for (let stage = 1; stage <= 2; stage++) grantXp(c, victoryXp(stage));
-    expect(c.level).toBe(3);
+    expect(grantXp(c, 100 + 125 + 10)).toBe(2); // two levels, and the rest carries over
+    expect([c.level, c.xp]).toEqual([3, 10]);
+  });
+
+  it('Quick Battle: each victory is worth exactly a level, so a winning party is level 3 at stage 3', () => {
+    const d = newDemo();
+    d.party.push(hero(), hero());
+    d.party[1].xp = 60; // part-way through a level: still exactly one level per win
+    resolveDemoBattle(d, 'victory');
+    resolveDemoBattle(d, 'victory');
+    expect(d.party.map((c) => [c.level, c.xp])).toEqual([[3, 0], [3, 60]]);
   });
 
   it('badly hurt enemies retreat instead of trading blows; healthy ones attack', () => {

@@ -4,7 +4,7 @@ A small turn-based tactical RPG that runs in the browser, built with [Phaser 4](
 
 ## How the game works
 
-1. **Main menu**: New Game, Continue, Save Game, Load Game, and **Quick Battle (Demo)**: the original game on its own. Recruit up to 4 Adventurers for free at a camp (any look, weapon and skills), then fight stages 1 to 5; every victory is worth a level, and clearing stage 5 completes the demo. The **Enemies** slider at camp raises the difficulty: it multiplies the encounter's size from 1x to 5x in 0.5 steps (5x at stage 1 is 30 rats, whatever the size of your party). Big encounters deploy further toward the middle of the map. The demo is separate from your Arch City campaign and isn't saved.
+1. **Main menu**: New Game, Continue, Save Game, Load Game, and **Quick Battle (Demo)**: the original game on its own. Recruit up to 4 Adventurers for free at a camp (any look, weapon and skills), then fight stages 1 to 5; every victory is worth exactly one level, and clearing stage 5 completes the demo. The **Enemies** slider at camp raises the difficulty: it multiplies the encounter's size from 1x to 5x in 0.5 steps (5x at stage 1 is 30 rats, whatever the size of your party). Big encounters deploy further toward the middle of the map. The demo is separate from your Arch City campaign and isn't saved.
 2. **Your character**: a new game starts by creating your main character (name, sex, skin, face, hair, hair colour, clothes colour, weapon, skills) and naming your party. The main character is permanent: they can't be dismissed and always lead the party on quests.
 3. **Arch City**: the hub is a map of the walled city (`public/art/city/arch-city.webp`) with two tabs: the **Outer City**, between the outer and inner walls and out to the harbour (Adventurer Guild, the domed hall in the south-west; Docks, Marketplace, Slave Market, Slums, Customs Office, Tailor, Auction House, Church, Sleeping Griffin Inn, Outer City House), and the **Inner City**, inside the inner wall (Lord's Manor, Central Church, Central Government Office, Library, Estate Office, Silver Lantern Inn, Gilded Crown Inn, Inner City Townhouse, Inner City Mansion). Click a pin on the map or a button below it. Open so far: the **Adventurer Guild**, the **Slave Market**, the **Estate Office**, the three **inns** and the three **residences**; the rest are greyed out. **Manage Party** (bottom bar) handles your members and their schedule, **Sleep outside** ends the day for free, and the side panel sets out on an accepted quest. See [Arch City and the guild](#arch-city-and-the-adventurer-guild).
 4. **Adventurers**: There are no fixed classes. Every party member is an Adventurer, and you build them by mixing a weapon with picks from the skill trees. Up to 4 go on each quest (the lineup); the party can have up to 8 members.
@@ -75,7 +75,7 @@ Every 7th day is **payday** for companions.
 The **Quest Board** is shared with every rival party. It holds about **24 quests** across all ranks: up to 8 new ones are posted each day (35% C, 25% D, 25% B, 15% A), each stays up 4–8 days, and there are always at least 6 at your rank. **Rival parties take quests from it every day**, and they go for the best deals first, so a generous quest may not last. You can take quests at your rank or below (the board shows those by default; **All quests** shows the rest, locked). Quests vary in risk and reward:
 
 - **Enemy level and group size** are rolled independently within the quest's rank ("Small group" and "Large band" mark the bottom and top third of its size range). Together they make the quest's **total threat**, which sets its pay, renown and how hard rival parties find it.
-- **Quest cards** show the foes as pictures rather than numbers: an icon per enemy to expect (a small copy of the monster's battle art; goblins, bandits, skeletons, orcs, sellswords and renegades get their own head badges), and **five skulls**, lit for how dangerous the quest is for its rank (orange at 4–5). Hover them for the same in words. The enemy level is in the description, and the card says how long the journey is and the day the notice comes down.
+- **Quest cards** show the foes as pictures rather than numbers: an icon per enemy to expect (a small copy of the monster's battle art; goblins, bandits, skeletons, orcs, sellswords and renegades get their own head badges), and **up to five skulls, in halves**, for how hard the quest is on one fixed scale for the whole game (orange from 4). Skulls rise evenly with the quest's difficulty (the average party level it calls for, from its total threat): half a skull at difficulty −4, five at 24 (`threat.skulls` in `guild.json`). D quests show about ½–2, C 1½–3, B 3–4, A 4–5. Hover them for the same in words. The enemy level is in the description, and the card says how long the journey is and the day the notice comes down.
 - **Pay**: on top of that, the reward is 0.75–1.35× the usual for the quest's level and group size. Cards flag **Generous pay** and **Poor pay**.
 
 **Total threat** = group size × strength. Group size is in threat points (each enemy type's `threat` in `enemies.json`: a bandit is 1, a rat 0.5, so weak types come in bigger packs). Strength is how strong one enemy is at the quest's level: 10 at level 1, about 16.5% more per level (a level-20 enemy is about 18× a level-1 one). Usual gold is total threat × 1.75 and renown total threat × 0.26; the pay roll then adds luck to the gold. (`quests` and `threat` in `guild.json`.)
@@ -89,7 +89,17 @@ The **Quest Board** is shared with every rival party. It holds about **24 quests
 
 Promotion quests use the easier half of the rank's levels, its middle group size and usual pay.
 
-XP from a won quest depends on the enemy level against each member's level: 100 XP at an equal level, up to 200 for punching above it, and as little as 15 for easy work.
+**XP** from a won quest: every member who comes back gets **25 XP** (the same as a day of Training) plus an **equal share of 200 XP**, so smaller parties learn faster. Each member's total is then adjusted by the level difference: **+25% per level the enemies are above them, −25% per level below**, and **nothing at 4 or more levels above** (veterans can still escort newcomers on easy quests for the pay, but learn nothing). Failed quests give no XP. (`xp` in `guild.json`.)
+
+| Party size | XP each at the enemies' level |
+|---|---|
+| 1 | 225 |
+| 2 | 125 |
+| 3 | 92 |
+| 4 | 75 |
+| 5 | 65 |
+
+Each level needs **25 XP more than the last**: 100 from level 1 to 2, 125 to 3, 325 from 10 to 11, 575 from 20 to 21 (`xpPerLevel` in `stats.json`). Early levels come after a win or two; later ones take several, or harder quests.
 
 ### The other parties
 
@@ -142,7 +152,7 @@ Tooltips show a formula line generated from the numbers (e.g. "80% P.Atk, then 4
 
 Every attack hits. **Resist** gives a chance to shrug off debuffs (Burn, Slow, Corrode...): Resist ÷ (100 + Resist), the same curve as Defense, so 50 Resist = 33% and 100 = 50%. A resisted debuff shows "Resisted" and doesn't apply; the attack's damage still lands. Targeting shows the chance, and the enemy AI weighs it. Enemies' Resist matches their Defense.
 
-Stats grow automatically on level up (100 XP per level), at a speed set by the Adventurer's **talent**. Every growing stat (Health, Mana, P.Atk, M.Atk, Defense, Resist) has its own talent grade, rolled when the Adventurer is created; the grade multiplies that stat's growth per level (the numbers in brackets above):
+Stats grow automatically on level up (100 XP for the first level, 25 more for each one after), at a speed set by the Adventurer's **talent**. Every growing stat (Health, Mana, P.Atk, M.Atk, Defense, Resist) has its own talent grade, rolled when the Adventurer is created; the grade multiplies that stat's growth per level (the numbers in brackets above):
 
 | Talent | S | A | B | C | D | F |
 |---|---|---|---|---|---|---|

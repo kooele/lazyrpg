@@ -1,7 +1,7 @@
 // Quick Battle (demo): the original 5-stage game. Build a party of up to 4 Adventurers at camp,
 // then fight stages 1 to 5. It lives apart from the Arch City campaign and isn't saved.
-import { STAT_CONFIG } from '../data/stats';
 import type { Character } from '../data/types';
+import { xpToNext } from '../data/content';
 import { grantXp } from './character';
 
 export const DEMO_STAGES = 5;
@@ -31,7 +31,7 @@ export function requireDemo(): DemoState {
   return demo.state ?? newDemo();
 }
 
-/** Settle a demo battle: a victory gives every Adventurer xpPerVictory and moves to the next stage. Returns report lines. */
+/** Settle a demo battle: a victory gives every Adventurer one level's worth of XP and moves to the next stage. Returns report lines. */
 export function resolveDemoBattle(d: DemoState, outcome: 'victory' | 'defeat'): string[] {
   const lines: string[] = [];
   if (outcome === 'defeat') {
@@ -39,9 +39,8 @@ export function resolveDemoBattle(d: DemoState, outcome: 'victory' | 'defeat'): 
     return ['Your party falls back to camp to recover.', 'Rethink your loadouts and try again.'];
   }
   d.victories += 1;
-  const xp = STAT_CONFIG.xpPerVictory;
-  lines.push(`Each adventurer gains ${xp} XP.`);
-  for (const c of d.party) if (grantXp(c, xp) > 0) lines.push(`${c.name} reached level ${c.level}! Stats grew, and they gained a skill point.`);
+  lines.push('Each adventurer gains a level\'s worth of XP.');
+  for (const c of d.party) if (grantXp(c, xpToNext(c.level)) > 0) lines.push(`${c.name} reached level ${c.level}! Stats grew, and they gained a skill point.`);
   if (d.stage >= DEMO_STAGES) {
     d.complete = true;
     lines.push('', `All ${DEMO_STAGES} stages cleared: the demo is complete!`, 'Start a new game to visit Arch City.');

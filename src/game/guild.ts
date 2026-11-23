@@ -3,7 +3,9 @@
 import { WEAPONS } from '../data/content';
 import { GUILD } from '../data/guild';
 import { RANKS, type AdventurerRank, type FreeAdventurer, type GameState, type GuildState, type Quest, type Rank, type RivalMember, type RivalParty } from '../data/types';
-import { postQuests, questRenown, strength, totalThreat, usualCount } from './board';
+import { postQuests, questDifficulty, questRenown, usualCount } from './board';
+
+export { questDifficulty };
 import { newId, type Rng } from './character';
 import { randInt, randomAdventurer, randomName, randomPartyName } from './people';
 
@@ -185,17 +187,6 @@ export function deathFactor(level: number): number {
 export function rivalSuccessChance(p: RivalParty, rank: Rank): number {
   const power = avg(p.members.map((m) => m.level)) + 0.25 * (p.members.length - 4);
   return Math.max(0.1, Math.min(0.95, 0.55 + SIM.successPerLevel * (power - rankDifficulty(rank))));
-}
-
-/**
- * How hard a board quest is, as the average party level it calls for: the level at which a group of
- * threat.standardCount enemies would have the quest's total threat, minus 1. A usual-sized group at level L is
- * about L - 1; every ~16.5% more total threat (a level's worth of strength) adds a level.
- */
-export function questDifficulty(q: Pick<Quest, 'stage' | 'count'>): number {
-  const t = GUILD.threat;
-  const perEnemy = totalThreat(q) / t.standardCount;
-  return Math.log(perEnemy / strength(1)) / Math.log(t.strengthGrowth);
 }
 
 /** A usual quest of `rank`: mid-rank enemy level and group size. */
