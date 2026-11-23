@@ -1190,6 +1190,23 @@ export class Battle {
     return Math.round(this.stat(source, 'pAtk') * (sc.pAtk ?? 0) + this.stat(source, 'mAtk') * (sc.mAtk ?? 0));
   }
 
+  /**
+   * Run `fn` as if `target` had status `id` from `source` (one stack, caster-scaled amounts included),
+   * then put its statuses back. For previews: what a buff or debuff would change.
+   */
+  withStatus<T>(source: Unit, target: Unit, id: string, fn: () => T): T {
+    const def = STATUSES[id];
+    const saved = target.statuses;
+    target.statuses = [...saved.filter((s) => s.id !== id), {
+      id, name: def.name, debuff: def.debuff, stacks: 1, amount: this.scaledStatusAmount(source, id), turns: 1, tick: def.tick,
+    }];
+    try {
+      return fn();
+    } finally {
+      target.statuses = saved;
+    }
+  }
+
   /** Shield points `skill` gives `target` when `caster` uses it. */
   shieldAmount(caster: Unit, skill: SkillDef, target: Unit): number {
     const sh = skill.shield;

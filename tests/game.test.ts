@@ -6,7 +6,7 @@ import enemiesJson from '../src/data/enemies.json';
 import { ENEMIES, parseEnemies } from '../src/data/enemies';
 import { STAT_CONFIG, parseStatConfig } from '../src/data/stats';
 import type { Character, SkillDef } from '../src/data/types';
-import { caution, planTurn, preferredMode, runAiTurn, shouldDisengage, shouldSurrender, threatAt, tribeRouted, wantsToFlee } from '../src/game/ai';
+import { bestAction, caution, planTurn, preferredMode, runAiTurn, shouldDisengage, shouldSurrender, threatAt, tribeRouted, wantsToFlee } from '../src/game/ai';
 import { Battle, defenseMultiplier, resistChance, deploymentTiles, enemyTypesForStage, generateEnemies, makeEnemy, pickFoes, makeUnit, victoryXp, type Team } from '../src/game/battle';
 import { allSkills, bodyGain, skillBarLayout, swapBarSlots, bodyPoints as bodyPointsOf, bodyStats, createCharacter, deriveStats, freePoints, grantXp, isUnlocked, makeRng, pointsUsed, sanitizeLoadout } from '../src/game/character';
 import { randomAdventurer } from '../src/game/people';
@@ -1111,6 +1111,36 @@ describe('progression and enemy behaviour', () => {
     slime.hp = Math.round(slime.stats.health * 0.3);
     expect(wantsToFlee(battle, slime)).toBe(true);
     expect(shouldDisengage(battle, slime)).toBe(false);
+  });
+});
+
+describe('buffs (War Cry, Howl)', () => {
+  const goblin = (weapon: string, at: Point) => {
+    for (let seed = 1; seed < 300; seed++) {
+      const g = makeEnemy('goblin', 6, makeRng(seed));
+      if (g.weaponId === weapon) return makeUnit(g, 'enemy', at);
+    }
+    throw new Error(`no goblin with a ${weapon}`);
+  };
+  const map = () => openMap(12, 8);
+
+  it('a goblin archer shoots rather than War Cry when the cry would only rouse itself and one far-off ally', () => {
+    // War Cry ends its turn, so its own Frenzy only covers its next turn: worth less than a shot now.
+    const a = makeUnit(hero(), 'player', { x: 4, y: 3 });
+    const archer = goblin('bow', { x: 8, y: 3 });
+    const bandit = makeUnit(makeEnemy('bandit', 6, makeRng(8)), 'enemy', { x: 9, y: 0 });
+    const battle = new Battle(map(), [a, archer, bandit], makeRng(1));
+    battle.endPhase();
+    expect(bestAction(battle, archer)?.id).toBe('bow_attack');
+  });
+
+  it('War Cry is worth it when a pack is about to charge', () => {
+    const heroes = [3, 4, 5].map((y) => makeUnit(hero(), 'player', { x: 2, y }));
+    const archer = goblin('bow', { x: 8, y: 4 });
+    const pack = [3, 4, 5, 6].map((y, i) => goblin(i % 2 ? 'spear' : 'staff', { x: 7, y }));
+    const battle = new Battle(map(), [...heroes, archer, ...pack], makeRng(1));
+    battle.endPhase();
+    expect(bestAction(battle, archer)?.id).toBe('war_cry');
   });
 });
 

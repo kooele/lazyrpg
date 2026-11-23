@@ -120,9 +120,8 @@ function scoreSkill(battle: Battle, u: Unit, skill: SkillDef, from: Point, aim: 
         score += lands * t.stats.health * (def.damagePctMaxHpPerStack ?? 0) * stackTurns;
         if (def.statMods || def.statPct) score += lands * 15 * lasts;
       } else if (friendly && !def.debuff && !t.statuses.some((x) => x.id === a.status)) {
-        // Buffs (e.g. Howl's Frenzy) are worth it when a fight is close.
-        const fightNear = battle.living().some((f) => f.team !== u.team && dist(f, t) <= 6);
-        if (fightNear) score += 25 * a.turns;
+        // Buffs (Howl's and War Cry's Frenzy, Protection): the damage they add or prevent while they last.
+        score += buffValue(battle, u, skill, from, t, a.status, a.turns);
       }
     }
     if (skill.heal) {
@@ -151,6 +150,46 @@ function scoreSkill(battle: Battle, u: Unit, skill: SkillDef, from: Point, aim: 
     }
   }
   return score;
+}
+
+/**
+ * What a buff on ally `t` is worth: the extra damage it lets `t` deal, plus the damage it saves `t` from,
+ * over the turns it really covers, counting only foes that could be in reach on those turns.
+ * A status lasting N turns covers N - 1 later turns of each side, plus the rest of this turn for a unit
+ * that can still act in it (not the caster of a turn-ending skill such as War Cry).
+ */
+function buffValue(battle: Battle, u: Unit, skill: SkillDef, from: Point, t: Unit, status: string, turns: number): number {
+  const pos = t === u ? from : { x: t.x, y: t.y };
+  const actsNow = t.team === battle.phase && battle.canAct(t) && !(t === u && skill.ap === 'end');
+  const later = Math.max(0, turns - 1);
+  const tiles = (x: Unit) => battle.stat(x, 'movement') / MOVEMENT_PER_TILE;
+  const damage = (from: Unit, to: Unit) => battle.previewHits(from, battle.basicAttack(from), to).reduce((a, b) => a + b, 0);
+  const foes = battle.living().filter((f) => f.team !== t.team);
+  const before = {
+    dealt: new Map(foes.map((f) => [f, damage(t, f)])),
+    taken: new Map(foes.map((f) => [f, damage(f, t)])),
+  };
+  return battle.withStatus(u, t, status, () => {
+    let value = 0;
+    // Offence: each covered turn of t's, its best extra hit on a foe it could reach by then.
+    const ownTurns = [...(actsNow ? [1] : []), ...Array.from({ length: later }, (_, i) => (actsNow ? 2 : 1) + i)];
+    for (const moves of ownTurns) {
+      let best = 0;
+      for (const f of foes) {
+        if (dist(pos, f) > moves * tiles(t) + battle.basicAttack(t).range + 0.5) continue;
+        best = Math.max(best, damage(t, f) - before.dealt.get(f)!);
+      }
+      value += best;
+    }
+    // Defence: each covered foe turn, the damage each foe that could reach t no longer deals.
+    for (let i = 1; i <= later; i++) {
+      for (const f of foes) {
+        if (dist(pos, f) > i * tiles(f) + battle.basicAttack(f).range + 0.5) continue;
+        value += Math.max(0, before.taken.get(f)! - damage(f, t));
+      }
+    }
+    return value;
+  });
 }
 
 function bestFrom(
