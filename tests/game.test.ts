@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import skillsJson from '../src/data/skills.json';
 import weaponsJson from '../src/data/weapons.json';
-import { SKILLS, TREE_SKILLS, WEAPONS, parseContent, skillFormula, skillPointsForLevel, skillStatText, skillStats } from '../src/data/content';
+import { SKILLS, TREE_SKILLS, WEAPONS, parseContent, skillEffect, skillPointsForLevel, skillStatText, skillStats } from '../src/data/content';
 import enemiesJson from '../src/data/enemies.json';
 import { parseEnemies } from '../src/data/enemies';
 import { STAT_CONFIG, parseStatConfig } from '../src/data/stats';
@@ -75,32 +75,23 @@ describe('stats and content files', () => {
 
   it('every weapon grants defined skills; formulas are generated from the data', () => {
     for (const w of Object.values(WEAPONS)) for (const s of w.skills) expect(SKILLS[s]).toBeDefined();
-    expect(skillFormula(SKILLS.execute)).toBe("100% P.Atk + 15% target's missing HP");
-    expect(skillFormula(SKILLS.double_strike)).toBe('basic attack x2');
-    expect(skillFormula(SKILLS.life_risking_strike)).toBe('250% P.Atk · you: Exposed (1 turn) · if it survives, you take 100% P.Atk');
+    expect(skillEffect(SKILLS.execute)).toBe("100% P.Atk + 15% of target's missing HP");
+    expect(skillEffect(SKILLS.double_strike)).toBe('Basic attack x2');
+    expect(skillEffect(SKILLS.life_risking_strike)).toBe('250% P.Atk, You: Exposed (1 turn), 100% P.Atk recoil if the target survives');
   });
 
-  it('skill stat lists are uniform: effect rows, then Target, Range, AP, Mana, Cooldown on every skill', () => {
-    const labels = (id: string) => skillStats(SKILLS[id]).map((r) => r.label);
+  it('skill info shows Effect, Tags, AP, Mana and Cooldown, leaving out a 0 mana cost or no cooldown', () => {
     for (const [id, s] of Object.entries(SKILLS)) {
-      if (s.modes) continue;
-      const l = labels(id);
-      const common = l.filter((x) => ['Target', 'Range', 'AP', 'Mana', 'Cooldown'].includes(x));
-      expect(common, id).toEqual(['Target', 'Range', 'AP', 'Mana', 'Cooldown']);
-      expect(l.indexOf('Target'), id).toBe(l.length - common.length - (l.includes('Needs') ? 1 : 0) - (l.includes('Unlocks') ? 1 : 0));
-      // Numbers live in the list, not the description.
-      expect(s.description, id).not.toMatch(/\d+%/);
+      const labels = skillStats(s).map((r) => r.label);
+      const c = s.modes ? SKILLS[s.modes[0]] : s;
+      const want = ['Effect', ...(s.tags.length ? ['Tags'] : []), 'AP', ...(c.mana ? ['Mana'] : []), ...(c.cooldown > 0 ? ['Cooldown'] : [])];
+      expect(labels, id).toEqual(want);
     }
-    expect(skillStatText(SKILLS.fireball, true)).toBe([
-      '• Damage: 100% M.Atk', '• Applies: Burn x1, 2 turns', '• Target: Enemy', '• Range: 5 tiles',
-      '• Needs: Line of sight', '• AP: Ends turn', '• Mana: None', '• Cooldown: 2 turns',
-    ].join('\n'));
-    expect(skillStatText(SKILLS.fireball)).toContain('• Applies: Burn x1, 2 turns\n   Lose 1%');
-    expect(labels('life_risking_strike')).toEqual(['Damage', 'On you', 'Recoil', 'Target', 'Range', 'AP', 'Mana', 'Cooldown', 'Unlocks']);
-    expect(skillStats(SKILLS.charge).find((r) => r.label === 'Range')!.value).toBe('Movement');
-    expect(skillStats(SKILLS.indirect_shot).find((r) => r.label === 'Range')!.value).toBe('Weapon range x1.5');
-    expect(skillStats(SKILLS.circle_swing).find((r) => r.label === 'Target')!.value).toBe('Every unit around you');
-    expect(skillStats(SKILLS.bow_attack).map((r) => r.label)).toEqual(['Direct mode', 'Indirect mode', 'Melee mode']);
+    expect(skillStatText(SKILLS.fireball)).toBe(
+      'Effect: 100% M.Atk, Burn x1 (2 turns)\nTags: Projectile, Debuff, Magical\nAP: Ends turn\nMana: 30\nCooldown: 2 turns');
+    expect(skillStatText(SKILLS.sword_slash)).toBe('Effect: 100% P.Atk\nTags: Melee, Engage, Physical\nAP: Ends turn');
+    expect(skillStats(SKILLS.engage)[0].value).toBe(SKILLS.engage.description);
+    expect(skillStats(SKILLS.bow_attack)[0].value).toBe('Direct: 100% P.Atk / Indirect: 70% P.Atk / Melee: 80% P.Atk');
   });
 });
 

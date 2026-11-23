@@ -291,120 +291,59 @@ export const isSupport = (s: SkillDef) => s.affects === 'ally' || !!(s.heal || s
 
 const pct = (v: number) => `${Math.round(v * 100)}%`;
 
-/** "80% P.Atk, then 40% P.Atk + 100% Def" etc. */
-export function skillFormula(s: SkillDef): string {
-  if (s.modes) return s.modes.map((m) => `${SKILLS[m].modeName ?? SKILLS[m].name}: ${skillFormula(SKILLS[m])}`).join(' / ');
+const tiles = (n: number) => `${n} tile${n === 1 ? '' : 's'}`;
+const turns = (n: number) => `${n} turn${n === 1 ? '' : 's'}`;
+
+/** What a skill does, with its numbers: "100% M.Atk, Burn x1 (2 turns)". Falls back to the description. */
+export function skillEffect(s: SkillDef): string {
+  if (s.modes) return s.modes.map((id) => `${SKILLS[id].modeName ?? SKILLS[id].name}: ${skillEffect(SKILLS[id])}`).join(' / ');
   const parts: string[] = [];
   if (s.hits?.length) {
     parts.push(s.hits.map((h) => [
       h.pAtk ? `${pct(h.pAtk)} ${STAT_INFO.pAtk.short}` : '',
       h.mAtk ? `${pct(h.mAtk)} ${STAT_INFO.mAtk.short}` : '',
       h.def ? `${pct(h.def)} ${STAT_INFO.defense.short}` : '',
-      h.missingHp ? `${pct(h.missingHp)} target's missing HP` : '',
-    ].filter(Boolean).join(' + ')).join(', then '));
-  }
-  if (s.basicAttack) parts.push(s.basicAttack > 1 ? `basic attack x${s.basicAttack}` : 'basic attack');
-  for (const a of s.selfStatus ?? []) parts.push(`you: ${STATUSES[a.status].name} (${a.turns} turn${a.turns > 1 ? 's' : ''})`);
-  if (s.heal) parts.push(`heals ${pct(s.heal.mAtk)} M.Atk`);
-  if (s.shield) parts.push(`shield ${pct(s.shield.maxHpPct)} max HP for ${s.shield.turns} turn${s.shield.turns > 1 ? 's' : ''}`);
-  for (const a of s.applyStatus ?? []) parts.push(`${a.stacks ? `${a.stacks}x ` : ''}${STATUSES[a.status].name} (${a.turns} turns)`);
-  if (s.recoilIfSurvives) {
-    const r = s.recoilIfSurvives;
-    const cost = [r.pAtk ? `${pct(r.pAtk)} P.Atk` : '', r.mAtk ? `${pct(r.mAtk)} M.Atk` : ''].filter(Boolean).join(' + ');
-    parts.push(`if it survives, you take ${cost}`);
-  }
-  if (s.knockback) parts.push(`knockback ${s.knockback}`);
-  if (s.cleanse) parts.push('removes debuffs');
-  if (s.teleport) parts.push('teleport');
-  return parts.join(' · ');
-}
-
-const tiles = (n: number) => `${n} tile${n === 1 ? '' : 's'}`;
-const turns = (n: number) => `${n} turn${n === 1 ? '' : 's'}`;
-
-/** What a skill can be aimed at. */
-function targetLabel(s: SkillDef): string {
-  const who = s.affects === 'enemy' ? 'Enemy' : s.affects === 'ally' ? 'Ally' : 'Any unit';
-  switch (s.target) {
-    case 'unit': return s.affects === 'any' ? 'Any unit (you included)' : who;
-    case 'self':
-      if (hasTag(s, 'weapon') || s.aoeRadius) return s.affects === 'any' ? 'Every unit around you' : s.affects === 'ally' ? 'You and allies around you' : 'Enemies around you';
-      return 'Self';
-    case 'line': return `First ${who.toLowerCase()} in a line`;
-    case 'cone': return `First enemy to enter a ${s.cone?.angle ?? 60}° cone`;
-    case 'emptyTile': return 'Empty tile';
-    case 'move': return 'Reachable tile';
-  }
-}
-
-/** How far a skill reaches. */
-function rangeLabel(s: SkillDef): string {
-  if (s.weaponRange !== undefined) return `Weapon range${s.weaponRange !== 1 ? ` x${s.weaponRange}` : ''}`;
-  if (s.rangeScale !== undefined || s.target === 'move') return 'Movement';
-  if (s.target === 'self') return hasTag(s, 'weapon') ? 'Weapon range' : s.aoeRadius ? `${tiles(s.aoeRadius)} radius` : 'Self';
-  if (hasTag(s, 'weapon')) return 'Weapon range';
-  return tiles(s.range);
-}
-
-/**
- * A skill's data as a uniform list of rows, always in the same order: the effect rows it has
- * (Damage, Heal, Shield, Applies, On you, Recoil, Knockback, Cleanse, Move), then the rows every
- * skill has (Target, Range, [Needs], AP, Mana, Cooldown, [Unlocks]). A moded skill (the Bow) lists its modes instead.
- */
-export function skillStats(s: SkillDef): SkillStat[] {
-  const rows: SkillStat[] = [];
-  const row = (label: string, value: string, note?: string) => rows.push({ label, value, note });
-  if (s.modes) {
-    for (const m of s.modes.map((id) => SKILLS[id])) {
-      const los = m.los ? [m.los === 'fire' ? 'Line of fire' : 'Line of sight'] : [];
-      row(`${m.modeName ?? m.name} mode`, [skillFormula(m), rangeLabel(m), ...los].join(' · '));
-    }
-    return rows;
-  }
-  if (s.hits?.length) {
-    row('Damage', s.hits.map((h) => [
-      h.pAtk ? `${pct(h.pAtk)} ${STAT_INFO.pAtk.short}` : '',
-      h.mAtk ? `${pct(h.mAtk)} ${STAT_INFO.mAtk.short}` : '',
-      h.def ? `${pct(h.def)} ${STAT_INFO.defense.short}` : '',
       h.missingHp ? `${pct(h.missingHp)} of target's missing HP` : '',
     ].filter(Boolean).join(' + ')).join(', then '));
   }
-  if (s.basicAttack) row('Damage', s.basicAttack > 1 ? `Basic attack x${s.basicAttack}` : 'Basic attack');
-  if (s.heal) row('Heal', `${pct(s.heal.mAtk)} ${STAT_INFO.mAtk.short}`);
-  if (s.shield) row('Shield', `${pct(s.shield.maxHpPct)} of max HP for ${turns(s.shield.turns)}`);
-  for (const a of s.applyStatus ?? []) {
-    const st = STATUSES[a.status];
-    row('Applies', `${st.name}${a.stacks ? ` x${a.stacks}` : ''}, ${turns(a.turns)}`, st.description);
-  }
-  for (const a of s.selfStatus ?? []) row('On you', `${STATUSES[a.status].name}, ${turns(a.turns)}`, STATUSES[a.status].description);
+  if (s.basicAttack) parts.push(s.basicAttack > 1 ? `Basic attack x${s.basicAttack}` : 'Basic attack');
+  if (s.heal) parts.push(`Heal ${pct(s.heal.mAtk)} ${STAT_INFO.mAtk.short}`);
+  if (s.shield) parts.push(`Shield ${pct(s.shield.maxHpPct)} of max HP (${turns(s.shield.turns)})`);
+  for (const a of s.applyStatus ?? []) parts.push(`${STATUSES[a.status].name}${a.stacks ? ` x${a.stacks}` : ''} (${turns(a.turns)})`);
+  for (const a of s.selfStatus ?? []) parts.push(`You: ${STATUSES[a.status].name} (${turns(a.turns)})`);
   if (s.recoilIfSurvives) {
     const r = s.recoilIfSurvives;
-    row('Recoil', `${[r.pAtk ? `${pct(r.pAtk)} P.Atk` : '', r.mAtk ? `${pct(r.mAtk)} M.Atk` : ''].filter(Boolean).join(' + ')} if the target survives`);
+    parts.push(`${[r.pAtk ? `${pct(r.pAtk)} P.Atk` : '', r.mAtk ? `${pct(r.mAtk)} M.Atk` : ''].filter(Boolean).join(' + ')} recoil if the target survives`);
   }
-  if (s.knockback) row('Knockback', tiles(s.knockback));
-  if (s.cleanse) row('Cleanse', 'Removes all debuffs');
-  if (s.teleport) row('Move', s.charge ? 'Teleport next to the target' : 'Teleport');
-  else if (s.charge) row('Move', 'Dash next to the target');
-  row('Target', targetLabel(s));
-  row('Range', rangeLabel(s));
-  const los = s.los ?? s.cone?.los;
-  if (los) row('Needs', los === 'fire' ? 'Line of fire' : 'Line of sight');
-  row('AP', apLabel(s));
-  row('Mana', s.mana ? `${s.mana} MP` : 'None');
-  row('Cooldown', s.cooldown > 0 ? turns(s.cooldown) : 'None');
-  if (s.level > 1) row('Unlocks', `Level ${s.level}`);
+  if (s.knockback) parts.push(`Knockback ${tiles(s.knockback)}`);
+  if (s.cleanse) parts.push('Removes all debuffs');
+  if (s.teleport) parts.push(s.charge ? 'Teleport next to the target' : 'Teleport');
+  else if (s.charge) parts.push('Dash next to the target');
+  return parts.length ? parts.join(', ') : s.description;
+}
+
+/** One row of a skill's info: "Label: value". */
+export interface SkillStat { label: string; value: string }
+
+/**
+ * A skill's info rows, always in this order: Effect, Tags, AP, Mana, Cooldown.
+ * Mana and Cooldown are left out when they are 0. (The targeting grid is drawn separately.)
+ */
+export function skillStats(s: SkillDef): SkillStat[] {
+  const rows: SkillStat[] = [{ label: 'Effect', value: skillEffect(s) }];
+  const tags = tagNames(s);
+  if (tags.length) rows.push({ label: 'Tags', value: tags.join(', ') });
+  // A moded skill (the Bow Attack) costs what its modes cost.
+  const c = s.modes ? SKILLS[s.modes[0]] : s;
+  rows.push({ label: 'AP', value: apLabel(c) });
+  if (c.mana) rows.push({ label: 'Mana', value: String(c.mana) });
+  if (c.cooldown > 0) rows.push({ label: 'Cooldown', value: turns(c.cooldown) });
   return rows;
 }
 
-/** One row of `skillStats`: "Label: value", with an optional explanation (a status's effect). */
-export interface SkillStat { label: string; value: string; note?: string }
-
-/**
- * `skillStats` as text: one "• Label: value" row per line, a note on an indented line under its row.
- * `compact` (the battle panel and the weapon list) leaves the notes out.
- */
-export function skillStatText(s: SkillDef, compact = false): string {
-  return skillStats(s).map((r) => `• ${r.label}: ${r.value}${r.note && !compact ? `\n   ${r.note}` : ''}`).join('\n');
+/** `skillStats` as text, one "Label: value" row per line. */
+export function skillStatText(s: SkillDef): string {
+  return skillStats(s).map((r) => `${r.label}: ${r.value}`).join('\n');
 }
 
 /** Display names of a skill's tags. */

@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import {
-  BASIC_SKILLS, NAME_MAX_LENGTH, PALETTE, isSupport, SKILLS, SKILL_TABS, SKILL_TREES, WEAPONS, XP_PER_LEVEL, resolveWeaponSkill, skillStatText, tagNames,
+  BASIC_SKILLS, NAME_MAX_LENGTH, PALETTE, isSupport, SKILLS, SKILL_TABS, SKILL_TREES, WEAPONS, XP_PER_LEVEL, resolveWeaponSkill, skillStatText,
 } from '../data/content';
 import { STAT_CONFIG, visibleStatKeys } from '../data/stats';
 import {
@@ -189,10 +189,7 @@ export class CharacterCreatorScene extends Phaser.Scene {
   }
 
   private skillInfo(s: SkillDef): string {
-    const shape = skillShape(s, this.reachContext());
-    const note = shape.kind === 'cone' ? '\nShown facing right; aim it any way.'
-        : shape.kind === 'self' ? '\nAffects only you.' : '';
-    return `${s.name}  [${tagNames(s).join(', ')}]\n${s.description}\n\n${skillStatText(s)}${note}`;
+    return `${s.name}\n${skillStatText(s)}`;
   }
 
   private showSkill(s: SkillDef): void {
@@ -255,14 +252,12 @@ export class CharacterCreatorScene extends Phaser.Scene {
       const name = text(this, 0, 0, `${s.name}${note}`, { fontSize: '15px' }).setInteractive();
       name.on('pointerover', () => this.showSkill(s)).on('pointerout', () => this.tooltip.hide());
       c.add(name);
-      const desc = text(this, 0, 20, s.description, { fontSize: '12px', color: COLORS.dim, wordWrap: { width: 196 } });
-      c.add(desc);
-      const stats = text(this, 0, 24 + desc.height, skillStatText(s, true), { fontSize: '11px', color: COLORS.gold, wordWrap: { width: 266 }, lineSpacing: 1 });
+      const stats = text(this, 0, 21, skillStatText(s), { fontSize: '12px', color: COLORS.dim, wordWrap: { width: 196 }, lineSpacing: 1 });
       c.add(stats);
       const mini = this.diagram(s, 56);
       mini.container.setPosition(266 - mini.size, 2);
       c.add(mini.container);
-      items.push({ obj: c, height: Math.max(30 + desc.height + stats.height, mini.size + 6) });
+      items.push({ obj: c, height: Math.max(28 + stats.height, mini.size + 6) });
     };
     w.skills.forEach((sid, i) => skillItem(sid, i === 0 ? '  (basic attack)' : ''));
     items.push({ obj: this.add.container(0, 0, [text(this, 0, 4, 'Basic abilities (every Adventurer)', { fontSize: '12px', color: COLORS.dim })]), height: 24 });

@@ -148,14 +148,14 @@
     "fireball": {
       "name": "Fireball", "description": "Hurl a fireball that sets an enemy alight.",
       "tags": ["projectile", "debuff", "magical"],
-      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "los": "sight", "cooldown": 2,
+      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "los": "sight", "cooldown": 2, "mana": 30,
       "hits": [{ "mAtk": 1 }],
       "applyStatus": [{ "status": "burn", "stacks": 1, "turns": 2 }]
     },
     "freeze": {
       "name": "Freeze", "description": "Freeze an enemy, slowing it down.",
       "tags": ["debuff", "magical"],
-      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "cooldown": 2,
+      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "cooldown": 2, "mana": 30,
       "hits": [{ "mAtk": 1 }],
       "applyStatus": [{ "status": "slow", "turns": 2 }]
     },
