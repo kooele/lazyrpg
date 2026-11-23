@@ -85,10 +85,23 @@ export function parseContent(skillsData: unknown, weaponsData: unknown): GameCon
       statMods: st.statMods === undefined ? undefined : S.stats(st.statMods, `${p}.statMods`),
       statPct: st.statPct === undefined ? undefined : S.stats(st.statPct, `${p}.statPct`),
       stealth: S.bool(st.stealth, `${p}.stealth`) || undefined,
+      maxStacks: S.optNum(st.maxStacks, `${p}.maxStacks`),
+      overflow: st.overflow === undefined ? undefined : (() => {
+        const o = S.obj(st.overflow, `${p}.overflow`);
+        return { status: S.str(o.status, `${p}.overflow.status`), turns: S.num(o.turns, `${p}.overflow.turns`) };
+      })(),
+      frozen: S.bool(st.frozen, `${p}.frozen`) || undefined,
+      casterScaled: st.casterScaled === undefined ? undefined : (() => {
+        const o = S.obj(st.casterScaled, `${p}.casterScaled`);
+        return { stat: S.oneOf(o.stat, `${p}.casterScaled.stat`, STAT_KEYS), pAtk: S.optNum(o.pAtk, `${p}.casterScaled.pAtk`), mAtk: S.optNum(o.mAtk, `${p}.casterScaled.mAtk`) };
+      })(),
     };
   }
+  for (const st of Object.values(statuses)) {
+    if (st.overflow && !statuses[st.overflow.status]) fail('skills.json', `statuses.${st.id}.overflow.status`, `"${st.overflow.status}" is not defined in "statuses"`);
+  }
 
-  const TARGETS: readonly SkillTarget[] = ['unit', 'self', 'line', 'cone', 'emptyTile', 'move'];
+  const TARGETS: readonly SkillTarget[] = ['unit', 'self', 'line', 'cone', 'emptyTile', 'move', 'ground'];
   const LOS: readonly LosRule[] = ['sight', 'fire'];
   const skills: Record<string, SkillDef> = {};
   // Skills with modes (the bow's basic attack) are filled in from their modes once every skill is read.
@@ -150,13 +163,26 @@ export function parseContent(skillsData: unknown, weaponsData: unknown): GameCon
       heal: r.heal === undefined ? undefined : { mAtk: S.num(S.obj(r.heal, `${p}.heal`).mAtk, `${p}.heal.mAtk`) },
       shield: r.shield === undefined ? undefined : (() => {
         const o = S.obj(r.shield, `${p}.shield`);
-        return { maxHpPct: S.num(o.maxHpPct, `${p}.shield.maxHpPct`), turns: S.num(o.turns, `${p}.shield.turns`) };
+        const shield = { maxHpPct: S.optNum(o.maxHpPct, `${p}.shield.maxHpPct`), mAtk: S.optNum(o.mAtk, `${p}.shield.mAtk`), turns: S.num(o.turns, `${p}.shield.turns`) };
+        if (!shield.maxHpPct && !shield.mAtk) fail('skills.json', `${p}.shield`, 'needs maxHpPct and/or mAtk');
+        return shield;
       })(),
       applyStatus: r.applyStatus === undefined ? undefined : statusList(r.applyStatus, `${p}.applyStatus`),
       knockback: S.optNum(r.knockback, `${p}.knockback`),
       cleanse: S.bool(r.cleanse, `${p}.cleanse`) || undefined,
       aoeRadius: S.optNum(r.aoeRadius, `${p}.aoeRadius`),
       cone,
+      zone: r.zone === undefined ? undefined : (() => {
+        const o = S.obj(r.zone, `${p}.zone`);
+        const endTurnHits = S.num(o.endTurnHits ?? 1, `${p}.zone.endTurnHits`);
+        return {
+          radius: S.num(o.radius, `${p}.zone.radius`),
+          turns: S.num(o.turns, `${p}.zone.turns`),
+          hit: part(o.hit, `${p}.zone.hit`),
+          applyStatus: o.applyStatus === undefined ? [] : statusList(o.applyStatus, `${p}.zone.applyStatus`),
+          endTurnHits,
+        };
+      })(),
       teleport: S.bool(r.teleport, `${p}.teleport`) || undefined,
       charge: S.bool(r.charge, `${p}.charge`) || undefined,
       level: S.num(r.level ?? 1, `${p}.level`),
@@ -172,6 +198,7 @@ export function parseContent(skillsData: unknown, weaponsData: unknown): GameCon
     if (skill.basicAttack !== undefined && skill.hits) fail('skills.json', `${p}.basicAttack`, "can't be combined with \"hits\"");
     if (skill.level < 1 || !Number.isInteger(skill.level)) fail('skills.json', `${p}.level`, 'must be a whole number of 1 or more');
     if (skill.target === 'cone' && !skill.cone) fail('skills.json', `${p}.cone`, 'is required when target is "cone"');
+    if ((skill.target === 'ground') !== !!skill.zone) fail('skills.json', `${p}.zone`, 'goes with target "ground" (each needs the other)');
     if (skillTags.includes('movement') && skill.rangeScale === undefined) fail('skills.json', `${p}.rangeScale`, 'is required for "movement" skills');
     skills[id] = skill;
   }
@@ -285,47 +312,86 @@ export const isFree = (s: SkillDef) => s.ap === 0;
 /** "Free", "1 AP", "2 AP" or "Ends turn". */
 export const apLabel = (s: SkillDef) => (s.ap === 0 ? 'Free' : s.ap === 'end' ? 'Ends turn' : `${s.ap} AP`);
 /** Helpful skills (heals, cleanses, shields, buffs) are drawn green; attacks red. */
-export const isSupport = (s: SkillDef) => s.affects === 'ally' || !!(s.heal || s.cleanse || s.shield);
+export const isSupport = (s: SkillDef) =>
+  s.affects === 'ally' || !!(s.heal || s.cleanse || s.shield) || (s.applyStatus ?? []).some((a) => !STATUSES[a.status]?.debuff);
 
 // ---- descriptions generated from the data (always match the numbers) ---------------
 
 const pct = (v: number) => `${Math.round(v * 100)}%`;
 
-/** "80% P.Atk, then 40% P.Atk + 100% Def" etc. */
-export function skillFormula(s: SkillDef): string {
-  if (s.modes) return s.modes.map((m) => `${SKILLS[m].modeName ?? SKILLS[m].name}: ${skillFormula(SKILLS[m])}`).join(' / ');
-  const parts: string[] = [];
-  if (s.hits?.length) {
-    parts.push(s.hits.map((h) => [
-      h.pAtk ? `${pct(h.pAtk)} ${STAT_INFO.pAtk.short}` : '',
-      h.mAtk ? `${pct(h.mAtk)} ${STAT_INFO.mAtk.short}` : '',
-      h.def ? `${pct(h.def)} ${STAT_INFO.defense.short}` : '',
-      h.missingHp ? `${pct(h.missingHp)} target's missing HP` : '',
-    ].filter(Boolean).join(' + ')).join(', then '));
-  }
-  if (s.basicAttack) parts.push(s.basicAttack > 1 ? `basic attack x${s.basicAttack}` : 'basic attack');
-  for (const a of s.selfStatus ?? []) parts.push(`you: ${STATUSES[a.status].name} (${a.turns} turn${a.turns > 1 ? 's' : ''})`);
-  if (s.heal) parts.push(`heals ${pct(s.heal.mAtk)} M.Atk`);
-  if (s.shield) parts.push(`shield ${pct(s.shield.maxHpPct)} max HP for ${s.shield.turns} turn${s.shield.turns > 1 ? 's' : ''}`);
-  for (const a of s.applyStatus ?? []) parts.push(`${a.stacks ? `${a.stacks}x ` : ''}${STATUSES[a.status].name} (${a.turns} turns)`);
-  if (s.recoilIfSurvives) {
-    const r = s.recoilIfSurvives;
-    const cost = [r.pAtk ? `${pct(r.pAtk)} P.Atk` : '', r.mAtk ? `${pct(r.mAtk)} M.Atk` : ''].filter(Boolean).join(' + ');
-    parts.push(`if it survives, you take ${cost}`);
-  }
-  if (s.knockback) parts.push(`knockback ${s.knockback}`);
-  if (s.cleanse) parts.push('removes debuffs');
-  if (s.teleport) parts.push('teleport');
-  return parts.join(' · ');
+const tiles = (n: number) => `${n} tile${n === 1 ? '' : 's'}`;
+const turns = (n: number) => `${n} turn${n === 1 ? '' : 's'}`;
+
+/** One hit's damage: "100% P.Atk + 15% of target's missing HP". */
+function damageText(h: DamagePart): string {
+  return [
+    h.pAtk ? `${pct(h.pAtk)} ${STAT_INFO.pAtk.short}` : '',
+    h.mAtk ? `${pct(h.mAtk)} ${STAT_INFO.mAtk.short}` : '',
+    h.def ? `${pct(h.def)} ${STAT_INFO.defense.short}` : '',
+    h.missingHp ? `${pct(h.missingHp)} of target's missing HP` : '',
+  ].filter(Boolean).join(' + ');
 }
 
-/** One-line summary of a skill's rules: cooldown and line requirement. (Reach is shown as a tile diagram.) */
-export function skillDetails(s: SkillDef): string {
-  const parts = [...(s.level > 1 ? [`Level ${s.level}`] : []), apLabel(s), ...(s.mana ? [`${s.mana} MP`] : []), s.cooldown > 0 ? `Cooldown ${s.cooldown}` : 'No cooldown'];
-  const los = s.los ?? s.cone?.los;
-  if (los === 'fire') parts.push('Needs line of fire');
-  else if (los === 'sight') parts.push('Needs line of sight');
-  return parts.join(' · ');
+/** What a skill does, with its numbers: "100% M.Atk, Burn x1 (2 turns)". Falls back to the description. */
+export function skillEffect(s: SkillDef): string {
+  if (s.modes) return s.description;
+  if (s.zone) {
+    const z = s.zone;
+    const side = 2 * Math.floor(z.radius) + 1;
+    const hit = [damageText(z.hit), ...z.applyStatus.map((a) => `${STATUSES[a.status].name}${a.stacks ? ` x${a.stacks}` : ''} (${turns(a.turns)})`)].join(', ');
+    return `${side}x${side} zone for ${turns(z.turns)}. Each tile entered: ${hit}. Ending a turn inside: ${z.endTurnHits} hits`;
+  }
+  const parts: string[] = [];
+  if (s.hits?.length) parts.push(s.hits.map(damageText).join(', then '));
+  if (s.basicAttack) parts.push(s.basicAttack > 1 ? `Basic attack x${s.basicAttack}` : 'Basic attack');
+  if (s.heal) parts.push(`Heal ${pct(s.heal.mAtk)} ${STAT_INFO.mAtk.short}`);
+  if (s.shield) {
+    const sh = s.shield;
+    const amount = [sh.maxHpPct ? `${pct(sh.maxHpPct)} of max HP` : '', sh.mAtk ? `${pct(sh.mAtk)} ${STAT_INFO.mAtk.short}` : ''].filter(Boolean).join(' + ');
+    parts.push(`Shield ${amount} (${turns(sh.turns)})`);
+  }
+  for (const a of s.applyStatus ?? []) {
+    const st = STATUSES[a.status];
+    const sc = st.casterScaled;
+    if (sc) {
+      const from = [sc.pAtk ? `${pct(sc.pAtk)} ${STAT_INFO.pAtk.short}` : '', sc.mAtk ? `${pct(sc.mAtk)} ${STAT_INFO.mAtk.short}` : ''].filter(Boolean).join(' + ');
+      parts.push(`${STAT_INFO[sc.stat].name} +${from} (${turns(a.turns)})`);
+    } else parts.push(`${st.name}${a.stacks ? ` x${a.stacks}` : ''} (${turns(a.turns)})`);
+  }
+  for (const a of s.selfStatus ?? []) parts.push(`You: ${STATUSES[a.status].name} (${turns(a.turns)})`);
+  if (s.recoilIfSurvives) {
+    const r = s.recoilIfSurvives;
+    parts.push(`${[r.pAtk ? `${pct(r.pAtk)} P.Atk` : '', r.mAtk ? `${pct(r.mAtk)} M.Atk` : ''].filter(Boolean).join(' + ')} recoil if the target survives`);
+  }
+  if (s.knockback) parts.push(`Knockback ${tiles(s.knockback)}`);
+  if (s.cleanse) parts.push('Removes all debuffs');
+  if (s.teleport) parts.push(s.charge ? 'Teleport next to the target' : 'Teleport');
+  else if (s.charge) parts.push('Dash next to the target');
+  return parts.length ? parts.join(', ') : s.description;
+}
+
+/** One row of a skill's info: "Label: value". */
+export interface SkillStat { label: string; value: string }
+
+/**
+ * A skill's info rows, always in this order: Effect, Tags, AP, Mana, Cooldown.
+ * Mana and Cooldown are left out when they are 0. (The targeting grid is drawn separately.)
+ */
+export function skillStats(s: SkillDef): SkillStat[] {
+  const rows: SkillStat[] = [{ label: 'Effect', value: skillEffect(s) }];
+  const tags = tagNames(s);
+  if (tags.length) rows.push({ label: 'Tags', value: tags.join(', ') });
+  // A moded skill (the Bow Attack) costs what its modes cost.
+  const c = s.modes ? SKILLS[s.modes[0]] : s;
+  rows.push({ label: 'AP', value: apLabel(c) });
+  if (c.mana) rows.push({ label: 'Mana', value: String(c.mana) });
+  if (c.cooldown > 0) rows.push({ label: 'Cooldown', value: turns(c.cooldown) });
+  return rows;
+}
+
+/** `skillStats` as text, one "Label: value" row per line. */
+export function skillStatText(s: SkillDef): string {
+  return skillStats(s).map((r) => `${r.label}: ${r.value}`).join('\n');
 }
 
 /** Display names of a skill's tags. */

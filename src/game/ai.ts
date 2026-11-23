@@ -3,7 +3,7 @@
 // advance toward the enemy and set up overwatch if the weapon has it.
 import { SKILLS, STATUSES, hasTag, isFree } from '../data/content';
 import type { SkillDef } from '../data/types';
-import type { Battle, Unit } from './battle';
+import type { Battle, ReachInfo, Unit } from './battle';
 import { DIRS, MOVEMENT_PER_TILE, TERRAIN, dist, key, passable, type Point } from './grid';
 
 export interface AiAction {
@@ -63,7 +63,7 @@ function scoreSkill(battle: Battle, u: Unit, skill: SkillDef, from: Point, aim: 
     if (skill.shield) {
       // Only worth it if an enemy could walk up and hit us next turn.
       const threatened = battle.living().some((f) => f.team !== u.team && dist(f, from) <= f.stats.movement / MOVEMENT_PER_TILE + 1.5);
-      if (threatened && battle.shieldOf(t) === 0) score += t.stats.health * skill.shield.maxHpPct * 0.5;
+      if (threatened && battle.shieldOf(t) === 0) score += battle.shieldAmount(u, skill, t) * (friendly ? 0.5 : -1);
     }
     if (skill.cleanse) {
       if (!friendly) {
@@ -230,12 +230,14 @@ export function planTurn(battle: Battle, u: Unit): AiPlan {
   const threats = foeThreats(battle, u);
   const care = caution(battle, u);
   const danger = new Map(tiles.map((t) => [key(t.x, t.y), threatAt(battle, u, t, threats)]));
+  const hazard = (t: Point) => zoneHazard(battle, u, reach, t);
 
   // Badly hurt enemies run for the map edge if they can reach it this turn (the safest edge tile).
   if (wantsToFlee(u)) {
     const exits = tiles.filter((t) => battle.onEdge(t));
     if (exits.length) {
-      return { moveTo: exits.reduce((a, b) => (danger.get(key(b.x, b.y))! < danger.get(key(a.x, a.y))! ? b : a)) };
+      const risk = (t: Point) => danger.get(key(t.x, t.y))! + hazard(t);
+      return { moveTo: exits.reduce((a, b) => (risk(b) < risk(a) ? b : a)) };
     }
   }
 
@@ -249,10 +251,10 @@ export function planTurn(battle: Battle, u: Unit): AiPlan {
     const friends = healthyAllies(battle, u);
     const nearFriend = (p: Point) => Math.min(...friends.map((f) => dist(f, p)));
     let moveTo: Point = { x: u.x, y: u.y };
-    let bestRisk = danger.get(key(u.x, u.y)) ?? Infinity;
+    let bestRisk = (danger.get(key(u.x, u.y)) ?? Infinity) + hazard(u);
     let bestNear = nearFriend(u);
     for (const tile of tiles) {
-      const r = danger.get(key(tile.x, tile.y))!;
+      const r = danger.get(key(tile.x, tile.y))! + hazard(tile);
       const near = nearFriend(tile);
       if (r < bestRisk - 1e-9 || (Math.abs(r - bestRisk) < 1e-9 && near < bestNear)) {
         bestRisk = r;
@@ -268,10 +270,12 @@ export function planTurn(battle: Battle, u: Unit): AiPlan {
   // (otherwise weak units like rats never come).
   const held = holdTurns.get(u) ?? 0;
   const wary = u.hp / u.stats.health < 0.6 && held < MAX_HOLD_TURNS;
+  // Zone damage counts as extra distance (5% of max HP ~ one tile), so units walk around Firestorms when they can.
+  const zoneTiles = (t: Point) => hazard(t) / (u.stats.health * 0.05);
   let moveTo: Point = { x: u.x, y: u.y };
-  let bestDist = field.get(key(u.x, u.y)) ?? Infinity;
+  let bestDist = (field.get(key(u.x, u.y)) ?? Infinity) + zoneTiles(u);
   for (const tile of tiles) {
-    const d = field.get(key(tile.x, tile.y)) ?? Infinity;
+    const d = (field.get(key(tile.x, tile.y)) ?? Infinity) + zoneTiles(tile);
     const r = danger.get(key(tile.x, tile.y))!;
     if (d < bestDist && (!wary || r < u.hp || r <= danger.get(key(u.x, u.y))!)) {
       bestDist = d;
@@ -287,7 +291,7 @@ export function planTurn(battle: Battle, u: Unit): AiPlan {
  * shouldn't make a unit stand still instead of advancing), with its score. Null if nothing scores.
  */
 function attackPlan(
-  battle: Battle, u: Unit, tiles: Point[], reach: Map<string, { cost: number }>, danger: Map<string, number>, care: number,
+  battle: Battle, u: Unit, tiles: Point[], reach: Map<string, ReachInfo>, danger: Map<string, number>, care: number,
 ): { plan: AiPlan; score: number } | null {
   const leastDanger = Math.min(...danger.values());
   let best: { plan: AiPlan; score: number } | null = null;
@@ -299,7 +303,8 @@ function attackPlan(
     // Danger that can't be avoided anyway (even the safest reachable tile has it) costs nothing,
     // so a unit that's already in the thick of it still fights instead of freezing.
     const risk = care * (danger.get(key(tile.x, tile.y))! - leastDanger);
-    const score = found.score + free * 0.5 + terrain - risk - reach.get(key(tile.x, tile.y))!.cost * 0.1;
+    // Zone damage on the way and at the end is certain, so it counts in full.
+    const score = found.score + free * 0.5 + terrain - risk - zoneHazard(battle, u, reach, tile) - reach.get(key(tile.x, tile.y))!.cost * 0.1;
     if (score > (best?.score ?? 0)) best = { plan: { moveTo: tile, action: found.action }, score };
   }
   return best;
@@ -340,6 +345,12 @@ export function preferredMode(battle: Battle, u: Unit): number | null {
     u.weaponMode = current;
   }
   return bestMode === current ? null : bestMode;
+}
+
+/** Damage `u` would take from zones walking to `tile` (each zone tile entered) and ending its turn there. */
+function zoneHazard(battle: Battle, u: Unit, reach: Map<string, ReachInfo>, tile: Point): number {
+  if (battle.zones.length === 0) return 0;
+  return battle.zoneDanger(u, tile.x === u.x && tile.y === u.y ? [] : battle.pathTo(reach, tile));
 }
 
 /** Turns in a row a unit has held back instead of advancing (so it never waits forever). */
