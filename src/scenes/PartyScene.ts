@@ -1,9 +1,10 @@
 import Phaser from 'phaser';
 import { MAX_PARTY_SIZE, SKILLS, WEAPONS, XP_PER_LEVEL } from '../data/content';
-import { GUILD } from '../data/guild';
+import { ACTIVITIES, GUILD } from '../data/guild';
 import type { Character } from '../data/types';
 import { bodyPoints, deriveStats, freePoints, skillPoints } from '../game/character';
-import { lineupMembers, sellSlave, toggleLineup } from '../game/city';
+import { lineupMembers, scheduledMembers, sellSlave, toggleLineup } from '../game/city';
+import { ACTIVITY_INFO, activityOf, healthOf, isInjured, moraleOf } from '../game/condition';
 import { daysLeft, isCompanion, leaveParty, weeklyCost } from '../game/contracts';
 import { markDirty, requireState, session } from '../game/session';
 import { MEMBER_COLOR, MEMBER_LABEL, cityHeader, memberStatus } from '../ui/hud';
@@ -56,6 +57,8 @@ export class PartyScene extends Phaser.Scene {
       row.add(text(this, 58, 6, `${c.name}  Lv ${c.level}`, { fontSize: '15px' }));
       row.add(text(this, 58, 26, memberStatus(state, c), { fontSize: '11px', color: MEMBER_COLOR[c.contract?.type ?? 'main'], wordWrap: { width: 200 } }));
       if (lineup.has(c.id)) row.add(text(this, 300, 6, '⚔ lineup', { fontSize: '11px', color: COLORS.gold }).setOrigin(1, 0));
+      const cond = `${isInjured(c) ? `Injured ${healthOf(c)}` : 'Healthy'} · Morale ${moraleOf(c)} · ${ACTIVITY_INFO[activityOf(state, c)].name}`;
+      row.add(text(this, 58, 40, cond, { fontSize: '11px', color: isInjured(c) ? COLORS.bad : COLORS.dim }));
       return { obj: row, height: 58 };
     }), 'keep');
 
@@ -79,6 +82,15 @@ export class PartyScene extends Phaser.Scene {
     g.fillStyle(0x0b0d14).fillRect(X + 150, 150, 200, 8);
     g.fillStyle(0x7d6bd8).fillRect(X + 150, 150, 200 * (c.xp / XP_PER_LEVEL), 8);
     text(this, X + 356, 146, `${c.xp}/${XP_PER_LEVEL} XP`, { fontSize: '11px', color: COLORS.dim });
+    // Strategic Layer condition: Health (not battle HP) and Morale.
+    const bar = (y: number, label: string, v: number, color: number) => {
+      text(this, X + 420, y, `${label} ${v}/100`, { fontSize: '12px', color: label === 'Health' && v < 100 ? COLORS.bad : COLORS.text });
+      g.fillStyle(0x0b0d14).fillRect(X + 420, y + 17, 150, 6);
+      g.fillStyle(color).fillRect(X + 420, y + 17, 1.5 * v, 6);
+    };
+    bar(88, 'Health', healthOf(c), 0x6fdc8c);
+    bar(116, 'Morale', moraleOf(c), 0xe0b44c);
+    if (isInjured(c)) text(this, X + 570, 90, 'Injured', { fontSize: '11px', color: COLORS.bad }).setOrigin(1, 0);
 
     const st = deriveStats(c);
     text(this, X + 150, 166, `HP ${st.health}   MP ${st.mana}   P.Atk ${st.pAtk}   M.Atk ${st.mAtk}\nDef ${st.defense}   Resist ${st.resist}   Move ${st.movement}`, { fontSize: '13px', lineSpacing: 4 });
@@ -119,6 +131,18 @@ export class PartyScene extends Phaser.Scene {
         fontSize: '11px', color: COLORS.dim, wordWrap: { width: W - 32 },
       });
     }
+
+    // ---- schedule: what they do on days they aren't on a quest ----
+    const sy = 440;
+    const busy = !scheduledMembers(state).some((m) => m.id === c.id);
+    text(this, X + 16, sy, `Schedule${busy ? ' (back from a quest today: starts tomorrow)' : ' (days not on a quest)'}`, { fontSize: '13px', color: COLORS.gold });
+    const now = activityOf(state, c);
+    ACTIVITIES.forEach((a, i) => button(this, X + 16 + i * 140, sy + 20, 132, 30, ACTIVITY_INFO[a].name, () => {
+      state.schedule[c.id] = a;
+      markDirty();
+      this.render();
+    }, { fontSize: 13, selected: a === now }));
+    text(this, X + 16, sy + 56, ACTIVITY_INFO[now].describe(), { fontSize: '11px', color: COLORS.dim, wordWrap: { width: W - 32 } });
 
     // ---- actions ----
     const by = HEIGHT - 76;

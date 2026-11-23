@@ -1,6 +1,7 @@
 // Contracts: mercenary fees, companion negotiations, slaves. Pure logic (no Phaser).
 import { GUILD } from '../data/guild';
 import type { Character, CompanionTerms, Contract, FreeAdventurer, GameState, Rank } from '../data/types';
+import { isInjured } from './condition';
 import { talentScore } from './talent';
 
 const C = GUILD.companion;
@@ -124,9 +125,9 @@ export const bounty = (level: number) => GUILD.slave.bountyPerLevel * level;
 
 // ---- the roster -------------------------------------------------------------------------------------
 
-/** Members who can fight on the next quest (lapsed companions sit out). */
+/** Members who can fight on the next quest (lapsed companions and the injured sit out). */
 export function canFight(state: GameState, c: Character): boolean {
-  return !isExpired(c, state.day);
+  return !isExpired(c, state.day) && !isInjured(c);
 }
 
 export function rosterFull(state: GameState): boolean {
@@ -145,6 +146,7 @@ export function joinParty(state: GameState, a: FreeAdventurer, contract: Contrac
 export function leaveParty(state: GameState, c: Character, greed = 1): void {
   state.party = state.party.filter((m) => m.id !== c.id);
   state.lineup = state.lineup.filter((id) => id !== c.id);
+  delete state.schedule[c.id];
   const { contract: _contract, ...character } = c;
   state.guild.pool.push({ character, greed, patience: GUILD.companion.patience, refusedUntil: state.day + 3 });
 }

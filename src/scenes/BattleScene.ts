@@ -1290,7 +1290,9 @@ export class BattleScene extends Phaser.Scene {
     if (this.demo) {
       lines = resolveDemoBattle(requireDemo(), outcome);
     } else {
-      lines = resolveQuest(requireState(), outcome, makeRng(Date.now() & 0xffffffff));
+      const conditions = this.battle.units.filter((u) => u.team === 'player')
+        .map((u) => ({ id: u.character.id, lowestHp: u.lowestHp / u.stats.health, fell: !u.alive }));
+      lines = resolveQuest(requireState(), outcome, makeRng(Date.now() & 0xffffffff), conditions);
       markDirty();
     }
     const title = this.demo ? (outcome === 'victory' ? 'Victory!' : 'Defeat') : (outcome === 'victory' ? 'Quest complete!' : 'Quest failed');

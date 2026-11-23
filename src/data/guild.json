@@ -1,5 +1,5 @@
 {
-  "_readme": "Management and simulation numbers for Arch City and its Adventurer Guild. Gold amounts are whole numbers. upkeep.foodLodgingPerDay is what each person the party feeds and houses costs on days spent away (quests); resting in the city means a night at an inn, priced per person by inns (the luxury inn also raises companions' relationship each night). Ranks come from the leaderboard: parties are sorted by renown and the top rankShares.A share are A rank, the next rankShares.B are B, and so on (renown fades by renownDecayPerDay so ranks follow recent success). Quests: stages is the enemy strength range (the same stages battles always used), reward a gold range, days how long the trip takes. companion.expectedWeeklyLoot is how much gold a candidate thinks a party of that rank earns per week; they use it to value a loot cut. simulation tunes the rival parties: the chance a party goes on a quest each day, its chance of success (0.55 + successPerLevel x (average level - rankDifficulty), clamped), and what can go wrong. New adventurers arrive at about the rate adventurers are lost, nudged toward targetAdventurers.",
+  "_readme": "Management and simulation numbers for Arch City and its Adventurer Guild. Gold amounts are whole numbers. upkeep.foodLodgingPerDay is what each person the party feeds and houses costs on days spent away (quests); each day in the city ends with a night at an inn (priced per person by inns) or sleeping outside (see lodging). Ranks come from the leaderboard: parties are sorted by renown and the top rankShares.A share are A rank, the next rankShares.B are B, and so on (renown fades by renownDecayPerDay so ranks follow recent success). Quests: stages is the enemy strength range (the same stages battles always used), reward a gold range, days how long the trip takes. companion.expectedWeeklyLoot is how much gold a candidate thinks a party of that rank earns per week; they use it to value a loot cut. simulation tunes the rival parties: the chance a party goes on a quest each day, its chance of success (0.55 + successPerLevel x (average level - rankDifficulty), clamped), and what can go wrong. New adventurers arrive at about the rate adventurers are lost, nudged toward targetAdventurers.",
   "city": "Arch City",
   "startingGold": 500,
   "startingRenown": 0,
@@ -15,8 +15,34 @@
   },
   "upkeep": { "foodLodgingPerDay": 4 },
   "inns": {
-    "standard": { "name": "Sleeping Griffin Inn", "pricePerPerson": 4, "relationshipPerNight": 0 },
-    "luxury": { "name": "Gilded Crown Inn", "pricePerPerson": 15, "relationshipPerNight": 2 }
+    "standard": { "name": "Sleeping Griffin Inn", "pricePerPerson": 4, "drinksPerPerson": 2, "drinksMorale": 8 },
+    "luxury": { "name": "Gilded Crown Inn", "pricePerPerson": 15, "drinksPerPerson": 6, "drinksMorale": 15 }
+  },
+  "_inns": "drinksPerPerson / drinksMorale: a round of drinks for the whole party (once a day) costs drinksPerPerson per member and raises everyone's Morale by drinksMorale.",
+  "lodging": {
+    "_comment": "Every day ends with a night somewhere: an inn, or sleeping outside (free). Adventurers expect a standard inn below luxuryFromLevel and the luxury inn from it. Each night, housed companions (food & lodging in their contract) gain relationshipAbove when the party sleeps better than they expect, and lose relationshipBelowPerStep for each step worse (luxury > standard > outside). Nights on the road during multi-day quests cost upkeep.foodLodgingPerDay and don't count.",
+    "luxuryFromLevel": 6,
+    "relationshipAbove": 2,
+    "relationshipBelowPerStep": 3,
+    "outsidePerPerson": 0
+  },
+  "condition": {
+    "_comment": "Health (0-100, not battle HP) and Morale (0-100) of party members. After a battle, Health drops by maxHealthLoss x the share of HP the unit lost at its lowest point (falling = the full amount). Below 100 Health a member is injured and can't go on quests; everyone recovers healthPerDay each night. A member who falls in battle dies with deathChanceOnFall (never the main character). Morale changes: moralePerQuest for each member who goes on a quest, moraleFailedQuest more if it fails, moralePerHealthLost per Health point lost to injuries, moraleMemberDied for everyone when a member dies. New members start at startingMorale.",
+    "maxHealthLoss": 60,
+    "healthPerDay": 10,
+    "deathChanceOnFall": 0.15,
+    "startingMorale": 75,
+    "moralePerQuest": 5,
+    "moraleFailedQuest": 10,
+    "moralePerHealthLost": 0.2,
+    "moraleMemberDied": 15
+  },
+  "schedule": {
+    "_comment": "What members who aren't on a quest do each day (Manage Party). recover: recovers recoverMultiplier x healthPerDay. training: trainingXp XP. oddJobs: oddJobsGold gold. dayOff: dayOffMorale Morale.",
+    "recoverMultiplier": 2,
+    "trainingXp": 25,
+    "oddJobsGold": 10,
+    "dayOffMorale": 10
   },
   "talentPrice": { "weight": 2, "min": 0.4 },
   "_talentPrice": "Talented adventurers cost more: mercenary fees and cuts, companion wages and slave prices are multiplied by max(min, 1 + weight x (average talent growth rate - 1)). All C = x1; all S (160%) = x2.2 with weight 2; all F = x0.4.",

@@ -1,6 +1,6 @@
 // Save / load. Saves are pretty-printed JSON so players can read (and edit!) them.
 import { MAX_PARTY_SIZE, NAME_MAX_LENGTH, SKILLS, TREE_SKILLS, WEAPONS, skillPointsForLevel } from '../data/content';
-import { GUILD } from '../data/guild';
+import { ACTIVITIES, GUILD, type Activity } from '../data/guild';
 import {
   BODY_MODELS, ENEMY_MODELS, FACE_COUNT, HAIR_COLORS, HAIR_STYLES, RANKS, SEXES, SKIN_TONES, STAT_KEYS, TALENT_GRADES,
   type BodyInvestment, type Character, type StatKey, type Talents, type Contract, type GameState, type Look, type NewsItem, type Offer, type Quest, type Rank, type RivalParty,
@@ -186,6 +186,8 @@ function validateCharacter(raw: unknown, path: string, opts: { member?: boolean 
   // An unknown mode (modes change between versions) just falls back to the weapon's default.
   if (typeof r.weaponMode === 'string' && SKILLS[r.weaponMode]) out.weaponMode = r.weaponMode;
   if (r.talents !== undefined) out.talents = validateTalents(r.talents, `${path}.talents`);
+  if (r.health !== undefined) out.health = num(r.health, `${path}.health`, 0, 100);
+  if (r.morale !== undefined) out.morale = num(r.morale, `${path}.morale`, 0, 100);
   if (opts.member) out.contract = validateContract(r.contract, `${path}.contract`);
   return out;
 }
@@ -247,6 +249,17 @@ function uniqueIds(chars: Character[], path: string): void {
 }
 
 /** Validate a version-3 save. */
+/** Members' daily activities. Unknown activities or members are dropped (they fall back to the default). */
+function validateSchedule(raw: unknown, party: Character[]): GameState['schedule'] {
+  if (raw === undefined) return {};
+  const o = obj(raw, 'schedule');
+  const out: GameState['schedule'] = {};
+  for (const [id, a] of Object.entries(o)) {
+    if (party.some((c) => c.id === id) && (ACTIVITIES as readonly unknown[]).includes(a)) out[id] = a as Activity;
+  }
+  return out;
+}
+
 function validateState(raw: Record<string, unknown>): GameState {
   const progress = obj(raw.progress, 'progress');
   const party = arr(raw.party, 'party').map((c, i) => validateCharacter(c, `party[${i}]`, { member: true }));
@@ -296,6 +309,10 @@ function validateState(raw: Record<string, unknown>): GameState {
     },
     prisoners: arr(raw.prisoners, 'prisoners').map((o, i) => validateOffer(o, `prisoners[${i}]`)),
     quest: raw.quest === null || raw.quest === undefined ? null : validateQuest(raw.quest, 'quest'),
+    lastQuestDay: raw.lastQuestDay === undefined ? 0 : int(raw.lastQuestDay, 'lastQuestDay'),
+    questMembers: raw.questMembers === undefined ? [] : arr(raw.questMembers, 'questMembers').filter((id): id is string => typeof id === 'string'),
+    schedule: validateSchedule(raw.schedule, party),
+    drinksDay: raw.drinksDay === undefined ? 0 : int(raw.drinksDay, 'drinksDay'),
     log: validateNews(raw.log ?? [], 'log'),
   };
   tidyLineup(state);

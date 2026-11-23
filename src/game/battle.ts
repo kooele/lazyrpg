@@ -45,6 +45,8 @@ export interface Unit {
   /** Maximum stats (level + weapon). */
   stats: Stats;
   hp: number;
+  /** Lowest HP the unit was taken down to this battle (Strategic Layer injuries). */
+  lowestHp: number;
   x: number;
   y: number;
   alive: boolean;
@@ -138,6 +140,7 @@ export function makeUnit(character: Character, team: Team, pos: Point): Unit {
     character,
     stats,
     hp: stats.health,
+    lowestHp: stats.health,
     x: pos.x,
     y: pos.y,
     alive: true,
@@ -1165,6 +1168,7 @@ export class Battle {
       target.statuses = target.statuses.filter((s) => s.id !== 'shield' || s.amount > 0);
     }
     target.hp = Math.max(0, target.hp - (amount - absorbed));
+    target.lowestHp = Math.min(target.lowestHp, target.hp);
     const killed = target.hp === 0;
     if (killed) {
       target.alive = false;

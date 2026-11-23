@@ -4,9 +4,11 @@ import { GUILD, parseGuildConfig } from '../src/data/guild';
 import type { Character, GameState } from '../src/data/types';
 import { createCharacter, makeRng } from '../src/game/character';
 import {
-  acceptQuest, advanceDay, advanceDays, buySlave, stayAtInn, canTakeQuest, dailyUpkeep, lineupMembers, newCampaign, registerPrisoner,
-  resolveQuest, rewardShares, toggleLineup,
+  acceptQuest, advanceDay, advanceDays, buyDrinks, buySlave, stayAtInn, canTakeQuest, dailyUpkeep, departBlock, lineupMembers, mainCharacter,
+  newCampaign, registerPrisoner, resolveQuest, rewardShares, sleepOutside, toggleLineup,
 } from '../src/game/city';
+import { activityOf, expectedInn, healthOf, isInjured, moraleOf } from '../src/game/condition';
+import { parseSave, serializeSave } from '../src/game/save';
 import {
   companionContract, companionDemand, evaluateOffer, joinParty, mercenaryRates, offerValue, openingTerms,
 } from '../src/game/contracts';
@@ -71,6 +73,7 @@ describe('ranks and the leaderboard', () => {
       const q = s.guild.board.find((x) => canTakeQuest(s, x))!;
       expect(acceptQuest(s, q.id)).toBeNull();
       resolveQuest(s, 'victory', rng);
+      stayAtInn(s, 'standard', 1, rng);
     }
     expect(s.rank).toBe('C');
     expect(s.log.some((n) => /promoted to C rank/.test(n.text))).toBe(true);
@@ -158,21 +161,184 @@ describe('contracts', () => {
     expect(dailyUpkeep(s)).toBe(2 * GUILD.upkeep.foodLodgingPerDay);
   });
 
-  it('a night at an inn costs its price per person; the luxury inn also pleases housed companions', () => {
+  it('a night at an inn costs its price per person; housed companions compare it with what their level expects', () => {
     const s = start();
     const c = companion(s);
     if (c.contract?.type !== 'companion') throw new Error('not a companion');
     c.contract.foodLodging = true;
     c.contract.endDay = 100;
+    c.level = 3;
+    s.schedule[c.id] = 'training'; // not Day Off, so gold is the only thing that changes besides XP
+    s.schedule[s.mainId] = 'training';
     s.gold = 1000;
     const rel = c.contract.relationship;
     stayAtInn(s, 'standard', 1, makeRng(1));
     expect(s.gold).toBe(1000 - 2 * GUILD.inns.standard.pricePerPerson);
-    expect(c.contract.relationship).toBe(rel);
+    expect(c.contract.relationship).toBe(rel); // level 3 expects a regular inn
     stayAtInn(s, 'luxury', 2, makeRng(1));
     expect(s.gold).toBe(1000 - 2 * GUILD.inns.standard.pricePerPerson - 4 * GUILD.inns.luxury.pricePerPerson);
-    expect(c.contract.relationship).toBe(rel + 2 * GUILD.inns.luxury.relationshipPerNight);
+    expect(c.contract.relationship).toBe(rel + 2 * GUILD.lodging.relationshipAbove);
     expect(s.day).toBe(4);
+  });
+
+  it('level 6+ adventurers expect the high-end inn; sleeping outside upsets everyone housed', () => {
+    const s = start();
+    const c = companion(s);
+    if (c.contract?.type !== 'companion') throw new Error('not a companion');
+    c.contract.foodLodging = true;
+    c.contract.endDay = 100;
+    c.contract.relationship = 50;
+    s.gold = 1000;
+    c.level = GUILD.lodging.luxuryFromLevel;
+    expect(expectedInn(c)).toBe('luxury');
+    stayAtInn(s, 'standard', 1, makeRng(1));
+    expect(c.contract.relationship).toBe(50 - GUILD.lodging.relationshipBelowPerStep);
+    stayAtInn(s, 'luxury', 1, makeRng(1));
+    expect(c.contract.relationship).toBe(50 - GUILD.lodging.relationshipBelowPerStep); // as expected: no change
+    const gold = s.gold;
+    sleepOutside(s, makeRng(1));
+    expect(c.contract.relationship).toBe(50 - 3 * GUILD.lodging.relationshipBelowPerStep); // two steps below
+    c.level = 2;
+    sleepOutside(s, makeRng(1));
+    expect(c.contract.relationship).toBe(50 - 4 * GUILD.lodging.relationshipBelowPerStep);
+    expect(s.gold).toBeGreaterThanOrEqual(gold); // free (odd jobs aside)
+  });
+
+  it('quests do not end the day, and only one quest a day', () => {
+    const s = start();
+    const q = s.guild.board.find((x) => canTakeQuest(s, x))!;
+    q.days = 1;
+    acceptQuest(s, q.id);
+    expect(departBlock(s)).toBeNull();
+    const day = s.day;
+    const lines = resolveQuest(s, 'victory', makeRng(3));
+    expect(s.day).toBe(day);
+    expect(lines.some((l) => /sleep outside/.test(l))).toBe(true);
+    acceptQuest(s, s.guild.board.find((x) => canTakeQuest(s, x))!.id);
+    expect(departBlock(s)).toMatch(/One quest a day/);
+    stayAtInn(s, 'standard', 1, makeRng(1));
+    expect(departBlock(s)).toBeNull();
+    // A 3-day trip: two nights on the road, back on the evening of the third day.
+    s.quest!.days = 3;
+    resolveQuest(s, 'victory', makeRng(3));
+    expect(s.day).toBe(day + 3);
+    expect(s.lastQuestDay).toBe(s.day);
+  });
+
+  it('battle injuries lower Health; the injured sit out until they recover', () => {
+    const s = start();
+    const c = companion(s);
+    if (c.contract?.type !== 'companion') throw new Error('not a companion');
+    c.contract.endDay = 100;
+    s.gold = 1000;
+    toggleLineup(s, c.id);
+    acceptQuest(s, s.guild.board.find((x) => canTakeQuest(s, x))!.id);
+    s.quest!.days = 1;
+    resolveQuest(s, 'victory', makeRng(3), [{ id: s.mainId, lowestHp: 1, fell: false }, { id: c.id, lowestHp: 0.5, fell: false }]);
+    expect(healthOf(c)).toBe(100 - GUILD.condition.maxHealthLoss / 2);
+    expect(healthOf(mainCharacter(s))).toBe(100);
+    expect(isInjured(c)).toBe(true);
+    expect(lineupMembers(s).map((m) => m.id)).toEqual([s.mainId]);
+    expect(toggleLineup(s, c.id)).toMatch(/injured/);
+    // Everyone recovers each night; Recover doubles it (not on the quest day itself, which they spent on the quest).
+    s.schedule[c.id] = 'recover';
+    const h = healthOf(c);
+    stayAtInn(s, 'standard', 1, makeRng(1));
+    expect(healthOf(c)).toBe(h + GUILD.condition.healthPerDay);
+    stayAtInn(s, 'standard', 1, makeRng(1));
+    expect(healthOf(c)).toBe(Math.min(100, h + 3 * GUILD.condition.healthPerDay));
+    while (isInjured(c)) stayAtInn(s, 'standard', 1, makeRng(1));
+    expect(toggleLineup(s, c.id)).toBeNull();
+    // An injured leader can't set out at all.
+    mainCharacter(s).health = 90;
+    acceptQuest(s, s.guild.board.find((x) => canTakeQuest(s, x))!.id);
+    expect(departBlock(s)).toMatch(/injured/);
+  });
+
+  it('morale: quests, failures, injuries and deaths lower it; drinks and days off raise it', () => {
+    const s = start();
+    const C = GUILD.condition;
+    const c = companion(s);
+    if (c.contract?.type !== 'companion') throw new Error('not a companion');
+    c.contract.endDay = 100;
+    s.gold = 1000;
+    const main = mainCharacter(s);
+    expect(moraleOf(main)).toBe(C.startingMorale);
+    toggleLineup(s, c.id);
+    acceptQuest(s, s.guild.board.find((x) => canTakeQuest(s, x))!.id);
+    s.quest!.days = 1;
+    resolveQuest(s, 'defeat', makeRng(3), [{ id: main.id, lowestHp: 0.5, fell: false }, { id: c.id, lowestHp: 1, fell: false }]);
+    const loss = C.maxHealthLoss / 2;
+    expect(moraleOf(c)).toBe(C.startingMorale - C.moralePerQuest - C.moraleFailedQuest);
+    expect(moraleOf(main)).toBe(C.startingMorale - C.moralePerQuest - C.moraleFailedQuest - Math.round(loss * C.moralePerHealthLost));
+    const before = moraleOf(main);
+    expect(buyDrinks(s, 'standard')).toBeNull();
+    expect(moraleOf(main)).toBe(before + GUILD.inns.standard.drinksMorale);
+    expect(buyDrinks(s, 'standard')).toMatch(/already/);
+    // Day off the next day (the quest day itself doesn't count for those who went).
+    stayAtInn(s, 'standard', 1, makeRng(1));
+    s.schedule[c.id] = 'dayOff';
+    const m = moraleOf(c);
+    stayAtInn(s, 'standard', 1, makeRng(1));
+    expect(moraleOf(c)).toBe(m + GUILD.schedule.dayOffMorale);
+  });
+
+  it('a member who falls can die; everyone else loses morale. The main character never dies', () => {
+    const s = start();
+    const c = companion(s);
+    if (c.contract?.type !== 'companion') throw new Error('not a companion');
+    c.contract.endDay = 100;
+    const other = companion(s);
+    toggleLineup(s, c.id);
+    acceptQuest(s, s.guild.board.find((x) => canTakeQuest(s, x))!.id);
+    s.quest!.days = 1;
+    const always = () => 0; // every roll succeeds
+    const lines = resolveQuest(s, 'defeat', always, [{ id: s.mainId, lowestHp: 0, fell: true }, { id: c.id, lowestHp: 0, fell: true }]);
+    expect(s.party.some((m) => m.id === c.id)).toBe(false);
+    expect(lines.some((l) => /did not survive/.test(l))).toBe(true);
+    expect(healthOf(mainCharacter(s))).toBe(100 - GUILD.condition.maxHealthLoss);
+    expect(moraleOf(other)).toBe(GUILD.condition.startingMorale - GUILD.condition.moraleMemberDied);
+  });
+
+  it('schedule: training gives XP, odd jobs gold; members on the quest skip it that day', () => {
+    const s = start();
+    const c = companion(s);
+    if (c.contract?.type !== 'companion') throw new Error('not a companion');
+    c.contract.endDay = 100;
+    c.contract.foodLodging = false;
+    s.schedule[c.id] = 'training';
+    s.schedule[s.mainId] = 'oddJobs';
+    s.gold = 1000;
+    const xp = c.xp;
+    stayAtInn(s, 'standard', 1, makeRng(1));
+    expect(c.xp).toBe(xp + GUILD.schedule.trainingXp);
+    expect(s.gold).toBe(1000 + GUILD.schedule.oddJobsGold - GUILD.inns.standard.pricePerPerson);
+    // The main character goes on a quest: no odd jobs for them that day, but the companion still trains.
+    acceptQuest(s, s.guild.board.find((x) => canTakeQuest(s, x))!.id);
+    s.quest!.days = 1;
+    s.quest!.reward = 0;
+    resolveQuest(s, 'victory', makeRng(3));
+    const gold = s.gold;
+    stayAtInn(s, 'standard', 1, makeRng(1));
+    expect(s.gold).toBe(gold - GUILD.inns.standard.pricePerPerson);
+    expect(c.xp).toBe(xp + 2 * GUILD.schedule.trainingXp);
+    expect(activityOf(s, mainCharacter(s))).toBe('oddJobs');
+  });
+
+  it('health, morale and the schedule survive a save', () => {
+    const s = start();
+    const c = companion(s);
+    c.health = 70;
+    c.morale = 40;
+    s.schedule[c.id] = 'recover';
+    s.lastQuestDay = s.day;
+    s.questMembers = [s.mainId];
+    const r = parseSave(serializeSave(s));
+    if (!r.ok) throw new Error(r.error);
+    const back = r.state.party.find((m) => m.id === c.id)!;
+    expect([back.health, back.morale]).toEqual([70, 40]);
+    expect(r.state.schedule[c.id]).toBe('recover');
+    expect(r.state.lastQuestDay).toBe(s.day);
   });
 
   it('rewards are split with mercenaries on a cut and companions with a loot cut; mercenaries leave after the quest', () => {

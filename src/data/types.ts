@@ -304,6 +304,10 @@ export interface Character {
   weaponMode?: string;
   /** Party members only: how they are bound to the party. */
   contract?: Contract;
+  /** Strategic Layer: 0-100, separate from battle HP. Below 100 = injured (can't go on quests). Missing = 100. */
+  health?: number;
+  /** Strategic Layer: 0-100. Missing = the starting morale (guild.json condition.startingMorale). */
+  morale?: number;
 }
 
 // ---- management: contracts, the guild, Arch City ----------------------------------------
@@ -446,6 +450,13 @@ export interface GameState {
   prisoners: Offer[];
   /** The quest the party has accepted and not yet fought. */
   quest: Quest | null;
+  /** Day the party last came back from a quest (one quest a day), and who went. */
+  lastQuestDay: number;
+  questMembers: string[];
+  /** What each member does on days they aren't on a quest (by character id; see activityOf for the default). */
+  schedule: Record<string, 'recover' | 'training' | 'oddJobs' | 'dayOff'>;
+  /** Day the party last bought a round of drinks (once a day). */
+  drinksDay: number;
   /** Messages for the player (newest last). */
   log: NewsItem[];
 }

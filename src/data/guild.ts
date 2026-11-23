@@ -14,8 +14,18 @@ export const INN_TIERS: readonly InnTier[] = ['standard', 'luxury'];
 export interface InnConfig {
   name: string;
   pricePerPerson: number;
-  relationshipPerNight: number;
+  /** A round of drinks for the party: gold per member, and Morale for everyone. */
+  drinksPerPerson: number;
+  drinksMorale: number;
 }
+
+/** Where the party spends a night: an inn, outside (free), or on the road during a quest. */
+export type Lodging = InnTier | 'outside' | 'road';
+/** Night quality, worst to best (for adventurers' expectations). */
+export const LODGING_QUALITY: Record<'outside' | InnTier, number> = { outside: 0, standard: 1, luxury: 2 };
+
+export type Activity = 'recover' | 'training' | 'oddJobs' | 'dayOff';
+export const ACTIVITIES: readonly Activity[] = ['recover', 'training', 'oddJobs', 'dayOff'];
 
 export interface GuildConfig {
   city: string;
@@ -28,6 +38,18 @@ export interface GuildConfig {
   quests: Record<Rank, QuestTier>;
   upkeep: { foodLodgingPerDay: number };
   inns: Record<InnTier, InnConfig>;
+  lodging: { luxuryFromLevel: number; relationshipAbove: number; relationshipBelowPerStep: number; outsidePerPerson: number };
+  condition: {
+    maxHealthLoss: number;
+    healthPerDay: number;
+    deathChanceOnFall: number;
+    startingMorale: number;
+    moralePerQuest: number;
+    moraleFailedQuest: number;
+    moralePerHealthLost: number;
+    moraleMemberDied: number;
+  };
+  schedule: { recoverMultiplier: number; trainingXp: number; oddJobsGold: number; dayOffMorale: number };
   /** Price multiplier from talent: max(min, 1 + weight x (average growth rate - 1)). */
   talentPrice: { weight: number; min: number };
   mercenary: { feePerLevel: number; cutBase: number; cutPerLevel: number };
@@ -106,7 +128,8 @@ function parseInns(v: unknown): Record<InnTier, InnConfig> {
     out[t] = {
       name: inn.name as string,
       pricePerPerson: num(inn.pricePerPerson, `inns.${t}.pricePerPerson`),
-      relationshipPerNight: num(inn.relationshipPerNight, `inns.${t}.relationshipPerNight`, 0, 100),
+      drinksPerPerson: num(inn.drinksPerPerson, `inns.${t}.drinksPerPerson`),
+      drinksMorale: num(inn.drinksMorale, `inns.${t}.drinksMorale`, 0, 100),
     };
   }
   return out;
@@ -145,6 +168,13 @@ export function parseGuildConfig(data: unknown): GuildConfig {
     quests,
     upkeep: numbers(d.upkeep, 'upkeep', ['foodLodgingPerDay']),
     inns: parseInns(d.inns),
+    lodging: numbers(d.lodging, 'lodging', ['luxuryFromLevel', 'relationshipAbove', 'relationshipBelowPerStep', 'outsidePerPerson']),
+    condition: {
+      ...numbers<GuildConfig['condition']>(d.condition, 'condition', ['maxHealthLoss', 'healthPerDay', 'startingMorale', 'moralePerQuest',
+        'moraleFailedQuest', 'moralePerHealthLost', 'moraleMemberDied'], 100),
+      deathChanceOnFall: num(obj(d.condition, 'condition').deathChanceOnFall, 'condition.deathChanceOnFall', 0, 1),
+    },
+    schedule: numbers(d.schedule, 'schedule', ['recoverMultiplier', 'trainingXp', 'oddJobsGold', 'dayOffMorale']),
     talentPrice: numbers(d.talentPrice ?? { weight: 2, min: 0.4 }, 'talentPrice', ['weight', 'min']),
     mercenary: numbers(d.mercenary, 'mercenary', ['feePerLevel', 'cutBase', 'cutPerLevel']),
     companion: {

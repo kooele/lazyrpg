@@ -6,19 +6,42 @@ A small turn-based tactical RPG that runs in the browser, built with [Phaser 4](
 
 1. **Main menu**: New Game, Continue, Save Game, Load Game, and **Quick Battle (Demo)**: the original game on its own. Recruit up to 4 Adventurers for free at a camp (any look, weapon and skills), then fight stages 1 to 5; every victory is worth a level, and clearing stage 5 completes the demo. The **Enemies** slider at camp raises the difficulty: it multiplies the encounter's size from 1x to 5x in 0.5 steps (5x at stage 1 with 4 heroes is 40 rats). Big encounters deploy further toward the middle of the map. The demo is separate from your Arch City campaign and isn't saved.
 2. **Your character**: a new game starts by creating your main character (name, sex, skin, face, hair, hair colour, clothes colour, weapon, skills) and naming your party. The main character is permanent: they can't be dismissed and always lead the party on quests.
-3. **Arch City**: the hub is a map of the walled city (`public/art/city/arch-city.webp`) with three tabs: **Outer Ring** (Adventurer Guild, Docks, Marketplace, Slave Market, Slums, Customs Office, Sleeping Griffin Inn), **Middle Ring** (Tailor, Auction House, Library, Church) and **Inner Ring** (Lord's Manor, Central Government Office, Central Church, Gilded Crown Inn). Click a pin on the map or a button below it. Open so far: the **Adventurer Guild**, the **Slave Market** and the two **inns**; the rest are greyed out. **Manage Party** (bottom bar) handles your members, and the side panel sets out on an accepted quest. See [Arch City and the guild](#arch-city-and-the-adventurer-guild).
+3. **Arch City**: the hub is a map of the walled city (`public/art/city/arch-city.webp`) with three tabs: **Outer Ring** (Adventurer Guild, Docks, Marketplace, Slave Market, Slums, Customs Office, Sleeping Griffin Inn), **Middle Ring** (Tailor, Auction House, Library, Church) and **Inner Ring** (Lord's Manor, Central Government Office, Central Church, Gilded Crown Inn). Click a pin on the map or a button below it. Open so far: the **Adventurer Guild**, the **Slave Market** and the two **inns**; the rest are greyed out. **Manage Party** (bottom bar) handles your members and their schedule, **Sleep outside** ends the day for free, and the side panel sets out on an accepted quest. See [Arch City and the guild](#arch-city-and-the-adventurer-guild).
 4. **Adventurers**: There are no fixed classes. Every party member is an Adventurer, and you build them by mixing a weapon with picks from the skill trees. Up to 4 go on each quest (the lineup); the party can have up to 8 members.
 5. **Tactical battle**: XCOM-style alternating turns. On your turn, every Adventurer has **2 AP** (action points), a movement AP and an action AP, and can spend them in any order (click a unit or press Tab). See [Action points and mana](#action-points-and-mana). Skills sit on the **skill bar** under the map: press **1–0** (or click a slot) to use one. By default slot 1 is the basic attack, 2 Overwatch, 3 Dash, and the rest follow; newly learned skills go after the last used slot. **Drag a slot onto another** to swap them (the layout is saved per character). With more than 10 skills the bar gets more pages: flip with ▲ ▼ or **[ ]**, and while dragging, hover ▲ ▼ to carry a skill to another page (or to a new empty one). The battle log is in the sidebar. Hover a skill to see its range box; any tile in range can be targeted. The map is 18×13 tiles (set in `stats.json`). Terrain: grass costs 4 Movement, forest 6 (and gives +20 Defense), river 8. Rock and deep water block movement, and rock blocks line of sight.
 
 ## Arch City and the Adventurer Guild
 
-Time passes in days. To pass time in the city, the party stays at an **inn** (1 night, 3 nights or a week), and a quest takes its listed number of days. The party pays food and lodging for the main character, slaves, and companions whose contract includes it:
+The management and simulation side of the game (Arch City, the guild, contracts, days) is the **Strategic Layer**; battles are the **Tactical Layer**.
 
-| Where | Per person per day | Extra |
-|---|---|---|
-| Sleeping Griffin Inn (Outer Ring) | 4 gold | |
-| Gilded Crown Inn (Inner Ring) | 15 gold | Companions the party houses gain +2 relationship each night |
-| Away on a quest | 4 gold | |
+Time passes in days, and **every day ends with a night somewhere**: an **inn** (1 night, 3 nights or a week), or **sleeping outside** (free; button in the city's bottom bar). A quest doesn't end the day: the party comes back in the evening and still needs a bed, and you can only go on **one quest a day** (you can accept the next one, but set out tomorrow). A quest that takes several days spends the nights before the last on the road. The party pays food and lodging for the main character, slaves, and companions whose contract includes it:
+
+| Where | Per person per night |
+|---|---|
+| Sleeping Griffin Inn (Outer Ring) | 4 gold |
+| Gilded Crown Inn (Inner Ring) | 15 gold |
+| Sleeping outside | free |
+| On the road (multi-day quests) | 4 gold |
+
+**Expectations**: adventurers of level 1–5 expect a regular inn, level 6+ the high-end Gilded Crown. Each night, every companion the party houses gains **+2 relationship** if they slept better than they expect, and loses **3 per step** worse (high-end > regular > outside): a level 6+ companion loses 3 at the Sleeping Griffin and 6 outside. Nights on the road don't count. (`lodging` in `guild.json`.)
+
+### Health, Morale and the schedule
+
+Party members have two Strategic Layer stats, both out of 100 (`condition` and `schedule` in `guild.json`):
+
+- **Health** is not battle HP. After a battle, each member loses up to **60 Health** depending on the lowest HP they were taken down to (at half HP: −30; falling: the full 60). Below 100 Health a member is **injured** and can't go on quests (an injured leader means no quests at all). Everyone recovers **10 Health a night**. A member who falls in battle has a **15% chance to die** (the main character never dies).
+- **Morale** drops for each member who goes on a quest (−5), more if it fails (−10), with injuries (−1 per 5 Health lost), and for everyone when a party member dies (−15). It comes back with **drinks** (a round for the whole party at an inn, once a day: Sleeping Griffin 2 gold a head for +8, Gilded Crown 6 gold a head for +15) and **days off**. Morale has no other effect yet.
+
+The **schedule** (Manage Party) sets what each member does on days they aren't on a quest. It runs when the day ends; members who went on that day's quest skip it.
+
+| Activity | Effect per day |
+|---|---|
+| Recover | 2× Health recovery (20 instead of 10) |
+| Training | +25 XP |
+| Odd Jobs | +10 gold |
+| Day Off | +10 Morale |
+
+Unscheduled members recover when injured and take a day off otherwise.
 
 Every 7th day is **payday** for companions.
 
