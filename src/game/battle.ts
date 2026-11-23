@@ -34,6 +34,8 @@ export interface Overwatch {
   los?: LosRule;
   /** What the reaction hits with (the skill's own hits, or the user's basic attack). */
   hits: DamagePart[];
+  /** It fires the weapon's basic attack (so weapon on-hit effects like Arcane Weapon apply). */
+  weapon?: boolean;
 }
 
 /** Action points every unit gets each turn: one movement AP and one action AP. */
@@ -98,6 +100,8 @@ export type BattleEvent =
   | { type: 'escape'; target: string }
   | { type: 'surrender'; target: string }
   | { type: 'mode'; target: string; name: string }
+  /** A toggle (Arcane Weapon) switched on or off; `reason` says why it went off on its own. */
+  | { type: 'toggle'; target: string; name: string; on: boolean; reason?: 'mana' }
   /** A zone (Firestorm) was placed on these tiles. */
   | { type: 'zone'; source: string; name: string; tiles: Point[] }
   /** A unit is caught by a zone (followed by its damage and status events). */
@@ -346,7 +350,9 @@ export class Battle {
   /** Off cooldown, enough mana, and not blocked by a disabled weapon. */
   isUsable(u: Unit, skillId: string): boolean {
     const s = SKILLS[skillId];
-    return this.isReady(u, skillId) && u.mp >= s.mana && !(u.weaponDisabled && hasTag(s, 'weapon')) && !(this.isFrozen(u) && this.movesUser(s));
+    // Switching a toggle off is free.
+    const mana = s.toggleStatus && this.isToggledOn(u, s.toggleStatus) ? 0 : s.mana;
+    return this.isReady(u, skillId) && u.mp >= mana && !(u.weaponDisabled && hasTag(s, 'weapon')) && !(this.isFrozen(u) && this.movesUser(s));
   }
 
   /** Frozen units can't move (see the Frozen status). */
@@ -437,6 +443,7 @@ export class Battle {
       if (!victim.alive) break;
       events.push(...this.dealHit(attacker, victim, part, 'opportunity'));
     }
+    events.push(...this.weaponProcs(attacker, victim, 'opportunity'));
     return events;
   }
 
@@ -558,7 +565,8 @@ export class Battle {
   usableFreeActions(u: Unit): string[] {
     return this.skillIds(u).filter((id) => {
       const s = SKILLS[id];
-      if (!isFree(s) || s.switchMode || !this.canUseSkill(u, id)) return false;
+      // Switch Mode and toggles never keep a turn open on their own.
+      if (!isFree(s) || s.switchMode || s.toggleStatus || !this.canUseSkill(u, id)) return false;
       return this.rangeTiles(u, s).some((t) => this.targetsOf(u, s, t).length > 0);
     });
   }
@@ -694,10 +702,10 @@ export class Battle {
   }
 
   /** Spend a skill's AP, mana and cooldown. Using a skill can't be undone. */
-  private payFor(u: Unit, skillId: string): void {
+  private payFor(u: Unit, skillId: string, noMana = false): void {
     const skill = SKILLS[skillId];
     this.spendAp(u, skill);
-    u.mp -= skill.mana;
+    if (!noMana) u.mp -= skill.mana;
     // Cooldown N = can't be used during the next N turns. The counter ticks at the
     // start of each of the unit's turns, so store N + 1 (it hits 0 on the turn it's usable).
     if (skill.cooldown > 0) u.cooldowns[skillId] = skill.cooldown + 1;
@@ -754,6 +762,7 @@ export class Battle {
         if (!mover.alive) break;
         events.push(...this.dealHit(w, mover, part, 'overwatch'));
       }
+      if (ow.weapon) events.push(...this.weaponProcs(w, mover, 'overwatch'));
       if (ow.interrupt) interrupted = true;
     }
     return { events, interrupted };
@@ -1088,7 +1097,10 @@ export class Battle {
 
   /** Predicted damage of each hit of `skill` on `target` (accounts for missing health growing). */
   previewHits(attacker: Unit, skill: SkillDef, target: Unit): number[] {
+    const swings = this.isWeaponAttack(attacker, skill) ? (this.skillFor(attacker, skill).basicAttack ?? 1) : 0;
     skill = this.skillFor(attacker, skill);
+    // Weapon on-hit effects (Arcane Weapon) the attacker can pay for.
+    if (swings) skill = { ...skill, hits: [...(skill.hits ?? []), ...this.procParts(attacker, swings)] };
     let hp = target.hp;
     let shield = this.shieldOf(target);
     const out: number[] = [];
@@ -1155,7 +1167,7 @@ export class Battle {
       events.push({ type: 'zoneHit', source: caster.uid, target: u.uid, name: z.name });
       events.push(...this.dealHit(caster, u, z.def.hit, 'zone'));
       if (!u.alive) break;
-      for (const a of z.def.applyStatus) events.push(this.applyStatus(caster, u, a.status, a.turns, a.stacks ?? 1));
+      for (const a of z.def.applyStatus) events.push(...this.applyStatus(caster, u, a.status, a.turns, a.stacks ?? 1));
     }
     return events;
   }
@@ -1219,7 +1231,8 @@ export class Battle {
     if (!this.skillIds(u).includes(skillId)) throw new Error(`${u.character.name} doesn't have ${skill.name}`);
     if (!this.canPay(u, skill)) throw new Error(`${skill.name} needs more AP`);
     if (!this.isReady(u, skillId)) throw new Error(`${skill.name} is on cooldown`);
-    if (u.mp < skill.mana) throw new Error(`${skill.name} needs ${skill.mana} mana`);
+    const switchingOff = !!skill.toggleStatus && this.isToggledOn(u, skill.toggleStatus);
+    if (u.mp < skill.mana && !switchingOff) throw new Error(`${skill.name} needs ${skill.mana} mana`);
     if (!this.isUsable(u, skillId)) throw new Error(`${skill.name} needs a weapon`);
     const block = this.engagementBlock(u, skill, tile);
     if (block) throw new Error(block);
@@ -1238,8 +1251,20 @@ export class Battle {
         events.push({ type: 'disengage', source: u.uid, target: opp.uid, reason: 'escaped' });
       }
     }
-    for (const a of skill.selfStatus ?? []) events.push(this.applyStatus(u, u, a.status, a.turns, 1, true));
+    for (const a of skill.selfStatus ?? []) events.push(...this.applyStatus(u, u, a.status, a.turns, 1, true));
     if (skill.switchMode) events.push(...this.setWeaponMode(u, u.weaponMode + 1));
+    // Toggles: switch the status on (paying the mana) or off again (free).
+    let free = false;
+    if (skill.toggleStatus) {
+      if (this.isToggledOn(u, skill.toggleStatus)) {
+        events.push(this.toggleOff(u, skill.toggleStatus));
+        free = true;
+      } else {
+        const def = STATUSES[skill.toggleStatus];
+        u.statuses.push({ id: def.id, name: def.name, debuff: def.debuff, stacks: 1, amount: 0, turns: Infinity, tick: def.tick });
+        events.push({ type: 'toggle', target: u.uid, name: def.name, on: true });
+      }
+    }
     if (skill.charge) {
       const dest = this.chargeDestination(u, tile, u, skill)!;
       if (dest.x !== u.x || dest.y !== u.y) {
@@ -1270,16 +1295,20 @@ export class Battle {
         los: skill.cone.los ?? this.skillLos(u, skill),
         // Without hits of its own, the watch fires the user's basic attack.
         hits: skill.hits ?? this.basicAttack(u).hits ?? [],
+        weapon: !skill.hits,
       };
       events.push({ type: 'overwatch', source: u.uid, skillId });
     }
 
-    const targets = aimed ?? this.targetsOf(u, skill, tile);
+    const targets = skill.toggleStatus ? [] : aimed ?? this.targetsOf(u, skill, tile);
+    // Weapon attacks carry on-hit effects (Arcane Weapon): one per swing (Double Strike swings twice).
+    const swings = this.isWeaponAttack(u, skill) ? (used.basicAttack ?? 1) : 0;
     for (const t of targets) {
       for (const part of used.hits ?? []) {
         if (!t.alive) break;
         events.push(...this.dealHit(u, t, part, 'skill'));
       }
+      for (let i = 0; i < swings && t.alive; i++) events.push(...this.weaponProcs(u, t, 'skill'));
       // Life-Risking Strike: the user pays if the target is still standing.
       if (skill.recoilIfSurvives && t.alive && u.alive) {
         events.push(...this.dealHit(u, u, skill.recoilIfSurvives, 'skill'));
@@ -1292,7 +1321,7 @@ export class Battle {
         this.engage(u, t);
         events.push({ type: 'engage', source: u.uid, target: t.uid });
       }
-      for (const a of skill.applyStatus ?? []) events.push(this.applyStatus(u, t, a.status, a.turns, a.stacks ?? 1));
+      for (const a of skill.applyStatus ?? []) events.push(...this.applyStatus(u, t, a.status, a.turns, a.stacks ?? 1));
       if (skill.heal) {
         const amount = Math.min(this.healAmount(u, skill), t.stats.health - t.hp);
         t.hp += amount;
@@ -1341,19 +1370,25 @@ export class Battle {
     events.push(...this.separationEvents());
     // Attacking gives a Stealthed unit away.
     if (this.isAttack(used) && used.affects !== 'ally') u.statuses = u.statuses.filter((st) => !STATUSES[st.id]?.stealth);
-    this.payFor(u, skillId);
+    this.payFor(u, skillId, free);
     return events;
   }
 
   /** Apply a status. Debuffs can be shrugged off: a Resist roll (see resistChance). */
-  private applyStatus(source: Unit, t: Unit, id: string, turns: number, stacks: number, unresisted = false): BattleEvent {
+  private applyStatus(source: Unit, t: Unit, id: string, turns: number, stacks: number, unresisted = false): BattleEvent[] {
     const def = STATUSES[id];
+    if (!t.alive) return [];
     if (def.debuff && !unresisted) {
       const chance = resistChance(this.stat(t, 'resist'), this.rules.defenseScale);
-      if (chance > 0 && this.rng() < chance) return { type: 'resist', source: source.uid, target: t.uid, name: def.name, chance: Math.round(chance * 100) };
+      if (chance > 0 && this.rng() < chance) return [{ type: 'resist', source: source.uid, target: t.uid, name: def.name, chance: Math.round(chance * 100) }];
+    }
+    // Instant statuses (Explosion) do their damage now and aren't kept.
+    if (def.instantDamagePctMaxHp) {
+      const amount = Math.max(1, Math.round(t.stats.health * def.instantDamagePctMaxHp));
+      return [{ type: 'status', source: source.uid, target: t.uid, name: def.name }, this.dealDamage(t, amount, source.uid, 'status', true)];
     }
     const existing = t.statuses.find((s) => s.id === id);
-    // Past its stack cap the status turns into its overflow (Slow x3 -> Frozen).
+    // Past its stack cap the status turns into its overflow (Slow x3 -> Frozen, Burn x3 -> Explosion).
     const have = existing?.stacks ?? 0;
     if (def.stacking && def.overflow && def.maxStacks !== undefined && have + stacks > def.maxStacks) {
       t.statuses = t.statuses.filter((s) => s.id !== id);
@@ -1372,7 +1407,66 @@ export class Battle {
       status.amount = Math.max(status.amount, this.scaledStatusAmount(source, id));
     }
     const now = t.statuses.find((s) => s.id === id)!;
-    return { type: 'status', source: source.uid, target: t.uid, name: def.stacking ? `${def.name} x${now.stacks}` : def.name };
+    return [{ type: 'status', source: source.uid, target: t.uid, name: def.stacking ? `${def.name} x${now.stacks}` : def.name }];
+  }
+
+  // ---- toggles and weapon on-hit effects (Arcane Weapon) -------------------------------
+
+  /** The unit's active toggle statuses with a weapon on-hit effect. */
+  private weaponOnHits(u: Unit): Status[] {
+    return u.statuses.filter((s) => STATUSES[s.id]?.weaponOnHit);
+  }
+
+  /** Is `s` (as listed, not resolved) a weapon attack: the weapon's basic attack (any mode) or a 'weapon' skill? */
+  isWeaponAttack(u: Unit, s: SkillDef): boolean {
+    const raw = this.rawBasic(u);
+    return s.id === raw.id || !!raw.modes?.includes(s.id) || (hasTag(s, 'weapon') && !s.cone);
+  }
+
+  /** Switch a toggle status off (out of mana, or the unit used the skill again). */
+  private toggleOff(u: Unit, id: string, reason?: 'mana'): BattleEvent {
+    u.statuses = u.statuses.filter((s) => s.id !== id);
+    return { type: 'toggle', target: u.uid, name: STATUSES[id].name, on: false, ...(reason ? { reason } : {}) };
+  }
+
+  /**
+   * A weapon attack landed on `t` (one per swing): each active on-hit effect adds its hit, paying its mana.
+   * Without the mana for it, the effect switches off.
+   */
+  private weaponProcs(u: Unit, t: Unit, cause: DamageCause): BattleEvent[] {
+    const events: BattleEvent[] = [];
+    for (const s of this.weaponOnHits(u)) {
+      if (!t.alive || !u.alive) break;
+      const def = STATUSES[s.id];
+      const cost = def.manaPerHit ?? 0;
+      if (u.mp < cost) {
+        events.push(this.toggleOff(u, s.id, 'mana'));
+        continue;
+      }
+      u.mp -= cost;
+      events.push(...this.dealHit(u, t, def.weaponOnHit!, cause));
+    }
+    return events;
+  }
+
+  /** Extra damage each swing of a weapon attack would add on `target` (for previews), as hits. */
+  private procParts(u: Unit, swings: number): DamagePart[] {
+    const out: DamagePart[] = [];
+    let mp = u.mp;
+    for (let i = 0; i < swings; i++) {
+      for (const s of this.weaponOnHits(u)) {
+        const def = STATUSES[s.id];
+        if (mp < (def.manaPerHit ?? 0)) continue;
+        mp -= def.manaPerHit ?? 0;
+        out.push(def.weaponOnHit!);
+      }
+    }
+    return out;
+  }
+
+  /** Is this toggle status on? */
+  isToggledOn(u: Unit, statusId: string): boolean {
+    return u.statuses.some((s) => s.id === statusId);
   }
 
   // ---- turn flow --------------------------------------------------------------------
@@ -1404,6 +1498,13 @@ export class Battle {
         if (s.tick === 'start') s.turns -= 1;
       }
       u.statuses = u.statuses.filter((s) => s.turns > 0);
+      // Toggles cost mana every turn to keep up; they switch off when the unit can't pay.
+      for (const s of [...u.statuses]) {
+        const upkeep = STATUSES[s.id]?.manaPerTurn;
+        if (!upkeep || !u.alive) continue;
+        if (u.mp >= upkeep) u.mp -= upkeep;
+        else events.push(this.toggleOff(u, s.id, 'mana'));
+      }
       // Frozen: the movement AP is lost this turn.
       if (this.isFrozen(u)) {
         u.ap -= 1;

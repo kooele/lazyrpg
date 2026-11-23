@@ -618,6 +618,7 @@ describe('contracts', () => {
     const q = s.guild.board.find((x) => canTakeQuest(s, x))!;
     const gold = s.gold;
     acceptQuest(s, q.id);
+    s.quest!.days = 1; // no nights on the road (food moves relationship too)
     const relBefore = comp.contract.relationship;
     resolveQuest(s, 'victory', makeRng(3));
     expect(s.party.some((m) => m.id === merc.id)).toBe(false);

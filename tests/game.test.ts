@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import skillsJson from '../src/data/skills.json';
 import weaponsJson from '../src/data/weapons.json';
-import { SKILLS, TREE_SKILLS, WEAPONS, maxBodyRank, modeWithTag, parseContent, resolveWeaponSkill, skillEffect, skillPointsForLevel, skillStatText, skillStats } from '../src/data/content';
+import { SKILLS, STATUSES, TREE_SKILLS, WEAPONS, maxBodyRank, modeWithTag, parseContent, resolveWeaponSkill, skillEffect, skillPointsForLevel, skillStatText, skillStats } from '../src/data/content';
 import enemiesJson from '../src/data/enemies.json';
 import { ENEMIES, parseEnemies } from '../src/data/enemies';
 import { STAT_CONFIG, parseStatConfig } from '../src/data/stats';
@@ -90,7 +90,10 @@ describe('stats and content files', () => {
       expect(labels, id).toEqual(want);
     }
     expect(skillStatText(SKILLS.fireball)).toBe(
-      'Effect: 100% M.Atk, Burn x1 (2 turns)\nTags: Projectile, Debuff, Magical\nAP: Ends turn\nMana: 40\nCooldown: 2 turns');
+      'Effect: 120% M.Atk, Burn x1 (2 turns)\nTags: Projectile, Debuff, Magical\nAP: Ends turn\nMana: 40\nCooldown: 2 turns');
+    expect(skillStatText(SKILLS.ignite)).toBe(
+      'Effect: 20% M.Atk, Burn x1 (2 turns)\nTags: Debuff, Magical\nAP: 1 AP\nMana: 20\nCooldown: 1 turn');
+    expect(skillStats(SKILLS.arcane_weapon)[0].value).toBe('Toggle: Weapon attacks +50% M.Atk per hit (10 mana each); 10 mana a turn while on');
     expect(skillStatText(SKILLS.sword_slash)).toBe('Effect: 100% P.Atk\nTags: Melee, Engage, Physical\nAP: Ends turn');
     expect(skillStats(SKILLS.engage)[0].value).toBe(SKILLS.engage.description);
     expect(skillStats(SKILLS.bow_attack)[0].value).toBe("Attacks based on the bow's mode.");
@@ -101,7 +104,7 @@ describe('stats and content files', () => {
 });
 
 describe('save files', () => {
-  const campaign = () => newCampaign(hero('bow', ['fireball', 'kick'], 'Main'), 'Testers', makeRng(5));
+  const campaign = () => newCampaign(hero('bow', ['ignite', 'kick'], 'Main'), 'Testers', makeRng(5));
 
   it('round-trips through human-readable JSON', () => {
     const state = campaign();
@@ -1419,10 +1422,10 @@ describe('skill-sheet systems: level locks, Disengage and the new skills', () =>
   });
 
   it('saves with a skill above the character level load with that skill unlearned', () => {
-    const state = newCampaign(hero('staff', ['fireball', 'arcane_pulse'], 'Main'), 'Testers', makeRng(5));
+    const state = newCampaign(hero('staff', ['ignite', 'fireball', 'arcane_pulse'], 'Main'), 'Testers', makeRng(5));
     const parsed = parseSave(serializeSave(state));
     expect(parsed.ok).toBe(true);
-    if (parsed.ok) expect(parsed.state.party[0].skillIds).toEqual(['fireball']);
+    if (parsed.ok) expect(parsed.state.party[0].skillIds).toEqual(['ignite']); // Fireball and Arcane Pulse need level 3
   });
 
   it('Engage locks onto an enemy without hitting it, for 1 AP', () => {
@@ -1659,7 +1662,8 @@ describe('bow modes and damage types', () => {
 
   it('skills are tagged Physical / Magical to match the damage their hits deal', () => {
     for (const s of Object.values(SKILLS)) {
-      const hits = [...(s.hits ?? []), ...(s.recoilIfSurvives ? [s.recoilIfSurvives] : []), ...(s.zone ? [s.zone.hit] : [])];
+      const onHit = s.toggleStatus ? STATUSES[s.toggleStatus].weaponOnHit : undefined;
+      const hits = [...(s.hits ?? []), ...(s.recoilIfSurvives ? [s.recoilIfSurvives] : []), ...(s.zone ? [s.zone.hit] : []), ...(onHit ? [onHit] : [])];
       const physical = hits.some((h) => h.pAtk || h.def || h.missingHp);
       const magical = hits.some((h) => h.mAtk);
       expect([s.id, s.tags.includes('physical')]).toEqual([s.id, physical]);
@@ -1814,5 +1818,119 @@ describe('quick battle difficulty', () => {
     expect(spots.every((p) => p.x >= Math.floor(map.width / 2) && passable(map, p.x, p.y))).toBe(true);
     // Normal encounters still use only the three edge columns.
     expect(deploymentTiles(map, 'enemy', 4).every((p) => p.x >= map.width - 3)).toBe(true);
+  });
+});
+
+describe('Elementalist rework: Ignite, Freeze, Fireball, Iceblast and Burn explosions', () => {
+  /** A caster and a target; `() => 0.99` never rolls a Resist. */
+  const duelOf = (skills: string[]) => {
+    const m = makeUnit(hero('staff', skills), 'player', { x: 1, y: 3 });
+    const e = makeUnit(hero('bow'), 'enemy', { x: 4, y: 3 });
+    return { battle: new Battle(openMap(), [m, e], () => 0.99), m, e };
+  };
+
+  it('Ignite: 1 AP, 20 mana, 1-turn cooldown, 20% M.Atk and one Burn stack; Freeze does the same with Slow', () => {
+    expect(SKILLS.ignite).toMatchObject({ ap: 1, mana: 20, cooldown: 1, level: 1, hits: [{ mAtk: 0.2 }] });
+    expect(SKILLS.freeze).toMatchObject({ ap: 1, mana: 20, cooldown: 1, level: 1, hits: [{ mAtk: 0.2 }] });
+    const { battle, m, e } = duelOf(['ignite', 'freeze']);
+    battle.perform(m, 'ignite', { x: 4, y: 3 });
+    expect(e.hp).toBe(500 - 17); // 24 M.Atk x 100/140
+    expect(e.statuses.find((s) => s.id === 'burn')?.stacks).toBe(1);
+    expect(m).toMatchObject({ acted: false, mp: m.stats.mana - 20 }); // 1 AP: the turn goes on
+    battle.perform(m, 'freeze', { x: 4, y: 3 });
+    expect(e.statuses.find((s) => s.id === 'slow')?.stacks).toBe(1);
+    expect(m.ap).toBe(0); // both AP spent
+  });
+
+  it('Fireball and Iceblast are level 3 and hit for 120% M.Atk', () => {
+    expect(SKILLS.fireball).toMatchObject({ level: 3, hits: [{ mAtk: 1.2 }] });
+    expect(SKILLS.iceblast).toMatchObject({ level: 3, los: 'sight', hits: [{ mAtk: 1.2 }], applyStatus: [{ status: 'slow', stacks: 1, turns: 2 }] });
+    const { battle, m, e } = duelOf(['iceblast']);
+    battle.perform(m, 'iceblast', { x: 4, y: 3 });
+    expect(e.hp).toBe(500 - 103); // 144 M.Atk x 100/140
+    expect(e.statuses.find((s) => s.id === 'slow')?.stacks).toBe(1);
+  });
+
+  it('Burn stacks to 2; a 3rd stack Explodes: Burn is gone and the unit loses 10% of max Health (ignoring Defense and shields)', () => {
+    const { battle, m, e } = duelOf(['ignite']);
+    e.statuses.push({ id: 'burn', name: 'Burn', debuff: true, stacks: 2, amount: 0, turns: 2, tick: 'start' });
+    e.statuses.push({ id: 'shield', name: 'Shield', debuff: false, stacks: 0, amount: 999, turns: 2, tick: 'start' });
+    const events = battle.perform(m, 'ignite', { x: 4, y: 3 });
+    expect(events).toContainEqual(expect.objectContaining({ type: 'status', name: 'Explosion' }));
+    // The shield soaks Ignite's own hit, but not the explosion.
+    expect(events).toContainEqual(expect.objectContaining({ type: 'damage', cause: 'status', amount: 50, absorbed: 0 }));
+    expect(e.hp).toBe(500 - 50);
+    expect(e.statuses.some((s) => s.id === 'burn' || s.id === 'explosion')).toBe(false);
+  });
+});
+
+describe('Arcane Weapon (toggle)', () => {
+  const setupAw = (weapon = 'sword_shield', skills: string[] = ['arcane_weapon']) => {
+    const c = hero(weapon, skills);
+    c.level = 3; // Arcane Weapon is a level-3 skill (and 3 skills need 3 points)
+    const a = makeUnit(c, 'player', { x: 3, y: 3 });
+    const e = makeUnit(hero('bow'), 'enemy', { x: 4, y: 3 });
+    return { battle: new Battle(openMap(), [a, e], () => 0.99), a, e };
+  };
+
+  it('switches on for 10 mana as a free action, adds 50% M.Atk to each weapon attack for 10 mana a hit, and off again for free', () => {
+    expect(SKILLS.arcane_weapon).toMatchObject({ ap: 0, mana: 10, level: 3, toggleStatus: 'arcane_weapon' });
+    const { battle, a, e } = setupAw();
+    const mp = a.mp;
+    const on = battle.perform(a, 'arcane_weapon', { x: 3, y: 3 });
+    expect(on).toContainEqual({ type: 'toggle', target: a.uid, name: 'Arcane Weapon', on: true });
+    expect(a).toMatchObject({ mp: mp - 10, ap: 2, acted: false });
+    expect(battle.usableFreeActions(a)).not.toContain('arcane_weapon'); // never keeps the turn open
+    // Level 3: Sword Slash 120 P.Atk x 100/140 = 86 (Physical), then 50% of 96 M.Atk = 48 x 100/140 = 34 (Magical).
+    expect(battle.previewHits(a, SKILLS.sword_slash, e)).toEqual([86, 34]);
+    const hit = battle.perform(a, 'sword_slash', { x: 4, y: 3 }).filter((ev) => ev.type === 'damage');
+    expect(hit).toEqual([
+      expect.objectContaining({ amount: 86, damageType: 'physical' }),
+      expect.objectContaining({ amount: 34, damageType: 'magical' }),
+    ]);
+    expect(a.mp).toBe(mp - 20);
+    // Next turn: 10 mana upkeep; switching off is free.
+    battle.endPhase();
+    battle.endPhase();
+    expect(a.mp).toBe(mp - 30);
+    const off = battle.perform(a, 'arcane_weapon', { x: 3, y: 3 });
+    expect(off).toContainEqual({ type: 'toggle', target: a.uid, name: 'Arcane Weapon', on: false });
+    expect(a.mp).toBe(mp - 30);
+    expect(battle.isToggledOn(a, 'arcane_weapon')).toBe(false);
+  });
+
+  it('procs once per swing (Double Strike twice), on opportunity attacks, and not on spells', () => {
+    const { battle, a, e } = setupAw('sword_shield', ['arcane_weapon', 'double_strike', 'arcane_bolt']);
+    battle.perform(a, 'arcane_weapon', { x: 3, y: 3 });
+    const ds = battle.perform(a, 'double_strike', { x: 4, y: 3 }).filter((ev) => ev.type === 'damage' && ev.damageType === 'magical');
+    expect(ds).toHaveLength(2);
+    battle.endPhase();
+    battle.endPhase();
+    const mp = a.mp;
+    battle.perform(a, 'arcane_bolt', { x: 4, y: 3 });
+    expect(a.mp).toBe(mp - SKILLS.arcane_bolt.mana); // a spell: no proc
+    // Engaged foe breaks away: the opportunity attack procs too.
+    battle.endPhase();
+    a.engagedWith = e.uid;
+    e.engagedWith = a.uid;
+    const opp = battle.disengage(e).filter((ev) => ev.type === 'damage');
+    expect(opp.map((ev) => ev.type === 'damage' && ev.damageType)).toEqual(['physical', 'magical']);
+  });
+
+  it('switches off when it runs out of mana (per hit or per turn)', () => {
+    const { battle, a } = setupAw();
+    battle.perform(a, 'arcane_weapon', { x: 3, y: 3 });
+    a.mp = 5;
+    const events = battle.perform(a, 'sword_slash', { x: 4, y: 3 });
+    expect(events).toContainEqual({ type: 'toggle', target: a.uid, name: 'Arcane Weapon', on: false, reason: 'mana' });
+    expect(events.filter((ev) => ev.type === 'damage')).toHaveLength(1); // no extra hit
+    // Upkeep: on with too little mana for the next turn.
+    const b = setupAw();
+    b.battle.perform(b.a, 'arcane_weapon', { x: 3, y: 3 });
+    b.a.mp = 9;
+    b.battle.endPhase();
+    const start = b.battle.endPhase();
+    expect(start).toContainEqual(expect.objectContaining({ type: 'toggle', on: false, reason: 'mana' }));
+    expect(b.a.mp).toBe(9);
   });
 });

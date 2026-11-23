@@ -81,6 +81,16 @@ export interface StatusDef {
   overflow?: { status: string; turns: number };
   /** Can't move (walk, Dash, Movement skills) and loses its movement AP at the start of its turn. */
   frozen?: boolean;
+  /** Instant: applying it deals this share of the unit's max Health at once (ignores Defense and shields); it isn't kept. */
+  instantDamagePctMaxHp?: number;
+  /** Toggled on and off by a skill (see SkillDef.toggleStatus); lasts until switched off. */
+  toggle?: boolean;
+  /** Mana the unit pays at the start of each of its turns to keep it; it switches off when it can't. */
+  manaPerTurn?: number;
+  /** Weapon attacks (basic attacks, Overwatch, opportunity attacks, 'weapon' skills) add this hit to each target they hit. */
+  weaponOnHit?: DamagePart;
+  /** Mana each weapon attack's extra hit costs; without it the status switches off. */
+  manaPerHit?: number;
 }
 
 /**
@@ -208,6 +218,8 @@ export interface SkillDef {
   basicMode?: string;
   /** Cycles the user's weapon to its next mode. */
   switchMode?: boolean;
+  /** Switch this status on (paying the skill's mana) or, if it's on, off again (free). */
+  toggleStatus?: string;
 }
 
 export type SkillTab = string;

@@ -22,6 +22,8 @@
     "basicAttackDamage": "For 'basicAttack' skills: damage multiplier per swing, one per basic attack (Double Strike: [1, 0.5] = full, then half). Omit for full damage.",
     "engageWithin": "Engage the target (as the Engage tag does) only if it is within this many tiles (Spear Thrust: 1.5 = adjacent, diagonals included). Don't combine with the engage tag.",
     "selfStatus": "list of { status, turns } applied to the user before the skill resolves (never resisted)",
+    "toggleStatus": "A status with \"toggle\": true. Using the skill switches it on (paying the skill's mana) or, if it's already on, off (free). Toggle statuses can set manaPerTurn (paid at the start of each of the unit's turns), weaponOnHit { pAtk, mAtk } (an extra hit on each target of a weapon attack: basic attacks, Overwatch, opportunity attacks, 'weapon' skills) and manaPerHit (paid per extra hit). Out of mana, the status switches off.",
+    "instantDamagePctMaxHp": "Statuses: applying it deals this share of max Health at once, ignoring Defense and shields, and it isn't kept (Explosion, Burn's overflow).",
     "recoilIfSurvives": "{ pAtk, mAtk, ... } damage the user takes (after its own Defense) if the target survives the hits",
     "optional": "heal { mAtk }, shield { maxHpPct and/or mAtk, turns }, knockback (tiles), cleanse, teleport, charge (with teleport: appear next to the target instead of dashing), aoeRadius (a 'weapon' self skill without one uses the weapon's range), cone { angle, radius, interrupt, los } (radius defaults to the skill's range, so 'weapon' cones reach as far as the weapon; a cone skill without hits attacks with the user's basic attack)",
     "zone": "For target 'ground': { radius (1.5 = 3x3), turns (the caster's team's turns it lasts), hit { pAtk, mAtk } per hit, applyStatus per hit, endTurnHits }. Each tile a unit enters inside it = 1 hit; ending a turn inside = endTurnHits hits. Hits everyone, allies included.",
@@ -46,11 +48,14 @@
     "free": { "name": "Free Action", "description": "Costs 0 AP. Usable any time until the unit's turn ends." },
     "debuff": { "name": "Debuff", "description": "Applies a harmful effect that Cleanse can remove." },
     "monster": { "name": "Monster", "description": "A natural attack used by monsters." },
-    "support": { "name": "Support", "description": "Restores or protects. Heal and Cleanse work on any unit, enemies included." }
+    "support": { "name": "Support", "description": "Restores or protects. Heal and Cleanse work on any unit, enemies included." },
+    "toggle": { "name": "Toggle", "description": "Switches an effect on, paying its mana cost. It stays on, costing mana every turn, until you use it again (free) or run out of mana." }
   },
 
   "statuses": {
-    "burn": { "name": "Burn", "debuff": true, "stacking": true, "tick": "start", "damagePctMaxHpPerStack": 0.02, "description": "Lose 2% of max Health per stack at the start of each turn. Ignores Defense and shields." },
+    "burn": { "name": "Burn", "debuff": true, "stacking": true, "maxStacks": 2, "overflow": { "status": "explosion", "turns": 1 }, "tick": "start", "damagePctMaxHpPerStack": 0.02, "description": "Lose 2% of max Health per stack at the start of each turn, up to 2 stacks. Ignores Defense and shields. A 3rd stack Explodes instead." },
+    "explosion": { "name": "Explosion", "debuff": true, "stacking": false, "tick": "start", "instantDamagePctMaxHp": 0.1, "description": "Burn's 3rd stack: removes Burn and deals 10% of max Health at once. Ignores Defense and shields." },
+    "arcane_weapon": { "name": "Arcane Weapon", "debuff": false, "stacking": false, "tick": "start", "toggle": true, "manaPerTurn": 10, "manaPerHit": 10, "weaponOnHit": { "mAtk": 0.5 }, "description": "Weapon attacks deal an extra 50% M.Atk (Magical) to each target hit, for 10 mana each. Costs 10 mana at the start of each turn. Switches off when mana runs out." },
     "frenzy": { "name": "Frenzy", "debuff": false, "stacking": false, "tick": "end", "statMods": { "pAtk": 20 }, "description": "+20 P.Atk." },
     "slow": { "name": "Slow", "debuff": true, "stacking": true, "maxStacks": 2, "overflow": { "status": "frozen", "turns": 2 }, "tick": "end", "statMods": { "movement": -4 }, "description": "-4 Movement (one grass tile) per stack, up to 2 stacks. A 3rd stack Freezes the unit instead." },
     "frozen": { "name": "Frozen", "debuff": true, "stacking": false, "frozen": true, "tick": "start", "description": "Can't move, and loses its movement AP on its next turn." },
@@ -151,19 +156,39 @@
       "target": "emptyTile", "affects": "ally", "range": 2, "minRange": 1, "cooldown": 2, "mana": 40, "level": 3,
       "teleport": true
     },
-    "fireball": {
-      "name": "Fireball", "description": "Hurl a fireball that sets an enemy alight.",
-      "tags": ["projectile", "debuff", "magical"],
-      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "los": "sight", "cooldown": 2, "mana": 40,
-      "hits": [{ "mAtk": 1 }],
+    "arcane_weapon": {
+      "name": "Arcane Weapon", "description": "Empower your weapon with arcane force. Use it again to switch it off.",
+      "tags": ["free", "toggle", "magical"],
+      "target": "self", "affects": "ally", "range": 0, "minRange": 0, "ap": 0, "cooldown": 0, "mana": 10, "level": 3,
+      "toggleStatus": "arcane_weapon"
+    },
+    "ignite": {
+      "name": "Ignite", "description": "Set an enemy on fire.",
+      "tags": ["debuff", "magical"],
+      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "ap": 1, "cooldown": 1, "mana": 20,
+      "hits": [{ "mAtk": 0.2 }],
       "applyStatus": [{ "status": "burn", "stacks": 1, "turns": 2 }]
     },
     "freeze": {
-      "name": "Freeze", "description": "Freeze an enemy, slowing it down.",
+      "name": "Freeze", "description": "Chill an enemy, slowing it down.",
       "tags": ["debuff", "magical"],
-      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "cooldown": 2, "mana": 40,
-      "hits": [{ "mAtk": 1 }],
-      "applyStatus": [{ "status": "slow", "turns": 2 }]
+      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "ap": 1, "cooldown": 1, "mana": 20,
+      "hits": [{ "mAtk": 0.2 }],
+      "applyStatus": [{ "status": "slow", "stacks": 1, "turns": 2 }]
+    },
+    "fireball": {
+      "name": "Fireball", "description": "Hurl a fireball that sets an enemy alight.",
+      "tags": ["projectile", "debuff", "magical"],
+      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "los": "sight", "cooldown": 2, "mana": 40, "level": 3,
+      "hits": [{ "mAtk": 1.2 }],
+      "applyStatus": [{ "status": "burn", "stacks": 1, "turns": 2 }]
+    },
+    "iceblast": {
+      "name": "Iceblast", "description": "Hurl a shard of ice that slows an enemy down.",
+      "tags": ["projectile", "debuff", "magical"],
+      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "los": "sight", "cooldown": 2, "mana": 40, "level": 3,
+      "hits": [{ "mAtk": 1.2 }],
+      "applyStatus": [{ "status": "slow", "stacks": 1, "turns": 2 }]
     },
     "firestorm": {
       "name": "Firestorm", "description": "Set a 3x3 area ablaze. Anyone moving through it or ending a turn in it burns.",
@@ -419,8 +444,8 @@
   ],
 
   "skillTrees": [
-    { "id": "arcanist", "name": "Arcanist", "tab": "mage", "skills": ["arcane_bolt", "arcane_pulse", "arcane_shift"] },
-    { "id": "elementalist", "name": "Elementalist", "tab": "mage", "skills": ["fireball", "freeze", "firestorm", "blizzard"] },
+    { "id": "arcanist", "name": "Arcanist", "tab": "mage", "skills": ["arcane_bolt", "arcane_pulse", "arcane_shift", "arcane_weapon"] },
+    { "id": "elementalist", "name": "Elementalist", "tab": "mage", "skills": ["ignite", "freeze", "fireball", "iceblast", "firestorm", "blizzard"] },
     { "id": "cleric", "name": "Cleric", "tab": "mage", "skills": ["heal", "cleanse", "protection", "barrier"] },
     { "id": "vanguard", "name": "Vanguard", "tab": "warrior", "skills": ["engage", "charge"] },
     { "id": "infighter", "name": "Infighter", "tab": "warrior", "skills": ["kick", "pocket_sand"] },

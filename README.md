@@ -172,7 +172,7 @@ Every unit gets **2 AP** each turn: a **movement AP** (the regular move) and an 
 
 Moving after a skill isn't possible once the movement AP is gone. **Undo move** takes back a regular move as long as nothing else happened since.
 
-Skills can cost **mana** (`mana` in `skills.json`), which doesn't come back during a battle: Engage 10, Kick 10, Charge 20, Cleanse 20, Dash 20, Double Strike 20, Execute 20, Pocket Sand 20, Arcane Bolt 30, Arcane Shift 40, Barrier 40, Fireball 40, Flicker Strike 40, Freeze 40, Heal 40, Life-Risking Strike 40, Protection 40, Shadow Step 40, Circle Swing 50, Arcane Pulse 60, Firestorm 100, Blizzard 100. Skill buttons show the cost; without enough mana a skill is greyed out.
+Skills can cost **mana** (`mana` in `skills.json`), which doesn't come back during a battle: Engage 10, Kick 10, Arcane Weapon 10 (toggle), Charge 20, Cleanse 20, Dash 20, Double Strike 20, Execute 20, Freeze 20, Ignite 20, Pocket Sand 20, Arcane Bolt 30, Arcane Shift 40, Barrier 40, Fireball 40, Flicker Strike 40, Heal 40, Iceblast 40, Life-Risking Strike 40, Protection 40, Shadow Step 40, Circle Swing 50, Arcane Pulse 60, Firestorm 100, Blizzard 100. Skill buttons show the cost; without enough mana a skill is greyed out.
 
 **Bow modes**: the bow's basic attack depends on its mode. **Switch Mode** (a free action) cycles Direct → Indirect → Melee → Direct. The bow keeps the selected mode between battles (saved as `weaponMode` on the character). Overwatch, opportunity attacks and Weapon skills (Execute, Double Strike) use the current mode. Circle Swing always swings in Melee mode without changing the selection. Bow Strike (Melee) engages, and a bow user that is engaged always fights in Melee mode; its selected mode comes back once it breaks free. Enemy archers fight at range: each turn they pick Direct or Indirect, whichever gives the better attack (Indirect when cover is in the way), and only fight in Melee when engaged. Modes are set in `skills.json` (`bow_attack.modes`), with ranges relative to the weapon's `range` in `weapons.json`.
 
@@ -196,10 +196,12 @@ Adventurers have **skill points**: 2 at level 1 and 1 more every level. Each poi
 
 Some skills need a **minimum level** (`level` in `skills.json`; shown as "Lv 3" in the skill tree). Until then they're greyed out and can't be learned. A loaded save with a skill above the character's level unlearns it and refunds the point. Random adventurers only pick skills their level has unlocked.
 
-- **Mage**: Arcanist (Arcane Bolt, Arcane Pulse Lv 3, Arcane Shift Lv 3), Elementalist (Fireball, Freeze), Cleric (Heal, Cleanse)
+- **Mage**: Arcanist (Arcane Bolt, Arcane Pulse Lv 3, Arcane Shift Lv 3, Arcane Weapon Lv 3), Elementalist (Ignite, Freeze, Fireball Lv 3, Iceblast Lv 3, Firestorm Lv 5, Blizzard Lv 5), Cleric (Heal, Cleanse, Protection Lv 3, Barrier Lv 3)
+  - **Ignite** / **Freeze** (1 AP, 20 mana, 1-turn cooldown): 20% M.Atk and one stack of Burn / Slow. **Fireball** / **Iceblast** (level 3): 120% M.Atk and one stack of Burn / Slow.
+  - **Arcane Weapon** is a **toggle** (free action): switching it on costs 10 mana, then 10 mana at the start of each of your turns. While it's on, every weapon attack (basic attacks, Overwatch, opportunity attacks and Weapon skills such as Double Strike, Execute and Circle Swing) deals an extra 50% M.Atk Magical hit to each target, for 10 mana per hit (Double Strike: two). Using it again switches it off for free; it also switches off when you can't pay. The skill bar shows it as **ON**, and damage previews include the extra hit.
 - **Warrior**: Vanguard (Engage, Charge Lv 3), Infighter (Kick, Pocket Sand Lv 3), Assassin (Shadow Step, Flicker Strike Lv 3, Life-Risking Strike Lv 5), Weapon Master (Double Strike, Execute Lv 3, Circle Swing Lv 5)
 
-Status effects: Burn, Slow, Corrode, Frenzy, **Blinded** (Pocket Sand: −30% P.Atk and M.Atk), **Exposed** (Life-Risking Strike: no Defense until your next turn) and **Stealthed** (Shadow Step: enemies can't target you directly or trigger overwatch on you until your next turn; area attacks still hit, and attacking ends it).
+Status effects: **Burn** (2% of max Health per stack each turn, up to 2 stacks; a 3rd stack **Explodes**: Burn is removed and the unit loses 10% of its max Health at once, ignoring Defense and shields), **Slow** (up to 2 stacks; a 3rd Freezes), Corrode, Frenzy, **Blinded** (Pocket Sand: −30% P.Atk and M.Atk), **Exposed** (Life-Risking Strike: no Defense until your next turn) and **Stealthed** (Shadow Step: enemies can't target you directly or trigger overwatch on you until your next turn; area attacks still hit, and attacking ends it).
 
 ### Tags
 
@@ -259,9 +261,9 @@ Heal and Cleanse work on any unit, enemies included. An attack aimed straight at
 
 ### Lines, cooldowns, and prepared systems
 
-- *Line of sight* (no rock in between): Direct Shot (bow in Direct mode), Magic Bolt, Arcane Bolt, Arcane Pulse, Fireball, and Overwatch with a weapon that needs it (Bow).
+- *Line of sight* (no rock in between): Direct Shot (bow in Direct mode), Magic Bolt, Arcane Bolt, Arcane Pulse, Fireball, Iceblast, and Overwatch with a weapon that needs it (Bow).
 - *Line of fire* (no rock **or unit** in between): no skill uses it right now; set `"los": "fire"` on a skill to use it.
-- No line needed: melee skills, Spear Thrust (it stops at the first enemy in the way), Indirect Shot (bow in Indirect mode), Freeze, Heal, Cleanse, Arcane Shift.
+- No line needed: melee skills, Spear Thrust (it stops at the first enemy in the way), Indirect Shot (bow in Indirect mode), Ignite, Freeze, Heal, Cleanse, Arcane Shift.
 - **Ranges** use Euclidean distance. Ranges of 2 or more round the distance to the nearest tile, so range 2 also reaches 2-over-1-up and shapes are rounder. Ranges 1 and 1.5 stay exact: 1 is the 4 neighbours, 1.5 adds the diagonals. Set `rangeRounding.fromRange` in `stats.json` to change the cut-off.
 - Skill tooltips and the weapon panel show a **tile diagram** of what each skill covers, with you in gold, rather than describing range in words.
 - A cooldown of N means the skill can't be used during your next N turns.
