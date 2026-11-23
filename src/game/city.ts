@@ -7,7 +7,7 @@ import { RANKS, type Character, type GameState, type Offer, type Quest, type Ran
 import { makeQuest, postQuests } from './board';
 import { grantXp, type Rng } from './character';
 import {
-  bondOf, bounty, canFight, changeRelationship, isCompanion, isExpired, isHoused, isSlave, leaveParty, slaveContract, slavePrice, talentPriceFactor,
+  bondOf, bounty, canFight, registrationFee, slaveTax, changeRelationship, isCompanion, isExpired, isHoused, isSlave, leaveParty, slaveContract, slavePrice, talentPriceFactor,
 } from './contracts';
 import {
   ACTIVITY_INFO, FOOD_EXPECT_TEXT, QUALITY_TEXT, activityOf, changeHealth, changeMorale, expectedQuality, foodOf, foodRelationship, healthLoss, healthOf,
@@ -407,6 +407,11 @@ export function weeklyWages(state: GameState): number {
   return state.party.reduce((s, c) => s + (isCompanion(c) && !isExpired(c, state.day) ? c.contract.basePay : 0), 0);
 }
 
+/** Property tax on the party's slaves, due each payday (see slaveTax). */
+export function weeklyTaxes(state: GameState): number {
+  return state.party.reduce((s, c) => s + (isSlave(c) ? slaveTax(c) : 0), 0);
+}
+
 export const isPayday = (day: number) => day % 7 === 0;
 
 /** Pass `days` days (nights on the road). Returns the messages for the player. */
@@ -488,6 +493,19 @@ export function advanceDay(state: GameState, rng: Rng, lodging: Lodging = 'road'
       }
     }
     if (paid) say(`Payday: ${paid} gold in wages.`);
+    // Property tax on slaves: one the party can't pay for is seized and sold at the slave market.
+    let taxed = 0;
+    for (const c of state.party.filter(isSlave)) {
+      const tax = slaveTax(c);
+      if (state.gold >= tax) {
+        state.gold -= tax;
+        taxed += tax;
+      } else {
+        seizeSlave(state, c, rng);
+        say(`You couldn't pay the property tax on ${c.name} (${tax} gold): the city seized them for the slave market.`);
+      }
+    }
+    if (taxed) say(`Slave property tax: ${taxed} gold.`);
   }
 
   // Contracts running out.
@@ -599,6 +617,16 @@ export function sellSlave(state: GameState, id: string, rng: Rng): number {
   return gold;
 }
 
+/** The city takes a slave whose property tax went unpaid; it goes up for sale at the slave market. */
+function seizeSlave(state: GameState, c: Character, rng: Rng): void {
+  state.party = state.party.filter((m) => m !== c);
+  state.lineup = state.lineup.filter((x) => x !== c.id);
+  delete state.schedule[c.id];
+  delete state.food[c.id];
+  const { contract: _k, ...character } = c;
+  state.market.slaves.push({ character, price: slavePrice(c.level, rng, talentPriceFactor(c)) });
+}
+
 // ---- prisoners: registered at the city gate --------------------------------------------------------
 
 /** Prisoners waiting at the city gate: the party can't do anything else in the city until each one is registered. */
@@ -613,14 +641,15 @@ export function turnInPrisoner(state: GameState, id: string): number {
   return p.price;
 }
 
-/** Register a prisoner as the party's slave for the registration fee. Returns an error message, or null. */
+/** Register a prisoner as the party's slave for its registration fee (see registrationFee). Returns an error message, or null. */
 export function registerPrisoner(state: GameState, id: string, rng: Rng = Math.random): string | null {
   const p = state.prisoners.find((o) => o.character.id === id);
   if (!p) return 'No such prisoner.';
   if (state.party.length >= GUILD.maxRoster) return `Your party is full (${GUILD.maxRoster}).`;
-  if (state.gold < GUILD.slave.registrationFee) return `The registration fee is ${GUILD.slave.registrationFee} gold.`;
-  state.gold -= GUILD.slave.registrationFee;
+  const fee = registrationFee(p);
+  if (state.gold < fee) return `The registration fee is ${fee} gold.`;
+  state.gold -= fee;
   state.prisoners = state.prisoners.filter((o) => o !== p);
-  state.party.push({ ...p.character, contract: slaveContract('prisoner', GUILD.slave.registrationFee, rng) });
+  state.party.push({ ...p.character, contract: slaveContract('prisoner', fee, rng) });
   return null;
 }

@@ -6,12 +6,12 @@ import { createCharacter, deriveStats, makeRng } from '../src/game/character';
 import { makeEnemy, makeUnit } from '../src/game/battle';
 import {
   acceptQuest, advanceDay, advanceDays, askingPrice, buyDrinks, isShipmentDay, marketBuyPrice, marketDay, sellSlave, turnInPrisoner, buyResidence, buySlave, makeQuest, sellResidence, stayAtHome, stayAtInn, canTakeQuest, dailyUpkeep, foodCost, departBlock, lineupMembers, mainCharacter,
-  newCampaign, registerPrisoner, resolveQuest, rewardShares, sleepOutside, toggleLineup,
+  newCampaign, registerPrisoner, resolveQuest, rewardShares, sleepOutside, toggleLineup, weeklyTaxes,
 } from '../src/game/city';
 import { activityOf, combatPenalty, expectedQuality, foodRelationship, healthOf, isInjured, moraleOf, moralePenalty, obediencePenalty } from '../src/game/condition';
 import { parseSave, serializeSave } from '../src/game/save';
 import {
-  companionContract, companionDemand, evaluateOffer, joinParty, mercenaryRates, offerValue, openingTerms, punishSlave, slaveContract,
+  companionContract, companionDemand, evaluateOffer, joinParty, mercenaryRates, offerValue, openingTerms, punishSlave, slaveContract, bounty, registrationFee, slaveTax, slaveValue,
 } from '../src/game/contracts';
 import { DEMO_STAGES, newDemo, resolveDemoBattle } from '../src/game/demo';
 import { encounterBudget, fairReward, payRatio } from '../src/game/board';
@@ -733,17 +733,46 @@ describe('contracts', () => {
     expect(s.market.slaves).toHaveLength(stock + 1);
   });
 
-  it('prisoners can be registered as slaves for a fee', () => {
+  it('prisoners can be registered as slaves for a fee: market value minus bounty', () => {
     const s = start();
-    s.prisoners.push({ character: s.guild.pool[0].character, price: 50 });
-    s.gold = GUILD.slave.registrationFee;
-    expect(registerPrisoner(s, s.prisoners[0].character.id)).toBeNull();
+    const c = s.guild.pool[0].character;
+    const p = { character: c, price: bounty(c.level) };
+    s.prisoners.push(p);
+    const fee = registrationFee(p);
+    // Enslaving (worth its normal market value) and turning in come to the same, give or take rounding.
+    expect(Math.abs(slaveValue(c) - fee - bounty(c.level))).toBeLessThanOrEqual(2.5);
+    s.gold = fee - 1;
+    expect(registerPrisoner(s, c.id)).toMatch(/fee/);
+    s.gold = fee;
+    expect(registerPrisoner(s, c.id)).toBeNull();
     const k = s.party.at(-1)!.contract;
-    expect(k).toMatchObject({ type: 'slave', price: GUILD.slave.registrationFee, origin: 'prisoner', relationship: GUILD.slave.startingRelationship });
+    expect(k).toMatchObject({ type: 'slave', price: fee, origin: 'prisoner', relationship: GUILD.slave.startingRelationship });
     if (k?.type !== 'slave') throw new Error('not a slave');
     expect(k.obedience).toBeGreaterThanOrEqual(GUILD.slave.obedienceCaptive[0]);
     expect(k.obedience).toBeLessThanOrEqual(GUILD.slave.obedienceCaptive[1]);
     expect(s.gold).toBe(0);
+  });
+
+  it('slaves are taxed every payday; one whose tax goes unpaid is seized for the market', () => {
+    const s = start();
+    s.day = 6; // tomorrow is payday
+    const c = s.guild.pool[0].character;
+    s.party.push({ ...c, contract: slaveContract('market', 100, makeRng(1)) });
+    const tax = slaveTax(c);
+    expect(tax).toBe(Math.round(slaveValue(c) * GUILD.slave.weeklyTaxShare));
+    expect(weeklyTaxes(s)).toBe(tax);
+    s.gold = 10000;
+    const stock = s.market.slaves.length;
+    const msgs = advanceDay(s, makeRng(2));
+    expect(msgs.join(' ')).toContain(`Slave property tax: ${tax} gold`);
+    expect(s.party.some((m) => m.id === c.id)).toBe(true);
+    // Broke on the next payday: the city takes the slave.
+    for (let d = 0; d < 6; d++) advanceDay(s, makeRng(3 + d));
+    s.gold = 0;
+    advanceDay(s, makeRng(10));
+    expect(s.party.some((m) => m.id === c.id)).toBe(false);
+    expect(s.market.slaves.some((o) => o.character.id === c.id)).toBe(true);
+    expect(s.market.slaves.length).toBeGreaterThanOrEqual(Math.min(stock, GUILD.market.stock[0]));
   });
 
   it('market slaves start fairly obedient (40-80), captives much less (0-40)', () => {

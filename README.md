@@ -19,9 +19,9 @@ Time passes in days, and **every day ends with a night somewhere**: an **inn** (
 | Where | Per person per night | Quality |
 |---|---|---|
 | Sleeping outside | free | 0 |
-| Sleeping Griffin Inn (Outer City) | 4 gold | 1 |
-| Silver Lantern Inn (Inner City, high-end) | 8 gold | 2 |
-| Gilded Crown Inn (Inner City, luxury) | 15 gold | 3 |
+| Sleeping Griffin Inn (Outer City) | 8 gold | 1 |
+| Silver Lantern Inn (Inner City, high-end) | 16 gold | 2 |
+| Gilded Crown Inn (Inner City, luxury) | 30 gold | 3 |
 | Your residence (Outer City House / Inner City Townhouse / Mansion) | free | 1 / 2 / 3 |
 | On the road (multi-day quests) | 2 gold | doesn't count |
 
@@ -29,10 +29,10 @@ Time passes in days, and **every day ends with a night somewhere**: an **inn** (
 
 | Food | Per person per day | Quality |
 |---|---|---|
-| Poor | 1 gold | 0 |
-| Common (default) | 2 gold | 1 |
-| Fine | 4 gold | 2 |
-| Luxury | 8 gold | 3 |
+| Poor | 2 gold | 0 |
+| Common (default) | 4 gold | 1 |
+| Fine | 8 gold | 2 |
+| Luxury | 16 gold | 3 |
 
 Companions whose contract doesn't include food and lodging find their own (their food buttons are greyed out), as do mercenaries.
 
@@ -45,7 +45,7 @@ Companions whose contract doesn't include food and lodging find their own (their
 Party members have two Strategic Layer stats, both out of 100 (`condition` and `schedule` in `guild.json`):
 
 - **Health** is not battle HP. After a battle, each member loses up to **60 Health** depending on the lowest HP they were taken down to (at half HP: −30; falling: the full 60). Below 100 Health a member is **injured**: they can still go on quests, but **every stat drops by 1/3 of their missing Health** in battle (Health 70 = −10%). Everyone recovers **10 Health a night**. A member whose Health reaches **0 dies** (so an injured member who falls again can die); the main character pulls through at 1 Health instead.
-- **Morale** drops for each member who goes on a quest (−5), more if it fails (−10), with injuries (−1 per 5 Health lost), and for everyone when a party member dies (−15). It comes back with **drinks** (a round for the whole party at an inn, once a day: Sleeping Griffin 2 gold a head for +8, Silver Lantern 4 for +12, Gilded Crown 6 for +15) and **days off**. Below **50 Morale**, a companion or slave loses **2 relationship every day**. At **0 Morale** a member **leaves the party** (companions and slaves go to the guild hall; the main character stays).
+- **Morale** drops for each member who goes on a quest (−5), more if it fails (−10), with injuries (−1 per 5 Health lost), and for everyone when a party member dies (−15). It comes back with **drinks** (a round for the whole party at an inn, once a day: Sleeping Griffin 4 gold a head for +8, Silver Lantern 8 for +12, Gilded Crown 12 for +15) and **days off**. Below **50 Morale**, a companion or slave loses **2 relationship every day**. At **0 Morale** a member **leaves the party** (companions and slaves go to the guild hall; the main character stays).
 
 **In battle**, every stat of a party member drops by **1% per 5 Morale below 100** (Morale 50 = −10%), on top of the injury penalty. Slaves also lose **1% per 5 Obedience below 100**. The penalties multiply: Health 70, Morale 50 and Obedience 60 give 0.9 × 0.9 × 0.92 = −25.5%. New members start at 75 Morale (−5%), so keeping spirits up matters. Manage Party shows each member's total (`combat` in `guild.json`).
 
@@ -99,13 +99,13 @@ The rival parties are simulated day by day. A new game starts them spread over t
 | **Main character** | Created at the start | Food & lodging | Permanent; always goes on quests |
 | **Mercenary** | Guild Hall | The **larger** of a fixed fee and a % of the next quest's reward: the fee up front, and if their cut of a won quest is worth more, they take the difference from the reward | Leaves after the next quest, win or lose |
 | **Companion** | Guild Hall, after negotiating a contract | Base pay every 7th day, a % of each reward, food & lodging if included | Permanent while the contract runs |
-| **Slave** | Slave Market, or a prisoner registered at the city gate | Food & lodging only | Permanent; can be sold to the market |
+| **Slave** | Slave Market, or a prisoner registered at the city gate | Food & lodging, plus a weekly property tax (5% of their market value) | Permanent; can be sold to the market; seized by the city if the tax goes unpaid |
 
 **Companion contracts** have four terms: **base pay**, **loot cut** (% of each quest reward), **food and lodging included** (worth 28 gold a week to them), and **term length** (2, 4, 8 or 12 weeks). Candidates ask more the higher their level and the greedier they are, a little more for short terms and less for long ones. They value a loot cut by what a party of your rank usually earns (150 gold a week at D, 2000 at A). An offer close to what they want gets a counter-offer; a low one offends them. Each rejected offer uses up patience, and once it runs out they won't talk to you for a week.
 
 Companions (and slaves, see above) have a **relationship** score (0–100). It goes up by 6 for every quest completed together, drops if you can't pay them, and lowers their demands when you renew: by up to 30% at 100. When a contract ends, they sit out of quests and you have 3 days to **renew** it (Manage Party) before they leave. Walking out of a renewal ends the contract on the spot. Unpaid companions lose 20 relationship each payday, and quit when it reaches 0.
 
-**Prisoners**: human enemies who surrender in battle are taken prisoner when you win, as many as surrender. The party doesn't keep prisoners: when it comes back, the **city gate** won't let them in until each one is registered, either **turned in for a bounty** (35 gold per level) or **registered as your slave** for a fixed 60 gold fee (only while the party has room). **Turn them all in** settles them at once.
+**Prisoners**: human enemies who surrender in battle are taken prisoner when you win, as many as surrender. The party doesn't keep prisoners: when it comes back, the **city gate** won't let them in until each one is registered, either **turned in for a bounty** (9 gold per level) or **registered as your slave** (only while the party has room) for a fee of its normal market value minus its bounty, so at an average market both come to the same: a level-6 prisoner with average talent is worth 470 gold, so its bounty is 54 and its fee 415. **Slaves are taxed** every payday (every 7th day, with companion wages) 5% of their normal market value (24 gold a week for that level-6 slave; `slave.weeklyTaxShare` in `guild.json`). If you can't pay a slave's tax, the city **seizes** them and sells them at the slave market. **Turn them all in** settles them at once.
 
 **The Slave Market** is a living market (`market` in `guild.json`). It holds **10–30 slaves**: a few (1–4) are sold to other buyers every day, and a **shipment of 5–12 arrives twice a week** (days 1 and 4 of each week; the screen shows the next one). Slaves are of about your party's rank. **Prices follow supply and demand**: each slave's value (120 gold + 70 per level above 1, × talent) times a price index that drifts a little every day and rises when stock is short (falls when there's a glut), between 70% and 150% of usual. The market buys your slaves for **80%** of the current price (Slave Market or Manage Party). It doesn't buy prisoners.
 

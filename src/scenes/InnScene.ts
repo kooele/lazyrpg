@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { GUILD, LODGING_QUALITY, isResidence, type InnTier, type Ring } from '../data/guild';
-import { boarders, buyDrinks, dailyUpkeep, drinksCost, foodCost, isPayday, lodgingCost, stayAtHome, stayAtInn, weeklyWages } from '../game/city';
+import { boarders, buyDrinks, dailyUpkeep, drinksCost, foodCost, isPayday, lodgingCost, stayAtHome, stayAtInn, weeklyTaxes, weeklyWages } from '../game/city';
 import { QUALITY_TEXT, foodOf, foodRelationship, lodgingName, lodgingRelationship, moraleOf } from '../game/condition';
 import { bondOf, isHoused } from '../game/contracts';
 import { markDirty, requireState, session } from '../game/session';
@@ -67,7 +67,7 @@ export class InnScene extends Phaser.Scene {
     text(this, 30, 378, guests.map((c) => c.name).join(', '), { fontSize: '12px', color: COLORS.dim, wordWrap: { width: 532 } });
 
     const toPay = (7 - (state.day % 7)) % 7;
-    text(this, 30, 408, `Tonight: ${perNight} gold (lodging ${lodgingCost(state, this.place)} + food ${foodCost(state)}).   Gold: ${state.gold}.\nNext payday ${isPayday(state.day) ? 'is today' : `in ${toPay} day${toPay === 1 ? '' : 's'}`}: ${weeklyWages(state)} gold in wages.`, {
+    text(this, 30, 408, `Tonight: ${perNight} gold (lodging ${lodgingCost(state, this.place)} + food ${foodCost(state)}).   Gold: ${state.gold}.\nNext payday ${isPayday(state.day) ? 'is today' : `in ${toPay} day${toPay === 1 ? '' : 's'}`}: ${weeklyWages(state)} gold in wages${weeklyTaxes(state) ? ` and ${weeklyTaxes(state)} in slave tax` : ''}.`, {
       fontSize: '13px', lineSpacing: 4,
     });
     if (home && !owned) {

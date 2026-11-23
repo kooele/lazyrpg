@@ -100,8 +100,9 @@ export interface GuildConfig {
     priceBase: number;
     pricePerLevel: number;
     sellBackShare: number;
-    registrationFee: number;
     bountyPerLevel: number;
+    /** Weekly property tax per slave: this share of its normal market value. */
+    weeklyTaxShare: number;
     obedienceMarket: [number, number];
     obedienceCaptive: [number, number];
     startingRelationship: number;
@@ -277,7 +278,7 @@ export function parseGuildConfig(data: unknown): GuildConfig {
     },
     slave: {
       ...numbers<Omit<GuildConfig['slave'], 'obedienceMarket' | 'obedienceCaptive'>>(d.slave, 'slave', ['priceBase', 'pricePerLevel',
-        'sellBackShare', 'registrationFee', 'bountyPerLevel', 'startingRelationship', 'obedienceRiseFrom', 'obedienceFallBelow',
+        'sellBackShare', 'bountyPerLevel', 'weeklyTaxShare', 'startingRelationship', 'obedienceRiseFrom', 'obedienceFallBelow',
         'obedienceChangePerDay', 'punishObedience', 'punishRelationship']),
       obedienceMarket: range(obj(d.slave, 'slave').obedienceMarket, 'slave.obedienceMarket'),
       obedienceCaptive: range(obj(d.slave, 'slave').obedienceCaptive, 'slave.obedienceCaptive'),

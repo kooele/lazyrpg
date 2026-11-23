@@ -3,6 +3,7 @@ import { GUILD } from '../data/guild';
 import { WEAPONS } from '../data/content';
 import { departBlock, lineupMembers, prisonersAtGate, registerPrisoner, sleepOutside, turnInPrisoner } from '../game/city';
 import { adventurerRank } from '../game/guild';
+import { registrationFee, slaveTax } from '../game/contracts';
 import { markDirty, requireState, session } from '../game/session';
 import { cityHeader, rankBadge } from '../ui/hud';
 import { COLORS, HEIGHT, ScrollList, WIDTH, button, confirmDialog, figure, panel, setupCamera, talentTag, text, toast } from '../ui/widgets';
@@ -153,18 +154,17 @@ export class CityScene extends Phaser.Scene {
 
   /**
    * The city gate: prisoners brought back from a quest must each be registered before the party goes on,
-   * turned in for the bounty or registered as the party's slave for a fixed fee. The party never keeps prisoners.
+   * turned in for the bounty or registered as the party's slave for a fee (its market value minus its bounty). The party never keeps prisoners.
    */
   private gate(): void {
     const state = requireState();
-    const fee = GUILD.slave.registrationFee;
     const full = state.party.length >= GUILD.maxRoster;
     const layer = this.add.container(0, 0).setDepth(1000);
     layer.add(this.add.rectangle(0, 0, WIDTH, HEIGHT, 0x000000, 0.7).setOrigin(0).setInteractive());
     const X = WIDTH / 2 - 330;
     layer.add(panel(this, X, 40, 660, HEIGHT - 80));
     layer.add(text(this, WIDTH / 2, 54, 'City gate: register your prisoners', { fontSize: '22px', color: COLORS.gold }).setOrigin(0.5, 0));
-    layer.add(text(this, X + 20, 88, `The guards won't let prisoners into ${GUILD.city} unregistered. Turn each one in for the bounty, or register them as your slave (${fee} gold).${full ? ` Your party is full (${GUILD.maxRoster}), so you can only turn them in.` : ''}  Gold: ${state.gold}.`, {
+    layer.add(text(this, X + 20, 88, `The guards won't let prisoners into ${GUILD.city} unregistered. Turn each one in for the bounty, or register them as your slave: the fee is their market value minus the bounty, and slaves are taxed weekly.${full ? ` Your party is full (${GUILD.maxRoster}), so you can only turn them in.` : ''}  Gold: ${state.gold}.`, {
       fontSize: '13px', wordWrap: { width: 620 }, lineSpacing: 2,
     }));
     const list = new ScrollList(this, X + 14, 140, 632, HEIGHT - 252, 4);
@@ -185,13 +185,14 @@ export class CityScene extends Phaser.Scene {
         this.render();
         toast(this, `${c.name} is taken away. Bounty: ${gold} gold.`);
       }, { fontSize: 13 }));
-      row.add(button(this, 488, 22, 120, 36, `Slave: ${fee}g`, () => {
+      const fee = registrationFee(o);
+      row.add(button(this, 488, 22, 120, 36, `Slave: ${fee}g\n(tax ${slaveTax(c)}g/wk)`, () => {
         const err = registerPrisoner(state, c.id);
         if (err) return toast(this, err, COLORS.bad);
         markDirty();
         this.render();
         toast(this, `${c.name} is registered as your slave. Set their food and loadout in Manage Party.`);
-      }, { fontSize: 13, enabled: !full && state.gold >= fee }));
+      }, { fontSize: 12, enabled: !full && state.gold >= fee }));
       return { obj: row, height: 80 };
     }), 'top');
     const total = state.prisoners.reduce((sum, o) => sum + o.price, 0);
