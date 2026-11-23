@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { MAX_PARTY_SIZE, SKILLS, WEAPONS, XP_PER_LEVEL } from '../data/content';
 import { GUILD } from '../data/guild';
 import type { Character } from '../data/types';
-import { deriveStats, skillSlots } from '../game/character';
+import { bodyPoints, deriveStats, freePoints, skillPoints } from '../game/character';
 import { lineupMembers, sellSlave, toggleLineup } from '../game/city';
 import { daysLeft, isCompanion, leaveParty, weeklyCost } from '../game/contracts';
 import { markDirty, requireState, session } from '../game/session';
@@ -85,8 +85,8 @@ export class PartyScene extends Phaser.Scene {
     const w = WEAPONS[c.weaponId];
     talentTag(this, X + 150, 207, c, { fontSize: 11 });
     text(this, X + 150, 226, `${w.name}: ${w.skills.map((s) => SKILLS[s].name).join(', ')}`, { fontSize: '12px', color: COLORS.dim, wordWrap: { width: W - 170 } });
-    const free = skillSlots(c) - c.skillIds.length;
-    text(this, X + 150, 247, `Skills ${c.skillIds.length}/${skillSlots(c)}: ${c.skillIds.map((s) => SKILLS[s].name).join(', ') || '—'}`, {
+    const free = freePoints(c);
+    text(this, X + 150, 247, `Skill points ${skillPoints(c) - free}/${skillPoints(c)}${free > 0 ? ` (${free} to spend)` : ''}: ${c.skillIds.map((s) => SKILLS[s].name).join(', ') || '—'}${bodyPoints(c) ? ` · Body ${bodyPoints(c)}` : ''}`, {
       fontSize: '12px', color: free > 0 ? COLORS.gold : COLORS.dim, wordWrap: { width: W - 170 },
     });
 

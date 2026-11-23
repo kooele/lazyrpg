@@ -36,7 +36,7 @@ export function resolveDemoBattle(d: DemoState, outcome: 'victory' | 'defeat'): 
   d.victories += 1;
   const xp = STAT_CONFIG.xpPerVictory;
   lines.push(`Each adventurer gains ${xp} XP.`);
-  for (const c of d.party) if (grantXp(c, xp) > 0) lines.push(`${c.name} reached level ${c.level}! Stats grew automatically.`);
+  for (const c of d.party) if (grantXp(c, xp) > 0) lines.push(`${c.name} reached level ${c.level}! Stats grew, and they gained a skill point.`);
   if (d.stage >= DEMO_STAGES) {
     d.complete = true;
     lines.push('', `All ${DEMO_STAGES} stages cleared: the demo is complete!`, 'Start a new game to visit Arch City.');

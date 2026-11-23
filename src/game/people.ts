@@ -1,10 +1,10 @@
 // Random people for Arch City: names, looks, and ready-to-fight adventurers.
-import { PALETTE, SKILL_TREES, WEAPONS, skillSlotsForLevel } from '../data/content';
+import { PALETTE, SKILL_TREES, WEAPONS, skillPointsForLevel } from '../data/content';
 import {
   FACE_COUNT, HAIR_COLORS, HAIR_STYLES, SEXES, SKIN_TONES,
-  type BodyModel, type Character, type HairColor, type HairStyle, type Look, type Sex, type SkinTone,
+  type BodyInvestment, type BodyModel, type Character, type HairColor, type HairStyle, type Look, type Sex, type SkinTone,
 } from '../data/types';
-import { newId, type Rng } from './character';
+import { bodyStats, newId, type Rng } from './character';
 import { rollTalents } from './talent';
 
 export const SEX_NAMES: Record<Sex, string> = { male: 'Male', female: 'Female' };
@@ -99,15 +99,28 @@ export function randomAdventurer(level: number, rng: Rng, opts: { name?: string;
   const preferred = SKILL_TREES.filter((t) => t.tab === tab).flatMap((t) => t.skills);
   const others = SKILL_TREES.filter((t) => t.tab !== tab).flatMap((t) => t.skills);
   const pool = [...shuffle(preferred, rng), ...shuffle(others, rng)];
+  // Points: mostly skills, now and then a Body investment in a stat that suits the build.
+  const points = skillPointsForLevel(level);
+  const skillIds: string[] = [];
+  const body: BodyInvestment = {};
+  const favored = bodyStats().filter((k) => (tab === 'mage' ? ['mAtk', 'mana', 'health'] : ['pAtk', 'health', 'defense']).includes(k));
+  for (let i = 0; i < points; i++) {
+    if (pool.length > skillIds.length && (i < 2 || rng() < 0.6)) skillIds.push(pool[skillIds.length]);
+    else {
+      const k = pick(favored.length ? favored : bodyStats(), rng);
+      body[k] = (body[k] ?? 0) + 1;
+    }
+  }
   return {
     id: newId(),
     name: opts.name ?? randomName(look.sex, rng, opts.avoidNames),
     level,
     xp: 0,
     weaponId,
-    skillIds: pool.slice(0, skillSlotsForLevel(level)),
+    skillIds,
     appearance: { color: pick(PALETTE, rng), look },
     talents: rollTalents(rng),
+    ...(Object.keys(body).length ? { body } : {}),
   };
 }
 

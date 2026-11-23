@@ -447,6 +447,63 @@ export class Battle {
     return result;
   }
 
+  // ---- threat (what a unit could do on its next turn) -------------------------------
+
+  /** Could `u` use this skill on its next turn? Cooldowns tick down at the start of its own turn. */
+  readyNextTurn(u: Unit, skillId: string): boolean {
+    const left = u.cooldowns[skillId] ?? 0;
+    const ticks = u.team === this.phase ? 0 : 1;
+    return left - ticks <= 0 && !(u.weaponDisabled && hasTag(SKILLS[skillId], 'weapon'));
+  }
+
+  /** How far a skill reaches from where the user stands (cones and self-centered areas included). */
+  maxReach(u: Unit, s: SkillDef): number {
+    if (s.target === 'self') return s.aoeRadius ?? 0;
+    if (s.target === 'cone') return s.cone?.radius ?? this.skillRange(u, s);
+    return this.skillRange(u, s);
+  }
+
+  /** Skills that can hurt or hinder the other team (damage, a debuff or a push). */
+  isHostile(s: SkillDef): boolean {
+    return s.affects !== 'ally' && (!!s.hits?.length || !!s.knockback || (s.applyStatus ?? []).some((a) => STATUSES[a.status]?.debuff));
+  }
+
+  /**
+   * What `u` threatens on its next turn: the tiles it can move to, and the tiles its longest-ranged
+   * hostile skill (usable next turn) can reach from any of them. Engaged units can't move.
+   */
+  threat(u: Unit): { move: Point[]; attack: Point[]; skill: SkillDef | null; range: number } {
+    const move = u.engagedWith ? [{ x: u.x, y: u.y }] : [...this.reachable(u).keys()].map((k) => {
+      const [x, y] = k.split(',').map(Number);
+      return { x, y };
+    });
+    let skill: SkillDef | null = null;
+    let range = 0;
+    for (const id of this.skillIds(u)) {
+      const s = SKILLS[id];
+      if (!this.isHostile(s) || !this.readyNextTurn(u, id)) continue;
+      const r = this.maxReach(u, s);
+      if (!skill || r > range) {
+        skill = s;
+        range = r;
+      }
+    }
+    const attack = new Map<string, Point>();
+    if (skill) {
+      for (const from of move) {
+        for (let y = 0; y < this.map.height; y++) {
+          for (let x = 0; x < this.map.width; x++) {
+            const k = key(x, y);
+            if (attack.has(k)) continue;
+            const tile = { x, y };
+            if (skill.target === 'self' ? withinRange(dist(from, tile), range) && dist(from, tile) > 0 : this.inReach(u, skill, tile, from)) attack.set(k, tile);
+          }
+        }
+      }
+    }
+    return { move, attack: [...attack.values()], skill, range };
+  }
+
   pathTo(reach: Map<string, ReachInfo>, dest: Point): Point[] {
     const path: Point[] = [];
     let k: string | null = key(dest.x, dest.y);

@@ -255,9 +255,7 @@ export const MAX_PARTY_SIZE = 4;
 export const XP_PER_LEVEL = 100;
 export const NAME_MAX_LENGTH = 16;
 
-/** Skill-tree slots grow with level: 2 at level 1, 3 at level 3, 4 at level 6. */
-export function skillSlotsForLevel(level: number): number {
-  if (level >= 6) return 4;
-  if (level >= 3) return 3;
-  return 2;
+/** Skill points: 2 at level 1 and 1 more every level. Each one learns a tree skill or buys a Body investment. */
+export function skillPointsForLevel(level: number): number {
+  return level + 1;
 }

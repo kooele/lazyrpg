@@ -21,6 +21,7 @@ export const STAT_INFO: Record<StatKey, { name: string; short: string; descripti
 export const TALENT_GRADES = ['F', 'D', 'C', 'B', 'A', 'S'] as const;
 export type Talent = (typeof TALENT_GRADES)[number];
 export type Talents = Partial<Record<StatKey, Talent>>;
+export type BodyInvestment = Partial<Record<StatKey, number>>;
 
 /**
  * What must be clear between attacker and target:
@@ -223,6 +224,8 @@ export interface Character {
   appearance: Appearance;
   /** Adventurers: talent grade per growing stat (rolled at creation). Missing = C (100% growth). */
   talents?: Talents;
+  /** Adventurers: skill points invested per stat (Body tab). Each adds 2x the stat's base growth per level. */
+  body?: BodyInvestment;
   /** Party members only: how they are bound to the party. */
   contract?: Contract;
 }

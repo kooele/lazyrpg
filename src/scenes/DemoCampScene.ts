@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { MAX_PARTY_SIZE, SKILLS, WEAPONS, XP_PER_LEVEL } from '../data/content';
 import type { Character } from '../data/types';
-import { deriveStats, skillSlots } from '../game/character';
+import { bodyPoints, deriveStats, freePoints, skillPoints } from '../game/character';
 import { DEMO_STAGES, newDemo, requireDemo } from '../game/demo';
 import { COLORS, HEIGHT, WIDTH, button, confirmDialog, figure, panel, talentTag, text, setupCamera } from '../ui/widgets';
 
@@ -52,7 +52,7 @@ export class DemoCampScene extends Phaser.Scene {
 
   private card(c: Character, x: number, y: number): void {
     const stats = deriveStats(c);
-    const freeSlots = skillSlots(c) - c.skillIds.length;
+    const freeSlots = freePoints(c);
     panel(this, x, y, 216, 440);
     const g = this.add.graphics();
     figure(this, x + 40, y + 70, 62, c.appearance, c.weaponId);
@@ -76,11 +76,11 @@ export class DemoCampScene extends Phaser.Scene {
     text(this, x + 14, y + 192, 'Weapon', { color: COLORS.dim, fontSize: '12px' });
     text(this, x + 14, y + 207, weapon.name, { fontSize: '15px' });
     text(this, x + 14, y + 226, weapon.skills.map((s) => SKILLS[s].name).join(', '), { fontSize: '12px', color: COLORS.dim, wordWrap: { width: 188 } });
-    text(this, x + 14, y + 266, `Skills ${c.skillIds.length}/${skillSlots(c)}`, { color: COLORS.dim, fontSize: '12px' });
+    text(this, x + 14, y + 266, `Skill points ${skillPoints(c) - freeSlots}/${skillPoints(c)}${bodyPoints(c) ? ` (${bodyPoints(c)} in Body)` : ''}`, { color: COLORS.dim, fontSize: '12px' });
     text(this, x + 14, y + 282, c.skillIds.map((s) => `• ${SKILLS[s].name}`).join('\n') || '—', { fontSize: '14px', lineSpacing: 2 });
 
     if (freeSlots > 0) {
-      text(this, x + 108, y + 356, `${freeSlots} empty skill slot${freeSlots > 1 ? 's' : ''}`, { color: COLORS.gold, fontSize: '13px' }).setOrigin(0.5);
+      text(this, x + 108, y + 356, `${freeSlots} skill point${freeSlots > 1 ? 's' : ''} to spend`, { color: COLORS.gold, fontSize: '13px' }).setOrigin(0.5);
     }
     button(this, x + 14, y + 380, 110, 44, 'Customize', () => this.scene.start('CharacterCreator', { mode: 'demoEdit', characterId: c.id }), {
       selected: freeSlots > 0, fontSize: 14,

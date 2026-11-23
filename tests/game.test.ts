@@ -1,14 +1,15 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import skillsJson from '../src/data/skills.json';
 import weaponsJson from '../src/data/weapons.json';
-import { SKILLS, TREE_SKILLS, WEAPONS, parseContent, skillFormula } from '../src/data/content';
+import { SKILLS, TREE_SKILLS, WEAPONS, parseContent, skillFormula, skillPointsForLevel } from '../src/data/content';
 import enemiesJson from '../src/data/enemies.json';
 import { parseEnemies } from '../src/data/enemies';
 import { STAT_CONFIG, parseStatConfig } from '../src/data/stats';
 import type { Character } from '../src/data/types';
 import { planTurn, runAiTurn, shouldDisengage, threatAt } from '../src/game/ai';
 import { Battle, defenseMultiplier, diceHitOdds, deploymentTiles, enemyTypesForStage, generateEnemies, makeEnemy, makeUnit, victoryXp, type Team } from '../src/game/battle';
-import { allSkills, createCharacter, deriveStats, grantXp, makeRng } from '../src/game/character';
+import { allSkills, bodyGain, bodyPoints as bodyPointsOf, bodyStats, createCharacter, deriveStats, freePoints, grantXp, makeRng, pointsUsed, sanitizeLoadout } from '../src/game/character';
+import { randomAdventurer } from '../src/game/people';
 import { generateMap, hasLineOfSight, passable, withinRange, type BattleMap, type Point, type Terrain } from '../src/game/grid';
 import { parseSave, serializeSave } from '../src/game/save';
 import { advanceDays, newCampaign } from '../src/game/city';
@@ -949,6 +950,89 @@ describe('battles', () => {
       const map = generateMap(makeRng(seed));
       expect([map.width, map.height]).toEqual([STAT_CONFIG.map.width, STAT_CONFIG.map.height]);
       for (const p of deploymentTiles(map, 'enemy', 6)) expect(passable(map, p.x, p.y)).toBe(true);
+    }
+  });
+});
+
+describe('enemy threat (click an enemy in battle)', () => {
+  it("shows a rat's move tiles and where its bite reaches from them", () => {
+    const rat = makeUnit(makeEnemy('rat', 1, makeRng(1)), 'enemy', { x: 9, y: 6 });
+    const hero1 = makeUnit(hero('bow'), 'player', { x: 1, y: 1 });
+    const battle = new Battle(openMap(18, 13), [hero1, rat], makeRng(1));
+    const t = battle.threat(rat);
+    const has = (list: Point[], x: number, y: number) => list.some((p) => p.x === x && p.y === y);
+    // Movement 20 on grass (cost 4) = 5 tiles; Gnaw reaches 1.5 (diagonals included).
+    expect(t.skill?.id).toBe('gnaw');
+    expect(has(t.move, 14, 6)).toBe(true);
+    expect(has(t.move, 15, 6)).toBe(false);
+    expect(has(t.attack, 15, 6)).toBe(true);
+    expect(has(t.attack, 15, 7)).toBe(true);
+    expect(has(t.attack, 16, 6)).toBe(false);
+  });
+
+  it('uses the longest-ranged hostile skill that is ready next turn', () => {
+    const wolf = makeUnit(makeEnemy('wolf', 3, makeRng(1)), 'enemy', { x: 9, y: 6 });
+    const battle = new Battle(openMap(18, 13), [makeUnit(hero(), 'player', { x: 1, y: 1 }), wolf], makeRng(1));
+    expect(battle.threat(wolf).skill?.id).toBe('pounce');
+    // Pounce used last enemy turn (cooldown 2 + 1): still 2 turns away on the player's turn -> not ready.
+    wolf.cooldowns.pounce = 3;
+    expect(battle.threat(wolf).skill?.id).toBe('bite');
+    // One turn left: it ticks down at the start of the wolf's turn, so it's ready.
+    wolf.cooldowns.pounce = 1;
+    expect(battle.threat(wolf).skill?.id).toBe('pounce');
+  });
+
+  it("an engaged enemy can't move: only its own tile", () => {
+    const rat = makeUnit(makeEnemy('rat', 1, makeRng(1)), 'enemy', { x: 5, y: 3 });
+    const h = makeUnit(hero(), 'player', { x: 4, y: 3 });
+    const battle = new Battle(openMap(), [h, rat], makeRng(1));
+    rat.engagedWith = h.uid;
+    h.engagedWith = rat.uid;
+    expect(battle.threat(rat).move).toEqual([{ x: 5, y: 3 }]);
+  });
+});
+
+describe('skill points and the Body tab', () => {
+  it('a skill point every level: 2 at level 1, +1 per level', () => {
+    expect([1, 2, 3, 6, 10].map(skillPointsForLevel)).toEqual([2, 3, 4, 7, 11]);
+  });
+
+  it('each Body point adds 2x the base growth, before weapon multipliers and regardless of talent', () => {
+    const c = createCharacter('B', '#3d7be0', 'sword_shield', undefined, { health: 'S', defense: 'F' });
+    c.body = { health: 2, defense: 1 };
+    expect(bodyGain('health')).toBe(100);
+    expect(bodyGain('movement')).toBe(0);
+    expect(bodyStats()).not.toContain('movement');
+    // Level 1: 500 + 2 x 100; Defense (50 + 10) x 1.5 for the shield.
+    expect(deriveStats(c)).toMatchObject({ health: 700, defense: 90 });
+    expect(pointsUsed(c)).toBe(3);
+    expect(freePoints(c)).toBe(-1); // level 1 has 2 points
+    sanitizeLoadout(c);
+    expect(freePoints(c)).toBe(0);
+    expect(bodyPointsOf(c)).toBe(2);
+  });
+
+  it('saves keep Body points and reject over-spending', () => {
+    const c = createCharacter('Main', '#3d7be0', 'bow');
+    c.level = 3;
+    c.skillIds = ['fireball'];
+    c.body = { pAtk: 2, accuracy: 1 };
+    const state = newCampaign(c, 'Testers', makeRng(2));
+    const r = parseSave(serializeSave(state));
+    expect(r.ok && r.state.party[0].body).toEqual({ pAtk: 2, accuracy: 1 });
+    const file = JSON.parse(serializeSave(state));
+    file.party[0].body.pAtk = 5;
+    const bad = parseSave(JSON.stringify(file));
+    expect(!bad.ok && bad.error).toMatch(/skill points/);
+    file.party[0].body = { movement: 1 };
+    const bad2 = parseSave(JSON.stringify(file));
+    expect(!bad2.ok && bad2.error).toMatch(/body.movement/);
+  });
+
+  it('random adventurers spend all their points', () => {
+    for (let s = 1; s < 20; s++) {
+      const a = randomAdventurer(6, makeRng(s));
+      expect(pointsUsed(a)).toBe(7);
     }
   });
 });

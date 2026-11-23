@@ -107,7 +107,10 @@ Weapons **multiply** these stats:
 | Bow | x0.8 P.Atk, x0.8 M.Atk | Direct Shot, Indirect Shot, Overwatch |
 | Staff | x0.5 P.Atk, x1.2 M.Atk | Empowered Strike, Magic Bolt |
 
-### Skill trees (mix freely; 2 slots, 3 at Lv 3, 4 at Lv 6)
+### Skill points, skill trees and the Body tab
+
+Adventurers have **skill points**: 2 at level 1 and 1 more every level. Each point either learns a skill-tree skill (mix trees freely) or goes into the **Body** tab, where it trains a stat by twice its base growth per level: +100 Health, +40 Mana, +20 P.Atk or M.Atk, +10 Defense, +4 Accuracy or +2 Evasion per point (before weapon multipliers; talent doesn't change it). Points can be moved around freely in Customize / Loadout.
+
 
 - **Mage**: Arcanist (Arcane Bolt, Arcane Pulse, Arcane Shift), Elementalist (Fireball, Freeze), Cleric (Heal, Cleanse)
 - **Warrior**: Vanguard (Charge), Infighter (Kick), Assassin (Execute)
@@ -136,7 +139,7 @@ Each enemy type has a fixed level range and its own stats and skills (`src/data/
 
 **Enemy AI** weighs how dangerous a tile is (how much the party could hit it for next turn) against what it can do from there. Healthy enemies take small risks freely. Danger it can't avoid anyway doesn't hold it back, so a unit that's already in the thick of the fight keeps fighting. Below 35% health, an enemy that can reach the edge of the map this turn **flees the battle** and is removed. Otherwise it falls back to regroup with healthy allies (and may disengage to do it), or, if it's on its own, makes a last stand. Wounded enemies may hold back from walking into a deadly spot, but never for more than two turns in a row.
 
-Encounter size is a threat budget: 1 per Adventurer. Rats cost 0.5 (two per Adventurer), slimes 0.75, wolves and bandits 1. Past stage 5, bandits keep coming at level 5, and the budget grows 25% per stage. Bandits have their own looks (hoods, masks, an eye patch, ragged leather, round wooden shields). Hover an enemy in battle to see its skills.
+Encounter size is a threat budget: 1 per Adventurer. Rats cost 0.5 (two per Adventurer), slimes 0.75, wolves and bandits 1. Past stage 5, bandits keep coming at level 5, and the budget grows 25% per stage. Bandits have their own looks (hoods, masks, an eye patch, ragged leather, round wooden shields). Hover an enemy in battle to see its skills. **Click an enemy** to see its reach on its next turn: the tiles it can move to (orange) and, around them, every tile its longest-ranged attack that will be off cooldown can hit (red). Click it again, or anywhere else, to hide it.
 
 ### Engagement
 

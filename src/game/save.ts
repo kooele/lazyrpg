@@ -1,11 +1,11 @@
 // Save / load. Saves are pretty-printed JSON so players can read (and edit!) them.
-import { MAX_PARTY_SIZE, NAME_MAX_LENGTH, SKILLS, TREE_SKILLS, WEAPONS, skillSlotsForLevel } from '../data/content';
+import { MAX_PARTY_SIZE, NAME_MAX_LENGTH, SKILLS, TREE_SKILLS, WEAPONS, skillPointsForLevel } from '../data/content';
 import { GUILD } from '../data/guild';
 import {
   BODY_MODELS, ENEMY_MODELS, FACE_COUNT, HAIR_COLORS, HAIR_STYLES, RANKS, SEXES, SKIN_TONES, STAT_KEYS, TALENT_GRADES,
-  type Character, type Talents, type Contract, type GameState, type Look, type NewsItem, type Offer, type Quest, type Rank, type RivalParty,
+  type BodyInvestment, type Character, type StatKey, type Talents, type Contract, type GameState, type Look, type NewsItem, type Offer, type Quest, type Rank, type RivalParty,
 } from '../data/types';
-import { makeRng, modelFor } from './character';
+import { bodyStats, makeRng, modelFor } from './character';
 import { newCampaign, tidyLineup } from './city';
 import { companionContract, companionDemand, foodLodgingWeekly } from './contracts';
 import { lookFromModel } from './people';
@@ -119,6 +119,18 @@ function validateTalents(raw: unknown, path: string): Talents {
   return out;
 }
 
+/** Skill points invested per stat (Body tab). */
+function validateBody(raw: unknown, path: string): BodyInvestment {
+  const o = obj(raw, path);
+  const out: BodyInvestment = {};
+  for (const [k, v] of Object.entries(o)) {
+    if (!bodyStats().includes(k as StatKey)) bad(`${path}.${k}`, `can't be trained (allowed: ${bodyStats().join(', ')})`);
+    const n = int(v, `${path}.${k}`);
+    if (n > 0) out[k as StatKey] = n;
+  }
+  return out;
+}
+
 function validateCharacter(raw: unknown, path: string, opts: { member?: boolean } = {}): Character {
   const r = obj(raw, path);
   const { id, name, level, xp, weaponId, skillIds, appearance } = r;
@@ -138,8 +150,10 @@ function validateCharacter(raw: unknown, path: string, opts: { member?: boolean 
     }
   }
   if (new Set(skills).size !== skills.length) bad(`${path}.skillIds`, 'contains duplicates');
-  const slots = skillSlotsForLevel(level as number);
-  if (skills.length > slots) bad(`${path}.skillIds`, `has ${skills.length} skills but level ${level} allows ${slots}`);
+  const points = skillPointsForLevel(level as number);
+  const body = r.body === undefined ? undefined : validateBody(r.body, `${path}.body`);
+  const spent = skills.length + Object.values(body ?? {}).reduce((a, n) => a + (n ?? 0), 0);
+  if (spent > points) bad(`${path}.skillIds`, `${skills.length} skills + ${spent - skills.length} Body investments use ${spent} skill points, but level ${level} has ${points}`);
   const a = obj(appearance, `${path}.appearance`);
   if (typeof a.color !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(a.color)) bad(`${path}.appearance.color`, 'must be a hex color like "#3d7be0"');
   const models: readonly string[] = [...BODY_MODELS, ...ENEMY_MODELS];
@@ -155,6 +169,7 @@ function validateCharacter(raw: unknown, path: string, opts: { member?: boolean 
     skillIds: [...(skills as string[])],
     appearance: { color: (a.color as string).toLowerCase(), look },
   };
+  if (body && Object.keys(body).length) out.body = body;
   if (r.talents !== undefined) out.talents = validateTalents(r.talents, `${path}.talents`);
   if (opts.member) out.contract = validateContract(r.contract, `${path}.contract`);
   return out;

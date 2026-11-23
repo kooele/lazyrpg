@@ -162,7 +162,7 @@ export function resolveQuest(state: GameState, outcome: 'victory' | 'defeat', rn
     lines.push(`XP: ${gains.join(', ')}.`);
     for (const c of members) {
       const levels = grantXp(c, questXp(q.stage, c.level));
-      if (levels > 0) lines.push(`${c.name} reached level ${c.level}!`);
+      if (levels > 0) lines.push(`${c.name} reached level ${c.level}! +${levels} skill point${levels > 1 ? 's' : ''}.`);
       if (isCompanion(c)) c.contract.relationship = Math.min(100, c.contract.relationship + GUILD.companion.relationshipPerQuest);
     }
     const fought = enemyTypesForStage(q.stage);

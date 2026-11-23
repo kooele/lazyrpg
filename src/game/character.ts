@@ -1,9 +1,9 @@
-import { DEFAULT_WEAPON, PALETTE, TREE_SKILLS, WEAPONS, XP_PER_LEVEL, skillSlotsForLevel } from '../data/content';
+import { DEFAULT_WEAPON, PALETTE, TREE_SKILLS, WEAPONS, XP_PER_LEVEL, skillPointsForLevel } from '../data/content';
 import { ENEMIES } from '../data/enemies';
 import { STAT_CONFIG } from '../data/stats';
-import { BODY_MODELS, STAT_KEYS, type BodyModel, type Character, type Look, type Stats, type Talents, type UnitModel } from '../data/types';
+import { BODY_MODELS, STAT_KEYS, type BodyModel, type BodyInvestment, type Character, type Look, type StatKey, type Stats, type Talents, type UnitModel } from '../data/types';
 import { lookFromModel } from './people';
-import { talentGrowth } from './talent';
+import { talentGrowth, talentStats } from './talent';
 
 export function newId(prefix = 'c'): string {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
@@ -26,9 +26,31 @@ export function enemyLevelStats(type: string, level: number): Stats {
   return out;
 }
 
-/** Final stats: level stats (or the enemy type's stats) x weapon multipliers (rounded). */
+// ---- skill points and the Body tab ---------------------------------------------------------
+
+/** Stats skill points can be invested in: the ones that grow with level. */
+export const bodyStats = (): StatKey[] => talentStats();
+
+/** What one Body investment adds to a stat: twice its base growth per level (talent doesn't change it). */
+export const bodyGain = (k: StatKey) => STAT_CONFIG.growthPerLevel[k] * 2;
+
+export const bodyPoints = (c: Pick<Character, 'body'>) => Object.values(c.body ?? {}).reduce((s: number, n) => s + (n ?? 0), 0);
+
+/** Skill points spent: one per tree skill, one per Body investment. */
+export const pointsUsed = (c: Character) => c.skillIds.length + bodyPoints(c);
+export const freePoints = (c: Character) => skillPoints(c) - pointsUsed(c);
+
+/** Stat bonuses from Body investments. */
+export function bodyBonus(body: BodyInvestment | undefined): Partial<Stats> {
+  const out: Partial<Stats> = {};
+  for (const [k, n] of Object.entries(body ?? {})) if (n) out[k as StatKey] = bodyGain(k as StatKey) * n;
+  return out;
+}
+
+/** Final stats: level stats + Body investments (or the enemy type's stats) x weapon multipliers (rounded). */
 export function deriveStats(c: Character): Stats {
   const out = c.enemyType ? enemyLevelStats(c.enemyType, c.level) : levelStats(c.level, c.talents);
+  if (!c.enemyType) for (const [k, v] of Object.entries(bodyBonus(c.body))) out[k as StatKey] += v ?? 0;
   const mult = WEAPONS[c.weaponId]?.statMultipliers ?? {};
   for (const k of STAT_KEYS) out[k] = Math.round(out[k] * (mult[k] ?? 1));
   out.movement = Math.max(1, out.movement);
@@ -46,8 +68,9 @@ export function modelFor(seed: string, models: readonly UnitModel[] = BODY_MODEL
   return list[h % list.length];
 }
 
-export function skillSlots(c: Character): number {
-  return skillSlotsForLevel(c.level);
+/** Skill points the unit has at its level. */
+export function skillPoints(c: Character): number {
+  return skillPointsForLevel(c.level);
 }
 
 /**
@@ -63,7 +86,7 @@ export function allSkills(c: Character): string[] {
     const fromWeapon = def.weaponSkillUse === 'basic' ? weaponSkills.slice(0, 1) : weaponSkills;
     return [...new Set([...fromWeapon, ...def.skills, ...(def.weaponSkills[c.weaponId] ?? []), ...byLevel])];
   }
-  return [...weaponSkills, ...c.skillIds.slice(0, skillSlots(c))];
+  return [...weaponSkills, ...c.skillIds.slice(0, skillPoints(c))];
 }
 
 /** A new level-1 Adventurer. Without talents every stat grows at 100% (grade C). */
@@ -100,7 +123,17 @@ export function cloneCharacter(c: Character): Character {
 /** Ensure weapon/skills are legal for the character's level. */
 export function sanitizeLoadout(c: Character): void {
   if (!WEAPONS[c.weaponId]) c.weaponId = DEFAULT_WEAPON;
-  c.skillIds = [...new Set(c.skillIds)].filter((s) => TREE_SKILLS.includes(s)).slice(0, skillSlots(c));
+  c.skillIds = [...new Set(c.skillIds)].filter((s) => TREE_SKILLS.includes(s)).slice(0, skillPoints(c));
+  // Over budget: give back Body investments, last stat first.
+  const keys = bodyStats();
+  for (let i = keys.length - 1; i >= 0 && freePoints(c) < 0; i--) {
+    const k = keys[i];
+    const n = c.body?.[k] ?? 0;
+    if (!n || !c.body) continue;
+    const back = Math.min(n, -freePoints(c));
+    c.body[k] = n - back;
+    if (!c.body[k]) delete c.body[k];
+  }
 }
 
 /** Small deterministic RNG (mulberry32) so battles and tests can be seeded. */

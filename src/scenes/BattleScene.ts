@@ -71,6 +71,8 @@ export class BattleScene extends Phaser.Scene {
   private hoverTile: Point | null = null;
   /** A confirm dialog is open: ignore clicks on the board behind it. */
   private dialogOpen = false;
+  /** The enemy whose next-turn reach is shown (click an enemy to toggle). */
+  private threat: { uid: string; move: Set<string>; attack: Point[]; label: string } | null = null;
 
   /** Quick Battle (demo) instead of a campaign quest. */
   private demo = false;
@@ -312,8 +314,23 @@ export class BattleScene extends Phaser.Scene {
       g.lineStyle(3, 0xff9f43, 0.95).lineBetween(a.x, a.y - 4, c.x, c.y - 4);
     }
 
-    // Movement range for the selected unit.
-    if (this.mode === 'select' && sel && b.canMove(sel) && !this.previewAction) {
+    // An inspected enemy's next turn: where it can move (orange) and what its longest-ranged attack reaches from there (red).
+    const threat = this.mode === 'select' && !this.previewAction ? this.threat : null;
+    if (threat) {
+      for (const p of threat.attack) {
+        if (threat.move.has(key(p.x, p.y))) continue;
+        fill(p, 0xff4d4d, 0.2);
+        outline(p, 0xff6b6b, 0.6);
+      }
+      for (const k of threat.move) {
+        const [x, y] = k.split(',').map(Number);
+        fill({ x, y }, 0xffb347, 0.3);
+        outline({ x, y }, 0xffc56b, 0.9, 3);
+      }
+    }
+
+    // Movement range for the selected unit (hidden while an enemy's reach is shown).
+    if (this.mode === 'select' && sel && b.canMove(sel) && !this.previewAction && !threat) {
       // Pale fill + bright outline: stays readable on any terrain, including blue water.
       for (const k of this.reach.keys()) {
         const [x, y] = k.split(',').map(Number);
@@ -552,6 +569,7 @@ export class BattleScene extends Phaser.Scene {
     this.action = null;
     this.previewAction = null;
     this.selectedUid = u.uid;
+    this.threat = null;
     this.reach = this.battle.canMove(u) ? this.battle.reachable(u) : new Map();
     this.refresh();
   }
@@ -569,6 +587,7 @@ export class BattleScene extends Phaser.Scene {
     if (!u || (this.mode !== 'select' && this.mode !== 'target') || !this.battle.canUseSkill(u, id)) return;
     this.action = SKILLS[id];
     this.previewAction = null;
+    this.threat = null;
     this.mode = 'target';
     this.renderSidebar();
     this.drawOverlay();
@@ -705,6 +724,13 @@ export class BattleScene extends Phaser.Scene {
 
   private async onSelectClick(tile: Point, u: Unit | null, clicked: Unit | undefined): Promise<void> {
     const b = this.battle;
+    if (clicked && clicked.team === 'enemy' && b.canSee('player', clicked)) return this.toggleThreat(clicked);
+    if (this.threat) {
+      // Any other click hides the enemy's reach first.
+      this.threat = null;
+      this.drawOverlay();
+      if (!clicked) return;
+    }
     if (clicked && clicked.team === 'player' && clicked !== u) return this.selectUnit(clicked);
 
     const k = key(tile.x, tile.y);
@@ -722,6 +748,22 @@ export class BattleScene extends Phaser.Scene {
       this.mode = 'select';
       this.refresh();
     }
+  }
+
+  /** Show (or hide) where an enemy can move next turn and how far its longest-ranged attack reaches. */
+  private toggleThreat(e: Unit): void {
+    if (this.threat?.uid === e.uid) {
+      this.threat = null;
+      this.drawOverlay();
+      return;
+    }
+    const t = this.battle.threat(e);
+    const moves = e.engagedWith ? "can't move (engaged)" : 'moves within orange';
+    const reach = t.skill ? `${t.skill.name} (range ${Number(t.range.toFixed(1))}) reaches red` : 'no attack ready';
+    const label = `${e.character.name} next turn: ${moves}; ${reach}. Click again to hide.`;
+    this.threat = { uid: e.uid, move: new Set(t.move.map((p) => key(p.x, p.y))), attack: t.attack, label };
+    this.drawOverlay();
+    this.hoverText.setText(label);
   }
 
   private onHover(tile: Point | null): void {
@@ -745,6 +787,7 @@ export class BattleScene extends Phaser.Scene {
         : "Can't aim there — click to cancel.");
       info = b.canTarget(u, this.action, tile) ? `${this.preview(u, this.action, tile)}\n${info}` : `${why}\n${info}`;
     }
+    if (this.threat && this.mode === 'select') info = `${this.threat.label}\n${info}`;
     this.hoverText.setText(info);
   }
 
@@ -781,6 +824,7 @@ export class BattleScene extends Phaser.Scene {
     this.mode = 'busy';
     this.action = null;
     this.selectedUid = null;
+    this.threat = null;
     const events = this.battle.endPhase();
     void this.runEnemyPhase(events);
   }
