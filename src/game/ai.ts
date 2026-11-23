@@ -332,19 +332,63 @@ function canGetAway(battle: Battle, u: Unit, opp: Unit): boolean {
 /**
  * Should an engaged unit break away? Ranged fighters do, and so does anyone badly
  * hurt, as long as the opponent's free opportunity attack won't finish them off
- * and they can actually get away (see canGetAway).
+ * and they can actually get away (see canGetAway). It also has to mean it: the turn
+ * it would play once free must end out of the opponent's reach (see leavesOpponent).
  */
 export function shouldDisengage(battle: Battle, u: Unit): boolean {
   const opp = battle.opponentOf(u);
   if (!opp || !battle.canAct(u) || aiTypeOf(u) === 'evil') return false;
   if (!canGetAway(battle, u, opp)) return false;
-  // A bow counts as ranged even while engaged forces it into Melee mode.
-  const raw = SKILLS[battle.skillIds(u)[0]];
-  const ranged = !!raw?.modes?.some((m) => !hasTag(SKILLS[m], 'melee')) || battle.basicAttack(u).range > 1.5 || battle.basicAttack(u).los !== undefined;
+  const ranged = isRanged(battle, u);
   const hit = battle.previewHits(opp, battle.basicAttack(opp), u).reduce((a, b) => a + b, 0);
-  if (wantsToFlee(battle, u)) return u.hp - hit > 0;
-  if (ranged) return u.hp - hit > u.stats.health * 0.3;
-  return wantsToRetreat(battle, u) && u.hp - hit > u.stats.health * 0.1;
+  let wants: boolean;
+  if (wantsToFlee(battle, u)) wants = u.hp - hit > 0;
+  else if (ranged) wants = u.hp - hit > u.stats.health * 0.3;
+  else wants = wantsToRetreat(battle, u) && u.hp - hit > u.stats.health * 0.1;
+  return wants && leavesOpponent(battle, u, opp, hit);
+}
+
+/** Fights at range (a bow, even while engagement forces it into Melee mode; reach weapons like the spear; line-of-sight attacks). */
+function isRanged(battle: Battle, u: Unit): boolean {
+  const raw = SKILLS[battle.skillIds(u)[0]];
+  return !!raw?.modes?.some((m) => !hasTag(SKILLS[m], 'melee')) || battle.basicAttack(u).range > 1.5 || battle.basicAttack(u).los !== undefined;
+}
+
+/**
+ * What it costs a free ranged unit to end its turn on `tile`: every adjacent foe can engage it next turn,
+ * and breaking away again hands that foe a free basic attack. So ranged units step back before they shoot.
+ */
+function pinCost(battle: Battle, u: Unit, tile: Point): number {
+  if (u.engagedWith || !isRanged(battle, u)) return 0;
+  let cost = 0;
+  for (const f of battle.living()) {
+    if (f.team === u.team || dist(f, tile) > 1.5 + 1e-9) continue;
+    cost += battle.previewHits(f, battle.basicAttack(f), u).reduce((a, b) => a + b, 0);
+  }
+  return cost;
+}
+
+/**
+ * Would `u`, once broken away from `opp` (and hurt by its opportunity attack), plan a turn that ends
+ * out of the opponent's reach? If its best plan is to stay next to it (say, a point-blank shot or a
+ * spear thrust from where it stands), breaking away only hands over a free attack, and the unit ends
+ * up engaged again (by an Engage skill such as Kick or Spear Thrust) or right back in melee range.
+ * Plans with the engagement lifted for a moment and puts everything back afterwards.
+ */
+function leavesOpponent(battle: Battle, u: Unit, opp: Unit, hit: number): boolean {
+  const saved = { mine: u.engagedWith, theirs: opp.engagedWith, hp: u.hp, held: holdTurns.get(u) };
+  u.engagedWith = null;
+  if (opp.engagedWith === u.uid) opp.engagedWith = null;
+  u.hp = Math.max(1, u.hp - hit);
+  try {
+    return dist(planTurn(battle, u).moveTo, opp) > 1.5 + 1e-9;
+  } finally {
+    u.engagedWith = saved.mine;
+    opp.engagedWith = saved.theirs;
+    u.hp = saved.hp;
+    if (saved.held === undefined) holdTurns.delete(u);
+    else holdTurns.set(u, saved.held);
+  }
 }
 
 /**
@@ -439,7 +483,7 @@ function attackPlan(
     const risk = care * (danger.get(key(tile.x, tile.y))! - leastDanger);
     // Zone damage on the way and at the end is certain, so it counts in full.
     const score = found.score + free * 0.5 + terrain - risk - zoneHazard(battle, u, reach, tile) - reach.get(key(tile.x, tile.y))!.cost * 0.1
-      - formation(battle, u, tile);
+      - formation(battle, u, tile) - pinCost(battle, u, tile);
     if (score > (best?.score ?? 0)) best = { plan: { moveTo: tile, action: found.action }, score };
   }
   return best;

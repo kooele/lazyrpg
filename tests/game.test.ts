@@ -1080,6 +1080,26 @@ describe('progression and enemy behaviour', () => {
     expect(battle.opponentOf(slime)).toBe(a);
   });
 
+  it("doesn't break away when its best turn would stay next to its opponent anyway", () => {
+    // A healthy bandit archer would rather shoot point-blank (then Kick, re-engaging) than walk off:
+    // breaking away first would only hand the hero a free attack.
+    for (let seed = 1; seed < 60; seed++) {
+      const b = makeUnit(makeEnemy('bandit', 6, makeRng(seed)), 'enemy', { x: 5, y: 3 });
+      if (b.character.weaponId !== 'bow' && b.character.weaponId !== 'spear') continue;
+      const a = makeUnit(hero(), 'player', { x: 4, y: 3 });
+      const battle = new Battle(openMap(), [a, b], makeRng(1));
+      battle.perform(a, 'sword_slash', { x: 5, y: 3 });
+      battle.endPhase();
+      const hp = b.hp;
+      const wants = shouldDisengage(battle, b);
+      runAiTurn(battle, b);
+      // Either it never broke away (no free hit taken), or it really got away.
+      if (wants) expect(dist(a, b)).toBeGreaterThan(1.5);
+      else expect(b.hp).toBe(hp);
+      expect(battle.opponentOf(b) === a).toBe(!wants);
+    }
+  });
+
   it("doesn't break away when every tile it could reach is still next to its opponent", () => {
     // Heroes on every side: the slime can't walk anywhere.
     const slime = makeUnit(makeEnemy('slime', 3, makeRng(2)), 'enemy', { x: 5, y: 3 });
