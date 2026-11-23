@@ -90,9 +90,9 @@ describe('stats and content files', () => {
       expect(labels, id).toEqual(want);
     }
     expect(skillStatText(SKILLS.fireball)).toBe(
-      'Effect: 120% M.Atk, Burn x1 (2 turns)\nTags: Projectile, Debuff, Magical\nAP: Ends turn\nMana: 40\nCooldown: 2 turns');
+      'Effect: 120% M.Atk, a stack of Burn\nTags: Projectile, Debuff, Magical\nAP: Ends turn\nMana: 40\nCooldown: 2 turns');
     expect(skillStatText(SKILLS.ignite)).toBe(
-      'Effect: 20% M.Atk, Burn x1 (2 turns)\nTags: Debuff, Magical\nAP: 1 AP\nMana: 20\nCooldown: 1 turn');
+      'Effect: 20% M.Atk, a stack of Burn\nTags: Debuff, Magical\nAP: 1 AP\nMana: 20\nCooldown: 1 turn');
     expect(skillStats(SKILLS.arcane_weapon)[0].value).toBe('Toggle: Weapon attacks +50% M.Atk per hit (10 mana each); 10 mana a turn while on');
     expect(skillStatText(SKILLS.sword_slash)).toBe('Effect: 100% P.Atk\nTags: Melee, Engage, Physical\nAP: Ends turn');
     expect(skillStats(SKILLS.engage)[0].value).toBe(SKILLS.engage.description);
@@ -468,22 +468,34 @@ describe('skills', () => {
     expect(SKILLS.heal.cooldown).toBe(0);
   });
 
-  it('fireball burns 2% max health per stack per turn; cleanse removes it', () => {
+  it('Burn: 5% of max health per stack at the start of each turn, reduced by Defense and shields, then a stack drops off', () => {
     const { battle, units: [m, e, cleric] } = setup(openMap(), [
-      { c: hero('staff', ['fireball']), team: 'player', at: { x: 1, y: 1 } },
+      { c: hero('staff', ['ignite']), team: 'player', at: { x: 1, y: 1 } },
       { c: hero('bow'), team: 'enemy', at: { x: 4, y: 1 } },
       { c: hero('staff', ['cleanse']), team: 'enemy', at: { x: 6, y: 1 } },
     ]);
-    battle.perform(m, 'fireball', { x: 4, y: 1 });
-    const afterHit = e.hp;
+    e.statuses.push({ id: 'burn', name: 'Burn', debuff: true, stacks: 2, amount: 0, turns: Infinity, tick: 'start' });
+    const hp = e.hp;
     const events = battle.endPhase();
-    expect(events[0]).toMatchObject({ type: 'damage', cause: 'status', amount: 10 });
-    expect(e.hp).toBe(afterHit - 10);
+    // 2 stacks x 5% of 500 = 50, x 100/140 for Def 40 = 36.
+    expect(events[0]).toMatchObject({ type: 'damage', cause: 'status', amount: 36 });
+    expect(e.hp).toBe(hp - 36);
+    expect(e.statuses.find((st) => st.id === 'burn')?.stacks).toBe(1);
+    // A shield soaks the next tick (1 stack: 25 x 100/140 = 18), then Burn is gone.
+    e.statuses.push({ id: 'shield', name: 'Shield', debuff: false, stacks: 0, amount: 100, turns: 2, tick: 'start' });
+    battle.endPhase();
+    const tick = battle.endPhase();
+    expect(tick[0]).toMatchObject({ type: 'damage', cause: 'status', amount: 0, absorbed: 18 });
+    expect(e.statuses.some((st) => st.id === 'burn')).toBe(false);
+    // Cleanse still removes it.
+    battle.endPhase();
+    battle.perform(m, 'ignite', { x: 4, y: 1 });
+    battle.endPhase();
     battle.perform(cleric, 'cleanse', { x: 4, y: 1 });
-    expect(e.statuses).toEqual([]);
+    expect(e.statuses.some((st) => st.id === 'burn')).toBe(false);
   });
 
-  it('freeze slows the target for its next 2 turns', () => {
+  it('freeze puts a stack of Slow on the target, which drops off at the end of its next turn', () => {
     const { battle, units: [m, e] } = setup(openMap(), [
       { c: hero('staff', ['freeze']), team: 'player', at: { x: 1, y: 1 } },
       { c: hero('bow'), team: 'enemy', at: { x: 5, y: 1 } },
@@ -495,7 +507,7 @@ describe('skills', () => {
       moveOnEnemyTurns.push(battle.stat(e, 'movement'));
       battle.endPhase(); // player turn
     }
-    expect(moveOnEnemyTurns).toEqual([12, 12, 16]);
+    expect(moveOnEnemyTurns).toEqual([12, 16, 16]);
   });
 
   it('charge dashes next to an enemy within Movement and strikes', () => {
@@ -1695,10 +1707,10 @@ describe('zones (Firestorm, Blizzard), Slow stacks and Frozen', () => {
     expect(e.statuses.find((st) => st.id === 'slow')).toBeUndefined(); // the stacks became Frozen
     expect(result.interrupted).toBe(true);
     expect(battle.canMove(e)).toBe(false);
-    // Ending the turn inside: 2 more hits (2 new Slow stacks).
+    // Ending the turn inside: 2 more hits (2 new Slow stacks), and one drops off as the turn ends.
     const end = battle.endPhase();
     expect(end.filter((ev) => ev.type === 'zoneHit')).toHaveLength(2);
-    expect(e.statuses.find((st) => st.id === 'slow')?.stacks).toBe(2);
+    expect(e.statuses.find((st) => st.id === 'slow')?.stacks).toBe(1);
     // Next own turn: still Frozen, movement AP gone.
     battle.endPhase();
     expect(battle.isFrozen(e)).toBe(true);
@@ -1706,7 +1718,7 @@ describe('zones (Firestorm, Blizzard), Slow stacks and Frozen', () => {
     expect(battle.canMove(e)).toBe(false);
   });
 
-  it("Firestorm: ending a turn inside hits twice (2 Burn stacks, 2% each); it lasts 2 of the caster's turns", () => {
+  it("Firestorm: ending a turn inside hits twice (2 Burn stacks); it lasts 2 of the caster's turns", () => {
     const { battle, m, e } = zoned('firestorm');
     e.x = 6;
     e.y = 3;
@@ -1739,7 +1751,7 @@ describe('zones (Firestorm, Blizzard), Slow stacks and Frozen', () => {
     e.y = 3;
     battle.perform(m, 'freeze', { x: 6, y: 3 });
     expect(battle.stat(e, 'movement')).toBe(base - 4);
-    expect(skillEffect(SKILLS.firestorm)).toBe('3x3 zone for 2 turns. Each tile entered: 50% M.Atk, Burn x1 (2 turns). Ending a turn inside: 2 hits');
+    expect(skillEffect(SKILLS.firestorm)).toBe('3x3 zone for 2 turns. Each tile entered: 50% M.Atk, a stack of Burn. Ending a turn inside: 2 hits');
   });
 });
 
@@ -1844,23 +1856,28 @@ describe('Elementalist rework: Ignite, Freeze, Fireball, Iceblast and Burn explo
 
   it('Fireball and Iceblast are level 3 and hit for 120% M.Atk', () => {
     expect(SKILLS.fireball).toMatchObject({ level: 3, hits: [{ mAtk: 1.2 }] });
-    expect(SKILLS.iceblast).toMatchObject({ level: 3, los: 'sight', hits: [{ mAtk: 1.2 }], applyStatus: [{ status: 'slow', stacks: 1, turns: 2 }] });
+    expect(SKILLS.iceblast).toMatchObject({ level: 3, los: 'sight', hits: [{ mAtk: 1.2 }], applyStatus: [{ status: 'slow', stacks: 1 }] });
     const { battle, m, e } = duelOf(['iceblast']);
     battle.perform(m, 'iceblast', { x: 4, y: 3 });
     expect(e.hp).toBe(500 - 103); // 144 M.Atk x 100/140
     expect(e.statuses.find((s) => s.id === 'slow')?.stacks).toBe(1);
   });
 
-  it('Burn stacks to 2; a 3rd stack Explodes: Burn is gone and the unit loses 10% of max Health (ignoring Defense and shields)', () => {
+  it('Burn stacks to 2; a 3rd stack Explodes: Burn is gone and the unit takes 15% of max Health, reduced by Defense', () => {
     const { battle, m, e } = duelOf(['ignite']);
-    e.statuses.push({ id: 'burn', name: 'Burn', debuff: true, stacks: 2, amount: 0, turns: 2, tick: 'start' });
-    e.statuses.push({ id: 'shield', name: 'Shield', debuff: false, stacks: 0, amount: 999, turns: 2, tick: 'start' });
+    e.statuses.push({ id: 'burn', name: 'Burn', debuff: true, stacks: 2, amount: 0, turns: Infinity, tick: 'start' });
     const events = battle.perform(m, 'ignite', { x: 4, y: 3 });
     expect(events).toContainEqual(expect.objectContaining({ type: 'status', name: 'Explosion' }));
-    // The shield soaks Ignite's own hit, but not the explosion.
-    expect(events).toContainEqual(expect.objectContaining({ type: 'damage', cause: 'status', amount: 50, absorbed: 0 }));
-    expect(e.hp).toBe(500 - 50);
+    // 15% of 500 = 75, x 100/140 for Def 40 = 54; plus Ignite's own 17.
+    expect(events).toContainEqual(expect.objectContaining({ type: 'damage', cause: 'status', amount: 54 }));
+    expect(e.hp).toBe(500 - 17 - 54);
     expect(e.statuses.some((s) => s.id === 'burn' || s.id === 'explosion')).toBe(false);
+    // Shields absorb it too.
+    const b = duelOf(['ignite']);
+    b.e.statuses.push({ id: 'burn', name: 'Burn', debuff: true, stacks: 2, amount: 0, turns: Infinity, tick: 'start' });
+    b.e.statuses.push({ id: 'shield', name: 'Shield', debuff: false, stacks: 0, amount: 999, turns: 2, tick: 'start' });
+    b.battle.perform(b.m, 'ignite', { x: 4, y: 3 });
+    expect(b.e.hp).toBe(500);
   });
 });
 

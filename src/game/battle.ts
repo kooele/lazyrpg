@@ -1384,8 +1384,7 @@ export class Battle {
     }
     // Instant statuses (Explosion) do their damage now and aren't kept.
     if (def.instantDamagePctMaxHp) {
-      const amount = Math.max(1, Math.round(t.stats.health * def.instantDamagePctMaxHp));
-      return [{ type: 'status', source: source.uid, target: t.uid, name: def.name }, this.dealDamage(t, amount, source.uid, 'status', true)];
+      return [{ type: 'status', source: source.uid, target: t.uid, name: def.name }, this.statusDamage(t, def.instantDamagePctMaxHp, def.mitigated, source.uid)];
     }
     const existing = t.statuses.find((s) => s.id === id);
     // Past its stack cap the status turns into its overflow (Slow x3 -> Frozen, Burn x3 -> Explosion).
@@ -1394,11 +1393,13 @@ export class Battle {
       t.statuses = t.statuses.filter((s) => s.id !== id);
       return this.applyStatus(source, t, def.overflow.status, def.overflow.turns, 1, true);
     }
+    // Decaying statuses (Burn, Slow) last until their stacks run out, not a number of turns.
+    const lasts = def.decay ? Infinity : turns;
     if (existing) {
       if (def.stacking) existing.stacks += stacks;
-      existing.turns = Math.max(existing.turns, turns);
+      existing.turns = Math.max(existing.turns, lasts);
     } else {
-      t.statuses.push({ id, name: def.name, debuff: def.debuff, stacks: def.stacking ? stacks : 1, amount: 0, turns, tick: def.tick });
+      t.statuses.push({ id, name: def.name, debuff: def.debuff, stacks: def.stacking ? stacks : 1, amount: 0, turns: lasts, tick: def.tick });
     }
     // Caster-scaled bonuses (Protection) use the caster's stat now; a recast keeps the bigger one.
     const sc = def.casterScaled;
@@ -1408,6 +1409,27 @@ export class Battle {
     }
     const now = t.statuses.find((s) => s.id === id)!;
     return [{ type: 'status', source: source.uid, target: t.uid, name: def.stacking ? `${def.name} x${now.stacks}` : def.name }];
+  }
+
+  /**
+   * Damage from a status (a Burn tick, an Explosion): `pct` of max Health. Mitigated statuses are reduced by
+   * Defense and absorbed by shields like a hit; others ignore both.
+   */
+  private statusDamage(u: Unit, pct: number, mitigated: boolean | undefined, source?: string): BattleEvent {
+    const raw = u.stats.health * pct;
+    const amount = Math.max(1, Math.round(mitigated ? raw * defenseMultiplier(this.stat(u, 'defense')) : raw));
+    return this.dealDamage(u, amount, source, 'status', !mitigated);
+  }
+
+  /** A status ticks (start or end of the unit's turn): one turn less, or one stack less for decaying ones (Burn, Slow). */
+  private tickStatus(s: Status): void {
+    if (STATUSES[s.id]?.decay) s.stacks -= 1;
+    else s.turns -= 1;
+  }
+
+  /** Statuses that are still running (turns left; decaying ones also need stacks left). */
+  private stillActive(s: Status): boolean {
+    return s.turns > 0 && (!STATUSES[s.id]?.decay || s.stacks > 0);
   }
 
   // ---- toggles and weapon on-hit effects (Arcane Weapon) -------------------------------
@@ -1490,14 +1512,11 @@ export class Battle {
       u.overwatch = null;
       for (const k of Object.keys(u.cooldowns)) u.cooldowns[k] = Math.max(0, u.cooldowns[k] - 1);
       for (const s of u.statuses) {
-        const dot = STATUSES[s.id]?.damagePctMaxHpPerStack;
-        if (dot && u.alive) {
-          const amount = Math.max(1, Math.round(u.stats.health * dot * s.stacks));
-          events.push(this.dealDamage(u, amount, undefined, 'status', true));
-        }
-        if (s.tick === 'start') s.turns -= 1;
+        const def = STATUSES[s.id];
+        if (def?.damagePctMaxHpPerStack && u.alive) events.push(this.statusDamage(u, def.damagePctMaxHpPerStack * s.stacks, def.mitigated));
+        if (s.tick === 'start') this.tickStatus(s);
       }
-      u.statuses = u.statuses.filter((s) => s.turns > 0);
+      u.statuses = u.statuses.filter((s) => this.stillActive(s));
       // Toggles cost mana every turn to keep up; they switch off when the unit can't pay.
       for (const s of [...u.statuses]) {
         const upkeep = STATUSES[s.id]?.manaPerTurn;
@@ -1524,8 +1543,8 @@ export class Battle {
     }
     // Effects that last "through" the unit's turn (e.g. Slow) count down now.
     for (const u of this.living(this.phase)) {
-      for (const s of u.statuses) if (s.tick === 'end') s.turns -= 1;
-      u.statuses = u.statuses.filter((s) => s.turns > 0);
+      for (const s of u.statuses) if (s.tick === 'end') this.tickStatus(s);
+      u.statuses = u.statuses.filter((s) => this.stillActive(s));
     }
     const next: Team = this.phase === 'player' ? 'enemy' : 'player';
     if (next === 'player') this.round += 1;

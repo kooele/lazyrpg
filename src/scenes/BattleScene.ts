@@ -674,7 +674,8 @@ export class BattleScene extends Phaser.Scene {
     const shield = b.shieldOf(u);
     const terrainDef = TERRAIN[b.map.tiles[u.y][u.x]].defense;
     const effects = u.statuses.map((s) => (s.id === 'shield' ? `Shield ${s.amount} (${s.turns}t)`
-      : `${s.name}${s.stacks > 1 ? ` x${s.stacks}` : ''} (${Number.isFinite(s.turns) ? `${s.turns}t` : 'on'})`));
+      : STATUSES[s.id]?.decay ? `${s.name} x${s.stacks}` // loses a stack each turn
+        : `${s.name}${s.stacks > 1 ? ` x${s.stacks}` : ''} (${Number.isFinite(s.turns) ? `${s.turns}t` : 'on'})`));
     if (u.overwatch) effects.push(`Watching: ${SKILLS[u.overwatch.skillId].name}`);
     const opp = b.opponentOf(u);
     if (opp) effects.push(`Engaged with ${opp.character.name}`);

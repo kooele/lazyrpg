@@ -81,6 +81,10 @@ export interface StatusDef {
   overflow?: { status: string; turns: number };
   /** Can't move (walk, Dash, Movement skills) and loses its movement AP at the start of its turn. */
   frozen?: boolean;
+  /** Loses one stack each time it ticks and ends at 0 stacks (Burn, Slow), instead of lasting a number of turns. */
+  decay?: boolean;
+  /** Its damage (damagePctMaxHpPerStack, instantDamagePctMaxHp) is reduced by Defense and absorbed by shields, like a hit. */
+  mitigated?: boolean;
   /** Instant: applying it deals this share of the unit's max Health at once (ignores Defense and shields); it isn't kept. */
   instantDamagePctMaxHp?: number;
   /** Toggled on and off by a skill (see SkillDef.toggleStatus); lasts until switched off. */

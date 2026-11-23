@@ -197,11 +197,11 @@ Adventurers have **skill points**: 2 at level 1 and 1 more every level. Each poi
 Some skills need a **minimum level** (`level` in `skills.json`; shown as "Lv 3" in the skill tree). Until then they're greyed out and can't be learned. A loaded save with a skill above the character's level unlearns it and refunds the point. Random adventurers only pick skills their level has unlocked.
 
 - **Mage**: Arcanist (Arcane Bolt, Arcane Pulse Lv 3, Arcane Shift Lv 3, Arcane Weapon Lv 3), Elementalist (Ignite, Freeze, Fireball Lv 3, Iceblast Lv 3, Firestorm Lv 5, Blizzard Lv 5), Cleric (Heal, Cleanse, Protection Lv 3, Barrier Lv 3)
-  - **Ignite** / **Freeze** (1 AP, 20 mana, 1-turn cooldown): 20% M.Atk and one stack of Burn / Slow. **Fireball** / **Iceblast** (level 3): 120% M.Atk and one stack of Burn / Slow.
+  - **Ignite** / **Freeze** (1 AP, 20 mana, 1-turn cooldown): 20% M.Atk and a stack of Burn / Slow. **Fireball** / **Iceblast** (level 3): 120% M.Atk and a stack of Burn / Slow.
   - **Arcane Weapon** is a **toggle** (free action): switching it on costs 10 mana, then 10 mana at the start of each of your turns. While it's on, every weapon attack (basic attacks, Overwatch, opportunity attacks and Weapon skills such as Double Strike, Execute and Circle Swing) deals an extra 50% M.Atk Magical hit to each target, for 10 mana per hit (Double Strike: two). Using it again switches it off for free; it also switches off when you can't pay. The skill bar shows it as **ON**, and damage previews include the extra hit.
 - **Warrior**: Vanguard (Engage, Charge Lv 3), Infighter (Kick, Pocket Sand Lv 3), Assassin (Shadow Step, Flicker Strike Lv 3, Life-Risking Strike Lv 5), Weapon Master (Double Strike, Execute Lv 3, Circle Swing Lv 5)
 
-Status effects: **Burn** (2% of max Health per stack each turn, up to 2 stacks; a 3rd stack **Explodes**: Burn is removed and the unit loses 10% of its max Health at once, ignoring Defense and shields), **Slow** (up to 2 stacks; a 3rd Freezes), Corrode, Frenzy, **Blinded** (Pocket Sand: −30% P.Atk and M.Atk), **Exposed** (Life-Risking Strike: no Defense until your next turn) and **Stealthed** (Shadow Step: enemies can't target you directly or trigger overwatch on you until your next turn; area attacks still hit, and attacking ends it).
+Status effects: **Burn** and **Slow** don't last a set number of turns: skills apply **stacks**, and the unit loses one stack each turn. **Burn** deals 5% of max Health per stack at the start of each turn (reduced by Defense and absorbed by shields, like a hit), then drops a stack; it holds up to 2 stacks, and a 3rd stack **Explodes**: Burn is removed and the unit takes 15% of its max Health at once (also reduced by Defense and shields). **Slow** is −4 Movement per stack and drops a stack at the end of each turn; up to 2 stacks, and a 3rd Freezes the unit (Frozen lasts 2 turns). Also Corrode, Frenzy, **Blinded** (Pocket Sand: −30% P.Atk and M.Atk), **Exposed** (Life-Risking Strike: no Defense until your next turn) and **Stealthed** (Shadow Step: enemies can't target you directly or trigger overwatch on you until your next turn; area attacks still hit, and attacking ends it).
 
 ### Tags
 
@@ -235,7 +235,7 @@ Each enemy type has a fixed level range and its own stats and skills (`src/data/
 | Troll | 13–20 | Tribal | Club (Engage), Smash (knockback), Regenerate (heals itself). Slow and huge. |
 | Renegade | 14–25 | Human | Knights, lancers, rangers and sorcerers with Double Strike, Circle Swing, Freeze, Heal... |
 | Wyvern | 15–23 | Beast | Bite (Engage), Dive (swoops in), Tail Sting (Poison x2). Very fast. |
-| Demon | 16–25 | Evil | Claw (Engage), Hellfire (ranged, Burn x2), Infernal Leap. |
+| Demon | 16–25 | Evil | Claw (Engage), Hellfire (ranged, 2 stacks of Burn), Infernal Leap. |
 
 **Enemy AI** has four temperaments (`ai` in `enemies.json`):
 
