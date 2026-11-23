@@ -172,7 +172,7 @@ Every unit gets **2 AP** each turn: a **movement AP** (the regular move) and an 
 
 Moving after a skill isn't possible once the movement AP is gone. **Undo move** takes back a regular move as long as nothing else happened since.
 
-Skills can cost **mana** (`mana` in `skills.json`), which doesn't come back during a battle: Engage 10, Kick 10, Arcane Bolt 20, Charge 20, Cleanse 20, Double Strike 20, Execute 20, Flicker Strike 20, Pocket Sand 20, Shadow Step 20, Circle Swing 30, Life-Risking Strike 30, Arcane Pulse 40, Arcane Shift 40, Heal 40. Skill buttons show the cost; without enough mana a skill is greyed out.
+Skills can cost **mana** (`mana` in `skills.json`), which doesn't come back during a battle: Engage 10, Kick 10, Charge 20, Cleanse 20, Dash 20, Double Strike 20, Execute 20, Pocket Sand 20, Arcane Bolt 30, Arcane Shift 40, Barrier 40, Fireball 40, Flicker Strike 40, Freeze 40, Heal 40, Life-Risking Strike 40, Protection 40, Shadow Step 40, Circle Swing 50, Arcane Pulse 60, Firestorm 100, Blizzard 100. Skill buttons show the cost; without enough mana a skill is greyed out.
 
 **Bow modes**: the bow's basic attack depends on its mode. **Switch Mode** (a free action) cycles Direct → Indirect → Melee → Direct. The bow keeps the selected mode between battles (saved as `weaponMode` on the character). Overwatch, opportunity attacks and Weapon skills (Execute, Double Strike) use the current mode. Circle Swing always swings in Melee mode without changing the selection. Bow Strike (Melee) engages, and a bow user that is engaged always fights in Melee mode; its selected mode comes back once it breaks free. Enemy archers fight at range: each turn they pick Direct or Indirect, whichever gives the better attack (Indirect when cover is in the way), and only fight in Melee when engaged. Modes are set in `skills.json` (`bow_attack.modes`), with ranges relative to the weapon's `range` in `weapons.json`.
 
@@ -208,7 +208,7 @@ Every skill has tags that explain how it behaves. These five change the rules:
 - **Movement**: range in tiles = rangeScale × Movement ÷ 4 (the grass cost), rounded down. Charge uses 100% (4 tiles at Movement 16), and Slow (−4 Movement) shortens it. Arcane Shift has a fixed range of 2.
 - **Weapon**: uses your weapon's basic-attack range and line rules (Execute with a Bow reaches 5 tiles). Double Strike hits with the basic attack twice (the second hit at 50% damage), and Circle Swing hits every unit within the weapon's range with it, allies included (a bow uses its Melee mode for both the reach and the hit). Unusable while the weapon is disabled (nothing disables weapons yet).
 - **Engage**: see below. Sword Slash, Bow Strike (bow in Melee mode), Empowered Strike, Engage, Kick, Charge, Flicker Strike, Life-Risking Strike.
-- **Disengage**: usable while engaged, on anyone, and it ends your engagement with no free attack for your opponent. Arcane Pulse, Arcane Shift, Shadow Step.
+- **Disengage**: usable while engaged, on anyone, and it ends your engagement with no free attack for your opponent. Arcane Shift, Shadow Step.
 - **Free Action**: costs 0 AP (Kick). Usable any time until the unit's turn ends, so after a move or a 1/2-AP skill, but not after a turn-ending one. The turn doesn't end automatically while a unit still has a free action with a target in reach; press **End Turn** when done.
 
 Descriptive tags: Melee, Physical, Magical, Projectile, Indirect, Area, Knockback, Reaction, Teleport, Stealth, Debuff, Support.
@@ -252,7 +252,7 @@ Hitting a unit with an **Engage** skill (or **Spear Thrust** on an adjacent targ
 - You can't move, you can only attack your opponent, and you can only heal or cleanse yourself.
   - Attacks are fine as long as they hit your opponent: Spear Thrust aimed through them (diagonals included), Circle Swing (even if it also catches others), and Charge on the opponent itself (no dash, just the strike).
 - **Disengage** (button in the battle sidebar) breaks free, but your opponent gets a free basic attack on you (an opportunity attack). You can then move and act normally.
-- **Disengage** skills (Arcane Shift, Shadow Step, Arcane Pulse) slip out of an engagement with no opportunity attack. Other teleports and moves need you to disengage first.
+- **Disengage** skills (Arcane Shift, Shadow Step) slip out of an engagement with no opportunity attack. **Arcane Pulse** isn't one: an engaged caster can only Pulse its own opponent, and pushing it away breaks the engagement and gives the caster the free hit. Other teleports and moves need you to disengage first.
 - Engagement also ends if either unit falls, or if either one is successfully pushed by a knockback (Circle Swing, Arcane Pulse), even if they still end up next to each other. The pushed unit takes a free basic attack from its old opponent, just like disengaging. A push that's blocked doesn't break it.
 
 Heal and Cleanse work on any unit, enemies included. An attack aimed straight at an ally hits them normally (lines like Spear Thrust pass by allies they aren't aimed at). In battle, the game asks for confirmation before you attack an empty tile or an ally, or heal or cleanse an enemy. The battle log keeps the whole fight: scroll it with the mouse wheel or the bar on its right.

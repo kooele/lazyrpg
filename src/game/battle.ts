@@ -405,7 +405,7 @@ export class Battle {
   engagementBlock(caster: Unit, skill: SkillDef, tile: Point, from: Point = caster): string | null {
     const opp = this.opponentOf(caster);
     if (!opp) return null;
-    // Disengage skills (Arcane Shift, Shadow Step, Arcane Pulse) work anyway: they end the engagement for free.
+    // Disengage skills (Arcane Shift, Shadow Step) work anyway: they end the engagement for free.
     if (hasTag(skill, 'disengage')) return null;
     skill = this.skillFor(caster, skill);
     if (skill.teleport && !skill.charge) return `Engaged with ${opp.character.name}: disengage before moving.`;

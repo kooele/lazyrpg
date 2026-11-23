@@ -90,7 +90,7 @@ describe('stats and content files', () => {
       expect(labels, id).toEqual(want);
     }
     expect(skillStatText(SKILLS.fireball)).toBe(
-      'Effect: 100% M.Atk, Burn x1 (2 turns)\nTags: Projectile, Debuff, Magical\nAP: Ends turn\nMana: 30\nCooldown: 2 turns');
+      'Effect: 100% M.Atk, Burn x1 (2 turns)\nTags: Projectile, Debuff, Magical\nAP: Ends turn\nMana: 40\nCooldown: 2 turns');
     expect(skillStatText(SKILLS.sword_slash)).toBe('Effect: 100% P.Atk\nTags: Melee, Engage, Physical\nAP: Ends turn');
     expect(skillStats(SKILLS.engage)[0].value).toBe(SKILLS.engage.description);
     expect(skillStats(SKILLS.bow_attack)[0].value).toBe("Attacks based on the bow's mode.");
@@ -1319,7 +1319,7 @@ describe('action points, mana and Dash', () => {
   });
 
   it('skills cost mana; without enough mana they are unusable', () => {
-    expect(SKILLS.arcane_pulse.mana).toBe(40);
+    expect(SKILLS.arcane_pulse.mana).toBe(60);
     expect(SKILLS.kick).toMatchObject({ mana: 10, ap: 0 });
     const { battle, units: [a] } = setup(openMap(), [
       { c: hero('staff', ['arcane_bolt']), team: 'player', at: { x: 1, y: 1 } },
@@ -1327,10 +1327,10 @@ describe('action points, mana and Dash', () => {
     ]);
     expect(a.mp).toBe(200);
     battle.perform(a, 'arcane_bolt', { x: 4, y: 1 });
-    expect(a.mp).toBe(180);
+    expect(a.mp).toBe(170);
     battle.endPhase();
     battle.endPhase();
-    a.mp = 19;
+    a.mp = 29;
     expect(battle.canUseSkill(a, 'arcane_bolt')).toBe(false);
     expect(() => battle.perform(a, 'arcane_bolt', { x: 4, y: 1 })).toThrow(/mana/);
   });
@@ -1439,6 +1439,23 @@ describe('skill-sheet systems: level locks, Disengage and the new skills', () =>
   });
 
   it('Disengage skills work while engaged, on anyone, and end the engagement with no free attack', () => {
+    const { battle, units: [a, e] } = setup(openMap(), [
+      { c: hero('staff', ['arcane_shift']), team: 'player', at: { x: 3, y: 3 } },
+      { c: hero('sword_shield'), team: 'enemy', at: { x: 4, y: 3 } },
+    ]);
+    a.engagedWith = e.uid;
+    e.engagedWith = a.uid;
+    expect(battle.canTarget(a, SKILLS.arcane_shift, { x: 2, y: 2 })).toBe(true);
+    const hp = a.hp;
+    const events = battle.perform(a, 'arcane_shift', { x: 2, y: 2 });
+    expect(events).toContainEqual(expect.objectContaining({ type: 'disengage', reason: 'escaped' }));
+    expect(events.some((ev) => ev.type === 'damage' && ev.cause === 'opportunity')).toBe(false);
+    expect(a.hp).toBe(hp);
+    expect(a.engagedWith).toBeNull();
+    expect(e.engagedWith).toBeNull();
+  });
+
+  it('Arcane Pulse is not a disengage: engaged, it only hits the opponent, and the push gives the caster a free hit', () => {
     const { battle, units: [a, e, f] } = setup(openMap(), [
       { c: hero('staff', ['arcane_pulse']), team: 'player', at: { x: 3, y: 3 } },
       { c: hero('sword_shield'), team: 'enemy', at: { x: 4, y: 3 } },
@@ -1446,16 +1463,19 @@ describe('skill-sheet systems: level locks, Disengage and the new skills', () =>
     ]);
     a.engagedWith = e.uid;
     e.engagedWith = a.uid;
-    expect(battle.canTarget(a, SKILLS.empowered_strike, { x: 2, y: 3 })).toBe(false); // not the opponent
-    expect(battle.canTarget(a, SKILLS.arcane_pulse, { x: 2, y: 3 })).toBe(true);
+    expect(battle.canTarget(a, SKILLS.arcane_pulse, { x: 2, y: 3 })).toBe(false); // not the opponent
+    expect(battle.canTarget(a, SKILLS.arcane_pulse, { x: 4, y: 3 })).toBe(true);
     const hp = a.hp;
-    const events = battle.perform(a, 'arcane_pulse', { x: 2, y: 3 });
-    expect(events).toContainEqual(expect.objectContaining({ type: 'disengage', reason: 'escaped' }));
-    expect(events.some((ev) => ev.type === 'damage' && ev.cause === 'opportunity')).toBe(false);
+    const events = battle.perform(a, 'arcane_pulse', { x: 4, y: 3 });
+    expect(events.some((ev) => ev.type === 'disengage' && ev.reason === 'escaped')).toBe(false);
+    expect(events).toContainEqual(expect.objectContaining({ type: 'disengage', reason: 'displaced', source: e.uid, target: a.uid }));
+    // The pushed opponent takes the caster's free basic attack; the caster takes none.
+    expect(events).toContainEqual(expect.objectContaining({ type: 'damage', cause: 'opportunity', source: a.uid, target: e.uid }));
     expect(a.hp).toBe(hp);
+    expect(e).toMatchObject({ x: 6, y: 3 });
     expect(a.engagedWith).toBeNull();
     expect(e.engagedWith).toBeNull();
-    expect(f).toMatchObject({ x: 0, y: 3 });
+    expect(f).toMatchObject({ x: 2, y: 3 });
   });
 
   it('Pocket Sand blinds: -30% P.Atk and M.Atk through the enemy turn', () => {

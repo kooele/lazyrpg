@@ -136,13 +136,13 @@
     "arcane_bolt": {
       "name": "Arcane Bolt", "description": "Fire an arcane bolt at an enemy.",
       "tags": ["projectile", "magical"],
-      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "los": "sight", "cooldown": 0, "mana": 20,
+      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "los": "sight", "cooldown": 0, "mana": 30,
       "hits": [{ "mAtk": 1 }]
     },
     "arcane_pulse": {
       "name": "Arcane Pulse", "description": "Blast an enemy and knock it away.",
-      "tags": ["disengage", "knockback", "magical"],
-      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "los": "sight", "cooldown": 2, "mana": 40, "level": 3,
+      "tags": ["knockback", "magical"],
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "los": "sight", "cooldown": 2, "mana": 60, "level": 3,
       "hits": [{ "mAtk": 1 }], "knockback": 2
     },
     "arcane_shift": {
@@ -154,27 +154,27 @@
     "fireball": {
       "name": "Fireball", "description": "Hurl a fireball that sets an enemy alight.",
       "tags": ["projectile", "debuff", "magical"],
-      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "los": "sight", "cooldown": 2, "mana": 30,
+      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "los": "sight", "cooldown": 2, "mana": 40,
       "hits": [{ "mAtk": 1 }],
       "applyStatus": [{ "status": "burn", "stacks": 1, "turns": 2 }]
     },
     "freeze": {
       "name": "Freeze", "description": "Freeze an enemy, slowing it down.",
       "tags": ["debuff", "magical"],
-      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "cooldown": 2, "mana": 30,
+      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "cooldown": 2, "mana": 40,
       "hits": [{ "mAtk": 1 }],
       "applyStatus": [{ "status": "slow", "turns": 2 }]
     },
     "firestorm": {
       "name": "Firestorm", "description": "Set a 3x3 area ablaze. Anyone moving through it or ending a turn in it burns.",
       "tags": ["area", "debuff", "magical"],
-      "target": "ground", "affects": "any", "range": 5, "minRange": 0, "cooldown": 3, "mana": 50, "level": 5,
+      "target": "ground", "affects": "any", "range": 5, "minRange": 0, "cooldown": 3, "mana": 100, "level": 5,
       "zone": { "radius": 1.5, "turns": 2, "hit": { "mAtk": 0.5 }, "applyStatus": [{ "status": "burn", "stacks": 1, "turns": 2 }], "endTurnHits": 2 }
     },
     "blizzard": {
       "name": "Blizzard", "description": "Cover a 3x3 area in ice. Anyone moving through it or ending a turn in it is slowed, and can freeze.",
       "tags": ["area", "debuff", "magical"],
-      "target": "ground", "affects": "any", "range": 5, "minRange": 0, "cooldown": 3, "mana": 50, "level": 5,
+      "target": "ground", "affects": "any", "range": 5, "minRange": 0, "cooldown": 3, "mana": 100, "level": 5,
       "zone": { "radius": 1.5, "turns": 2, "hit": { "mAtk": 0.5 }, "applyStatus": [{ "status": "slow", "stacks": 1, "turns": 2 }], "endTurnHits": 2 }
     },
     "heal": {
@@ -227,19 +227,19 @@
     "shadow_step": {
       "name": "Shadow Step", "description": "Teleport a short distance and slip out of sight.",
       "tags": ["disengage", "teleport", "stealth"],
-      "target": "emptyTile", "affects": "ally", "range": 1.5, "minRange": 1, "cooldown": 3, "ap": 1, "mana": 20,
+      "target": "emptyTile", "affects": "ally", "range": 1.5, "minRange": 1, "cooldown": 3, "ap": 1, "mana": 40,
       "teleport": true, "selfStatus": [{ "status": "stealth", "turns": 1 }]
     },
     "flicker_strike": {
       "name": "Flicker Strike", "description": "Teleport next to an enemy and strike it.",
       "tags": ["teleport", "physical", "engage"],
-      "target": "unit", "affects": "enemy", "range": 3, "minRange": 1, "cooldown": 2, "mana": 20, "level": 3,
+      "target": "unit", "affects": "enemy", "range": 3, "minRange": 1, "cooldown": 2, "mana": 40, "level": 3,
       "hits": [{ "pAtk": 1 }], "charge": true, "teleport": true
     },
     "life_risking_strike": {
       "name": "Life-Risking Strike", "description": "Drop your guard for a devastating strike. If the enemy survives, the blow hurts you too.",
       "tags": ["physical", "engage"],
-      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 3, "mana": 30, "level": 5,
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 3, "mana": 40, "level": 5,
       "selfStatus": [{ "status": "exposed", "turns": 1 }],
       "hits": [{ "pAtk": 2.5 }], "recoilIfSurvives": { "pAtk": 1 }
     },
@@ -258,7 +258,7 @@
     "circle_swing": {
       "name": "Circle Swing", "description": "Swing at every unit around you, allies included, and knock them back. A bow always swings in Melee mode.",
       "tags": ["weapon", "area", "knockback"],
-      "target": "self", "affects": "any", "range": 0, "minRange": 0, "cooldown": 3, "mana": 30, "level": 5,
+      "target": "self", "affects": "any", "range": 0, "minRange": 0, "cooldown": 3, "mana": 50, "level": 5,
       "basicAttack": 1, "basicMode": "melee", "knockback": 1
     },
 
