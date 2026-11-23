@@ -5,7 +5,7 @@ import { SKILLS, TREE_SKILLS, WEAPONS, parseContent, skillFormula, skillPointsFo
 import enemiesJson from '../src/data/enemies.json';
 import { parseEnemies } from '../src/data/enemies';
 import { STAT_CONFIG, parseStatConfig } from '../src/data/stats';
-import type { Character } from '../src/data/types';
+import type { Character, SkillDef } from '../src/data/types';
 import { planTurn, runAiTurn, shouldDisengage, threatAt } from '../src/game/ai';
 import { Battle, defenseMultiplier, resistChance, deploymentTiles, enemyTypesForStage, generateEnemies, makeEnemy, makeUnit, victoryXp, type Team } from '../src/game/battle';
 import { allSkills, bodyGain, bodyPoints as bodyPointsOf, bodyStats, createCharacter, deriveStats, freePoints, grantXp, makeRng, pointsUsed, sanitizeLoadout } from '../src/game/character';
@@ -334,26 +334,43 @@ describe('skills', () => {
     expect(foe).toMatchObject({ x: 2, y: 3 });
   });
 
-  it('intercept stops a moving enemy; bow overwatch shoots without stopping', () => {
-    const { battle, units: [spear, mover] } = setup(openMap(), [
-      { c: hero('spear'), team: 'player', at: { x: 5, y: 3 } },
-      { c: hero('sword_shield'), team: 'enemy', at: { x: 8, y: 3 } },
-    ]);
-    battle.perform(spear, 'intercept', { x: 7, y: 3 });
-    battle.endPhase();
-    const res = battle.move(mover, { x: 6, y: 3 });
-    expect(res.interrupted).toBe(true);
-    expect(mover).toMatchObject({ x: 7, y: 3, hp: 500 - 57 });
-
+  it('Overwatch (basic ability): 60° arc to weapon range, fires the basic attack without stopping; ends the turn', () => {
     const { battle: b2, units: [archer, runner] } = setup(openMap(), [
       { c: hero('bow'), team: 'player', at: { x: 1, y: 3 } },
       { c: hero('sword_shield'), team: 'enemy', at: { x: 8, y: 3 } },
     ]);
+    expect(WEAPONS.bow.skills).not.toContain('overwatch');
+    expect(b2.skillIds(archer)).toContain('overwatch');
     b2.perform(archer, 'overwatch', { x: 5, y: 3 });
+    expect(archer).toMatchObject({ acted: true, ap: 0 });
+    expect(archer.overwatch!.tiles.has('6,3')).toBe(true); // Direct Shot range 5
+    expect(archer.overwatch!.tiles.has('7,3')).toBe(false);
     b2.endPhase();
     const r2 = b2.move(runner, { x: 5, y: 3 });
     expect(r2.interrupted).toBe(false);
     expect(r2.triggers).toHaveLength(1);
+    expect(runner).toMatchObject({ x: 5, y: 3, hp: 500 - 46 }); // Direct Shot: 80 P.Atk x 0.571
+
+    // A spear's watch reaches as far as Spear Thrust (2).
+    const { battle, units: [spear] } = setup(openMap(), [
+      { c: hero('spear'), team: 'player', at: { x: 5, y: 3 } },
+      { c: hero('sword_shield'), team: 'enemy', at: { x: 9, y: 3 } },
+    ]);
+    battle.perform(spear, 'overwatch', { x: 7, y: 3 });
+    expect([...spear.overwatch!.tiles].sort()).toEqual(['6,3', '7,2', '7,3', '7,4']); // range 2 rounds: 2-over-1-up is inside the arc
+  });
+
+  it('a turn-ending skill ends the turn: no free actions afterwards', () => {
+    const { battle, units: [k] } = setup(openMap(), [
+      { c: hero('sword_shield', ['kick']), team: 'player', at: { x: 1, y: 1 } },
+      { c: hero('bow'), team: 'enemy', at: { x: 2, y: 1 } },
+    ]);
+    battle.perform(k, 'kick', { x: 2, y: 1 }); // free: before the attack
+    expect(k).toMatchObject({ ap: 2, acted: false });
+    battle.perform(k, 'sword_slash', { x: 2, y: 1 });
+    expect(k).toMatchObject({ ap: 0, acted: true });
+    expect(battle.usableFreeActions(k)).toEqual([]);
+    expect(battle.commandableUnits()).toEqual([]);
   });
 
   it('heal and cleanse work on enemies (and on yourself)', () => {
@@ -420,19 +437,6 @@ describe('skills', () => {
     expect(k.acted).toBe(false);
     battle.perform(k, 'sword_slash', { x: 2, y: 1 });
     expect(k.acted).toBe(true);
-  });
-
-  it('free actions can be used after the main action, and keep the unit commandable', () => {
-    const { battle, units: [k] } = setup(openMap(), [
-      { c: hero('sword_shield', ['kick']), team: 'player', at: { x: 1, y: 1 } },
-      { c: hero('bow'), team: 'enemy', at: { x: 2, y: 1 } },
-    ]);
-    battle.perform(k, 'sword_slash', { x: 2, y: 1 });
-    expect(k.acted).toBe(true);
-    expect(battle.usableFreeActions(k)).toEqual(['kick']);
-    expect(battle.commandableUnits()).toContain(k);
-    battle.perform(k, 'kick', { x: 2, y: 1 });
-    expect(battle.commandableUnits()).toEqual([]);
   });
 
   it("execute: 100% P.Atk + 15% of the target's missing health", () => {
@@ -992,5 +996,96 @@ describe('skill points and the Body tab', () => {
       const a = randomAdventurer(6, makeRng(s));
       expect(pointsUsed(a)).toBe(7);
     }
+  });
+});
+
+describe('action points, mana and Dash', () => {
+  const skill = (id: string, patch: Partial<SkillDef>) => ({ ...SKILLS[id], ...patch });
+
+  it('2 AP a turn: moving uses the movement AP; a turn-ending skill uses the rest', () => {
+    const { battle, units: [a] } = setup(openMap(), [
+      { c: hero('bow'), team: 'player', at: { x: 1, y: 1 } },
+      { c: hero(), team: 'enemy', at: { x: 5, y: 1 } },
+    ]);
+    expect(a).toMatchObject({ ap: 2, moved: false });
+    battle.move(a, { x: 2, y: 1 });
+    expect(a).toMatchObject({ ap: 1, moved: true, acted: false });
+    expect(battle.canMove(a)).toBe(false);
+    battle.perform(a, 'direct_shot', { x: 5, y: 1 });
+    expect(a).toMatchObject({ ap: 0, acted: true });
+    battle.endPhase();
+    battle.endPhase();
+    expect(a).toMatchObject({ ap: 2, moved: false, acted: false });
+  });
+
+  it('1 AP uses the movement AP first and keeps the turn going; 2 AP uses both but allows free actions', () => {
+    const { battle, units: [a] } = setup(openMap(), [
+      { c: hero('bow', ['kick']), team: 'player', at: { x: 1, y: 1 } },
+      { c: hero(), team: 'enemy', at: { x: 2, y: 1 } },
+    ]);
+    const original = { ...SKILLS.direct_shot };
+    try {
+      Object.assign(SKILLS.direct_shot, skill('direct_shot', { ap: 1 }));
+      battle.perform(a, 'direct_shot', { x: 2, y: 1 });
+      expect(a).toMatchObject({ ap: 1, moved: true, acted: false }); // the movement AP went first
+      expect(battle.canMove(a)).toBe(false);
+      battle.perform(a, 'direct_shot', { x: 2, y: 1 });
+      expect(a).toMatchObject({ ap: 0, acted: false });
+      expect(battle.canUseSkill(a, 'direct_shot')).toBe(false);
+      expect(battle.canUseSkill(a, 'kick')).toBe(true); // still a free action
+      battle.endPhase();
+      battle.endPhase();
+      Object.assign(SKILLS.direct_shot, skill('direct_shot', { ap: 2 }));
+      battle.move(a, { x: 1, y: 2 });
+      expect(battle.canUseSkill(a, 'direct_shot')).toBe(false); // needs both AP
+      battle.undoMove(a);
+      expect(a.ap).toBe(2);
+      battle.perform(a, 'direct_shot', { x: 2, y: 1 });
+      expect(a).toMatchObject({ ap: 0, acted: false });
+      expect(battle.canUseSkill(a, 'kick')).toBe(true);
+    } finally {
+      Object.assign(SKILLS.direct_shot, original);
+    }
+  });
+
+  it('skills cost mana; without enough mana they are unusable', () => {
+    expect(SKILLS.arcane_pulse.mana).toBe(40);
+    expect(SKILLS.kick).toMatchObject({ mana: 10, ap: 0 });
+    const { battle, units: [a] } = setup(openMap(), [
+      { c: hero('staff', ['arcane_bolt']), team: 'player', at: { x: 1, y: 1 } },
+      { c: hero(), team: 'enemy', at: { x: 4, y: 1 } },
+    ]);
+    expect(a.mp).toBe(200);
+    battle.perform(a, 'arcane_bolt', { x: 4, y: 1 });
+    expect(a.mp).toBe(180);
+    battle.endPhase();
+    battle.endPhase();
+    a.mp = 19;
+    expect(battle.canUseSkill(a, 'arcane_bolt')).toBe(false);
+    expect(() => battle.perform(a, 'arcane_bolt', { x: 4, y: 1 })).toThrow(/mana/);
+  });
+
+  it('Dash: only after the regular move; uses the action AP, 20 mana and a 1-turn cooldown', () => {
+    const { battle, units: [a] } = setup(openMap(18, 13), [
+      { c: hero('bow'), team: 'player', at: { x: 1, y: 1 } },
+      { c: hero(), team: 'enemy', at: { x: 16, y: 11 } },
+    ]);
+    expect(battle.skillIds(a)).toContain('dash');
+    expect(battle.canUseSkill(a, 'dash')).toBe(false); // regular move first
+    battle.move(a, { x: 5, y: 1 });
+    expect(battle.canUseSkill(a, 'dash')).toBe(true);
+    expect(battle.canTarget(a, SKILLS.dash, { x: 9, y: 1 })).toBe(true);
+    expect(battle.canTarget(a, SKILLS.dash, { x: 10, y: 1 })).toBe(false); // Movement 16 = 4 tiles
+    battle.dash(a, { x: 9, y: 1 });
+    expect(a).toMatchObject({ x: 9, y: 1, ap: 0, mp: 180, acted: false });
+    expect(battle.canUndoMove(a)).toBe(false);
+    battle.endPhase();
+    battle.endPhase();
+    battle.move(a, { x: 9, y: 2 });
+    expect(battle.canUseSkill(a, 'dash')).toBe(false); // cooldown: not the very next turn
+    battle.endPhase();
+    battle.endPhase();
+    battle.move(a, { x: 9, y: 3 });
+    expect(battle.canUseSkill(a, 'dash')).toBe(true);
   });
 });

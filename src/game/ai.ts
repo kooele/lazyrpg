@@ -84,7 +84,7 @@ function bestFrom(
   let best: { action: AiAction; score: number } | null = null;
   for (const id of battle.skillIds(u)) {
     const skill = SKILLS[id];
-    if (!battle.isUsable(u, id) || isFree(skill) !== wantFree || skill.cone || skill.teleport) continue;
+    if (!battle.isUsable(u, id) || !battle.canPay(u, skill) || isFree(skill) !== wantFree || skill.cone || skill.teleport || skill.target === 'move') continue;
     if (!includeDefensive && skill.shield) continue;
     for (const aim of aimPoints(battle, skill, from)) {
       if (!battle.canTarget(u, skill, aim, from)) continue;
@@ -97,6 +97,7 @@ function bestFrom(
 
 /** Best free action (e.g. Kick) from where the unit stands now. */
 export function bestFreeAction(battle: Battle, u: Unit): AiAction | null {
+  if (!battle.canAct(u)) return null; // a turn-ending skill already ended the turn
   return bestFrom(battle, u, u, true)?.action ?? null;
 }
 
@@ -320,7 +321,7 @@ export function runAiTurn(battle: Battle, u: Unit): void {
   const action = bestAction(battle, u);
   if (action) battle.perform(u, action.id, action.target);
   else battle.wait(u);
-  // Free actions also work after the main action (e.g. Kick once something is in reach).
+  // Free actions still work after a move or a skill that doesn't end the turn.
   if (!free && u.alive && !battle.outcome()) {
     const late = bestFreeAction(battle, u);
     if (late) battle.perform(u, late.id, late.target);

@@ -2,13 +2,16 @@
   "_readme": "Skills, tags, status effects and skill trees. Percentages are fractions (0.8 = 80%). Ranges are in tiles (Euclidean: 1 = the 4 neighbours, 1.5 includes diagonals). Cooldown N = can't be used during your next N turns. Keys starting with _ are comments. The game checks this file on load and reports the exact field if something is wrong.",
 
   "_fields": {
-    "target": "unit (aim at a tile, affects the unit there) | self | line (aim at a tile, hits the first unit on the straight path to it) | cone (overwatch) | emptyTile",
+    "target": "unit (aim at a tile, affects the unit there) | self | line (aim at a tile, hits the first unit on the straight path to it) | cone (overwatch) | emptyTile | move (Dash: walk to a reachable tile)",
+    "ap": "Action points. Every unit has 2 AP a turn: a movement AP and an action AP. 0 = free action | 1 = uses the movement AP if it's still unspent (otherwise the action AP); the turn goes on while AP remain | 2 = uses both AP; the turn goes on (free actions are still allowed) | \"end\" (the default) = uses all remaining AP and ends the unit's turn. Free-tagged skills default to 0.",
+    "mana": "Mana spent on use (default 0). Mana doesn't come back during a battle.",
     "affects": "enemy | ally | any (friend and foe; for 'unit' skills this includes yourself)",
     "hits": "list of hits, each { pAtk, mAtk, def, missingHp } as fractions",
     "los": "sight = line of sight (rocks block) | fire = line of fire (rocks AND units block; kept for future skills). Omit for none.",
     "rangeScale": "for 'movement' skills: range in tiles = floor(rangeScale x Movement / movementCosts.grass)",
     "applyStatus": "list of { status, turns, stacks }",
-    "optional": "heal { mAtk }, shield { maxHpPct, turns }, knockback (tiles), cleanse, teleport, charge, aoeRadius, cone { angle, radius, interrupt, los }"
+    "optional": "heal { mAtk }, shield { maxHpPct, turns }, knockback (tiles), cleanse, teleport, charge, aoeRadius, cone { angle, radius, interrupt, los } (radius defaults to the skill's range, so 'weapon' cones reach as far as the weapon; a cone skill without hits attacks with the user's basic attack)",
+    "basicSkills": "abilities every Adventurer has on top of weapon and tree skills"
   },
 
   "tags": {
@@ -22,7 +25,7 @@
     "teleport": { "name": "Teleport", "description": "Moves you instantly, ignoring terrain and units in the way." },
     "movement": { "name": "Movement", "description": "Range scales with your Movement: every 4 Movement (one grass tile) = 1 tile, rounded down. Slow shortens it." },
     "weapon": { "name": "Weapon", "description": "Uses your weapon's basic-attack range and line rules. Unusable while your weapon is disabled." },
-    "free": { "name": "Free Action", "description": "Doesn't use your action. You can still act afterwards." },
+    "free": { "name": "Free Action", "description": "Costs 0 AP. Usable any time until the unit's turn ends." },
     "debuff": { "name": "Debuff", "description": "Applies a harmful effect that Cleanse can remove." },
     "monster": { "name": "Monster", "description": "A natural attack used by monsters." },
     "support": { "name": "Support", "description": "Restores or protects. Heal and Cleanse work on any unit, enemies included." }
@@ -45,7 +48,7 @@
     "slash_and_smash": {
       "name": "Slash and Smash", "description": "Slash an enemy for 80% P.Atk, then bash it with your shield for 40% P.Atk + 100% Def.",
       "tags": ["melee", "engage"],
-      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 2,
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 2, "mana": 20,
       "hits": [{ "pAtk": 0.8 }, { "pAtk": 0.4, "def": 1 }]
     },
     "shield_up": {
@@ -63,15 +66,8 @@
     "circle_swing": {
       "name": "Circle Swing", "description": "Sweep the tiles around you, hitting every unit (allies included) for 100% P.Atk and knocking them back 1 tile.",
       "tags": ["melee", "area", "knockback"],
-      "target": "self", "affects": "any", "range": 0, "minRange": 0, "aoeRadius": 1.5, "cooldown": 2,
+      "target": "self", "affects": "any", "range": 0, "minRange": 0, "aoeRadius": 1.5, "cooldown": 2, "mana": 30,
       "hits": [{ "pAtk": 1 }], "knockback": 1
-    },
-    "intercept": {
-      "name": "Intercept", "description": "Guard a cone in any direction. The first enemy to move into it takes 100% P.Atk and is stopped.",
-      "tags": ["reaction", "melee"],
-      "target": "cone", "affects": "enemy", "range": 2, "minRange": 1, "cooldown": 0,
-      "hits": [{ "pAtk": 1 }],
-      "cone": { "angle": 60, "radius": 2, "interrupt": true }
     },
     "direct_shot": {
       "name": "Direct Shot", "description": "Shoot an enemy for 100% P.Atk.",
@@ -86,11 +82,15 @@
       "hits": [{ "pAtk": 0.7 }]
     },
     "overwatch": {
-      "name": "Overwatch", "description": "Watch a cone in any direction. The first enemy to move into it is shot for 100% P.Atk but keeps moving.",
-      "tags": ["reaction", "projectile"],
-      "target": "cone", "affects": "enemy", "range": 5, "minRange": 1, "cooldown": 0,
-      "hits": [{ "pAtk": 1 }],
-      "cone": { "angle": 60, "radius": 5, "interrupt": false, "los": "sight" }
+      "name": "Overwatch", "description": "Basic ability. Watch a 60° arc in any direction, as far as your weapon reaches. The first enemy to move into it takes your basic attack but keeps moving.",
+      "tags": ["reaction", "weapon"],
+      "target": "cone", "affects": "enemy", "range": 1, "minRange": 1, "cooldown": 0, "ap": "end",
+      "cone": { "angle": 60, "interrupt": false }
+    },
+    "dash": {
+      "name": "Dash", "description": "Basic ability. After your regular move, spend your other AP to move again, up to your Movement.",
+      "tags": [],
+      "target": "move", "affects": "ally", "range": 0, "cooldown": 1, "ap": 1, "mana": 20
     },
     "empowered_strike": {
       "name": "Empowered Strike", "description": "Strike an enemy for 100% P.Atk + 50% M.Atk.",
@@ -108,19 +108,19 @@
     "arcane_bolt": {
       "name": "Arcane Bolt", "description": "Fire an arcane bolt at an enemy for 100% M.Atk.",
       "tags": ["projectile"],
-      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "los": "sight", "cooldown": 0,
+      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "los": "sight", "cooldown": 0, "mana": 20,
       "hits": [{ "mAtk": 1 }]
     },
     "arcane_pulse": {
       "name": "Arcane Pulse", "description": "Blast an enemy for 100% M.Atk and knock it back 2 tiles.",
       "tags": ["projectile", "knockback"],
-      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "los": "sight", "cooldown": 2,
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "los": "sight", "cooldown": 2, "mana": 40,
       "hits": [{ "mAtk": 1 }], "knockback": 2
     },
     "arcane_shift": {
       "name": "Arcane Shift", "description": "Teleport to an empty tile.",
       "tags": ["teleport"],
-      "target": "emptyTile", "affects": "ally", "range": 2, "minRange": 1, "cooldown": 2,
+      "target": "emptyTile", "affects": "ally", "range": 2, "minRange": 1, "cooldown": 2, "mana": 40,
       "teleport": true
     },
     "fireball": {
@@ -140,31 +140,31 @@
     "heal": {
       "name": "Heal", "description": "Heal a unit for 80% M.Atk. Works on enemies too.",
       "tags": ["support"],
-      "target": "unit", "affects": "any", "range": 5, "minRange": 0, "cooldown": 2,
+      "target": "unit", "affects": "any", "range": 5, "minRange": 0, "cooldown": 2, "mana": 40,
       "heal": { "mAtk": 0.8 }
     },
     "cleanse": {
       "name": "Cleanse", "description": "Remove all debuffs from a unit. Works on enemies too.",
       "tags": ["support"],
-      "target": "unit", "affects": "any", "range": 5, "minRange": 0, "cooldown": 0,
+      "target": "unit", "affects": "any", "range": 5, "minRange": 0, "cooldown": 0, "mana": 20,
       "cleanse": true
     },
     "charge": {
       "name": "Charge", "description": "Dash next to an enemy and strike it for 80% P.Atk.",
       "tags": ["movement", "melee", "engage"],
-      "target": "unit", "affects": "enemy", "range": 4, "rangeScale": 1, "minRange": 1, "cooldown": 2,
+      "target": "unit", "affects": "enemy", "range": 4, "rangeScale": 1, "minRange": 1, "cooldown": 2, "mana": 30,
       "hits": [{ "pAtk": 0.8 }], "charge": true
     },
     "kick": {
       "name": "Kick", "description": "Kick an enemy for 60% P.Atk.",
       "tags": ["melee", "engage", "free"],
-      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 1,
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 1, "mana": 10, "ap": 0,
       "hits": [{ "pAtk": 0.6 }]
     },
     "execute": {
       "name": "Execute", "description": "Strike an enemy for 100% P.Atk + 15% of its missing Health.",
       "tags": ["weapon"],
-      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 2,
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 2, "mana": 20,
       "hits": [{ "pAtk": 1, "missingHp": 0.15 }]
     },
 
@@ -208,6 +208,8 @@
     }
 
   },
+
+  "basicSkills": ["dash", "overwatch"],
 
   "skillTabs": [
     { "id": "mage", "name": "Mage" },

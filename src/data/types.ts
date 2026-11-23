@@ -85,14 +85,25 @@ export interface DamagePart {
  *  line      – aim at a tile in range; hits the first matching unit on the straight path to it
  *  cone      – pick a direction; sets up an overwatch cone
  *  emptyTile – an empty, walkable tile (e.g. teleport)
+ *  move      – a tile the unit can walk to (Dash)
  */
-export type SkillTarget = 'unit' | 'self' | 'line' | 'cone' | 'emptyTile';
+export type SkillTarget = 'unit' | 'self' | 'line' | 'cone' | 'emptyTile' | 'move';
+
+/**
+ * Action points a skill costs. Units have 2 AP a turn: a movement AP and an action AP.
+ *  0     – free action
+ *  1     – uses the movement AP if unspent, else the action AP; the turn goes on while AP remain
+ *  2     – uses both AP; the turn goes on (free actions still allowed)
+ *  'end' – uses all remaining AP and ends the unit's turn
+ */
+export type ApCost = 0 | 1 | 2 | 'end';
+export const AP_COSTS: readonly ApCost[] = [0, 1, 2, 'end'];
 
 export interface ConeDef {
   /** Full width of the cone in degrees. */
   angle: number;
-  /** Reach in tiles (Euclidean). */
-  radius: number;
+  /** Reach in tiles (Euclidean). Omitted = the skill's range (for 'weapon' skills, the weapon's). */
+  radius?: number;
   /** Stop the enemy's movement on the tile where it is hit. */
   interrupt: boolean;
   los?: LosRule;
@@ -112,6 +123,10 @@ export interface SkillDef {
   los?: LosRule;
   /** Turns the skill is unavailable after use (1 = can't be used next turn; 0 = every turn). */
   cooldown: number;
+  /** Action points it costs (see ApCost). */
+  ap: ApCost;
+  /** Mana spent on use. */
+  mana: number;
   /** Classification tags (see skills.json "tags"). engage / movement / weapon / free change behavior. */
   tags: string[];
   /** For 'movement' skills: range = floor(rangeScale x Movement). */

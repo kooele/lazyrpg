@@ -8,7 +8,7 @@ A small turn-based tactical RPG that runs in the browser, built with [Phaser 4](
 2. **Your character**: a new game starts by creating your main character (name, sex, skin, face, hair, hair colour, clothes colour, weapon, skills) and naming your party. The main character is permanent: they can't be dismissed and always lead the party on quests.
 3. **Arch City**: the hub is a map of the walled city (`public/art/city/arch-city.webp`) with three tabs: **Outer Ring** (Adventurer Guild, Docks, Marketplace, Slave Market, Slums, Customs Office, Sleeping Griffin Inn), **Middle Ring** (Tailor, Auction House, Library, Church) and **Inner Ring** (Lord's Manor, Central Government Office, Central Church, Gilded Crown Inn). Click a pin on the map or a button below it. Open so far: the **Adventurer Guild**, the **Slave Market** and the two **inns**; the rest are greyed out. **Manage Party** (bottom bar) handles your members, and the side panel sets out on an accepted quest. See [Arch City and the guild](#arch-city-and-the-adventurer-guild).
 4. **Adventurers**: There are no fixed classes. Every party member is an Adventurer, and you build them by mixing a weapon with picks from the skill trees. Up to 4 go on each quest (the lineup); the party can have up to 8 members.
-5. **Tactical battle**: XCOM-style alternating turns. On your turn, every Adventurer can move once and act once, in any order (click a unit or press Tab). Hover a skill to see its range box; any tile in range can be targeted. The map is 18×13 tiles (set in `stats.json`). Terrain: grass costs 4 Movement, forest 6 (and gives +20 Defense), river 8. Rock and deep water block movement, and rock blocks line of sight.
+5. **Tactical battle**: XCOM-style alternating turns. On your turn, every Adventurer has **2 AP** (action points), a movement AP and an action AP, and can spend them in any order (click a unit or press Tab). See [Action points and mana](#action-points-and-mana). Hover a skill to see its range box; any tile in range can be targeted. The map is 18×13 tiles (set in `stats.json`). Terrain: grass costs 4 Movement, forest 6 (and gives +20 Defense), river 8. Rock and deep water block movement, and rock blocks line of sight.
 
 ## Arch City and the Adventurer Guild
 
@@ -77,7 +77,7 @@ Tooltips show a formula line generated from the numbers (e.g. "80% P.Atk, then 4
 | Stat | Default | Meaning |
 |---|---|---|
 | Health | 500 (+50/level) | Max health |
-| Mana | 200 (+20) | Max mana (no skill costs mana yet) |
+| Mana | 200 (+20) | Spent by skills; doesn't come back during a battle |
 | P.Atk | 100 (+10) | Physical power; skills deal a % of it |
 | M.Atk | 100 (+10) | Magic power and healing |
 | Defense | 50 (+5) | Damage taken × 100 / (100 + Defense) |
@@ -102,9 +102,29 @@ Weapons **multiply** these stats:
 | Weapon | Multipliers | Skills (the first is the basic attack) |
 |---|---|---|
 | Sword & Shield | x1 P.Atk, x0.8 M.Atk, x1.5 Def | Sword Slash, Slash and Smash, Shield Up |
-| Spear | x1 P.Atk, x0.8 M.Atk | Spear Thrust, Circle Swing, Intercept |
-| Bow | x0.8 P.Atk, x0.8 M.Atk | Direct Shot, Indirect Shot, Overwatch |
+| Spear | x1 P.Atk, x0.8 M.Atk | Spear Thrust, Circle Swing |
+| Bow | x0.8 P.Atk, x0.8 M.Atk | Direct Shot, Indirect Shot |
 | Staff | x0.5 P.Atk, x1.2 M.Atk | Empowered Strike, Magic Bolt |
+
+### Action points and mana
+
+Every unit gets **2 AP** each turn: a **movement AP** (the regular move) and an **action AP**. Each skill has an AP cost (`ap` in `skills.json`):
+
+| Cost | Effect |
+|---|---|
+| 0 (free) | No AP. Usable until the unit's turn ends (Kick). |
+| 1 AP | Uses the movement AP if it's still unspent, otherwise the action AP. The turn goes on while AP remain. |
+| 2 AP | Uses both AP (so it can't follow a move). The turn goes on: free actions are still allowed. |
+| Ends turn | Uses all remaining AP and ends the unit's turn. The default: every weapon and tree skill, and Overwatch. |
+
+Moving after a skill isn't possible once the movement AP is gone. **Undo move** takes back a regular move as long as nothing else happened since.
+
+Skills can cost **mana** (`mana` in `skills.json`), which doesn't come back during a battle: Kick 10, Slash and Smash 20, Arcane Bolt 20, Cleanse 20, Execute 20, Circle Swing 30, Charge 30, Arcane Pulse 40, Arcane Shift 40, Heal 40. Skill buttons show the cost; without enough mana a skill is greyed out.
+
+**Basic abilities** (every Adventurer, listed under the weapon in the creator):
+
+- **Dash** (1 AP, 20 MP, cooldown 1): only after the regular move. Spends the action AP to move again, up to your Movement. Overwatch can still fire on the way; it can't be undone.
+- **Overwatch** (ends turn): watch a 60° arc in any direction, as far as your weapon reaches (Bow 5, Spear 2, sword and staff 1.5). The first enemy to move into it takes your basic attack and keeps moving. Bow and Spear no longer have their own Overwatch / Intercept.
 
 ### Skill points, skill trees and the Body tab
 
@@ -121,7 +141,7 @@ Every skill has tags that explain how it behaves. These four change the rules:
 - **Movement**: range in tiles = rangeScale × Movement ÷ 4 (the grass cost), rounded down. Charge uses 100% (4 tiles at Movement 16), and Slow (−4 Movement) shortens it. Arcane Shift has a fixed range of 2.
 - **Weapon**: uses your weapon's basic-attack range and line rules (Execute with a Bow reaches 5 tiles). Unusable while the weapon is disabled (nothing disables weapons yet).
 - **Engage**: see below. Sword Slash, Slash and Smash, Empowered Strike, Kick, Charge.
-- **Free Action**: doesn't use your action, and can be used before or after it (Kick). The turn doesn't end automatically while a unit still has a free action with a target in reach; press **End Turn** when done.
+- **Free Action**: costs 0 AP (Kick). Usable any time until the unit's turn ends, so after a move or a 1/2-AP skill, but not after a turn-ending one. The turn doesn't end automatically while a unit still has a free action with a target in reach; press **End Turn** when done.
 
 Descriptive tags: Melee, Projectile, Indirect, Area, Knockback, Reaction, Teleport, Debuff, Support.
 
@@ -153,7 +173,7 @@ Heal and Cleanse work on any unit, enemies included. An attack aimed straight at
 
 ### Lines, cooldowns, and prepared systems
 
-- *Line of sight* (no rock in between): Direct Shot, Magic Bolt, Arcane Bolt, Arcane Pulse, Fireball, Overwatch.
+- *Line of sight* (no rock in between): Direct Shot, Magic Bolt, Arcane Bolt, Arcane Pulse, Fireball, and Overwatch with a weapon that needs it (Bow).
 - *Line of fire* (no rock **or unit** in between): no skill uses it right now; set `"los": "fire"` on a skill to use it.
 - No line needed: melee skills, Spear Thrust (it stops at the first enemy in the way), Indirect Shot, Freeze, Heal, Cleanse, Arcane Shift.
 - **Ranges** use Euclidean distance. Ranges of 2 or more round the distance to the nearest tile, so range 2 also reaches 2-over-1-up and shapes are rounder. Ranges 1 and 1.5 stay exact: 1 is the 4 neighbours, 1.5 adds the diagonals. Set `rangeRounding.fromRange` in `stats.json` to change the cut-off.

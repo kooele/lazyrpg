@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import {
-  NAME_MAX_LENGTH, PALETTE, isSupport, SKILLS, SKILL_TABS, SKILL_TREES, WEAPONS, XP_PER_LEVEL, skillDetails, skillFormula, tagNames,
+  BASIC_SKILLS, NAME_MAX_LENGTH, PALETTE, isSupport, SKILLS, SKILL_TABS, SKILL_TREES, WEAPONS, XP_PER_LEVEL, skillDetails, skillFormula, tagNames,
 } from '../data/content';
 import { STAT_CONFIG, visibleStatKeys } from '../data/stats';
 import {
@@ -219,10 +219,10 @@ export class CharacterCreatorScene extends Phaser.Scene {
       c.add(text(this, 0, my + 26, 'Weapon skills (always equipped)', { fontSize: '12px', color: COLORS.dim }));
       items.push({ obj: c, height: my + 42 });
     }
-    w.skills.forEach((sid, i) => {
+    const skillItem = (sid: string, note = '') => {
       const s = SKILLS[sid];
       const c = this.add.container(0, 0);
-      const name = text(this, 0, 0, `${s.name}${i === 0 ? '  (basic)' : ''}`, { fontSize: '15px' }).setInteractive();
+      const name = text(this, 0, 0, `${s.name}${note}`, { fontSize: '15px' }).setInteractive();
       name.on('pointerover', () => this.showSkill(s)).on('pointerout', () => this.tooltip.hide());
       c.add(name);
       c.add(text(this, 0, 19, skillDetails(s), { fontSize: '11px', color: COLORS.gold }));
@@ -232,7 +232,10 @@ export class CharacterCreatorScene extends Phaser.Scene {
       mini.container.setPosition(266 - mini.size, 2);
       c.add(mini.container);
       items.push({ obj: c, height: Math.max(40 + desc.height, mini.size + 6) });
-    });
+    };
+    w.skills.forEach((sid, i) => skillItem(sid, i === 0 ? '  (basic attack)' : ''));
+    items.push({ obj: this.add.container(0, 0, [text(this, 0, 4, 'Basic abilities (every Adventurer)', { fontSize: '12px', color: COLORS.dim })]), height: 24 });
+    BASIC_SKILLS.forEach((sid) => skillItem(sid));
     this.weaponList?.destroy();
     this.weaponList = new ScrollList(this, 342, 182, 272, 358, 10);
     this.weaponList.setItems(items, 'top');

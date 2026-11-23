@@ -31,7 +31,12 @@ export interface Overwatch {
   tiles: Set<string>;
   interrupt: boolean;
   los?: LosRule;
+  /** What the reaction hits with (the skill's own hits, or the user's basic attack). */
+  hits: DamagePart[];
 }
+
+/** Action points every unit gets each turn: one movement AP and one action AP. */
+export const AP_PER_TURN = 2;
 
 export interface Unit {
   uid: string;
@@ -45,10 +50,16 @@ export interface Unit {
   alive: boolean;
   cooldowns: Record<string, number>;
   statuses: Status[];
-  /** Has this unit moved during its team's current turn? */
+  /** Action points left this turn (AP_PER_TURN at the start of its turn). */
+  ap: number;
+  /** Is the movement AP spent (by walking, or by a 1-AP skill used before moving)? */
   moved: boolean;
-  /** Has this unit used its action (or waited)? That ends its turn. */
+  /** Walked with the regular move (the only thing Undo can take back). */
+  walked: boolean;
+  /** The unit's turn is over (a turn-ending skill, Wait, or it fell). */
   acted: boolean;
+  /** Mana left (starts at max; doesn't come back during a battle). */
+  mp: number;
   /** Something happened that can't be undone (free action, triggered overwatch): no undo move. */
   locked: boolean;
   /** Where the unit stood when its turn began (for undoing a move). */
@@ -110,8 +121,11 @@ export function makeUnit(character: Character, team: Team, pos: Point): Unit {
     alive: true,
     cooldowns: {},
     statuses: [],
+    ap: AP_PER_TURN,
     moved: false,
+    walked: false,
     acted: false,
+    mp: stats.mana,
     locked: false,
     startPos: { x: pos.x, y: pos.y },
     overwatch: null,
@@ -203,9 +217,10 @@ export class Battle {
     return losFor(s, this.reachContext(u));
   }
 
-  /** Off cooldown and not blocked by a disabled weapon. */
+  /** Off cooldown, enough mana, and not blocked by a disabled weapon. */
   isUsable(u: Unit, skillId: string): boolean {
-    return this.isReady(u, skillId) && !(u.weaponDisabled && hasTag(SKILLS[skillId], 'weapon'));
+    const s = SKILLS[skillId];
+    return this.isReady(u, skillId) && u.mp >= s.mana && !(u.weaponDisabled && hasTag(s, 'weapon'));
   }
 
   // ---- engagement ------------------------------------------------------------------
@@ -341,24 +356,47 @@ export class Battle {
     return (u.cooldowns[skillId] ?? 0) <= 0;
   }
 
+  /** Regular move: needs the movement AP (and not engaged). */
   canMove(u: Unit): boolean {
-    return u.alive && u.team === this.phase && !u.moved && !u.acted && !u.engagedWith;
+    return this.canAct(u) && !u.moved && u.ap >= 1 && !u.engagedWith;
   }
 
+  /** Is the unit's turn still going (it may have AP or free actions left)? */
   canAct(u: Unit): boolean {
     return u.alive && u.team === this.phase && !u.acted;
   }
 
-  /** Units of the current team that still have an action this turn. */
-  readyUnits(): Unit[] {
-    return this.living(this.phase).filter((u) => !u.acted);
+  /** Enough AP for the skill's cost? Turn-ending skills need at least 1 AP; 2-AP skills need both. */
+  canPay(u: Unit, skill: SkillDef): boolean {
+    if (skill.ap === 0) return true;
+    return u.ap >= (skill.ap === 'end' ? 1 : skill.ap);
   }
 
-  /** Can `u` use this skill right now (ignoring targets)? Free skills work even after the unit's main action. */
+  /** Units of the current team that still have AP this turn. */
+  readyUnits(): Unit[] {
+    return this.living(this.phase).filter((u) => !u.acted && u.ap > 0);
+  }
+
+  /** Can `u` use this skill right now (ignoring targets)? AP, mana, cooldown and weapon permitting. */
   canUseSkill(u: Unit, skillId: string): boolean {
     const skill = SKILLS[skillId];
-    const inTurn = isFree(skill) ? u.alive && u.team === this.phase : this.canAct(u);
-    return inTurn && this.skillIds(u).includes(skillId) && this.isUsable(u, skillId);
+    if (!this.canAct(u) || !this.skillIds(u).includes(skillId) || !this.isUsable(u, skillId) || !this.canPay(u, skill)) return false;
+    // Dash: a second move with the action AP, only once the regular move is spent.
+    if (skill.target === 'move') return u.moved && !u.engagedWith;
+    return true;
+  }
+
+  /** Pay a skill's AP cost (see ApCost). */
+  private spendAp(u: Unit, skill: SkillDef): void {
+    if (skill.ap === 0) return;
+    if (skill.ap === 1) {
+      u.moved = true; // uses the movement AP if it was still there
+      u.ap -= 1;
+      return;
+    }
+    u.ap = 0;
+    u.moved = true;
+    if (skill.ap === 'end') u.acted = true;
   }
 
   /** Free skills (e.g. Kick) the unit could use right now on at least one unit. */
@@ -421,7 +459,7 @@ export class Battle {
   /** How far a skill reaches from where the user stands (cones and self-centered areas included). */
   maxReach(u: Unit, s: SkillDef): number {
     if (s.target === 'self') return s.aoeRadius ?? 0;
-    if (s.target === 'cone') return s.cone?.radius ?? this.skillRange(u, s);
+    if (s.target === 'cone') return this.coneRadius(u, s);
     return this.skillRange(u, s);
   }
 
@@ -477,14 +515,40 @@ export class Battle {
     return path;
   }
 
-  /** Walk to `dest`. Enemy overwatch can shoot (and Intercept can stop) the unit on the way. */
+  /** Walk to `dest` with the movement AP. Enemy overwatch can shoot (and an interrupting watch can stop) the unit on the way. */
   move(u: Unit, dest: Point): MoveResult {
     if (!this.canMove(u)) throw new Error(`${u.character.name} can't move now`);
     const reach = this.reachable(u);
     if (!reach.has(key(dest.x, dest.y))) throw new Error('Destination not reachable');
-    const full = this.pathTo(reach, dest);
-    const result: MoveResult = { path: [], triggers: [], interrupted: false };
     u.moved = true;
+    u.walked = true;
+    u.ap -= 1;
+    return this.walk(u, this.pathTo(reach, dest));
+  }
+
+  /** Dash: after the regular move, spend the action AP (and its mana, cooldown) to move again. */
+  dash(u: Unit, dest: Point): MoveResult {
+    const id = this.skillIds(u).find((s) => SKILLS[s].target === 'move');
+    if (!id || !this.canUseSkill(u, id)) throw new Error(`${u.character.name} can't dash now`);
+    const reach = this.reachable(u);
+    if (!reach.has(key(dest.x, dest.y)) || (dest.x === u.x && dest.y === u.y)) throw new Error('Destination not reachable');
+    this.payFor(u, id);
+    return this.walk(u, this.pathTo(reach, dest));
+  }
+
+  /** Spend a skill's AP, mana and cooldown. Using a skill can't be undone. */
+  private payFor(u: Unit, skillId: string): void {
+    const skill = SKILLS[skillId];
+    this.spendAp(u, skill);
+    u.mp -= skill.mana;
+    // Cooldown N = can't be used during the next N turns. The counter ticks at the
+    // start of each of the unit's turns, so store N + 1 (it hits 0 on the turn it's usable).
+    if (skill.cooldown > 0) u.cooldowns[skillId] = skill.cooldown + 1;
+    u.locked = true;
+  }
+
+  private walk(u: Unit, full: Point[]): MoveResult {
+    const result: MoveResult = { path: [], triggers: [], interrupted: false };
     for (const step of full) {
       u.x = step.x;
       u.y = step.y;
@@ -515,10 +579,9 @@ export class Battle {
       if (w.team === mover.team || !w.overwatch || !mover.alive) continue;
       if (!w.overwatch.tiles.has(key(mover.x, mover.y))) continue;
       if (w.overwatch.los && !this.clearLine(w, mover, w.overwatch.los, w)) continue;
-      const skill = SKILLS[w.overwatch.skillId];
       const ow = w.overwatch;
       w.overwatch = null;
-      for (const part of skill.hits ?? []) {
+      for (const part of ow.hits) {
         if (!mover.alive) break;
         events.push(this.dealDamage(mover, this.hitDamage(w, mover, part), w.uid, 'overwatch'));
       }
@@ -527,9 +590,10 @@ export class Battle {
     return { events, interrupted };
   }
 
+  /** Only a regular move with nothing else done since (no skill, no overwatch shot) can be taken back. */
   canUndoMove(u: Unit): boolean {
     const occupant = this.unitAt(u.startPos.x, u.startPos.y);
-    return u.alive && u.moved && !u.acted && !u.locked && (!occupant || occupant === u);
+    return u.alive && u.walked && !u.acted && !u.locked && (!occupant || occupant === u);
   }
 
   undoMove(u: Unit): void {
@@ -537,11 +601,14 @@ export class Battle {
     u.x = u.startPos.x;
     u.y = u.startPos.y;
     u.moved = false;
+    u.walked = false;
+    u.ap += 1;
   }
 
-  /** End this unit's turn without acting. */
+  /** End this unit's turn, giving up any AP left. */
   wait(u: Unit): void {
-    if (!this.canAct(u)) throw new Error(`${u.character.name} has already acted`);
+    if (!this.canAct(u)) throw new Error(`${u.character.name}'s turn is already over`);
+    u.ap = 0;
     u.acted = true;
   }
 
@@ -570,6 +637,9 @@ export class Battle {
         return d >= minRange - EPS && withinRange(d, range);
       case 'cone':
         return d >= 1 - EPS && withinRange(d, skill.cone?.radius ?? range);
+      case 'move':
+        // Dash: anywhere the unit could walk to right now.
+        return !caster.engagedWith && (tile.x !== from.x || tile.y !== from.y) && this.reachable(caster).has(key(tile.x, tile.y));
       case 'emptyTile': {
         if (d < minRange - EPS || !withinRange(d, range)) return false;
         const occupant = this.occupantFrom(caster, from, tile);
@@ -616,6 +686,14 @@ export class Battle {
 
   /** Every tile the skill could be aimed at — the "attack box" shown in the UI. */
   rangeTiles(caster: Unit, skill: SkillDef, from: Point = caster): Point[] {
+    if (skill.target === 'move') {
+      // Dash: every tile the unit can walk to (one search, not one per tile).
+      if (caster.engagedWith) return [];
+      return [...this.reachable(caster).keys()].map((k) => {
+        const [x, y] = k.split(',').map(Number);
+        return { x, y };
+      }).filter((p) => p.x !== from.x || p.y !== from.y);
+    }
     const out: Point[] = [];
     for (let y = 0; y < this.map.height; y++) {
       for (let x = 0; x < this.map.width; x++) {
@@ -644,10 +722,15 @@ export class Battle {
         // The straight path from the user to the aimed tile, nearest first.
         return [...tilesBetween(from, tile), tile].filter((p) => this.inMap(p));
       case 'cone':
-        return coneTiles(this.map, from, tile, skill.cone!.angle, skill.cone!.radius);
+        return coneTiles(this.map, from, tile, skill.cone!.angle, this.coneRadius(caster, skill));
       default:
         return [tile];
     }
+  }
+
+  /** A cone's reach: its own radius, or the skill's range (a 'weapon' cone reaches as far as the weapon). */
+  coneRadius(u: Unit, skill: SkillDef): number {
+    return skill.cone?.radius ?? this.skillRange(u, skill);
   }
 
   /** Who stands on `p` if `caster` were standing on `from` instead of its real tile. */
@@ -673,6 +756,7 @@ export class Battle {
     switch (skill.target) {
       case 'cone':
       case 'emptyTile':
+      case 'move':
         return [];
       case 'self': {
         if (!skill.aoeRadius) return [caster];
@@ -829,9 +913,12 @@ export class Battle {
   perform(u: Unit, skillId: string, tile: Point): BattleEvent[] {
     const skill = SKILLS[skillId];
     if (!skill) throw new Error(`Unknown skill ${skillId}`);
-    if (!(isFree(skill) ? u.alive && u.team === this.phase : this.canAct(u))) throw new Error(`${u.character.name} has already acted`);
+    if (!this.canAct(u)) throw new Error(`${u.character.name}'s turn is over`);
+    if (skill.target === 'move') throw new Error('Use dash() to dash');
     if (!this.skillIds(u).includes(skillId)) throw new Error(`${u.character.name} doesn't have ${skill.name}`);
+    if (!this.canPay(u, skill)) throw new Error(`${skill.name} needs more AP`);
     if (!this.isReady(u, skillId)) throw new Error(`${skill.name} is on cooldown`);
+    if (u.mp < skill.mana) throw new Error(`${skill.name} needs ${skill.mana} mana`);
     if (!this.isUsable(u, skillId)) throw new Error(`${skill.name} needs a weapon`);
     const block = this.engagementBlock(u, skill, tile);
     if (block) throw new Error(block);
@@ -861,9 +948,11 @@ export class Battle {
     if (skill.cone) {
       u.overwatch = {
         skillId,
-        tiles: new Set(coneTiles(this.map, u, tile, skill.cone.angle, skill.cone.radius).map((p) => key(p.x, p.y))),
+        tiles: new Set(coneTiles(this.map, u, tile, skill.cone.angle, this.coneRadius(u, skill)).map((p) => key(p.x, p.y))),
         interrupt: skill.cone.interrupt,
-        los: skill.cone.los,
+        los: skill.cone.los ?? this.skillLos(u, skill),
+        // Without hits of its own, the watch fires the user's basic attack.
+        hits: skill.hits ?? this.basicAttack(u).hits ?? [],
       };
       events.push({ type: 'overwatch', source: u.uid, skillId });
     }
@@ -924,13 +1013,8 @@ export class Battle {
       }
     }
 
-    // Cooldown N = can't be used during the next N turns. The counter ticks at the
-    // start of each of the unit's turns, so store N + 1 (it hits 0 on the turn it's usable).
     events.push(...this.separationEvents());
-
-    if (skill.cooldown > 0) u.cooldowns[skillId] = skill.cooldown + 1;
-    if (isFree(skill)) u.locked = true;
-    else u.acted = true;
+    this.payFor(u, skillId);
     return events;
   }
 
@@ -962,7 +1046,9 @@ export class Battle {
     this.phase = team;
     const events: BattleEvent[] = [];
     for (const u of this.living(team)) {
+      u.ap = AP_PER_TURN;
       u.moved = false;
+      u.walked = false;
       u.acted = false;
       u.locked = false;
       u.startPos = { x: u.x, y: u.y };

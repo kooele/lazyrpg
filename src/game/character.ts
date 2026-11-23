@@ -1,4 +1,4 @@
-import { DEFAULT_WEAPON, PALETTE, TREE_SKILLS, WEAPONS, XP_PER_LEVEL, skillPointsForLevel } from '../data/content';
+import { BASIC_SKILLS, DEFAULT_WEAPON, PALETTE, TREE_SKILLS, WEAPONS, XP_PER_LEVEL, skillPointsForLevel } from '../data/content';
 import { ENEMIES } from '../data/enemies';
 import { STAT_CONFIG } from '../data/stats';
 import { BODY_MODELS, STAT_KEYS, type BodyModel, type BodyInvestment, type Character, type Look, type StatKey, type Stats, type Talents, type UnitModel } from '../data/types';
@@ -74,7 +74,7 @@ export function skillPoints(c: Character): number {
 }
 
 /**
- * Every skill the unit has. Adventurers: weapon skills, then picked tree skills.
+ * Every skill the unit has. Adventurers: weapon skills, picked tree skills, then the basic abilities (Dash, Overwatch).
  * Enemies: weapon skills (if any), the type's skills, weapon extras, then skills unlocked by level.
  * The first skill is always the basic attack.
  */
@@ -86,7 +86,7 @@ export function allSkills(c: Character): string[] {
     const fromWeapon = def.weaponSkillUse === 'basic' ? weaponSkills.slice(0, 1) : weaponSkills;
     return [...new Set([...fromWeapon, ...def.skills, ...(def.weaponSkills[c.weaponId] ?? []), ...byLevel])];
   }
-  return [...weaponSkills, ...c.skillIds.slice(0, skillPoints(c))];
+  return [...weaponSkills, ...c.skillIds.slice(0, skillPoints(c)), ...BASIC_SKILLS];
 }
 
 /** A new level-1 Adventurer. Without talents every stat grows at 100% (grade C). */

@@ -3,7 +3,7 @@ import { SKILLS, STATUSES, WEAPONS, isFree, isSupport, skillDetails, skillFormul
 import type { SkillDef } from '../data/types';
 import { bestAction, bestFreeAction, planTurn, shouldDisengage, shouldEscape } from '../game/ai';
 import {
-  Battle, deploymentTiles, generateEnemies, makeUnit,
+  AP_PER_TURN, Battle, deploymentTiles, generateEnemies, makeUnit,
   type BattleEvent, type MoveResult, type Unit,
 } from '../game/battle';
 import { makeRng } from '../game/character';
@@ -265,7 +265,7 @@ export class BattleScene extends Phaser.Scene {
     for (const u of this.battle.units) {
       if (!u.alive) continue;
       this.views.get(u.uid)?.container.setVisible(this.battle.canSee('player', u));
-      const done = u.team === this.battle.phase && u.acted;
+      const done = u.team === this.battle.phase && (u.acted || (u.ap === 0 && this.battle.usableFreeActions(u).length === 0));
       this.views.get(u.uid)?.container.setAlpha(done ? 0.5 : 1);
       this.drawHp(u);
     }
@@ -392,7 +392,7 @@ export class BattleScene extends Phaser.Scene {
     const heroes = b.living('player');
     heroes.forEach((u, i) => {
       const x = MAP_X + 190 + i * 52;
-      const ready = mine && !u.acted;
+      const ready = mine && !u.acted && u.ap > 0;
       if (u.uid === this.selectedUid) this.topBar.add(this.add.rectangle(x, 36, 44, 56, 0xffd166, 0.18).setStrokeStyle(2, 0xffd166));
       this.topBar.add(figure(this, x, 58, 46, u.character.appearance, u.character.weaponId).setAlpha(ready ? 1 : 0.35));
       const hit = this.add.zone(x, 36, 44, 56).setInteractive({ useHandCursor: true });
@@ -421,9 +421,12 @@ export class BattleScene extends Phaser.Scene {
       }));
       S.add(text(this, SIDE_X + 10, 70, this.unitSummary(u), { fontSize: '12px', lineSpacing: 3, wordWrap: { width: SIDE_W - 20 } }));
       if (u.team === 'player' && b.phase === 'player') {
-        const freeLeft = u.acted && b.usableFreeActions(u).length > 0;
-        const status = freeLeft ? 'Acted — free action available' : u.acted ? 'Done this turn' : u.moved ? 'Moved — can still act' : 'Ready to move and act';
-        S.add(text(this, SIDE_X + 10, 156, status, { fontSize: '12px', color: u.acted && !freeLeft ? COLORS.dim : COLORS.good }));
+        const freeLeft = !u.acted && u.ap === 0 && b.usableFreeActions(u).length > 0;
+        const done = u.acted || (u.ap === 0 && !freeLeft);
+        const status = done ? 'Done this turn' : freeLeft ? 'Out of AP — free action available'
+          : u.moved ? 'Moved — 1 AP left (act or Dash)' : 'Ready: move + act';
+        const pips = `${'●'.repeat(u.ap)}${'○'.repeat(Math.max(0, AP_PER_TURN - u.ap))}`;
+        S.add(text(this, SIDE_X + 10, 156, `AP ${pips}  ${status}`, { fontSize: '12px', color: done ? COLORS.dim : COLORS.good }));
       }
     }
 
@@ -435,17 +438,27 @@ export class BattleScene extends Phaser.Scene {
     let y = 184;
     if (u && u.team === 'player') {
       const canAct = interactive && b.canAct(u);
-      for (const id of b.skillIds(u)) {
+      const ids = b.skillIds(u);
+      // Two columns once the list gets long (weapon + tree skills + Dash and Overwatch).
+      const cols = ids.length > 7 ? 2 : 1;
+      const bw = cols === 2 ? 118 : SIDE_W;
+      const bh = cols === 2 ? 28 : 30;
+      ids.forEach((id, i) => {
         const usable = interactive && b.canUseSkill(u, id);
         const s = SKILLS[id];
         const cd = u.cooldowns[id] ?? 0;
-        const label = `${s.name}${isFree(s) ? ' · free' : ''}${cd > 0 ? ` (${cd})` : ''}`;
-        S.add(button(this, SIDE_X, y, SIDE_W, 30, label, () => this.selectAction(id), {
+        const cost = [isFree(s) ? 'free' : s.ap === 1 || s.ap === 2 ? `${s.ap}AP` : '', s.mana ? `${s.mana}MP` : ''].filter(Boolean).join(' ');
+        const label = cols === 2 ? `${s.name}${cd > 0 ? ` (${cd})` : ''}` : `${s.name}${cost ? ` · ${cost}` : ''}${cd > 0 ? ` (${cd})` : ''}`;
+        const bx = SIDE_X + (i % cols) * (bw + 4);
+        const by = y + Math.floor(i / cols) * (bh + 4);
+        S.add(button(this, bx, by, bw, bh, label, () => this.selectAction(id), {
           enabled: usable && cd <= 0,
           selected: this.mode === 'target' && this.action?.id === id,
-          fontSize: 14,
+          fontSize: cols === 2 ? 12 : 14,
           onHover: () => {
-            this.hoverText.setText(`${s.name} [${tagNames(s).join(', ')}]\n${skillFormula(s)}\n${skillDetails(s)}${cd > 0 ? `\nReady ${cd === 1 ? 'next turn' : `in ${cd} turns`}.` : ''}`);
+            const why = !interactive || usable ? '' : u.mp < s.mana ? `\nNot enough mana (${u.mp}/${s.mana}).`
+              : s.target === 'move' && !u.moved ? '\nUse your regular move first.' : !b.canPay(u, s) ? '\nNot enough AP.' : '';
+            this.hoverText.setText(`${s.name} [${tagNames(s).join(', ') || 'basic'}]\n${skillFormula(s) || s.description}\n${skillDetails(s)}${cd > 0 ? `\nReady ${cd === 1 ? 'next turn' : `in ${cd} turns`}.` : ''}${why}`);
             if (this.mode === 'select') {
               this.previewAction = s;
               this.drawOverlay();
@@ -458,8 +471,8 @@ export class BattleScene extends Phaser.Scene {
             }
           },
         }));
-        y += 34;
-      }
+      });
+      y += Math.ceil(ids.length / cols) * (bh + 4);
       const opp = b.opponentOf(u);
       if (opp) {
         S.add(button(this, SIDE_X, y + 2, 116, 30, 'Disengage', () => void this.disengageUnit(), {
@@ -495,7 +508,7 @@ export class BattleScene extends Phaser.Scene {
     if (opp) effects.push(`Engaged with ${opp.character.name}`);
     if (u.team === 'enemy') effects.push(`Skills: ${b.skillIds(u).map((id) => SKILLS[id].name).join(', ')}`);
     return [
-      `HP ${u.hp}/${u.stats.health}${shield ? ` +${shield} shield` : ''}${u.stats.mana > 0 ? `   MP ${u.stats.mana}` : ''}   Move ${b.stat(u, 'movement')}`,
+      `HP ${u.hp}/${u.stats.health}${shield ? ` +${shield} shield` : ''}${u.stats.mana > 0 ? `   MP ${u.mp}/${u.stats.mana}` : ''}   Move ${b.stat(u, 'movement')}`,
       `P.Atk ${b.stat(u, 'pAtk')}  M.Atk ${b.stat(u, 'mAtk')}  Def ${b.stat(u, 'defense')}${terrainDef ? ' (forest)' : ''}  Res ${b.resistChance(u)}%`,
       effects.join(', '),
     ].filter(Boolean).join('\n');
@@ -589,6 +602,7 @@ export class BattleScene extends Phaser.Scene {
     this.renderSidebar();
     this.drawOverlay();
     const how = this.action.target === 'cone' ? 'click to aim the cone'
+      : this.action.target === 'move' ? 'click a tile to dash to'
       : this.action.target === 'line' ? 'click a tile to thrust toward'
         : this.action.target === 'self' ? 'click inside the box to use it' : 'click a tile in the box';
     this.hoverText.setText(`${this.action.name}: ${how} (right-click / Esc to cancel).`);
@@ -714,6 +728,18 @@ export class BattleScene extends Phaser.Scene {
     this.action = null;
     this.casterUid = u.uid;
     this.refresh();
+    if (action.target === 'move') {
+      // Dash: a second walk, paid with the action AP.
+      const result = this.battle.dash(u, tile);
+      this.addLog(`${u.character.name} dashes (${action.mana} MP).`);
+      this.refresh();
+      await this.animateMove(u, result);
+      this.reach = new Map();
+      if (!u.alive) this.selectedUid = null;
+      this.casterUid = null;
+      this.afterUnitDone();
+      return;
+    }
     await this.resolve(u, action, tile);
     this.casterUid = null;
     this.afterUnitDone();
@@ -790,6 +816,7 @@ export class BattleScene extends Phaser.Scene {
 
   private preview(u: Unit, s: SkillDef, tile: Point): string {
     const b = this.battle;
+    if (s.target === 'move') return `→ Dash here (${s.mana} MP, uses your last AP)`;
     if (s.cone) return '→ Watch this cone until your next turn';
     if (s.teleport) return '→ Teleport here';
     const lines: string[] = [];
@@ -867,7 +894,7 @@ export class BattleScene extends Phaser.Scene {
         b.wait(u);
         this.addLog(`${u.character.name} advances.`);
       }
-      // Free actions also work after the main action.
+      // Free actions still work if the turn didn't end.
       if (!free && u.alive && !b.outcome()) {
         const late = bestFreeAction(b, u);
         if (late) await this.enemyUse(u, late.id, late.target);
