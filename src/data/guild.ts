@@ -55,7 +55,7 @@ export interface GuildConfig {
   startingGold: number;
   startingRenown: number;
   maxRoster: number;
-  rankShares: Record<Rank, number>;
+  rankWeights: Record<Rank, number>;
   ranks: { renown: Record<Exclude<Rank, 'D'>, number>; demotionDays: number; failedQuestRenown: number; deathRenown: number };
   /** First level of each adventurer rank above D. */
   adventurerRanks: Record<'C' | 'B' | 'A' | 'S', number>;
@@ -214,9 +214,8 @@ function parseResidences(v: unknown): GuildConfig['residences'] {
 
 export function parseGuildConfig(data: unknown): GuildConfig {
   const d = obj(data, '(root)');
-  const rankShares = perRank(d.rankShares, 'rankShares', 1);
-  const total = RANKS.reduce((s, r) => s + rankShares[r], 0);
-  if (Math.abs(total - 1) > 0.001) fail('rankShares', `must add up to 1 (they add up to ${total})`);
+  const rankWeights = perRank(d.rankWeights, 'rankWeights');
+  if (RANKS.reduce((s, r) => s + rankWeights[r], 0) <= 0) fail('rankWeights', 'at least one weight must be above 0');
   const rk = obj(d.ranks, 'ranks');
   const thresholds = numbers<Record<'C' | 'B' | 'A', number>>(rk.renown, 'ranks.renown', ['C', 'B', 'A']);
   if (!(thresholds.C < thresholds.B && thresholds.B < thresholds.A)) fail('ranks.renown', 'must grow from C to B to A');
@@ -243,7 +242,7 @@ export function parseGuildConfig(data: unknown): GuildConfig {
     startingGold: num(d.startingGold, 'startingGold'),
     startingRenown: num(d.startingRenown, 'startingRenown'),
     maxRoster: num(d.maxRoster, 'maxRoster', 1, 20),
-    rankShares,
+    rankWeights,
     ranks: {
       renown: thresholds,
       demotionDays: num(rk.demotionDays, 'ranks.demotionDays', 1, 365),

@@ -39,15 +39,15 @@ describe('guild.json', () => {
     bad.quests.C.count = [6, 3];
     expect(() => parseGuildConfig(bad)).toThrow(/quests\.C\.count\[1\]/);
     const shares = JSON.parse(JSON.stringify(guildJson));
-    shares.rankShares.A = 0.5;
-    expect(() => parseGuildConfig(shares)).toThrow(/rankShares.*add up to 1/);
+    shares.rankWeights = { A: 0, B: 0, C: 0, D: 0 };
+    expect(() => parseGuildConfig(shares)).toThrow(/rankWeights.*above 0/);
   });
 });
 
 describe('ranks and the leaderboard', () => {
-  it('splits parties 5% A, 20% B, 60% C, 15% D', () => {
-    expect(rankCounts(21)).toEqual({ A: 1, B: 4, C: 13, D: 3 });
-    expect(rankCounts(20)).toEqual({ A: 1, B: 4, C: 12, D: 3 });
+  it('splits parties by weight: A 5, B 20, C 60, D 25 out of 110', () => {
+    expect(rankCounts(21)).toEqual({ A: 1, B: 4, C: 11, D: 5 });
+    expect(rankCounts(20)).toEqual({ A: 1, B: 4, C: 10, D: 5 });
   });
 
   it('a new game: about 100 adventurers in 20 parties, and the player starts at D rank', () => {
@@ -941,6 +941,8 @@ describe('contracts', () => {
     // Broke on the next payday: the city takes the slave.
     for (let d = 0; d < 6; d++) advanceDay(s, makeRng(3 + d));
     s.gold = 0;
+    // Keep the market at its minimum stock so the day's sales can't sell the seized slave straight away.
+    s.market.slaves = s.market.slaves.slice(0, GUILD.market.stock[0] - 1);
     advanceDay(s, makeRng(10));
     expect(s.party.some((m) => m.id === c.id)).toBe(false);
     expect(s.market.slaves.some((o) => o.character.id === c.id)).toBe(true);
