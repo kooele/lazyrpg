@@ -1,10 +1,10 @@
 import Phaser from 'phaser';
 import { session } from '../game/session';
 import {
-  FRAME_CAP_OPTIONS, RESOLUTION_OPTIONS, loadGraphics, saveGraphics, uiScaleFor,
+  FRAME_CAP_OPTIONS, GPU_OPTIONS, RESOLUTION_OPTIONS, STARTUP_GRAPHICS, loadGraphics, saveGraphics, uiScaleFor,
   type GraphicsSettings, type ResolutionSetting,
 } from '../game/settings';
-import { ACTIVE_RESOLUTION, COLORS, HEIGHT, UI_SCALE, WIDTH, button, confirmDialog, panel, setupCamera, text } from '../ui/widgets';
+import { COLORS, HEIGHT, UI_SCALE, WIDTH, button, confirmDialog, panel, setupCamera, text } from '../ui/widgets';
 
 const fmtScale = (s: number) => `${Number.isInteger(s) ? s : s.toFixed(2).replace(/0$/, '')}x`;
 const pixels = (s: number) => `${Math.round(960 * s)}x${Math.round(640 * s)}`;
@@ -77,50 +77,47 @@ export class SettingsScene extends Phaser.Scene {
     const X = 24;
     const W = WIDTH - 48;
     const GAP = 8;
+    const row = <T>(y: number, h: number, opts: { id: T; label: string }[], cur: T, label: (o: { id: T; label: string }) => string, pick: (id: T) => void, fontSize: number) => {
+      const bw = (W - 32 - (opts.length - 1) * GAP) / opts.length;
+      opts.forEach((o, i) => button(this, X + 16 + i * (bw + GAP), y, bw, h, label(o), () => pick(o.id), { selected: cur === o.id, fontSize }));
+    };
 
-    // ---- resolution ----
-    let y = 70;
-    panel(this, X, y, W, 222);
-    text(this, X + 16, y + 12, 'Resolution', { fontSize: '20px', color: COLORS.gold });
-    text(this, X + 140, y + 17, `Now drawing ${pixels(UI_SCALE)} pixels (${fmtScale(UI_SCALE)}).`, { fontSize: '14px', color: COLORS.dim });
-    const n = RESOLUTION_OPTIONS.length;
-    const bw = (W - 32 - (n - 1) * GAP) / n;
-    RESOLUTION_OPTIONS.forEach((o, i) => {
-      const s = this.scaleOf(o.id);
-      button(this, X + 16 + i * (bw + GAP), y + 50, bw, 58, `${o.label}\n${pixels(s)}`, () => this.set({ resolution: o.id }), {
-        selected: this.settings.resolution === o.id, fontSize: 15,
-      });
-    });
+    // ---- resolution (on reload) ----
+    let y = 62;
+    panel(this, X, y, W, 168);
+    text(this, X + 16, y + 10, 'Resolution', { fontSize: '20px', color: COLORS.gold });
+    text(this, X + 140, y + 15, `Now drawing ${pixels(UI_SCALE)} pixels (${fmtScale(UI_SCALE)}). Applies on reload.`, { fontSize: '14px', color: COLORS.dim });
+    row(y + 44, 56, RESOLUTION_OPTIONS, this.settings.resolution, (o) => `${o.label}\n${pixels(this.scaleOf(o.id))}`, (id) => this.set({ resolution: id }), 15);
     const res = RESOLUTION_OPTIONS.find((o) => o.id === this.settings.resolution)!;
-    text(this, X + 16, y + 122, res.hint, { fontSize: '14px', wordWrap: { width: W - 32 } });
-    if (this.settings.resolution !== ACTIVE_RESOLUTION && this.stored) {
-      text(this, X + 16, y + 168, 'Applies when the game is reloaded.', { fontSize: '14px', color: COLORS.gold });
-      button(this, X + 280, y + 158, 150, 38, 'Reload now', () => this.reload(), { fontSize: 15 });
-    } else {
-      text(this, X + 16, y + 168, 'A change applies when the game is reloaded (the canvas and art are made at startup).', {
-        fontSize: '13px', color: COLORS.dim,
-      });
-    }
+    text(this, X + 16, y + 112, res.hint, { fontSize: '14px', wordWrap: { width: W - 32 } });
 
-    // ---- frame cap ----
-    y = 306;
-    panel(this, X, y, W, 156);
-    text(this, X + 16, y + 12, 'Frame rate cap', { fontSize: '20px', color: COLORS.gold });
-    this.fpsText = text(this, X + 180, y + 17, 'Measuring FPS…', { fontSize: '14px', color: COLORS.dim });
+    // ---- frame cap (at once) ----
+    y = 240;
+    panel(this, X, y, W, 128);
+    text(this, X + 16, y + 10, 'Frame rate cap', { fontSize: '20px', color: COLORS.gold });
+    this.fpsText = text(this, X + 180, y + 15, 'Measuring FPS…', { fontSize: '14px', color: COLORS.dim });
     this.fpsFrames = 0;
     this.fpsSince = performance.now();
-    const m = FRAME_CAP_OPTIONS.length;
-    const fw = (W - 32 - (m - 1) * GAP) / m;
-    FRAME_CAP_OPTIONS.forEach((o, i) => {
-      button(this, X + 16 + i * (fw + GAP), y + 50, fw, 44, o.label, () => this.set({ frameCap: o.id }), {
-        selected: this.settings.frameCap === o.id, fontSize: 16,
-      });
-    });
+    row(y + 44, 40, FRAME_CAP_OPTIONS, this.settings.frameCap, (o) => o.label, (id) => this.set({ frameCap: id }), 16);
     const cap = FRAME_CAP_OPTIONS.find((o) => o.id === this.settings.frameCap)!;
-    text(this, X + 16, y + 108, `${cap.hint} Applies at once.`, { fontSize: '14px', wordWrap: { width: W - 32 } });
+    text(this, X + 16, y + 94, `${cap.hint} Applies at once.`, { fontSize: '14px', wordWrap: { width: W - 32 } });
 
+    // ---- graphics chip (on reload) ----
+    y = 378;
+    panel(this, X, y, W, 148);
+    text(this, X + 16, y + 10, 'Graphics chip', { fontSize: '20px', color: COLORS.gold });
+    text(this, X + 168, y + 15, 'For laptops with two graphics chips. Applies on reload.', { fontSize: '14px', color: COLORS.dim });
+    row(y + 44, 40, GPU_OPTIONS, this.settings.gpu, (o) => o.label, (id) => this.set({ gpu: id }), 16);
+    const gpu = GPU_OPTIONS.find((o) => o.id === this.settings.gpu)!;
+    text(this, X + 16, y + 94, `${gpu.hint} The browser may ignore this.`, { fontSize: '14px', wordWrap: { width: W - 32 } });
+
+    // ---- reload ----
+    const pending = this.settings.resolution !== STARTUP_GRAPHICS.resolution || this.settings.gpu !== STARTUP_GRAPHICS.gpu;
     if (!this.stored) {
-      text(this, X, 478, 'This browser won\'t store settings, so they last only until the page is closed.', { fontSize: '13px', color: COLORS.bad });
+      text(this, X, 540, 'This browser won\'t store settings, so they last only until the page is closed.', { fontSize: '13px', color: COLORS.bad });
+    } else if (pending) {
+      text(this, X, 546, 'Reload the game to apply the new resolution or graphics chip.', { fontSize: '14px', color: COLORS.gold });
+      button(this, X + 430, 536, 150, 36, 'Reload now', () => this.reload(), { fontSize: 15 });
     }
 
     button(this, 24, HEIGHT - 54, 180, 40, 'Back', () => this.scene.start(this.returnTo), { fontSize: 16 });

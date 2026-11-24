@@ -14,7 +14,7 @@ import { MainMenuScene } from './scenes/MainMenuScene';
 import { SaveLoadScene } from './scenes/SaveLoadScene';
 import { GlossaryScene } from './scenes/GlossaryScene';
 import { session } from './game/session';
-import { loadGraphics } from './game/settings';
+import { STARTUP_GRAPHICS } from './game/settings';
 import { SettingsScene } from './scenes/SettingsScene';
 import { COLORS, HEIGHT, UI_SCALE, WIDTH } from './ui/widgets';
 
@@ -27,7 +27,9 @@ const game = new Phaser.Game({
   backgroundColor: COLORS.bg,
   antialias: true,
   // A turn-based game gains little past 60 frames a second; the player picks the cap in Settings.
-  fps: { limit: loadGraphics().frameCap },
+  fps: { limit: STARTUP_GRAPHICS.frameCap },
+  // Which graphics chip to ask for on computers with two (Settings).
+  render: { powerPreference: STARTUP_GRAPHICS.gpu },
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
   scene: [BootScene, MainMenuScene, CityScene, GuildScene, MarketScene, InnScene, EstateScene, NegotiateScene, PartyScene, DemoCampScene, CharacterCreatorScene, SaveLoadScene, GlossaryScene, SettingsScene, BattleScene],
 });
