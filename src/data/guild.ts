@@ -37,11 +37,11 @@ export interface InnConfig {
   drinksMorale: number;
 }
 
-/** Where a member spends a night: an inn, a residence (by ring), outside (free), or on the road during a quest. */
+/** Where a member spends a night: an inn, a residence (by ring), the stables ('outside', kept for saves), or on the road during a quest. */
 export type Lodging = InnTier | Ring | 'outside' | 'road';
 /** A night in the city (not on the road). */
 export type CityLodging = Exclude<Lodging, 'road'>;
-/** Night quality (for adventurers' expectations): outside 0, then each inn or residence 1-3. */
+/** Night quality (for adventurers' expectations): the stables 0, then each inn or residence 1-3. */
 export const LODGING_QUALITY: Record<CityLodging, number> = { outside: 0, standard: 1, outer: 1, highEnd: 2, middle: 2, luxury: 3, inner: 3 };
 export const isResidence = (l: Lodging): l is Ring => (RINGS as readonly string[]).includes(l);
 
@@ -68,7 +68,7 @@ export interface GuildConfig {
   threat: ThreatConfig;
   food: Record<FoodTier, { name: string; pricePerPerson: number }> & { default: FoodTier; relationshipAbove: number; relationshipBelowPerStep: number };
   inns: Record<InnTier, InnConfig>;
-  lodging: { expectedQuality: Record<'S' | Rank, number>; slaveExpectedQuality: number; relationshipAbove: number; relationshipBelowPerStep: number; outsidePerPerson: number };
+  lodging: { expectedQuality: Record<'S' | Rank, number>; slaveExpectedQuality: number; relationshipAbove: number; relationshipBelowPerStep: number; stablesPerPerson: number };
   residences: Record<Ring, { name: string; price: number }> & { sellShare: number; capacity: number };
   condition: {
     maxHealthLoss: number;
@@ -293,7 +293,7 @@ export function parseGuildConfig(data: unknown): GuildConfig {
     food: parseFood(d.food),
     inns: parseInns(d.inns),
     lodging: {
-      ...numbers<Omit<GuildConfig['lodging'], 'expectedQuality'>>(d.lodging, 'lodging', ['relationshipAbove', 'relationshipBelowPerStep', 'outsidePerPerson']),
+      ...numbers<Omit<GuildConfig['lodging'], 'expectedQuality'>>(d.lodging, 'lodging', ['relationshipAbove', 'relationshipBelowPerStep', 'stablesPerPerson']),
       expectedQuality: numbers(obj(d.lodging, 'lodging').expectedQuality, 'lodging.expectedQuality', [...RANKS], 3),
       slaveExpectedQuality: num(obj(d.lodging, 'lodging').slaveExpectedQuality ?? 0, 'lodging.slaveExpectedQuality', 0, 3),
     },

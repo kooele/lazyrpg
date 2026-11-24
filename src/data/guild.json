@@ -45,27 +45,27 @@
   },
   "food": {
     "_comment": "Food for every member the party feeds (the main character, slaves, and companions with food & lodging in their contract), set per member in Manage Party. Each day, a fed member costs that tier's pricePerPerson. Quality: poor 0, common 1, fine 2, luxury 3, compared with lodging.expectedQuality for their rank like a night's lodging: companions and slaves gain relationshipAbove when they eat better than they expect and lose relationshipBelowPerStep for each step worse. default is the tier for members nobody has set.",
-    "poor": { "name": "Poor", "pricePerPerson": 2 },
+    "poor": { "name": "Poor", "pricePerPerson": 3 },
     "common": { "name": "Common", "pricePerPerson": 6 },
     "fine": { "name": "Fine", "pricePerPerson": 12 },
-    "luxury": { "name": "Luxury", "pricePerPerson": 20 },
+    "luxury": { "name": "Luxury", "pricePerPerson": 24 },
     "default": "common",
     "relationshipAbove": 1,
     "relationshipBelowPerStep": 2
   },
   "inns": {
-    "standard": { "name": "Sleeping Griffin Inn", "pricePerPerson": 9, "drinksPerPerson": 4, "drinksMorale": 8 },
-    "highEnd": { "name": "Silver Lantern Inn", "pricePerPerson": 18, "drinksPerPerson": 8, "drinksMorale": 12 },
-    "luxury": { "name": "Gilded Crown Inn", "pricePerPerson": 30, "drinksPerPerson": 12, "drinksMorale": 15 }
+    "standard": { "name": "Sleeping Griffin Inn", "pricePerPerson": 12, "drinksPerPerson": 4, "drinksMorale": 8 },
+    "highEnd": { "name": "Silver Lantern Inn", "pricePerPerson": 24, "drinksPerPerson": 8, "drinksMorale": 12 },
+    "luxury": { "name": "Gilded Crown Inn", "pricePerPerson": 48, "drinksPerPerson": 12, "drinksMorale": 15 }
   },
   "_inns": "pricePerPerson: a night's lodging for one member assigned to the inn (Manage Party). drinksPerPerson / drinksMorale: a round of drinks for the whole party (once a day) costs drinksPerPerson per member and raises everyone's Morale by drinksMorale.",
   "lodging": {
-    "_comment": "Every day ends (End Day on the city screen) with a night for each housed member where they lodge, set per member in Manage Party: an inn, a residence the party owns (free; at most residences.capacity residents each), or outside (outsidePerPerson). Night quality: outside 0; the Sleeping Griffin or the Outer City House 1; the Silver Lantern or the Inner City Townhouse 2; the Gilded Crown or the Inner City Mansion 3. expectedQuality is what an adventurer of each rank (from their level) expects (common food and an inn at every rank for now); slaves expect slaveExpectedQuality instead, whatever their rank (poor food, outside). Each night, housed companions (food & lodging in their contract) and slaves gain relationshipAbove when they sleep better than they expect, and lose relationshipBelowPerStep for each step worse. Nights on the road during multi-day quests are free (food is still paid) and don't count.",
+    "_comment": "Every day ends (End Day on the city screen) with a night for each housed member where they lodge, set per member in Manage Party: an inn, a residence the party owns (free; at most residences.capacity residents each), or the stables (stablesPerPerson). Night quality: the stables 0; the Sleeping Griffin or the Outer City House 1; the Silver Lantern or the Inner City Townhouse 2; the Gilded Crown or the Inner City Mansion 3. expectedQuality is what an adventurer of each rank (from their level) expects (common food and an inn at every rank for now); slaves expect slaveExpectedQuality instead, whatever their rank (poor food, the stables). Each night, housed companions (food & lodging in their contract) and slaves gain relationshipAbove when they sleep better than they expect, and lose relationshipBelowPerStep for each step worse. Nights on the road during multi-day quests are free (food is still paid) and don't count.",
     "expectedQuality": { "D": 1, "C": 1, "B": 1, "A": 1, "S": 1 },
     "slaveExpectedQuality": 0,
     "relationshipAbove": 2,
     "relationshipBelowPerStep": 3,
-    "outsidePerPerson": 0
+    "stablesPerPerson": 6
   },
   "residences": {
     "_comment": "Homes the party can buy and sell at the Estate Office (Inner City): one in the Outer City (key outer) and two in the Inner City (keys middle and inner; the keys are kept for old saves). Nights there are free and count as quality 1, 2 and 3 (see lodging). Each houses at most capacity residents, whatever its tier. The office buys a residence back for sellShare of its price.",

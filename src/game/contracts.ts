@@ -59,7 +59,7 @@ export function mercenaryRates(level: number, greed: number, talent = 1): { fee:
 export function foodLodgingWeekly(level: number): number {
   const q = GUILD.lodging.expectedQuality[adventurerRank(level)];
   const food = GUILD.food[FOOD_TIERS[q]].pricePerPerson;
-  const night = q === 0 ? GUILD.lodging.outsidePerPerson : GUILD.inns[INN_TIERS[q - 1]].pricePerPerson;
+  const night = q === 0 ? GUILD.lodging.stablesPerPerson : GUILD.inns[INN_TIERS[q - 1]].pricePerPerson;
   return (food + night) * 7;
 }
 

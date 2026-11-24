@@ -67,11 +67,11 @@ export function expectedQuality(c: Character): number {
 }
 
 /** What a night quality means, for the UI. */
-export const QUALITY_TEXT = ['sleeping outside', 'an inn or the Outer City House', 'a high-end inn or the Inner City Townhouse', 'a luxury inn or the Inner City Mansion'];
+export const QUALITY_TEXT = ['the stables', 'an inn or the Outer City House', 'a high-end inn or the Inner City Townhouse', 'a luxury inn or the Inner City Mansion'];
 
 /** Name of a place to spend the night. */
 export function lodgingName(l: Lodging): string {
-  if (l === 'outside') return 'outside';
+  if (l === 'outside') return 'the stables';
   if (l === 'road') return 'on the road';
   return isResidence(l) ? `your ${GUILD.residences[l].name}` : GUILD.inns[l].name;
 }
@@ -84,8 +84,8 @@ export function lodgingRelationship(c: Character, where: CityLodging): number {
 }
 
 /**
- * Where a member sleeps in the city: as set in Manage Party, else outside. A residence the party no longer owns
- * counts as outside.
+ * Where a member sleeps in the city: as set in Manage Party, else the stables ('outside'). A residence the party
+ * no longer owns counts as the stables.
  */
 export function lodgingOf(state: GameState, c: Pick<Character, 'id'>): CityLodging {
   const l = state.lodging?.[c.id] ?? 'outside';

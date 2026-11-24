@@ -14,14 +14,14 @@ A small turn-based tactical RPG that runs in the browser, built with [Phaser 4](
 
 The management and simulation side of the game (Arch City, the guild, contracts, days) is the **Strategic Layer**; battles are the **Tactical Layer**.
 
-Time passes in days. **End Day** (the city's bottom bar) ends the day: everyone the party houses (the main character, slaves, and companions whose contract includes food and lodging) spends the night **where they lodge**, set per member in **Manage Party**: **outside**, one of the three **inns**, or a **residence** the party owns. Each member pays for their own night. A quest doesn't end the day: the party comes back in the evening, and you can only go on **one quest a day** (you can accept the next one, but set out tomorrow). A quest that takes several days spends the nights before the last on the road. Lodging:
+Time passes in days. **End Day** (the city's bottom bar) ends the day: everyone the party houses (the main character, slaves, and companions whose contract includes food and lodging) spends the night **where they lodge**, set per member in **Manage Party**: the **stables**, one of the three **inns**, or a **residence** the party owns. Each member pays for their own night. A quest doesn't end the day: the party comes back in the evening, and you can only go on **one quest a day** (you can accept the next one, but set out tomorrow). A quest that takes several days spends the nights before the last on the road. Lodging:
 
 | Where | Per person per night | Quality |
 |---|---|---|
-| Outside (everyone's default) | free | 0 |
-| Sleeping Griffin Inn (Outer City) | 9 gold | 1 |
-| Silver Lantern Inn (Inner City, high-end) | 18 gold | 2 |
-| Gilded Crown Inn (Inner City, luxury) | 30 gold | 3 |
+| Stables (everyone's default) | 6 gold | 0 |
+| Sleeping Griffin Inn (Outer City) | 12 gold | 1 |
+| Silver Lantern Inn (Inner City, high-end) | 24 gold | 2 |
+| Gilded Crown Inn (Inner City, luxury) | 48 gold | 3 |
 | Your residence (Outer City House / Inner City Townhouse / Mansion), up to 6 residents each | free | 1 / 2 / 3 |
 | On the road (multi-day quests) | free (food is still paid) | doesn't count |
 
@@ -31,16 +31,16 @@ Time passes in days. **End Day** (the city's bottom bar) ends the day: everyone 
 
 | Food | Per person per day | Quality |
 |---|---|---|
-| Poor | 2 gold | 0 |
+| Poor | 3 gold | 0 |
 | Common (default) | 6 gold | 1 |
 | Fine | 12 gold | 2 |
-| Luxury | 20 gold | 3 |
+| Luxury | 24 gold | 3 |
 
 Companions whose contract doesn't include food and lodging find their own (their food and lodging choices are greyed out), as do mercenaries.
 
-**Residences** are bought and sold at the **Estate Office** (Inner City): the **Outer City House 4,000 gold**, the **Inner City Townhouse 10,000** and the **Inner City Mansion 25,000**; the office buys one back for 70% of its price. Each houses **at most 6 residents** whatever its tier (`residences.capacity`), and nights there are free and count as good as the Sleeping Griffin, the Silver Lantern and the Gilded Crown respectively. Each residence has its own pin on the map showing who lives there (the Estate Office lists them too). Selling a residence sends its residents outside until you move them.
+**Residences** are bought and sold at the **Estate Office** (Inner City): the **Outer City House 4,000 gold**, the **Inner City Townhouse 10,000** and the **Inner City Mansion 25,000**; the office buys one back for 70% of its price. Each houses **at most 6 residents** whatever its tier (`residences.capacity`), and nights there are free and count as good as the Sleeping Griffin, the Silver Lantern and the Gilded Crown respectively. Each residence has its own pin on the map showing who lives there (the Estate Office lists them too). Selling a residence sends its residents to the stables until you move them.
 
-**Expectations**: adventurers of every rank expect **common food and an inn** (or the Outer City House); **slaves** expect only **poor food and a night outside**, whatever their rank (`lodging.expectedQuality` per rank and `lodging.slaveExpectedQuality` in `guild.json`). Each night, every companion the party houses gains **+2 relationship** if they slept better than they expect, and loses **3 per quality step** worse: a companion loses 3 for a night outside, and a slave gains 2 for a night at an inn. Food works the same way against the same expectations (common for adventurers, poor for slaves), at **+1** for better food and **−2 per step** worse; slaves count too. (`lodging`, `food` and `residences` in `guild.json`.)
+**Expectations**: adventurers of every rank expect **common food and an inn** (or the Outer City House); **slaves** expect only **poor food and a night in the stables**, whatever their rank (`lodging.expectedQuality` per rank and `lodging.slaveExpectedQuality` in `guild.json`). Each night, every companion the party houses gains **+2 relationship** if they slept better than they expect, and loses **3 per quality step** worse: a companion loses 3 for a night in the stables, and a slave gains 2 for a night at an inn. Food works the same way against the same expectations (common for adventurers, poor for slaves), at **+1** for better food and **−2 per step** worse; slaves count too. (`lodging`, `food` and `residences` in `guild.json`.)
 
 ### Health, Morale and the schedule
 
@@ -122,7 +122,7 @@ The rival parties are simulated day by day. A new game starts them spread over t
 | **Companion** | Guild Hall, after negotiating a contract | Base pay every 7th day, a % of each reward, food & lodging if included | Permanent while the contract runs |
 | **Slave** | Slave Market, or a prisoner registered at the city gate | Food & lodging, plus a weekly property tax (10% of their market value: half a companion's base wage) | Permanent; can be sold to the market; seized by the city if the tax goes unpaid |
 
-**Companion contracts** have four terms: **base pay**, **loot cut** (% of each quest reward), **food and lodging included** (worth to them what the food and night their rank expects would cost you: 105 gold a week at every rank), and **term length** (2, 4, 8 or 12 weeks). Candidates' base pay starts from **100 + 20 × level × talent** gold a week, then goes up with greed, a little more for short terms and less for long ones. They value a loot cut by what a party of your rank usually earns (150 gold a week at D, 2000 at A, 4500 at S). An offer close to what they want gets a counter-offer; a low one offends them. Each rejected offer uses up patience, and once it runs out they won't talk to you for a week.
+**Companion contracts** have four terms: **base pay**, **loot cut** (% of each quest reward), **food and lodging included** (worth to them what the food and night their rank expects would cost you: 126 gold a week at every rank), and **term length** (2, 4, 8 or 12 weeks). Candidates' base pay starts from **100 + 20 × level × talent** gold a week, then goes up with greed, a little more for short terms and less for long ones. They value a loot cut by what a party of your rank usually earns (150 gold a week at D, 2000 at A, 4500 at S). An offer close to what they want gets a counter-offer; a low one offends them. Each rejected offer uses up patience, and once it runs out they won't talk to you for a week.
 
 Companions (and slaves, see above) have a **relationship** score (0–100). It goes up by 6 for every quest completed together, drops if you can't pay them, and lowers their demands when you renew: by up to 30% at 100. When a contract ends, they sit out of quests and you have 3 days to **renew** it (Manage Party) before they leave. Walking out of a renewal ends the contract on the spot. Unpaid companions lose 20 relationship each payday, and quit when it reaches 0.
 

@@ -269,7 +269,7 @@ export class PartyScene extends Phaser.Scene {
     const ly = fy + 32;
     const where = lodgingOf(state, c);
     text(this, X + 16, ly, 'Lodging', { fontSize: '13px', color: fed ? COLORS.gold : COLORS.dim });
-    text(this, X + 16, ly + 16, fed ? (c.id === state.mainId ? 'no complaints' : `expects ${['nothing', 'an inn', 'high-end', 'luxury'][expectedQuality(c)]}`) : 'finds their own', {
+    text(this, X + 16, ly + 16, fed ? (c.id === state.mainId ? 'no complaints' : `expects ${['the stables', 'an inn', 'high-end', 'luxury'][expectedQuality(c)]}`) : 'finds their own', {
       fontSize: '10px', color: COLORS.dim,
     });
     button(this, X + 110, ly - 2, 300, 28, fed ? `${lodgingLabel(state, where)}  ▾` : '—', () => this.lodgingMenu(c, X + 110, ly - 2), { fontSize: 12, enabled: fed });
@@ -327,7 +327,7 @@ export class PartyScene extends Phaser.Scene {
   }
 
   /**
-   * Pick where `c` lodges: outside, one of the inns, or a residence the party owns (with room). Opens above (x, y);
+   * Pick where `c` lodges: the stables, one of the inns, or a residence the party owns (with room). Opens above (x, y);
    * clicking outside it closes it.
    */
   private lodgingMenu(c: Character, x: number, y: number): void {
@@ -431,9 +431,9 @@ export class PartyScene extends Phaser.Scene {
   }
 }
 
-/** "Silver Lantern Inn · 30g", "Outer City House · 3/6" (residents), "Outside · free". */
+/** "Silver Lantern Inn · 24g", "Outer City House · 3/6" (residents), "Stables · 6g". */
 function lodgingLabel(state: GameState, where: CityLodging): string {
-  if (where === 'outside') return GUILD.lodging.outsidePerPerson ? `Outside · ${GUILD.lodging.outsidePerPerson}g` : 'Outside · free';
+  if (where === 'outside') return GUILD.lodging.stablesPerPerson ? `Stables · ${GUILD.lodging.stablesPerPerson}g` : 'Stables · free';
   if (isResidence(where)) return `${GUILD.residences[where].name} · ${residents(state, where).length}/${GUILD.residences.capacity}`;
   return `${GUILD.inns[where].name} · ${lodgingPrice(where)}g`;
 }

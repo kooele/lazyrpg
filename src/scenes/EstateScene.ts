@@ -61,7 +61,7 @@ export class EstateScene extends Phaser.Scene {
         });
         button(this, x + 14, HEIGHT - 120, w - 28, 40, 'Go there', () => this.scene.start('Inn', { ring }), { fontSize: 14, fill: 0x2c4a2f });
         button(this, x + 14, HEIGHT - 72, w - 28, 40, `Sell for ${residenceSellPrice(ring)} gold`, () => confirmDialog(this,
-          `Sell the ${home.name} for ${residenceSellPrice(ring)} gold?${residents(state, ring).length ? '\nIts residents will sleep outside until you move them.' : ''}`, () => {
+          `Sell the ${home.name} for ${residenceSellPrice(ring)} gold?${residents(state, ring).length ? '\nIts residents will sleep in the stables until you move them.' : ''}`, () => {
             const gold = sellResidence(state, ring);
             markDirty();
             this.render();

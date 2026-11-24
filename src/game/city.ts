@@ -354,9 +354,9 @@ export function boarders(state: GameState): Character[] {
   return state.party.filter((c) => c.contract?.type === 'main' || c.contract?.type === 'slave' || (isCompanion(c) && c.contract.foodLodging));
 }
 
-/** A night's lodging for one member at `where`: an inn's price, free in a residence, outsidePerPerson outside. */
+/** A night's lodging for one member at `where`: an inn's price, free in a residence, stablesPerPerson in the stables ('outside'). */
 export function lodgingPrice(where: CityLodging): number {
-  if (where === 'outside') return GUILD.lodging.outsidePerPerson;
+  if (where === 'outside') return GUILD.lodging.stablesPerPerson;
   return isResidence(where) ? 0 : GUILD.inns[where].pricePerPerson;
 }
 
@@ -416,7 +416,7 @@ export function buyResidence(state: GameState, ring: Ring): string | null {
 /** What the Estate Office pays for a residence. */
 export const residenceSellPrice = (ring: Ring) => Math.round(GUILD.residences[ring].price * GUILD.residences.sellShare);
 
-/** Sell a residence back to the Estate Office; its residents sleep outside until moved. Returns the gold received (0 if not owned). */
+/** Sell a residence back to the Estate Office; its residents sleep in the stables until moved. Returns the gold received (0 if not owned). */
 export function sellResidence(state: GameState, ring: Ring): number {
   if (!state.residences.includes(ring)) return 0;
   const gold = residenceSellPrice(ring);
@@ -424,7 +424,7 @@ export function sellResidence(state: GameState, ring: Ring): number {
   for (const c of moved) delete state.lodging[c.id];
   state.residences = state.residences.filter((r) => r !== ring);
   state.gold += gold;
-  note(state, `Sold the ${GUILD.residences[ring].name} to the Estate Office for ${gold} gold.${moved.length ? ` ${moved.map((c) => c.name).join(', ')} sleep${moved.length === 1 ? 's' : ''} outside until you find them somewhere.` : ''}`);
+  note(state, `Sold the ${GUILD.residences[ring].name} to the Estate Office for ${gold} gold.${moved.length ? ` ${moved.map((c) => c.name).join(', ')} sleep${moved.length === 1 ? 's' : ''} in the stables until you find them somewhere.` : ''}`);
   return gold;
 }
 
@@ -534,7 +534,7 @@ export function advanceDay(state: GameState, rng: Rng, night: 'road' | 'city' = 
         const d = lodgingRelationship(c, where);
         if (!d) continue;
         changeRelationship(c, d);
-        moods.push(`${c.name} ${d > 0 ? '+' : ''}${d} (${where === 'outside' ? 'slept outside' : `at ${lodgingName(where)}`}; expects ${QUALITY_TEXT[expectedQuality(c)]})`);
+        moods.push(`${c.name} ${d > 0 ? '+' : ''}${d} (${where === 'outside' ? 'slept in the stables' : `at ${lodgingName(where)}`}; expects ${QUALITY_TEXT[expectedQuality(c)]})`);
       }
       if (moods.length) say(`The night. Relationship: ${moods.join(', ')}.`);
     }
