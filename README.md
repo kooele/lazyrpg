@@ -4,9 +4,9 @@ A small turn-based tactical RPG that runs in the browser, built with [Phaser 4](
 
 ## How the game works
 
-1. **Main menu**: New Game, Continue, Save Game, Load Game, and **Quick Battle (Demo)**: the original game on its own. Recruit up to 4 Adventurers for free at a camp (any look, weapon and skills), then fight stages 1 to 5; every victory is worth exactly one level, and clearing stage 5 completes the demo. The **Enemies** slider at camp raises the difficulty: it multiplies the encounter's size from 1x to 5x in 0.5 steps (5x at stage 1 is 30 rats, whatever the size of your party). Big encounters deploy further toward the middle of the map. The demo is separate from your Arch City campaign and isn't saved.
+1. **Main menu**: New Game, Continue, Save Game, Load Game, **Guide**, and **Quick Battle (Demo)**: the original game on its own. Recruit up to 4 Adventurers for free at a camp (any look, weapon and skills), then fight stages 1 to 5; every victory is worth exactly one level, and clearing stage 5 completes the demo. The **Enemies** slider at camp raises the difficulty: it multiplies the encounter's size from 1x to 5x in 0.5 steps (5x at stage 1 is 30 rats, whatever the size of your party). Big encounters deploy further toward the middle of the map. The demo is separate from your Arch City campaign and isn't saved.
 2. **Your character**: a new game starts by creating your main character (name, sex, skin, face, hair, hair colour, clothes colour, weapon, skills) and naming your party. The main character is permanent: they can't be dismissed, but they can be **benched** (Manage Party) to rest in the city while the rest of the party goes on quests without them.
-3. **Arch City**: the hub is a map of the walled city (`public/art/city/arch-city.webp`) with two tabs: the **Outer City**, between the outer and inner walls and out to the harbour (Adventurer Guild, the domed hall in the south-west; Docks, Marketplace, Slave Market, Slums, Customs Office, Tailor, Auction House, Church, Sleeping Griffin Inn, Outer City House), and the **Inner City**, inside the inner wall (Lord's Manor, Central Church, Central Government Office, Library, Estate Office, Silver Lantern Inn, Gilded Crown Inn, Inner City Townhouse, Inner City Mansion). Click a pin on the map or a button below it. Open so far: the **Adventurer Guild**, the **Slave Market**, the **Estate Office**, the three **inns** and the three **residences**; the rest are greyed out. **Manage Party** (bottom bar) handles your members, their schedule, food and lodging, **End Day** ends the day, and the side panel sets out on an accepted quest. See [Arch City and the guild](#arch-city-and-the-adventurer-guild).
+3. **Arch City**: the hub is a map of the walled city (`public/art/city/arch-city.webp`) with two tabs: the **Outer City**, between the outer and inner walls and out to the harbour (Adventurer Guild, the domed hall in the south-west; Docks, Marketplace, Slave Market, Slums, Customs Office, Tailor, Auction House, Church, Sleeping Griffin Inn, Outer City House), and the **Inner City**, inside the inner wall (Lord's Manor, Central Church, Central Government Office, Library, Estate Office, Silver Lantern Inn, Gilded Crown Inn, Inner City Townhouse, Inner City Mansion). Click a pin on the map or a button below it. Open so far: the **Adventurer Guild**, the **Slave Market**, the **Estate Office**, the three **inns** and the three **residences**; the rest are greyed out. **Manage Party** (bottom bar) handles your members, their schedule, food and lodging, **End Day** ends the day, and the side panel sets out on an accepted quest. The **Guide** (main menu and the city's bottom bar) explains the less obvious rules by topic (city life, quests and ranks, experience, party members, slaves, battle), with numbers read from the game data so it stays current (`src/game/glossary.ts`). See [Arch City and the guild](#arch-city-and-the-adventurer-guild).
 4. **Adventurers**: There are no fixed classes. Every party member is an Adventurer, and you build them by mixing a weapon with picks from the skill trees. Up to 4 go on each quest (the lineup); the party can have up to 8 members.
 5. **Tactical battle**: XCOM-style alternating turns. On your turn, every Adventurer has **2 AP** (action points), a movement AP and an action AP, and can spend them in any order (click a unit or press Tab). See [Action points and mana](#action-points-and-mana). Skills sit on the **skill bar** under the map: press **1–0** (or click a slot) to use one. Each slot shows its AP cost along the bottom (**Ends Turn**, **1AP**, **2AP** or **free**) and its mana cost at the top. By default slot 1 is the basic attack, 2 Overwatch, 3 Dash, and the rest follow; newly learned skills go after the last used slot. **Drag a slot onto another** to swap them (the layout is saved per character). With more than 10 skills the bar gets more pages: flip with ▲ ▼ or **[ ]**, and while dragging, hover ▲ ▼ to carry a skill to another page (or to a new empty one). The battle log is in the sidebar. Hover a skill to see its range box; any tile in range can be targeted. The map is 18×13 tiles (set in `stats.json`). Terrain: grass costs 4 Movement, forest 6 (and gives +20 Defense), river 8. Rock and deep water block movement, and rock blocks line of sight.
 
@@ -14,14 +14,14 @@ A small turn-based tactical RPG that runs in the browser, built with [Phaser 4](
 
 The management and simulation side of the game (Arch City, the guild, contracts, days) is the **Strategic Layer**; battles are the **Tactical Layer**.
 
-Time passes in days. **End Day** (the city's bottom bar) ends the day: everyone the party houses (the main character, slaves, and companions whose contract includes food and lodging) spends the night **where they lodge**, set per member in **Manage Party**: **outside**, one of the three **inns**, or a **residence** the party owns. Each member pays for their own night. A quest doesn't end the day: the party comes back in the evening, and you can only go on **one quest a day** (you can accept the next one, but set out tomorrow). A quest that takes several days spends the nights before the last on the road. Lodging:
+Time passes in days. **End Day** (the city's bottom bar) ends the day: everyone the party houses (the main character, slaves, and companions whose contract includes food and lodging) spends the night **where they lodge**, set per member in **Manage Party**: the **stables**, one of the three **inns**, or a **residence** the party owns. Each member pays for their own night. A quest doesn't end the day: the party comes back in the evening, and you can only go on **one quest a day** (you can accept the next one, but set out tomorrow). A quest that takes several days spends the nights before the last on the road. Lodging:
 
 | Where | Per person per night | Quality |
 |---|---|---|
-| Outside (everyone's default) | free | 0 |
-| Sleeping Griffin Inn (Outer City) | 10 gold | 1 |
-| Silver Lantern Inn (Inner City, high-end) | 30 gold | 2 |
-| Gilded Crown Inn (Inner City, luxury) | 90 gold | 3 |
+| Stables (everyone's default) | 6 gold | 0 |
+| Sleeping Griffin Inn (Outer City) | 12 gold | 1 |
+| Silver Lantern Inn (Inner City, high-end) | 24 gold | 2 |
+| Gilded Crown Inn (Inner City, luxury) | 48 gold | 3 |
 | Your residence (Outer City House / Inner City Townhouse / Mansion), up to 6 residents each | free | 1 / 2 / 3 |
 | On the road (multi-day quests) | free (food is still paid) | doesn't count |
 
@@ -31,16 +31,16 @@ Time passes in days. **End Day** (the city's bottom bar) ends the day: everyone 
 
 | Food | Per person per day | Quality |
 |---|---|---|
-| Poor | 2 gold | 0 |
+| Poor | 3 gold | 0 |
 | Common (default) | 6 gold | 1 |
-| Fine | 18 gold | 2 |
-| Luxury | 54 gold | 3 |
+| Fine | 12 gold | 2 |
+| Luxury | 24 gold | 3 |
 
 Companions whose contract doesn't include food and lodging find their own (their food and lodging choices are greyed out), as do mercenaries.
 
-**Residences** are bought and sold at the **Estate Office** (Inner City): the **Outer City House 4,000 gold**, the **Inner City Townhouse 12,000** and the **Inner City Mansion 36,000**; the office buys one back for 70% of its price. Each houses **at most 6 residents** whatever its tier (`residences.capacity`), and nights there are free and count as good as the Sleeping Griffin, the Silver Lantern and the Gilded Crown respectively. Each residence has its own pin on the map showing who lives there (the Estate Office lists them too). Selling a residence sends its residents outside until you move them.
+**Residences** are bought and sold at the **Estate Office** (Inner City): the **Outer City House 4,000 gold**, the **Inner City Townhouse 10,000** and the **Inner City Mansion 25,000**; the office buys one back for 70% of its price. Each houses **at most 6 residents** whatever its tier (`residences.capacity`), and nights there are free and count as good as the Sleeping Griffin, the Silver Lantern and the Gilded Crown respectively. Each residence has its own pin on the map showing who lives there (the Estate Office lists them too). Selling a residence sends its residents to the stables until you move them.
 
-**Expectations** follow each adventurer's rank (see below): **D**-rank adventurers are fine sleeping outside, **C** expect an inn or the Outer City House, **B** a high-end inn or the Townhouse, **A** and **S** the luxury inn or the Mansion. Each night, every companion the party houses gains **+2 relationship** if they slept better than they expect, and loses **3 per quality step** worse: an A-rank companion loses 9 for a night outside. Food works the same way against the same expectations (D poor, C common, B fine, A and S luxury), at **+1** for better food and **−2 per step** worse; slaves count too. (`lodging`, `food` and `residences` in `guild.json`.)
+**Expectations**: adventurers of every rank expect **common food and an inn** (or the Outer City House); **slaves** expect only **poor food and a night in the stables**, whatever their rank (`lodging.expectedQuality` per rank and `lodging.slaveExpectedQuality` in `guild.json`). Each night, every companion the party houses gains **+2 relationship** if they slept better than they expect, and loses **3 per quality step** worse: a companion loses 3 for a night in the stables, and a slave gains 2 for a night at an inn. Food works the same way against the same expectations (common for adventurers, poor for slaves), at **+1** for better food and **−2 per step** worse; slaves count too. (`lodging`, `food` and `residences` in `guild.json`.)
 
 ### Health, Morale and the schedule
 
@@ -62,7 +62,7 @@ The **schedule** (Manage Party) sets what each member does on days they aren't o
 | Activity | Effect per day |
 |---|---|
 | Recover | 2× Health recovery (20 instead of 10) |
-| Training | +25 XP |
+| Training | +2 XP per level +20 (22 at level 1, 70 at level 25) |
 | Odd Jobs | +10 gold |
 | Day Off | +10 Morale |
 
@@ -74,7 +74,7 @@ Every 7th day is **payday** for companions.
 
 **Adventurer ranks** come from level: **D** 1–5, **C** 6–10, **B** 11–15, **A** 16–20, **S** 21+ (`adventurerRanks` in `guild.json`). They're shown next to every adventurer's level.
 
-**Party ranks** (D to S) come from **renown**: **C at 100**, **B at 400**, **A at 1600**, **S at 6400** (`ranks` in `guild.json`). Reaching the next rank's renown posts that rank's **promotion quest** on the Quest Board (gold frame); completing it promotes the party. Renown doesn't fade: completing a quest earns it, **failing a quest loses that quest's renown**, and **each party member who dies loses half of it**. A party that stays **below its rank's renown for a full week drops a rank**. The **Leaderboard** lists every party by rank, then renown. Your party starts at D. Parties hold up to **12 members** and take up to **5** on a quest.
+**Party ranks** (D to S) come from **renown**: **C at 50**, **B at 600**, **A at 2,300** (`ranks` in `guild.json`): with 2 members at D, 3 at C and 4 at B, a party is promoted at about level 6, 11 and 16 (about 4 D quests, then 11 C and 18 B). **S rank can't be reached for now**: there is no promotion quest past A (`highestPromotion`), and S's threshold (6,000) only matters for rival parties that start at S. Reaching the next rank's renown posts that rank's **promotion quest** on the Quest Board (gold frame); completing it promotes the party. Renown doesn't fade: completing a quest earns it, **failing a quest loses that quest's renown**, and **each party member who dies loses half of it**. A party that stays **below its rank's renown for a full week drops a rank**. The **Leaderboard** lists every party by rank, then renown. Your party starts at D. Parties hold up to **12 members** and take up to **5** on a quest.
 
 The **Quest Board** is shared with every rival party. It holds up to **40 quests** across all ranks (usually about 25): up to 8 new ones are posted each day by rank weight (C 60, D 40, B 20, A 7, S 1, out of 128: about 47% C, 31% D, 16% B, 5% A, 0.8% S; `board.rankWeights` in `guild.json`), and each stays up 4–8 days. Nothing is held back for you: in a slow week the rivals may snap up every quest at your rank. **Rival parties take quests from it every day**, and they go for the best deals first, so a generous quest may not last. You can take quests at your rank or below (the board shows those by default; **All quests** shows the rest, locked). **Sort** the board by rank (the default, highest first), gold reward, renown, difficulty or enemy type; click the selected sort again to reverse it (▲/▼). The promotion quest always stays on top. The Guild Hall and the Slave Market sort the same way by level (the default, highest first), talent, name or cost (a mercenary's fee, a slave's asking price). Quests vary in risk and reward:
 
@@ -82,31 +82,32 @@ The **Quest Board** is shared with every rival party. It holds up to **40 quests
 - **Quest cards** show the foes as pictures rather than numbers: an icon per enemy to expect (a small copy of the monster's battle art; goblins, bandits, skeletons, orcs, sellswords and renegades get their own head badges), and **skulls from ½ to 10, in halves**, for how hard the quest is on one fixed scale for the whole game: ½–5 fill five white skulls, and 5½–10 lay red skulls over them. Skulls rise evenly with the quest's difficulty (the average party level it calls for, from its total threat): half a skull at difficulty −4, ten at 24 (`threat.skulls` in `guild.json`). D quests show about ½–3, C 3–6, B 5½–8, A 7½–10. Hover them for the same in words. The enemy level is in the description, and the card says how long the journey is and the day the notice comes down.
 - **Pay**: on top of that, the reward is 0.75–1.35× the usual for the quest's level and group size. Cards flag **Generous pay** and **Poor pay**.
 
-**Total threat** = group size × strength. Group size is in threat points (each enemy type's `threat` in `enemies.json`: a bandit is 1, a rat 0.5, so weak types come in bigger packs). Strength is how strong one enemy is at the quest's level: 10 at level 1, about 16.5% more per level (a level-20 enemy is about 18× a level-1 one). Usual gold is total threat × 1.75 and renown total threat × 0.26; the pay roll then adds luck to the gold. (`quests` and `threat` in `guild.json`.)
+**Total threat** = group size × strength. Group size is in threat points (each enemy type's `threat` in `enemies.json`: a bandit is 1, a rat 0.5, so weak types come in bigger packs). Strength is how strong one enemy is at the quest's level: 10 at level 1, about 16.5% more per level (a level-20 enemy is about 18× a level-1 one). Usual gold is total threat × 1.75, and the pay roll then adds luck to the gold. **Renown** comes from the quest's danger in skulls (D): **2 × D² + 4 × D + 8**, then moves **opposite to the pay roll**: × (1 + (1 − pay)), so a quest paying 0.75 of the usual gold gives 1.25× the renown and one paying 1.35 gives 0.65×. Low-paying quests are how a party builds its name. A usual D quest gives about 21 renown, C 64, B 116, A 185. (`quests` and `threat` in `guild.json`.)
 
-| Rank | Enemy levels | Group size | Total threat | Usual gold | Renown |
+| Rank | Enemy levels | Group size | Total threat | Usual gold | Renown (with pay roll) |
 |---|---|---|---|---|---|
-| D | 1–5 | 2–4 | 20–74 | 35–130 | 5–19 |
-| C | 6–10 | 3–6 | 64–237 | 110–415 | 17–62 |
-| B | 11–15 | 4–7 | 184–594 | 320–1040 | 48–154 |
-| A | 16–20 | 5–8 | 494–1456 | 865–2550 | 128–379 |
-| S | 21–25 | 4–7 | 848–2735 | 1485–4785 | 221–711 |
+| D | 1–5 | 2–4 | 20–74 | 35–130 | 7–47 |
+| C | 6–10 | 3–6 | 64–237 | 110–415 | 25–130 |
+| B | 11–15 | 4–7 | 184–594 | 320–1040 | 59–210 |
+| A | 16–20 | 5–8 | 494–1456 | 865–2550 | 98–310 |
+| S | 21–25 | 4–7 | 848–2735 | 1485–4785 | 121–310 |
 
 Promotion quests use the easier half of the rank's levels, its middle group size and usual pay.
 
-**XP** from a quest: every member who comes back gets **25 XP** (the same as a day of Training) plus an **equal share of 200 XP**, so smaller parties learn faster. Each member's total is then adjusted by the level difference: **+25% per level the enemies are above them, −25% per level below**, and **nothing at 4 or more levels above** (veterans can still escort newcomers on easy quests for the pay, but learn nothing). A **failed quest** pays no reward, but still gives the 25 XP plus the pool's share for the fraction of enemies defeated (killed or surrendered): beating 3 of 4 before falling back is worth 75% of it. (`xp` in `guild.json`.)
+**XP** from a quest: every member who comes back gets a day of Training's XP (2 x their level + 20) plus an **equal share of the quest's XP pool**, so smaller parties learn faster. The pool grows with the quest's danger in skulls (D, 0.5 to 10): **20 x D² + 40 x D + 80**. The members' levels don't change it: there is no bonus or penalty for the level gap, because the level-up cost curve already makes easy quests worth little to veterans. A **failed quest** pays no reward, but still gives the training XP plus the pool's share for the fraction of enemies defeated (killed or surrendered): beating 3 of 4 before falling back is worth 75% of it. (`xp` in `guild.json`.)
 
 **Bounties**: every enemy the party kills is worth a bounty of 9 gold per level (the same as turning in a prisoner), claimed when the party gets back to the city, whether the quest succeeded or not.
 
-| Party size | XP each at the enemies' level |
-|---|---|
-| 1 | 225 |
-| 2 | 125 |
-| 3 | 92 |
-| 4 | 75 |
-| 5 | 65 |
+| Skulls | XP pool | Each of 4 members (pool share, before training XP) |
+|---|---|---|
+| 0.5 | 105 | 26 |
+| 1 | 140 | 35 |
+| 2.5 | 305 | 76 |
+| 5 | 780 | 195 |
+| 7.5 | 1,505 | 376 |
+| 10 | 2,480 | 620 |
 
-Each level needs **25 XP more than the last**: 100 from level 1 to 2, 125 to 3, 325 from 10 to 11, 575 from 20 to 21 (`xpPerLevel` in `stats.json`). Early levels come after a win or two; later ones take several, or harder quests.
+XP from level L to L + 1 is **5 x L² + 15 x L + 60**: 80 from level 1 to 2, 110 to 3, 710 from 10 to 11, 2,360 from 20 to 21, 3,560 from 25 to 26 (`xpPerLevel` in `stats.json`). Early levels come after a win or two; later ones take several, or harder quests.
 
 ### The other parties
 
@@ -119,15 +120,15 @@ The rival parties are simulated day by day. A new game starts them spread over t
 | **Main character** | Created at the start | Food & lodging | Permanent; can be benched to stay in the city while others quest |
 | **Mercenary** | Guild Hall | The **larger** of a fixed fee and a % of the next quest's reward: the fee up front, and if their cut of a won quest is worth more, they take the difference from the reward | Leaves after the next quest, win or lose |
 | **Companion** | Guild Hall, after negotiating a contract | Base pay every 7th day, a % of each reward, food & lodging if included | Permanent while the contract runs |
-| **Slave** | Slave Market, or a prisoner registered at the city gate | Food & lodging, plus a weekly property tax (5% of their market value) | Permanent; can be sold to the market; seized by the city if the tax goes unpaid |
+| **Slave** | Slave Market, or a prisoner registered at the city gate | Food & lodging, plus a weekly property tax (10% of their market value) | Permanent; can be sold to the market; seized by the city if the tax goes unpaid |
 
-**Companion contracts** have four terms: **base pay**, **loot cut** (% of each quest reward), **food and lodging included** (worth to them what the food and night their rank expects would cost you: 14 gold a week for D-rank, 112 for C-rank, 336 for B-rank, 1,008 for A and S-rank), and **term length** (2, 4, 8 or 12 weeks). Candidates ask more the higher their level and the greedier they are, a little more for short terms and less for long ones. They value a loot cut by what a party of your rank usually earns (150 gold a week at D, 2000 at A, 4500 at S). An offer close to what they want gets a counter-offer; a low one offends them. Each rejected offer uses up patience, and once it runs out they won't talk to you for a week.
+**Companion contracts** have four terms: **base pay**, **loot cut** (% of each quest reward), **food and lodging included** (worth to them what the food and night their rank expects would cost you: 126 gold a week at every rank), and **term length** (2, 4, 8 or 12 weeks). Candidates' base pay starts from **100 + 20 × level × talent** gold a week, then goes up with greed, a little more for short terms and less for long ones. They value a loot cut by what a party of your rank usually earns (150 gold a week at D, 2000 at A, 4500 at S). An offer close to what they want gets a counter-offer; a low one offends them. Each rejected offer uses up patience, and once it runs out they won't talk to you for a week.
 
 Companions (and slaves, see above) have a **relationship** score (0–100). It goes up by 6 for every quest completed together, drops if you can't pay them, and lowers their demands when you renew: by up to 30% at 100. When a contract ends, they sit out of quests and you have 3 days to **renew** it (Manage Party) before they leave. Walking out of a renewal ends the contract on the spot. Unpaid companions lose 20 relationship each payday, and quit when it reaches 0.
 
-**Prisoners**: human enemies who surrender in battle are taken prisoner when you win, as many as surrender. The party doesn't keep prisoners: when it comes back, the **city gate** won't let them in until each one is registered, either **turned in for a bounty** (9 gold per level) or **registered as your slave** (only while the party has room) for a fee of its normal market value minus its bounty, so at an average market both come to the same: a level-6 prisoner with average talent is worth 470 gold, so its bounty is 54 and its fee 415. **Slaves are taxed** every payday (every 7th day, with companion wages) 5% of their normal market value (24 gold a week for that level-6 slave; `slave.weeklyTaxShare` in `guild.json`). If you can't pay a slave's tax, the city **seizes** them and sells them at the slave market. **Turn them all in** settles them at once.
+**Prisoners**: human enemies who surrender in battle are taken prisoner when you win, as many as surrender. The party doesn't keep prisoners: when it comes back, the **city gate** won't let them in until each one is registered, either **turned in for a bounty** (9 gold per level) or **registered as your slave** (only while the party has room) for a fee of its normal market value minus its bounty, so at an average market both come to the same: a level-6 prisoner with average talent is worth 1,100 gold, so its bounty is 54 and its fee 1,045. **Slaves are taxed** every payday (every 7th day, with companion wages) 10% of their normal market value (110 gold a week for that level-6 slave; `slave.weeklyTaxShare` in `guild.json`). If you can't pay a slave's tax, the city **seizes** them and sells them at the slave market. **Turn them all in** settles them at once.
 
-**The Slave Market** is a living market (`market` in `guild.json`). It holds **10–30 slaves**: a few (1–4) are sold to other buyers every day, and a **shipment of 5–12 arrives twice a week** (days 1 and 4 of each week; the screen shows the next one). Slaves are of about your party's rank. **Prices follow supply and demand**: each slave's value (120 gold + 70 per level above 1, × talent) times a price index that drifts a little every day and rises when stock is short (falls when there's a glut), between 70% and 150% of usual. The market buys your slaves for **80%** of the current price (Slave Market or Manage Party). It doesn't buy prisoners.
+**The Slave Market** is a living market (`market` in `guild.json`). It holds **10–30 slaves**: a few (1–4) are sold to other buyers every day, and a **shipment of 5–12 arrives twice a week** (days 1 and 4 of each week; the screen shows the next one). Slaves are of about your party's rank. **Prices follow supply and demand**: each slave's value (**500 + 100 × level × talent** gold) times a price index that drifts a little every day and rises when stock is short (falls when there's a glut), between 70% and 150% of usual. The market buys your slaves for **80%** of the current price (Slave Market or Manage Party). It doesn't buy prisoners.
 
 All of these numbers are in `src/data/guild.json`.
 
@@ -159,14 +160,14 @@ Tooltips show a formula line generated from the numbers (e.g. "80% P.Atk, then 4
 
 Every attack hits. **Resist** gives a chance to shrug off debuffs (Burn, Slow, Corrode...): Resist ÷ (100 + Resist), the same curve as Defense, so 50 Resist = 33% and 100 = 50%. A resisted debuff shows "Resisted" and doesn't apply; the attack's damage still lands. Targeting shows the chance, and the enemy AI weighs it. Enemies' Resist matches their Defense.
 
-Stats grow automatically on level up (100 XP for the first level, 25 more for each one after), at a speed set by the Adventurer's **talent**. Every growing stat (Health, Mana, P.Atk, M.Atk, Defense, Resist) has its own talent grade, rolled when the Adventurer is created; the grade multiplies that stat's growth per level (the numbers in brackets above):
+Stats grow automatically on level up (80 XP for the first level, then 5 x L² + 15 x L + 60 for level L), at a speed set by the Adventurer's **talent**. Every growing stat (Health, Mana, P.Atk, M.Atk, Defense, Resist) has its own talent grade, rolled when the Adventurer is created; the grade multiplies that stat's growth per level (the numbers in brackets above):
 
 | Talent | S | A | B | C | D | F |
 |---|---|---|---|---|---|---|
 | Growth | 160% | 140% | 120% | 100% | 80% | 60% |
 | Chance | 5% | 10% | 20% | 40% | 20% | 5% |
 
-An S-talent P.Atk grows +16 a level instead of +10. Talent doesn't change level-1 stats. An Adventurer's overall talent is the grade nearest the average of their six, with a **+** or **−** when the average sits in the upper or lower third of that grade's band (so **A+** is close to S and **S−** just short of all-S; S never gets a + and F never a −). When you create your main character, or create or customize a Quick Battle recruit, **Reroll talent** rolls new grades, and the **‹ ›** arrows beside each grade set it by hand (F to S). Party members in the campaign keep the talent they have. Talented Adventurers cost more: mercenary fees and cuts, companion wages and slave prices are multiplied by `1 + 2 × (average growth rate − 1)` (at least ×0.4; `talentPrice` in `guild.json`), so all-S costs ×2.2 and all-F ×0.4. Growth rates and roll weights are in `stats.json` (`talent`): a grade's chance is its weight divided by the total of all weights, so the weights can be any non-negative numbers (a grade with weight 0 never comes up). Enemies always grow at 100%.
+An S-talent P.Atk grows +16 a level instead of +10. Talent doesn't change level-1 stats. An Adventurer's overall talent is the grade nearest the average of their six, with a **+** or **−** when the average sits in the upper or lower third of that grade's band (so **A+** is close to S and **S−** just short of all-S; S never gets a + and F never a −). When you create your main character, or create or customize a Quick Battle recruit, **Reroll talent** rolls new grades, and the **‹ ›** arrows beside each grade set it by hand (F to S). Party members in the campaign keep the talent they have. Talented Adventurers cost more, in proportion to how fast their stats grow: the talent modifier is their **average growth rate** (all C = ×1, all S = ×1.6, all F = ×0.6). It scales the per-level part of companion wages (100 + 20 × level × talent) and slave prices (500 + 100 × level × talent), and mercenary fees and cuts. Growth rates and roll weights are in `stats.json` (`talent`): a grade's chance is its weight divided by the total of all weights, so the weights can be any non-negative numbers (a grade with weight 0 never comes up). Enemies always grow at 100%.
 
 A won quest gives each member in the lineup `xpPerVictory` (100, in `stats.json`) when their level equals the quest's stage, more when they're below it and less when above, so a party that keeps winning stays close to the level of the quests it takes.
 

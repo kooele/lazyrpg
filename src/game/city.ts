@@ -1,9 +1,9 @@
 // Arch City: the calendar, the quest board, food, upkeep and pay, the slave market and prisoners.
 // Pure logic (no Phaser): scenes call these and show the messages they return.
 import { MAX_PARTY_SIZE } from '../data/content';
-import { GUILD, isResidence, type CityLodging, type InnTier, type Ring } from '../data/guild';
+import { GUILD, isResidence, trainingXp, type CityLodging, type InnTier, type Ring } from '../data/guild';
 import { RANKS, type Character, type GameState, type Offer, type Quest, type Rank } from '../data/types';
-import { makeQuest, postQuests } from './board';
+import { dangerRating, makeQuest, postQuests } from './board';
 import { grantXp, type Rng } from './character';
 import {
   bondOf, bounty, canFight, registrationFee, slaveTax, changeRelationship, isCompanion, isExpired, isHoused, isSlave, leaveParty, slaveContract, slavePrice, talentPriceFactor,
@@ -144,18 +144,22 @@ export function acceptQuest(state: GameState, questId: string): string | null {
   return null;
 }
 
-/** The level modifier on a member's quest XP: +levelStep per level the enemies are above them, -levelStep per level below (never under 0). */
-export const xpLevelFactor = (stage: number, level: number) => Math.max(0, 1 + GUILD.xp.levelStep * (stage - level));
+/** A quest's XP pool from its danger D in skulls (dangerRating, 0.5-10): xp.pool a x D^2 + b x D + c (105 at half a skull, 2480 at ten). */
+export function questXpPool(q: Pick<Quest, 'stage' | 'count'>): number {
+  const { a, b, c } = GUILD.xp.pool;
+  const d = dangerRating(q);
+  return Math.round(a * d * d + b * d + c);
+}
 
 /**
- * XP each member who comes back from a quest gets: a day of training's worth (schedule.trainingXp), plus an equal
- * share of the xp.pool split among all of them, times `defeated` (the share of the enemies killed or captured: 1 for a
- * won quest), then x their level modifier (xpLevelFactor). Same order as `members`.
+ * XP each member who comes back from a quest gets: a day of training's worth at their level (trainingXp), plus an equal
+ * share of the quest's XP pool (questXpPool) split among all of them, times `defeated` (the share of the enemies killed or captured: 1 for a
+ * won quest). Same order as `members`.
  */
-export function questXpShares(q: Pick<Quest, 'stage'>, members: Pick<Character, 'level'>[], defeated = 1): number[] {
+export function questXpShares(q: Pick<Quest, 'stage' | 'count'>, members: Pick<Character, 'level'>[], defeated = 1): number[] {
   if (members.length === 0) return [];
-  const each = GUILD.schedule.trainingXp + (GUILD.xp.pool * Math.max(0, Math.min(1, defeated))) / members.length;
-  return members.map((c) => Math.round(each * xpLevelFactor(q.stage, c.level)));
+  const share = (questXpPool(q) * Math.max(0, Math.min(1, defeated))) / members.length;
+  return members.map((c) => Math.round(trainingXp(c.level) + share));
 }
 
 /** Grant quest XP to the members who came back (see questXpShares) and report it. */
@@ -350,9 +354,9 @@ export function boarders(state: GameState): Character[] {
   return state.party.filter((c) => c.contract?.type === 'main' || c.contract?.type === 'slave' || (isCompanion(c) && c.contract.foodLodging));
 }
 
-/** A night's lodging for one member at `where`: an inn's price, free in a residence, outsidePerPerson outside. */
+/** A night's lodging for one member at `where`: an inn's price, free in a residence, stablesPerPerson in the stables ('outside'). */
 export function lodgingPrice(where: CityLodging): number {
-  if (where === 'outside') return GUILD.lodging.outsidePerPerson;
+  if (where === 'outside') return GUILD.lodging.stablesPerPerson;
   return isResidence(where) ? 0 : GUILD.inns[where].pricePerPerson;
 }
 
@@ -412,7 +416,7 @@ export function buyResidence(state: GameState, ring: Ring): string | null {
 /** What the Estate Office pays for a residence. */
 export const residenceSellPrice = (ring: Ring) => Math.round(GUILD.residences[ring].price * GUILD.residences.sellShare);
 
-/** Sell a residence back to the Estate Office; its residents sleep outside until moved. Returns the gold received (0 if not owned). */
+/** Sell a residence back to the Estate Office; its residents sleep in the stables until moved. Returns the gold received (0 if not owned). */
 export function sellResidence(state: GameState, ring: Ring): number {
   if (!state.residences.includes(ring)) return 0;
   const gold = residenceSellPrice(ring);
@@ -420,7 +424,7 @@ export function sellResidence(state: GameState, ring: Ring): number {
   for (const c of moved) delete state.lodging[c.id];
   state.residences = state.residences.filter((r) => r !== ring);
   state.gold += gold;
-  note(state, `Sold the ${GUILD.residences[ring].name} to the Estate Office for ${gold} gold.${moved.length ? ` ${moved.map((c) => c.name).join(', ')} sleep${moved.length === 1 ? 's' : ''} outside until you find them somewhere.` : ''}`);
+  note(state, `Sold the ${GUILD.residences[ring].name} to the Estate Office for ${gold} gold.${moved.length ? ` ${moved.map((c) => c.name).join(', ')} sleep${moved.length === 1 ? 's' : ''} in the stables until you find them somewhere.` : ''}`);
   return gold;
 }
 
@@ -462,7 +466,7 @@ function runSchedule(state: GameState, away: string[]): string[] {
     if (was < 100 && healthOf(c) === 100) out.push(`${c.name} has fully recovered.`);
     if (!act) continue;
     if (act === 'training') {
-      const levels = grantXp(c, S.trainingXp);
+      const levels = grantXp(c, trainingXp(c.level));
       if (levels > 0) out.push(`${c.name} reached level ${c.level} through training! +${levels} skill point${levels > 1 ? 's' : ''}.`);
     } else if (act === 'oddJobs') state.gold += S.oddJobsGold;
     else if (act === 'dayOff') changeMorale(c, S.dayOffMorale);
@@ -530,7 +534,7 @@ export function advanceDay(state: GameState, rng: Rng, night: 'road' | 'city' = 
         const d = lodgingRelationship(c, where);
         if (!d) continue;
         changeRelationship(c, d);
-        moods.push(`${c.name} ${d > 0 ? '+' : ''}${d} (${where === 'outside' ? 'slept outside' : `at ${lodgingName(where)}`}; expects ${QUALITY_TEXT[expectedQuality(c)]})`);
+        moods.push(`${c.name} ${d > 0 ? '+' : ''}${d} (${where === 'outside' ? 'slept in the stables' : `at ${lodgingName(where)}`}; expects ${QUALITY_TEXT[expectedQuality(c)]})`);
       }
       if (moods.length) say(`The night. Relationship: ${moods.join(', ')}.`);
     }

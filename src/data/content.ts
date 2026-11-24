@@ -449,8 +449,12 @@ export const PALETTE = ['#3d7be0', '#36b37e', '#e0b44c', '#9b59d0', '#e07b3d', '
 export const ENEMY_COLOR = '#c0392b';
 
 export const MAX_PARTY_SIZE = 5;
-/** XP to go from `level` to the next: stats.json xpPerLevel (100 at level 1, then +25 a level). */
-export const xpToNext = (level: number) => STAT_CONFIG.xpPerLevel.base + STAT_CONFIG.xpPerLevel.step * (Math.max(1, level) - 1);
+/** XP to go from `level` to the next: stats.json xpPerLevel, a x L^2 + b x L + c (80 at level 1, 3560 at level 25). */
+export const xpToNext = (level: number) => {
+  const { a, b, c } = STAT_CONFIG.xpPerLevel;
+  const L = Math.max(1, level);
+  return Math.max(1, Math.round(a * L * L + b * L + c));
+};
 export const NAME_MAX_LENGTH = 16;
 
 /** Skill points: 2 at level 1 and 1 more every level. Each one learns a tree skill or buys a Body investment. */

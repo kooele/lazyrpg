@@ -29,10 +29,13 @@ export const isHoused = (c: Character) => c.contract?.type === 'main' || c.contr
 
 // ---- talent ----------------------------------------------------------------------------------------
 
-/** How much more a talented adventurer costs (1 = all C talents). */
+/**
+ * Talent's price modifier: the adventurer's average stat growth rate (talentScore), so price follows how much more
+ * (or less) they grow per level: all C = x1, all S = x1.6, all F = x0.6. It scales the per-level part of wages and
+ * slave prices, and mercenary fees and cuts.
+ */
 export function talentPriceFactor(c: Pick<Character, 'talents'>): number {
-  const t = GUILD.talentPrice;
-  return Math.max(t.min, 1 + t.weight * (talentScore(c) - 1));
+  return talentScore(c);
 }
 
 // ---- mercenaries --------------------------------------------------------------------------------
@@ -50,13 +53,13 @@ export function mercenaryRates(level: number, greed: number, talent = 1): { fee:
 
 /**
  * What food and lodging are worth per week to an adventurer of `level`: what the party would pay to give them the
- * food and the night their rank expects (lodging.expectedQuality): D-rank poor food outside, C-rank common food at
- * the Sleeping Griffin, B-rank fine food at the Silver Lantern, A and S-rank luxury food at the Gilded Crown.
+ * food and the night their rank expects (lodging.expectedQuality): D and C-rank common food at the Sleeping Griffin,
+ * B and A-rank fine food at the Silver Lantern, S-rank luxury food at the Gilded Crown.
  */
 export function foodLodgingWeekly(level: number): number {
   const q = GUILD.lodging.expectedQuality[adventurerRank(level)];
   const food = GUILD.food[FOOD_TIERS[q]].pricePerPerson;
-  const night = q === 0 ? GUILD.lodging.outsidePerPerson : GUILD.inns[INN_TIERS[q - 1]].pricePerPerson;
+  const night = q === 0 ? GUILD.lodging.stablesPerPerson : GUILD.inns[INN_TIERS[q - 1]].pricePerPerson;
   return (food + night) * 7;
 }
 
@@ -69,11 +72,11 @@ export function offerValue(t: CompanionTerms, rank: Rank, level: number): number
 }
 
 /**
- * What a companion wants per week for a term: grows with level, greed and talent (talentPriceFactor); short terms cost more,
+ * What a companion wants per week for a term: wageBase + wagePerLevel x level x talent (talentPriceFactor), x greed; short terms cost more,
  * long ones less. On renewal, a good relationship lowers it (up to renewalDiscountAtMax at 100).
  */
 export function companionDemand(level: number, greed: number, termWeeks: number, relationship = 0, talent = 1): number {
-  const base = (C.wageBase + C.wagePerLevel * level) * greed * talent;
+  const base = (C.wageBase + C.wagePerLevel * level * talent) * greed;
   const term = C.termDemand[String(termWeeks)] ?? 1;
   return base * term * (1 - C.renewalDiscountAtMax * Math.max(0, Math.min(100, relationship)) / 100);
 }
@@ -135,15 +138,16 @@ export const isExpired = (c: Character, day: number) => isCompanion(c) && c.cont
 
 // ---- slaves ---------------------------------------------------------------------------------------
 
+/** A slave's price: priceBase + pricePerLevel x level x talent (talentPriceFactor), with +-15% luck. */
 export function slavePrice(level: number, rng: () => number, talent = 1): number {
   const s = GUILD.slave;
-  return round5((s.priceBase + s.pricePerLevel * (level - 1)) * talent * (0.85 + rng() * 0.3));
+  return round5((s.priceBase + s.pricePerLevel * level * talent) * (0.85 + rng() * 0.3));
 }
 
 /** A slave's normal market value: what the market asks on average (price index 1, no haggling luck). */
 export function slaveValue(c: Pick<Character, 'level' | 'talents'>): number {
   const s = GUILD.slave;
-  return (s.priceBase + s.pricePerLevel * (c.level - 1)) * talentPriceFactor(c);
+  return s.priceBase + s.pricePerLevel * c.level * talentPriceFactor(c);
 }
 
 export const bounty = (level: number) => GUILD.slave.bountyPerLevel * level;

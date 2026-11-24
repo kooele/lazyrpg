@@ -60,17 +60,18 @@ export function healthLoss(lowestHp: number): number {
   return Math.round(GUILD.condition.maxHealthLoss * (1 - clamp(lowestHp, 1)));
 }
 
-/** The night quality an adventurer expects, from their rank: D 0 (outside is fine) up to A/S 3 (luxury). */
+/** The food and night quality a member expects: slaves lodging.slaveExpectedQuality, everyone else lodging.expectedQuality for their rank. */
 export function expectedQuality(c: Character): number {
+  if (c.contract?.type === 'slave') return GUILD.lodging.slaveExpectedQuality;
   return GUILD.lodging.expectedQuality[adventurerRank(c.level)];
 }
 
 /** What a night quality means, for the UI. */
-export const QUALITY_TEXT = ['sleeping outside', 'an inn or the Outer City House', 'a high-end inn or the Inner City Townhouse', 'a luxury inn or the Inner City Mansion'];
+export const QUALITY_TEXT = ['the stables', 'an inn or the Outer City House', 'a high-end inn or the Inner City Townhouse', 'a luxury inn or the Inner City Mansion'];
 
 /** Name of a place to spend the night. */
 export function lodgingName(l: Lodging): string {
-  if (l === 'outside') return 'outside';
+  if (l === 'outside') return 'the stables';
   if (l === 'road') return 'on the road';
   return isResidence(l) ? `your ${GUILD.residences[l].name}` : GUILD.inns[l].name;
 }
@@ -83,8 +84,8 @@ export function lodgingRelationship(c: Character, where: CityLodging): number {
 }
 
 /**
- * Where a member sleeps in the city: as set in Manage Party, else outside. A residence the party no longer owns
- * counts as outside.
+ * Where a member sleeps in the city: as set in Manage Party, else the stables ('outside'). A residence the party
+ * no longer owns counts as the stables.
  */
 export function lodgingOf(state: GameState, c: Pick<Character, 'id'>): CityLodging {
   const l = state.lodging?.[c.id] ?? 'outside';
@@ -109,7 +110,7 @@ export const ACTIVITY_INFO: Record<Activity, { name: string; describe: () => str
     name: 'Recover',
     describe: () => `Rest up: recovers ${GUILD.schedule.recoverMultiplier * GUILD.condition.healthPerDay} Health a day instead of ${GUILD.condition.healthPerDay}.`,
   },
-  training: { name: 'Training', describe: () => `Drills and sparring: +${GUILD.schedule.trainingXp} XP a day.` },
+  training: { name: 'Training', describe: () => `Drills and sparring: +${GUILD.schedule.trainingXp.perLevel} XP per level +${GUILD.schedule.trainingXp.flat} a day.` },
   oddJobs: { name: 'Odd Jobs', describe: () => `Work around the city: +${GUILD.schedule.oddJobsGold} gold a day.` },
   dayOff: { name: 'Day Off', describe: () => `Take it easy: +${GUILD.schedule.dayOffMorale} Morale a day.` },
 };

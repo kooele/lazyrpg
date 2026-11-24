@@ -39,8 +39,8 @@ export interface StatConfig {
   talent: TalentRules;
   defenseScale: number;
   forestDefense: number;
-  /** XP to go from level L to L + 1: base + step x (L - 1). */
-  xpPerLevel: { base: number; step: number };
+  /** XP to go from level L to L + 1: a x L^2 + b x L + c. */
+  xpPerLevel: { a: number; b: number; c: number };
   map: MapRules;
   movementCosts: MovementCosts;
   rangeRounding: RangeRoundingRules;
@@ -99,8 +99,8 @@ export function parseStatConfig(data: unknown): StatConfig {
     talent: readTalent(rec.talent),
     defenseScale: num(rec.defenseScale, 'defenseScale'),
     xpPerLevel: (() => {
-      const x = obj(rec.xpPerLevel ?? { base: 100, step: 25 }, 'xpPerLevel');
-      return { base: num(x.base, 'xpPerLevel.base'), step: num(x.step, 'xpPerLevel.step') };
+      const x = obj(rec.xpPerLevel ?? { a: 5, b: 15, c: 60 }, 'xpPerLevel');
+      return { a: num(x.a, 'xpPerLevel.a'), b: num(x.b, 'xpPerLevel.b'), c: num(x.c, 'xpPerLevel.c') };
     })(),
     forestDefense: num(rec.forestDefense ?? 0, 'forestDefense'),
     map: { width: Math.round(num(map.width, 'map.width')), height: Math.round(num(map.height, 'map.height')) },

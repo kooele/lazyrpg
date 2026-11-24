@@ -38,10 +38,10 @@ export function rankLevels(rank: AdventurerRank): [number, number] {
   return bounds[rank];
 }
 
-/** Can a party with this renown take its next rank's promotion quest? */
+/** Can a party with this renown take its next rank's promotion quest? Never past ranks.highestPromotion. */
 export const promotionReady = (rank: Rank, renown: number) => {
   const up = nextRank(rank);
-  return !!up && renown >= rankThreshold(up);
+  return !!up && RANKS.indexOf(up) >= RANKS.indexOf(GUILD.ranks.highestPromotion) && renown >= rankThreshold(up);
 };
 
 /**
@@ -120,7 +120,12 @@ export function updateRanks(state: GameState): { player?: { from: Rank; to: Rank
 
 /** Typical member level of a party at each rank when the world is made (adventurers of about that rank). */
 const LEVELS_BY_RANK: Record<Rank, [number, number]> = { S: [21, 24], A: [16, 19], B: [11, 14], C: [6, 9], D: [1, 4] };
-const RENOWN_BY_RANK: Record<Rank, [number, number]> = { S: [6500, 9000], A: [1650, 2600], B: [420, 1400], C: [110, 380], D: [0, 90] };
+/** Starting renown of a rival at `rank`: above its own threshold, short of the next one (S: up to 40% past its threshold). */
+function startingRenown(rank: Rank): [number, number] {
+  const lo = rankThreshold(rank);
+  const up = nextRank(rank);
+  return [Math.round(lo * 1.05), Math.round(up ? rankThreshold(up) * 0.9 : lo * 1.4)];
+}
 
 function rivalMember(level: number, rng: Rng, avoid: Set<string>): RivalMember {
   const sex = rng() < 0.5 ? 'male' : 'female';
@@ -163,7 +168,7 @@ export function createGuild(rng: Rng, day = 1): GuildState {
       const name = randomPartyName(rng, names);
       names.add(name);
       const [lo, hi] = LEVELS_BY_RANK[rank];
-      const [r0, r1] = RENOWN_BY_RANK[rank];
+      const [r0, r1] = startingRenown(rank);
       const size = partySizeRoll(rng);
       rivals.push({
         id: newId('p'), name, rank, renown: randInt(r0, r1, rng),

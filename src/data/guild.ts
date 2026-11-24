@@ -15,7 +15,10 @@ export interface ThreatConfig {
   strengthAtLevel1: number;
   strengthGrowth: number;
   goldPerThreat: number;
-  renownPerThreat: number;
+  /** Renown for a quest: a x skulls^2 + b x skulls + c (skulls: its danger, 0.5-10). */
+  renown: { a: number; b: number; c: number };
+  /** Renown x (1 + renownPayFactor x (1 - pay roll)): low-paying quests earn more renown, high-paying ones less. */
+  renownPayFactor: number;
   standardCount: number;
   /** Difficulty shown as half a skull (from) and ten skulls (to); evenly in between. */
   skulls: { from: number; to: number };
@@ -34,11 +37,11 @@ export interface InnConfig {
   drinksMorale: number;
 }
 
-/** Where a member spends a night: an inn, a residence (by ring), outside (free), or on the road during a quest. */
+/** Where a member spends a night: an inn, a residence (by ring), the stables ('outside', kept for saves), or on the road during a quest. */
 export type Lodging = InnTier | Ring | 'outside' | 'road';
 /** A night in the city (not on the road). */
 export type CityLodging = Exclude<Lodging, 'road'>;
-/** Night quality (for adventurers' expectations): outside 0, then each inn or residence 1-3. */
+/** Night quality (for adventurers' expectations): the stables 0, then each inn or residence 1-3. */
 export const LODGING_QUALITY: Record<CityLodging, number> = { outside: 0, standard: 1, outer: 1, highEnd: 2, middle: 2, luxury: 3, inner: 3 };
 export const isResidence = (l: Lodging): l is Ring => (RINGS as readonly string[]).includes(l);
 
@@ -56,7 +59,7 @@ export interface GuildConfig {
   startingRenown: number;
   maxRoster: number;
   partyRankWeights: Record<Rank, number>;
-  ranks: { renown: Record<Exclude<Rank, 'D'>, number>; demotionDays: number; failedQuestRenown: number; deathRenown: number };
+  ranks: { renown: Record<Exclude<Rank, 'D'>, number>; highestPromotion: Rank; demotionDays: number; failedQuestRenown: number; deathRenown: number };
   /** First level of each adventurer rank above D. */
   adventurerRanks: Record<'C' | 'B' | 'A' | 'S', number>;
   boardSize: number;
@@ -65,7 +68,7 @@ export interface GuildConfig {
   threat: ThreatConfig;
   food: Record<FoodTier, { name: string; pricePerPerson: number }> & { default: FoodTier; relationshipAbove: number; relationshipBelowPerStep: number };
   inns: Record<InnTier, InnConfig>;
-  lodging: { expectedQuality: Record<'S' | Rank, number>; relationshipAbove: number; relationshipBelowPerStep: number; outsidePerPerson: number };
+  lodging: { expectedQuality: Record<'S' | Rank, number>; slaveExpectedQuality: number; relationshipAbove: number; relationshipBelowPerStep: number; stablesPerPerson: number };
   residences: Record<Ring, { name: string; price: number }> & { sellShare: number; capacity: number };
   condition: {
     maxHealthLoss: number;
@@ -88,11 +91,11 @@ export interface GuildConfig {
     drift: number;
     stockReference: number;
   };
-  /** Quest XP: each member gets schedule.trainingXp plus an equal share of pool, then x the level modifier (levelStep per level). */
-  xp: { pool: number; levelStep: number };
-  schedule: { recoverMultiplier: number; trainingXp: number; oddJobsGold: number; dayOffMorale: number };
+  /** Quest XP: each member gets a day of training XP plus an equal share of the pool (a x skulls^2 + b x skulls + c). */
+  xp: { pool: { a: number; b: number; c: number } };
+  /** trainingXp: XP for a day of training, perLevel x level + flat (see trainingXp()). */
+  schedule: { recoverMultiplier: number; trainingXp: { perLevel: number; flat: number }; oddJobsGold: number; dayOffMorale: number };
   /** Price multiplier from talent: max(min, 1 + weight x (average growth rate - 1)). */
-  talentPrice: { weight: number; min: number };
   mercenary: { feePerLevel: number; cutBase: number; cutPerLevel: number };
   companion: {
     wageBase: number;
@@ -249,6 +252,11 @@ export function parseGuildConfig(data: unknown): GuildConfig {
     partyRankWeights,
     ranks: {
       renown: thresholds,
+      highestPromotion: (() => {
+        const r = rk.highestPromotion ?? 'S';
+        if (typeof r !== 'string' || !RANKS.includes(r as Rank)) fail('ranks.highestPromotion', 'must be a rank (D to S)');
+        return r as Rank;
+      })(),
       demotionDays: num(rk.demotionDays, 'ranks.demotionDays', 1, 365),
       failedQuestRenown: num(rk.failedQuestRenown, 'ranks.failedQuestRenown', 0, 10),
       deathRenown: num(rk.deathRenown, 'ranks.deathRenown', 0, 10),
@@ -270,7 +278,8 @@ export function parseGuildConfig(data: unknown): GuildConfig {
         strengthAtLevel1: num(t.strengthAtLevel1, 'threat.strengthAtLevel1', 0.01),
         strengthGrowth: num(t.strengthGrowth, 'threat.strengthGrowth', 1, 3),
         goldPerThreat: num(t.goldPerThreat, 'threat.goldPerThreat', 0),
-        renownPerThreat: num(t.renownPerThreat, 'threat.renownPerThreat', 0),
+        renown: numbers(t.renown, 'threat.renown', ['a', 'b', 'c']),
+        renownPayFactor: num(t.renownPayFactor, 'threat.renownPayFactor', 0, 10),
         standardCount: num(t.standardCount, 'threat.standardCount', 0.5),
         skulls: (() => {
           const k = obj(t.skulls, 'threat.skulls');
@@ -284,15 +293,20 @@ export function parseGuildConfig(data: unknown): GuildConfig {
     food: parseFood(d.food),
     inns: parseInns(d.inns),
     lodging: {
-      ...numbers<Omit<GuildConfig['lodging'], 'expectedQuality'>>(d.lodging, 'lodging', ['relationshipAbove', 'relationshipBelowPerStep', 'outsidePerPerson']),
+      ...numbers<Omit<GuildConfig['lodging'], 'expectedQuality'>>(d.lodging, 'lodging', ['relationshipAbove', 'relationshipBelowPerStep', 'stablesPerPerson']),
       expectedQuality: numbers(obj(d.lodging, 'lodging').expectedQuality, 'lodging.expectedQuality', [...RANKS], 3),
+      slaveExpectedQuality: num(obj(d.lodging, 'lodging').slaveExpectedQuality ?? 0, 'lodging.slaveExpectedQuality', 0, 3),
     },
     residences: parseResidences(d.residences),
     condition: numbers<GuildConfig['condition']>(d.condition, 'condition', ['maxHealthLoss', 'healthPerDay', 'startingMorale', 'moralePerTurn',
       'moraleFailedQuest', 'moralePerHealthLost', 'moraleMemberDied', 'lowMorale', 'lowMoraleRelationshipPerDay'], 100),
-    xp: numbers(d.xp, 'xp', ['pool', 'levelStep']),
-    schedule: numbers(d.schedule, 'schedule', ['recoverMultiplier', 'trainingXp', 'oddJobsGold', 'dayOffMorale']),
-    talentPrice: numbers(d.talentPrice ?? { weight: 2, min: 0.4 }, 'talentPrice', ['weight', 'min']),
+    xp: {
+      pool: numbers(obj(d.xp, 'xp').pool, 'xp.pool', ['a', 'b', 'c']),
+    },
+    schedule: {
+      ...numbers<Omit<GuildConfig['schedule'], 'trainingXp'>>(d.schedule, 'schedule', ['recoverMultiplier', 'oddJobsGold', 'dayOffMorale']),
+      trainingXp: numbers(obj(d.schedule, 'schedule').trainingXp, 'schedule.trainingXp', ['perLevel', 'flat']),
+    },
     mercenary: numbers(d.mercenary, 'mercenary', ['feePerLevel', 'cutBase', 'cutPerLevel']),
     companion: {
       ...numbers<Omit<GuildConfig['companion'], 'terms' | 'termDemand' | 'expectedWeeklyLoot' | 'relationshipUnpaid'>>(c, 'companion',
@@ -334,3 +348,9 @@ export function parseGuildConfig(data: unknown): GuildConfig {
 }
 
 export const GUILD: GuildConfig = parseGuildConfig(raw);
+
+/** XP for a day of training at `level`: schedule.trainingXp perLevel x level + flat (22 at level 1). */
+export const trainingXp = (level: number) => {
+  const { perLevel, flat } = GUILD.schedule.trainingXp;
+  return Math.round(perLevel * Math.max(1, level) + flat);
+};

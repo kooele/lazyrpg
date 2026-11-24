@@ -31,8 +31,8 @@
     "weight": { "S": 5, "A": 10, "B": 20, "C": 40, "D": 20, "F": 5 }
   },
 
-  "xpPerLevel": { "base": 100, "step": 25 },
-  "_xpPerLevel": "XP needed to go from level L to L + 1: base + step x (L - 1), so 100 at level 1, 125 at level 2, 325 at level 10. Quests give XP as set in guild.json xp; Quick Battle gives exactly one level's worth per win.",
+  "xpPerLevel": { "a": 5, "b": 15, "c": 60 },
+  "_xpPerLevel": "XP needed to go from level L to L + 1: a x L^2 + b x L + c, rounded, so 80 at level 1, 110 at level 2, 710 at level 10, 3560 at level 25. Quests give XP as set in guild.json xp; Quick Battle gives exactly one level's worth per win.",
 
   "defenseScale": 100,
   "_defenseScale": "Damage taken is multiplied by defenseScale / (defenseScale + Defense). With 100: 100 Defense = 2x effective health, 200 = 3x. Negative Defense increases damage taken. Resist uses the same scale: the chance to shrug off a debuff is Resist / (defenseScale + Resist), so 50 Resist = 33%, 100 = 50%.",
