@@ -882,7 +882,8 @@ describe('enemies', () => {
     expect(rankForStage(1)).toBe('D');
     expect(rankForStage(5)).toBe('D');
     expect(rankForStage(6)).toBe('C');
-    expect(rankForStage(30)).toBe('A');
+    expect(rankForStage(21)).toBe('S');
+    expect(rankForStage(30)).toBe('S');
   });
 
   it('enemies.json is validated with precise errors', () => {

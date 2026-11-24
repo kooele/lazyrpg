@@ -17,8 +17,8 @@ export const PLAYER_ID = 'player';
 /** Renown a party needs to hold `rank` (D: none). */
 export const rankThreshold = (rank: Rank): number => (rank === 'D' ? 0 : GUILD.ranks.renown[rank]);
 
-/** The rank above (null for A). */
-export const nextRank = (rank: Rank): Rank | null => (rank === 'A' ? null : RANKS[RANKS.indexOf(rank) - 1]);
+/** The rank above (null for S). */
+export const nextRank = (rank: Rank): Rank | null => (rank === 'S' ? null : RANKS[RANKS.indexOf(rank) - 1]);
 
 /** The rank below (null for D). */
 export const lowerRank = (rank: Rank): Rank | null => (rank === 'D' ? null : RANKS[RANKS.indexOf(rank) + 1]);
@@ -56,15 +56,16 @@ export function demotionCheck(rank: Rank, renown: number, belowSince: number, da
   return { rank: down, belowSince: renown >= rankThreshold(down) ? 0 : day };
 }
 
-/** How many of `n` parties start at each rank (rankWeights: A 5, B 20, C 60, D 25 out of 110 by default). */
+/** How many of `n` parties start at each rank (rankWeights: S 1, A 5, B 20, C 60, D 40 out of 126 by default). */
 export function rankCounts(n: number): Record<Rank, number> {
   const w = GUILD.rankWeights;
   const total = RANKS.reduce((t, r) => t + w[r], 0);
-  const s = { A: w.A / total, B: w.B / total, D: w.D / total };
-  const A = n > 0 ? Math.max(1, Math.round(n * s.A)) : 0;
-  const B = Math.min(n - A, Math.round(n * s.B));
-  const D = Math.min(n - A - B, Math.round(n * s.D));
-  return { A, B, C: n - A - B - D, D };
+  const s = { S: w.S / total, A: w.A / total, B: w.B / total, D: w.D / total };
+  const S = Math.min(n, Math.round(n * s.S));
+  const A = n > S ? Math.max(1, Math.min(n - S, Math.round(n * s.A))) : 0;
+  const B = Math.min(n - S - A, Math.round(n * s.B));
+  const D = Math.min(n - S - A - B, Math.round(n * s.D));
+  return { S, A, B, C: n - S - A - B - D, D };
 }
 
 export interface BoardEntry {
@@ -110,7 +111,7 @@ export function updateRanks(state: GameState): { player?: { from: Rank; to: Rank
   state.belowRankSince = me.belowSince;
   for (const p of state.guild.rivals) {
     const r = demotionCheck(p.rank, p.renown, p.belowSince ?? 0, state.day);
-    if (r.rank !== p.rank && (p.rank === 'A' || p.rank === 'B')) news.push(`${p.name} dropped to ${r.rank} rank.`);
+    if (r.rank !== p.rank && (p.rank === 'S' || p.rank === 'A' || p.rank === 'B')) news.push(`${p.name} dropped to ${r.rank} rank.`);
     p.rank = r.rank;
     p.belowSince = r.belowSince;
   }
@@ -118,8 +119,8 @@ export function updateRanks(state: GameState): { player?: { from: Rank; to: Rank
 }
 
 /** Typical member level of a party at each rank when the world is made (adventurers of about that rank). */
-const LEVELS_BY_RANK: Record<Rank, [number, number]> = { A: [16, 19], B: [11, 14], C: [6, 9], D: [1, 4] };
-const RENOWN_BY_RANK: Record<Rank, [number, number]> = { A: [1650, 2600], B: [420, 1400], C: [110, 380], D: [0, 90] };
+const LEVELS_BY_RANK: Record<Rank, [number, number]> = { S: [21, 24], A: [16, 19], B: [11, 14], C: [6, 9], D: [1, 4] };
+const RENOWN_BY_RANK: Record<Rank, [number, number]> = { S: [6500, 9000], A: [1650, 2600], B: [420, 1400], C: [110, 380], D: [0, 90] };
 
 function rivalMember(level: number, rng: Rng, avoid: Set<string>): RivalMember {
   const sex = rng() < 0.5 ? 'male' : 'female';
@@ -264,7 +265,7 @@ function poisson(mean: number, rng: Rng): number {
   return k - 1;
 }
 
-const QUEST_WORDS: Record<Rank, string> = { A: 'an A-rank', B: 'a B-rank', C: 'a C-rank', D: 'a D-rank' };
+const QUEST_WORDS: Record<Rank, string> = { S: 'an S-rank', A: 'an A-rank', B: 'a B-rank', C: 'a C-rank', D: 'a D-rank' };
 
 /** Renown lost: a failed quest, and each member who died on it. */
 export function renownLoss(questRenown: number, failed: boolean, deaths: number): number {
@@ -312,7 +313,7 @@ export function simulateGuildDay(state: GameState, rng: Rng): void {
             p.rank = rank;
             p.belowSince = 0;
             p.last = `Day ${day}: promoted to ${rank} rank`;
-            if (rank === 'A' || rank === 'B') news(`${p.name} passed their promotion quest and rose to ${rank} rank.`);
+            if (rank === 'S' || rank === 'A' || rank === 'B') news(`${p.name} passed their promotion quest and rose to ${rank} rank.`);
           }
           for (const m of p.members) if (m.level < SIM.maxLevel && rng() < SIM.levelUpChanceOnSuccess * SIM.levelUpFalloff ** (m.level - 1)) m.level += 1;
           const lost = p.members.filter((m) => rng() < SIM.lossChanceOnSuccess * deathFactor(m.level));

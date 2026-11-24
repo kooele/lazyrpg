@@ -4,11 +4,11 @@
   "startingGold": 500,
   "startingRenown": 0,
   "maxRoster": 12,
-  "rankWeights": { "A": 5, "B": 20, "C": 60, "D": 25 },
-  "_rankWeights": "Relative weights for each rank (a rank's share is its weight over the total: D is 25/110, about 23%): how the rival parties are spread over the ranks when a new game starts (after that, ranks follow renown: see ranks), and how often the guild posts a quest of each rank (see board).",
+  "rankWeights": { "S": 1, "A": 5, "B": 20, "C": 60, "D": 40 },
+  "_rankWeights": "Relative weights for each rank (a rank's share is its weight over the total: D is 40/126, about 32%): how the rival parties are spread over the ranks when a new game starts (after that, ranks follow renown: see ranks), and how often the guild posts a quest of each rank (see board).",
   "ranks": {
     "_comment": "Party ranks. renown: the renown a party needs for each rank (D needs none). Reaching the next rank's renown puts a promotion quest of that rank on the board; completing it promotes the party. A party whose renown stays below its own rank's threshold for demotionDays days in a row drops a rank. Renown doesn't fade: a failed quest loses failedQuestRenown x that quest's renown, and each member who dies loses deathRenown x the quest's renown.",
-    "renown": { "C": 100, "B": 400, "A": 1600 },
+    "renown": { "C": 100, "B": 400, "A": 1600, "S": 6400 },
     "demotionDays": 7,
     "failedQuestRenown": 1,
     "deathRenown": 0.5
@@ -19,7 +19,7 @@
   },
   "boardSize": 24,
   "board": {
-    "_comment": "The guild's quest board is shared with the rival parties, who take quests from it (see simulation). Each day up to maxPostsPerDay new quests are posted until it holds boardSize; each quest's rank is picked by rankWeights (A 5, B 20, C 60, D 25, out of 110), with nothing set aside for the player: in a slow week the rivals may take every quest at the player's rank. Quests vary: each rolls its enemy level and group size (see quests and threat), and pay is extra luck on the reward, so some quests are much better deals than others.",
+    "_comment": "The guild's quest board is shared with the rival parties, who take quests from it (see simulation). Each day up to maxPostsPerDay new quests are posted until it holds boardSize; each quest's rank is picked by rankWeights (S 1, A 5, B 20, C 60, D 40, out of 126), with nothing set aside for the player: in a slow week the rivals may take every quest at the player's rank. Quests vary: each rolls its enemy level and group size (see quests and threat), and pay is extra luck on the reward, so some quests are much better deals than others.",
     "maxPostsPerDay": 8,
     "pay": [0.75, 1.35]
   },
@@ -28,7 +28,8 @@
     "D": { "stages": [1, 5], "count": [2, 4], "days": [1, 2] },
     "C": { "stages": [6, 10], "count": [3, 6], "days": [1, 3] },
     "B": { "stages": [11, 15], "count": [4, 7], "days": [2, 3] },
-    "A": { "stages": [16, 20], "count": [5, 8], "days": [2, 4] }
+    "A": { "stages": [16, 20], "count": [5, 8], "days": [2, 4] },
+    "S": { "stages": [21, 25], "count": [4, 7], "days": [3, 5] }
   },
   "threat": {
     "_comment": "A quest's total threat is its enemy count (threat points) x the strength of one enemy at its level: strengthAtLevel1 x strengthGrowth^(level - 1), so each level makes an enemy about 16.5% stronger (a level-20 enemy is about 18x a level-1 one). The usual gold for a quest is total threat x goldPerThreat (then x the board's pay roll), and its renown total threat x renownPerThreat. For rival parties, a quest is as hard as a group of standardCount enemies whose strength matches its total threat: that level - 1 is the average party level it calls for. Quest cards show it as skulls: half a skull at difficulty skulls.from up to ten at skulls.to, rising evenly in half steps (five white skulls, then red skulls over them).",
@@ -103,7 +104,7 @@
     "wagePerLevel": 20,
     "terms": [2, 4, 8, 12],
     "termDemand": { "2": 1.1, "4": 1.0, "8": 0.95, "12": 0.9 },
-    "expectedWeeklyLoot": { "D": 150, "C": 400, "B": 900, "A": 2000 },
+    "expectedWeeklyLoot": { "D": 150, "C": 400, "B": 900, "A": 2000, "S": 4500 },
     "patience": 3,
     "startingRelationship": 10,
     "relationshipPerQuest": 6,

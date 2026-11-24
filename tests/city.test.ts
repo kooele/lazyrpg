@@ -39,15 +39,16 @@ describe('guild.json', () => {
     bad.quests.C.count = [6, 3];
     expect(() => parseGuildConfig(bad)).toThrow(/quests\.C\.count\[1\]/);
     const shares = JSON.parse(JSON.stringify(guildJson));
-    shares.rankWeights = { A: 0, B: 0, C: 0, D: 0 };
+    shares.rankWeights = { S: 0, A: 0, B: 0, C: 0, D: 0 };
     expect(() => parseGuildConfig(shares)).toThrow(/rankWeights.*above 0/);
   });
 });
 
 describe('ranks and the leaderboard', () => {
-  it('splits parties by weight: A 5, B 20, C 60, D 25 out of 110', () => {
-    expect(rankCounts(21)).toEqual({ A: 1, B: 4, C: 11, D: 5 });
-    expect(rankCounts(20)).toEqual({ A: 1, B: 4, C: 10, D: 5 });
+  it('splits parties by weight: S 1, A 5, B 20, C 60, D 40 out of 126 (always at least one A)', () => {
+    expect(rankCounts(21)).toEqual({ S: 0, A: 1, B: 3, C: 10, D: 7 });
+    expect(rankCounts(20)).toEqual({ S: 0, A: 1, B: 3, C: 10, D: 6 });
+    expect(rankCounts(126)).toEqual({ S: 1, A: 5, B: 20, C: 60, D: 40 });
   });
 
   it('a new game: about 100 adventurers in 20 parties, and the player starts at D rank', () => {
@@ -103,6 +104,24 @@ describe('ranks and the leaderboard', () => {
     expect(promoQuests).toBe(1);
     expect(s.rank).toBe('C');
     expect(s.log.some((n) => /now C rank/.test(n.text))).toBe(true);
+  });
+
+  it('S rank: A-rank parties with enough renown get an S-rank promotion quest; S quests have level 21-25 foes', () => {
+    const s = start();
+    s.rank = 'A';
+    s.renown = GUILD.ranks.renown.S;
+    advanceDay(s, makeRng(5));
+    const promo = s.guild.board.find((q) => q.promotion)!;
+    expect(promo.rank).toBe('S');
+    expect(canTakeQuest(s, promo)).toBe(true);
+    for (let i = 0; i < 20; i++) {
+      const q = makeQuest('S', 1, makeRng(i));
+      expect(q.stage).toBeGreaterThanOrEqual(21);
+      expect(q.stage).toBeLessThanOrEqual(25);
+      expect(q.foes?.length).toBeGreaterThan(0);
+    }
+    s.rank = 'S';
+    expect(canTakeQuest(s, makeQuest('D', 1, makeRng(1)))).toBe(true);
   });
 
   it('renown doesn\'t fade; failing and deaths cost renown; a full week below the threshold drops a rank', () => {

@@ -217,8 +217,8 @@ export function parseGuildConfig(data: unknown): GuildConfig {
   const rankWeights = perRank(d.rankWeights, 'rankWeights');
   if (RANKS.reduce((s, r) => s + rankWeights[r], 0) <= 0) fail('rankWeights', 'at least one weight must be above 0');
   const rk = obj(d.ranks, 'ranks');
-  const thresholds = numbers<Record<'C' | 'B' | 'A', number>>(rk.renown, 'ranks.renown', ['C', 'B', 'A']);
-  if (!(thresholds.C < thresholds.B && thresholds.B < thresholds.A)) fail('ranks.renown', 'must grow from C to B to A');
+  const thresholds = numbers<Record<'C' | 'B' | 'A' | 'S', number>>(rk.renown, 'ranks.renown', ['C', 'B', 'A', 'S']);
+  if (!(thresholds.C < thresholds.B && thresholds.B < thresholds.A && thresholds.A < thresholds.S)) fail('ranks.renown', 'must grow from C to B to A to S');
   const advRanks = numbers<Record<'C' | 'B' | 'A' | 'S', number>>(d.adventurerRanks, 'adventurerRanks', ['C', 'B', 'A', 'S']);
   if (!(1 < advRanks.C && advRanks.C < advRanks.B && advRanks.B < advRanks.A && advRanks.A < advRanks.S)) fail('adventurerRanks', 'must grow from C to B to A to S (and C above 1)');
   const q = obj(d.quests, 'quests');
@@ -280,7 +280,7 @@ export function parseGuildConfig(data: unknown): GuildConfig {
     inns: parseInns(d.inns),
     lodging: {
       ...numbers<Omit<GuildConfig['lodging'], 'expectedQuality'>>(d.lodging, 'lodging', ['relationshipAbove', 'relationshipBelowPerStep', 'outsidePerPerson']),
-      expectedQuality: numbers(obj(d.lodging, 'lodging').expectedQuality, 'lodging.expectedQuality', ['S', ...RANKS], 3),
+      expectedQuality: numbers(obj(d.lodging, 'lodging').expectedQuality, 'lodging.expectedQuality', [...RANKS], 3),
     },
     residences: parseResidences(d.residences),
     condition: numbers<GuildConfig['condition']>(d.condition, 'condition', ['maxHealthLoss', 'healthPerDay', 'startingMorale', 'moralePerTurn',

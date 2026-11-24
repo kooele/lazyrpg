@@ -122,7 +122,7 @@ export function makeQuest(rank: Rank, day: number, rng: Rng, promotion = false):
   };
 }
 
-/** A rank picked in proportion to the share of parties at each rank (rankWeights: A 5, B 20, C 60, D 25 out of 110). */
+/** A rank picked in proportion to the share of parties at each rank (rankWeights: S 1, A 5, B 20, C 60, D 40 out of 126). */
 function postedRank(rng: Rng): Rank {
   const w = GUILD.rankWeights;
   const total = RANKS.reduce((s, r) => s + w[r], 0);
