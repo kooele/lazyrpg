@@ -1213,6 +1213,33 @@ describe('buffs (War Cry, Howl)', () => {
 });
 
 describe('battles', () => {
+  it('a move can only be undone until a teammate does something', () => {
+    const make = () => setup(openMap(), [
+      { c: hero(), team: 'player', at: { x: 1, y: 1 } },
+      { c: hero('staff', ['arcane_pulse']), team: 'player', at: { x: 1, y: 3 } },
+      { c: hero(), team: 'enemy', at: { x: 9, y: 6 } },
+    ]);
+    // An ally moving locks it in (no stepping aside to let it through, then stepping back).
+    const moved = make();
+    const [a, b] = moved.units;
+    moved.battle.move(a, { x: 3, y: 1 });
+    expect(moved.battle.canUndoMove(a)).toBe(true);
+    moved.battle.move(b, { x: 1, y: 2 });
+    expect(moved.battle.canUndoMove(a)).toBe(false);
+    expect(() => moved.battle.undoMove(a)).toThrow();
+    expect(moved.battle.canUndoMove(b)).toBe(true); // the last one to act can still take its own move back
+    // So does an ally's skill (no stepping out of its area attack, then back).
+    const cast = make();
+    cast.battle.move(cast.units[0], { x: 3, y: 1 });
+    cast.battle.perform(cast.units[1], 'magic_bolt', { x: 3, y: 1 });
+    expect(cast.battle.canUndoMove(cast.units[0])).toBe(false);
+    // Next turn starts fresh.
+    cast.battle.endPhase();
+    cast.battle.endPhase();
+    cast.battle.move(cast.units[0], { x: 4, y: 1 });
+    expect(cast.battle.canUndoMove(cast.units[0])).toBe(true);
+  });
+
   it('teams alternate turns; every unit moves and acts once per turn', () => {
     const { battle, units: [a, b, e] } = setup(openMap(), [
       { c: hero(), team: 'player', at: { x: 0, y: 0 } },
@@ -1221,8 +1248,8 @@ describe('battles', () => {
     ]);
     expect(battle.canAct(e)).toBe(false);
     battle.move(b, { x: 2, y: 2 });
-    battle.move(a, { x: 1, y: 0 });
     battle.undoMove(b);
+    battle.move(a, { x: 1, y: 0 });
     battle.wait(a);
     battle.wait(b);
     expect(battle.readyUnits()).toEqual([]);

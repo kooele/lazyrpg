@@ -65,7 +65,7 @@ export interface Unit {
   acted: boolean;
   /** Mana left (starts at max; doesn't come back during a battle). */
   mp: number;
-  /** Something happened that can't be undone (free action, triggered overwatch): no undo move. */
+  /** Something happened that can't be undone (free action, triggered overwatch, or a teammate acted since): no undo move. */
   locked: boolean;
   /** Where the unit stood when its turn began (for undoing a move). */
   startPos: Point;
@@ -455,6 +455,7 @@ export class Battle {
     events.push({ type: 'disengage', source: u.uid, target: opp.uid, reason: 'disengage' });
     events.push(...this.opportunityAttack(opp, u));
     u.locked = true;
+    this.lockTeammates(u);
     u.startPos = { x: u.x, y: u.y };
     if (!u.alive) u.acted = true;
     return events;
@@ -683,6 +684,7 @@ export class Battle {
     u.moved = true;
     u.walked = true;
     u.ap -= 1;
+    this.lockTeammates(u);
     return this.walk(u, this.pathTo(reach, dest));
   }
 
@@ -705,6 +707,16 @@ export class Battle {
     // start of each of the unit's turns, so store N + 1 (it hits 0 on the turn it's usable).
     if (skill.cooldown > 0) u.cooldowns[skillId] = skill.cooldown + 1;
     u.locked = true;
+    this.lockTeammates(u);
+  }
+
+  /**
+   * `u` did something (moved, used a skill, broke away): its teammates can no longer undo their moves this turn.
+   * Otherwise undoing would be free movement: step aside to let an ally through, or out of an ally's area attack, then step back.
+   */
+  private lockTeammates(u: Unit): void {
+    // Only moves already made are locked in; a teammate that hasn't moved yet can still undo its own move later.
+    for (const o of this.units) if (o !== u && o.team === u.team && o.walked) o.locked = true;
   }
 
   private walk(u: Unit, full: Point[]): MoveResult {
@@ -763,7 +775,10 @@ export class Battle {
     return { events, interrupted };
   }
 
-  /** Only a regular move with nothing else done since (no skill, no overwatch shot) can be taken back. */
+  /**
+   * Only a regular move with nothing else done since (no skill, no overwatch shot) can be taken back, and only
+   * until a teammate does something (see lockTeammates).
+   */
   canUndoMove(u: Unit): boolean {
     const occupant = this.unitAt(u.startPos.x, u.startPos.y);
     return u.alive && u.walked && !u.acted && !u.locked && (!occupant || occupant === u);
