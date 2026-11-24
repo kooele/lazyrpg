@@ -137,6 +137,7 @@ describe('ranks and the leaderboard', () => {
     resolveQuest(s, 'defeat', makeRng(1));
     expect(s.renown).toBe(Math.max(0, 120 - q.renown * GUILD.ranks.failedQuestRenown));
     s.renown = 90; // below C's 100
+    s.belowRankSince = s.day; // ...from today
     for (let i = 0; i < GUILD.ranks.demotionDays; i++) {
       expect(s.rank).toBe('C');
       nightsAt(s, 'standard', 1, makeRng(1));
