@@ -43,7 +43,7 @@ export function glossaryEntries(): GlossaryEntry[] {
   // ---- City life -------------------------------------------------------------------------------
   add('City life', 'Days and End Day',
     `Time only passes when you press End Day. Everyone the party houses eats and sleeps where you lodge them, and the schedule runs for members who didn't quest that day.\n\n`
-    + `You can go on one quest a day: coming back from one doesn't end the day, but the next one has to wait until tomorrow. Multi-day quests spend the nights before the last one on the road (free lodging, food still paid).\n\n`
+    + `You can go on one quest a day: coming back from one doesn't end the day, but the next one has to wait until tomorrow. Multi-day quests spend the nights before the last one on the road: free lodging for the members on the quest, food still paid. Members who stayed home live those days as usual, paying for and sleeping where they lodge.\n\n`
     + `Every 7th day is payday: companion wages and slave taxes are due.`);
   add('City life', 'Health (not battle HP)',
     `Health is a member's condition between battles, out of 100. It isn't their HP in battle.\n\n`
@@ -60,11 +60,11 @@ export function glossaryEntries(): GlossaryEntry[] {
   add('City life', 'Schedule',
     `Members who aren't on a quest follow their schedule when the day ends (set in Manage Party):\n\n`
     + `• Recover: ${G.schedule.recoverMultiplier}× Health recovery.\n• Training: ${G.schedule.trainingXp.perLevel} XP per level + ${G.schedule.trainingXp.flat} (${trainingXp(1)} at level 1, ${trainingXp(20)} at level 20).\n• Odd Jobs: +${G.schedule.oddJobsGold} gold.\n• Day Off: +${G.schedule.dayOffMorale} Morale.\n\n`
-    + `Unscheduled members recover when injured and take a day off otherwise. Benched members (not in the lineup) follow it too.`);
+    + `A schedule you set stays until you change it, except Recover: once Health is full they go back to Day Off. Unscheduled members take a Day Off, unless their Health would take longer to heal than their Morale takes to fill on Day Off: then they Recover. Benched members (not in the lineup) follow it too.`);
   add('City life', 'Food and lodging expectations',
     `Each member you house eats at a food tier and sleeps at a lodging you pick in Manage Party. Each has a quality from 0 to 3.\n\n`
     + `Adventurers of every rank expect quality ${adventurerQ}: ${FOOD_TIERS[adventurerQ]} food (${food(adventurerQ)} gold a day) and an inn (${night(adventurerQ)} gold a night). Slaves expect quality ${L.slaveExpectedQuality}: ${FOOD_TIERS[L.slaveExpectedQuality]} food and the stables.\n\n`
-    + `Each night, companions and slaves gain ${L.relationshipAbove} relationship for sleeping better than they expect and lose ${L.relationshipBelowPerStep} per step worse. Food works the same way: +${G.food.relationshipAbove} for better, −${G.food.relationshipBelowPerStep} per step worse. Food is paid on the road too.`);
+    + `Each night, companions and slaves gain ${L.relationshipAbovePerStep} relationship per step of lodging better than they expect and lose ${L.relationshipBelowPerStep} per step worse. Food works the same way: +${G.food.relationshipAbovePerStep} per step better, −${G.food.relationshipBelowPerStep} per step worse. Food is paid on the road too.`);
   add('City life', 'Stables',
     `Everyone's default lodging: ${L.stablesPerPerson} gold a night per person, quality 0. Slaves are content there; adventurers lose ${L.relationshipBelowPerStep} relationship per night in it.\n\n`
     + `Members also end up in the stables when you sell the residence they live in.`);
@@ -98,6 +98,7 @@ export function glossaryEntries(): GlossaryEntry[] {
     + `Climbing back above it in time resets the clock.`);
   add('Quests & ranks', 'Failure and deaths',
     `A failed quest pays nothing and loses ${G.ranks.failedQuestRenown === 1 ? 'that quest\'s renown' : `${G.ranks.failedQuestRenown}× that quest's renown`}. Each member who dies loses another ${pct(G.ranks.deathRenown)} of it, whether the quest succeeded or not.\n\n`
+    + `A member who quits on you (unpaid wages, or Morale 0) costs ${G.ranks.quitRenownPerLevel} renown per level. Releasing someone yourself doesn't.\n\n`
     + `A failed quest still gives XP for the share of enemies you defeated, and bounties for every kill.`);
   add('Quests & ranks', 'Shared quest board',
     `The Quest Board is shared with every rival party, and they take quests from it every day, the best deals first. Nothing is held back for you: in a slow week the rivals may take every quest at your rank.\n\n`
@@ -133,7 +134,7 @@ export function glossaryEntries(): GlossaryEntry[] {
 
   // ---- Party members ----------------------------------------------------------------------------
   add('Party members', 'Lineup and roster',
-    `The party holds up to ${G.maxRoster} members, and up to ${MAX_PARTY_SIZE} go on a quest: the lineup, set in Manage Party.\n\n`
+    `The party holds up to ${G.maxRoster} members, and up to ${MAX_PARTY_SIZE} go on a quest: the lineup. In Manage Party, drag members into the ${MAX_PARTY_SIZE} lineup slots at the top; the slot order is who deploys first. Drag a member out of the slots to bench them.\n\n`
     + `Anyone can be benched, the main character too, as long as one member goes. Benched members stay in the city and follow their schedule, so you can rest an injured leader while the others work.`);
   add('Party members', 'Mercenaries',
     `A mercenary goes on one quest, win or lose, then leaves. They're paid the larger of two amounts: their fee (${G.mercenary.feePerLevel} × level, paid up front) or their cut (${G.mercenary.cutBase} + ${G.mercenary.cutPerLevel} × level % of a won quest's reward).\n\n`
@@ -144,11 +145,13 @@ export function glossaryEntries(): GlossaryEntry[] {
   add('Party members', 'Negotiation',
     `An offer close to what a candidate wants gets a counter-offer; a low one offends them. Each rejected offer uses up patience (counters cost 1, insults 2). Once it runs out they walk away and won't talk to you for a week.`);
   add('Party members', 'Contracts and renewal',
-    `Contracts run ${K.terms.join(', ')} weeks. Base pay is due every payday. When a contract ends, the companion sits out of quests and you have ${K.graceDays} days to renew it in Manage Party before they leave.\n\n`
-    + `A good relationship lowers their demands on renewal, by up to ${pct(K.renewalDiscountAtMax)} at 100. Walking out of a renewal ends the contract on the spot.`);
+    `Contracts run ${K.terms.join(', ')} weeks. Base pay is due every payday, by the day: a companion hired midweek gets only the days they've worked, and so does one whose term ends midweek. Renewing settles the wages earned under the old terms on the spot. When a contract ends, the companion sits out of quests and you have ${K.graceDays} days to renew it in Manage Party before they leave.\n\n`
+    + `A good relationship lowers their demands on renewal, by up to ${pct(K.renewalDiscountAtMax)} at 100. Walking out of a renewal ends the contract on the spot.\n\n`
+    + `Releasing a companion before their term ends breaks the contract: you pay them ${pct(K.releaseShareOfRemaining)} of what the rest of the term is worth (base pay, loot cut and food & lodging), but never more than ${K.releaseMinWeeks} week${K.releaseMinWeeks === 1 ? '' : 's'} of it. Once the term has ended, there's no buyout.\n\n`
+    + `Either way, you also pay the base pay they've earned since the last payday, by the day (3 days in: 3/7 of a week's pay).`);
   add('Party members', 'Relationship',
     `Companions and slaves have a relationship from 0 to 100. It rises by ${K.relationshipPerQuest} for every quest completed together, and moves with food and lodging, low Morale and missed pay.\n\n`
-    + `Unpaid companions lose ${-K.relationshipUnpaid} relationship each payday and quit at 0. Slaves' relationship drives their Obedience.`);
+    + `Unpaid companions lose ${-K.relationshipUnpaid} relationship each payday. They quit at 0, which costs the party renown (see Failure and deaths). Slaves' relationship drives their Obedience.`);
   add('Party members', 'Protagonist',
     `Your main character's trait: they recover Health twice as fast and gain Morale twice as fast (drinks, days off). Morale losses aren't doubled.\n\n`
     + `The main character can't be dismissed or die from 0 Health (they pull through at 1), and they don't complain about food or lodging.`);

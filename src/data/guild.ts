@@ -51,7 +51,7 @@ export const FOOD_TIERS: readonly FoodTier[] = ['poor', 'common', 'fine', 'luxur
 export const foodQuality = (t: FoodTier) => FOOD_TIERS.indexOf(t);
 
 export type Activity = 'recover' | 'training' | 'oddJobs' | 'dayOff';
-export const ACTIVITIES: readonly Activity[] = ['recover', 'training', 'oddJobs', 'dayOff'];
+export const ACTIVITIES: readonly Activity[] = ['dayOff', 'recover', 'training', 'oddJobs'];
 
 export interface GuildConfig {
   city: string;
@@ -59,16 +59,16 @@ export interface GuildConfig {
   startingRenown: number;
   maxRoster: number;
   partyRankWeights: Record<Rank, number>;
-  ranks: { renown: Record<Exclude<Rank, 'D'>, number>; highestPromotion: Rank; demotionDays: number; failedQuestRenown: number; deathRenown: number };
+  ranks: { renown: Record<Exclude<Rank, 'D'>, number>; highestPromotion: Rank; demotionDays: number; failedQuestRenown: number; deathRenown: number; quitRenownPerLevel: number };
   /** First level of each adventurer rank above D. */
   adventurerRanks: Record<'C' | 'B' | 'A' | 'S', number>;
   boardSize: number;
   board: { maxPostsPerDay: number; rankWeights: Record<Rank, number>; pay: [number, number] };
   quests: Record<Rank, QuestTier>;
   threat: ThreatConfig;
-  food: Record<FoodTier, { name: string; pricePerPerson: number }> & { default: FoodTier; relationshipAbove: number; relationshipBelowPerStep: number };
+  food: Record<FoodTier, { name: string; pricePerPerson: number }> & { default: FoodTier; relationshipAbovePerStep: number; relationshipBelowPerStep: number };
   inns: Record<InnTier, InnConfig>;
-  lodging: { expectedQuality: Record<'S' | Rank, number>; slaveExpectedQuality: number; relationshipAbove: number; relationshipBelowPerStep: number; stablesPerPerson: number };
+  lodging: { expectedQuality: Record<'S' | Rank, number>; slaveExpectedQuality: number; relationshipAbovePerStep: number; relationshipBelowPerStep: number; stablesPerPerson: number };
   residences: Record<Ring, { name: string; price: number }> & { sellShare: number; capacity: number };
   condition: {
     maxHealthLoss: number;
@@ -109,6 +109,9 @@ export interface GuildConfig {
     relationshipUnpaid: number;
     renewalDiscountAtMax: number;
     graceDays: number;
+    /** Releasing a companion early pays them the larger of releaseMinWeeks of their compensation and releaseShareOfRemaining of what the rest of the term is worth. */
+    releaseMinWeeks: number;
+    releaseShareOfRemaining: number;
   };
   slave: {
     priceBase: number;
@@ -191,7 +194,7 @@ function parseInns(v: unknown): Record<InnTier, InnConfig> {
 function parseFood(v: unknown): GuildConfig['food'] {
   const o = obj(v, 'food');
   const out = {
-    relationshipAbove: num(o.relationshipAbove, 'food.relationshipAbove', 0, 100),
+    relationshipAbovePerStep: num(o.relationshipAbovePerStep, 'food.relationshipAbovePerStep', 0, 100),
     relationshipBelowPerStep: num(o.relationshipBelowPerStep, 'food.relationshipBelowPerStep', 0, 100),
   } as GuildConfig['food'];
   for (const t of FOOD_TIERS) {
@@ -260,6 +263,7 @@ export function parseGuildConfig(data: unknown): GuildConfig {
       demotionDays: num(rk.demotionDays, 'ranks.demotionDays', 1, 365),
       failedQuestRenown: num(rk.failedQuestRenown, 'ranks.failedQuestRenown', 0, 10),
       deathRenown: num(rk.deathRenown, 'ranks.deathRenown', 0, 10),
+      quitRenownPerLevel: num(rk.quitRenownPerLevel, 'ranks.quitRenownPerLevel', 0, 1000),
     },
     adventurerRanks: advRanks,
     boardSize: num(d.boardSize, 'boardSize', 1, 60),
@@ -293,7 +297,7 @@ export function parseGuildConfig(data: unknown): GuildConfig {
     food: parseFood(d.food),
     inns: parseInns(d.inns),
     lodging: {
-      ...numbers<Omit<GuildConfig['lodging'], 'expectedQuality'>>(d.lodging, 'lodging', ['relationshipAbove', 'relationshipBelowPerStep', 'stablesPerPerson']),
+      ...numbers<Omit<GuildConfig['lodging'], 'expectedQuality'>>(d.lodging, 'lodging', ['relationshipAbovePerStep', 'relationshipBelowPerStep', 'stablesPerPerson']),
       expectedQuality: numbers(obj(d.lodging, 'lodging').expectedQuality, 'lodging.expectedQuality', [...RANKS], 3),
       slaveExpectedQuality: num(obj(d.lodging, 'lodging').slaveExpectedQuality ?? 0, 'lodging.slaveExpectedQuality', 0, 3),
     },
@@ -310,7 +314,7 @@ export function parseGuildConfig(data: unknown): GuildConfig {
     mercenary: numbers(d.mercenary, 'mercenary', ['feePerLevel', 'cutBase', 'cutPerLevel']),
     companion: {
       ...numbers<Omit<GuildConfig['companion'], 'terms' | 'termDemand' | 'expectedWeeklyLoot' | 'relationshipUnpaid'>>(c, 'companion',
-        ['wageBase', 'wagePerLevel', 'patience', 'startingRelationship', 'relationshipPerQuest', 'renewalDiscountAtMax', 'graceDays']),
+        ['wageBase', 'wagePerLevel', 'patience', 'startingRelationship', 'relationshipPerQuest', 'renewalDiscountAtMax', 'graceDays', 'releaseMinWeeks', 'releaseShareOfRemaining']),
       relationshipUnpaid: num(c.relationshipUnpaid, 'companion.relationshipUnpaid', -100, 0),
       terms,
       termDemand: termDemand as Record<string, number>,

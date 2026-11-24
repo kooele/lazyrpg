@@ -3,7 +3,7 @@ import { GUILD } from '../data/guild';
 import { WEAPONS } from '../data/content';
 import { dailyUpkeep, departBlock, endDay, foodCost, lineupMembers, lodgingCost, prisonersAtGate, registerPrisoner, turnInPrisoner } from '../game/city';
 import { adventurerRank } from '../game/guild';
-import { registrationFee, slaveTax } from '../game/contracts';
+import { bondOf, registrationFee, slaveTax } from '../game/contracts';
 import { markDirty, requireState, session } from '../game/session';
 import { cityHeader, rankBadge } from '../ui/hud';
 import { COLORS, HEIGHT, ScrollList, UI_SCALE, WIDTH, bakeGraphics, button, confirmDialog, figure, panel, setupCamera, talentTag, text, toast } from '../ui/widgets';
@@ -84,7 +84,7 @@ export class CityScene extends Phaser.Scene {
   private render(): void {
     this.children.removeAll(true);
     const state = requireState();
-    cityHeader(this, state, GUILD.city);
+    cityHeader(this, state, GUILD.city, () => this.menu());
 
     // ---- district tabs and the map -------------------------------------------------------------
     DISTRICTS.forEach(([id, label], i) => button(this, 16 + i * 294, 72, 286, 30, label, () => {
@@ -125,7 +125,7 @@ export class CityScene extends Phaser.Scene {
       text(this, RX + 12, 150, `${q.reward} gold · ${q.days} day${q.days > 1 ? 's' : ''} · stage ${q.stage}`, { fontSize: '13px', color: COLORS.gold });
       text(this, RX + 12, 170, `Lineup: ${lineupMembers(state).map((c) => c.name).join(', ')}`, { fontSize: '12px', color: COLORS.dim, wordWrap: { width: 284 } });
       const block = departBlock(state);
-      button(this, RX + 12, 196, 284, 32, !block ? 'Set out from the city gate' : state.lastQuestDay === state.day ? 'Back from a quest today: rest first' : 'Leader injured: recover first', () => this.depart(), {
+      button(this, RX + 12, 196, 284, 32, !block ? 'Set out from the city gate' : state.lastQuestDay === state.day ? 'Back from a quest today: rest first' : 'No adventurers in the lineup', () => this.depart(), {
         fill: 0x4a2a22, fontSize: 14, enabled: !block,
       });
     } else {
@@ -144,11 +144,8 @@ export class CityScene extends Phaser.Scene {
     }), 'top');
 
     // ---- bottom ---------------------------------------------------------------------------------
-    button(this, 16, HEIGHT - 60, 104, 46, 'Main Menu', () => this.scene.start('MainMenu'), { fontSize: 14 });
-    button(this, 126, HEIGHT - 60, 104, 46, 'Save Game', () => this.scene.start('SaveLoad', { mode: 'save', returnTo: 'City' }), { fontSize: 14 });
-    button(this, 236, HEIGHT - 60, 82, 46, 'Guide', () => this.scene.start('Glossary', { returnTo: 'City' }), { fontSize: 14 });
-    button(this, 324, HEIGHT - 60, 136, 46, 'Manage Party', () => this.scene.start('Party'), { fontSize: 14 });
-    button(this, 466, HEIGHT - 60, 154, 46, `End Day\n(${dailyUpkeep(requireState(), 'city')} gold)`, () => this.endDay(), { fontSize: 13, fill: 0x2a3348 });
+    button(this, 16, HEIGHT - 60, 296, 46, 'Manage Party', () => this.scene.start('Party'), { fontSize: 16 });
+    button(this, 324, HEIGHT - 60, 296, 46, `End Day (${dailyUpkeep(requireState(), 'city')} gold)`, () => this.endDay(), { fontSize: 16, fill: 0x2a3348 });
 
     if (prisonersAtGate(state)) this.gate();
   }
@@ -207,17 +204,90 @@ export class CityScene extends Phaser.Scene {
     }, { fontSize: 14 }));
   }
 
+  /** The ☰ menu under the header's menu button: save, load, the guide, settings, or back to the title screen. Click outside to close. */
+  private menu(): void {
+    const items: [string, () => void][] = [
+      ['Save Game', () => this.scene.start('SaveLoad', { mode: 'save', returnTo: 'City' })],
+      ['Load Game', () => this.scene.start('SaveLoad', { mode: 'load', returnTo: 'City' })],
+      ['Guide', () => this.scene.start('Glossary', { returnTo: 'City' })],
+      ['Settings', () => this.scene.start('Settings', { returnTo: 'City' })],
+      ['Main Menu', () => this.scene.start('MainMenu')],
+    ];
+    const layer = this.add.container(0, 0).setDepth(900);
+    const shade = this.add.rectangle(0, 0, WIDTH, HEIGHT, 0x000000, 0.35).setOrigin(0).setInteractive();
+    shade.on('pointerup', () => layer.destroy());
+    layer.add([shade, panel(this, 12, 58, 200, items.length * 44 + 12)]);
+    items.forEach(([label, go], i) => layer.add(button(this, 18, 64 + i * 44, 188, 38, label, () => {
+      layer.destroy();
+      go();
+    }, { fontSize: 15 })));
+  }
+
   /** End the day: everyone the party houses sleeps where they lodge (set in Manage Party), and the next day begins. */
   private endDay(): void {
     const state = requireState();
     const total = dailyUpkeep(state, 'city');
     const short = total > state.gold ? '\nYou can\'t afford it: companions and slaves will be unhappy.' : '';
     confirmDialog(this, `End the day?\nTonight: ${total} gold (lodging ${lodgingCost(state, 'city')} + food ${foodCost(state)}).\nSet where each member lodges in Manage Party.${short}`, () => {
+      // Before the night: gold, and everyone's relationship, for the summary.
+      const gold = state.gold;
+      const before = state.party.filter((c) => bondOf(c)).map((c) => ({ id: c.id, name: c.name, rel: bondOf(c)!.relationship }));
       const msgs = endDay(state, Math.random);
       markDirty();
       this.render();
-      toast(this, `Day ${state.day}. ${msgs.length ? msgs[msgs.length - 1] : 'A quiet night.'}`);
+      this.daySummary(gold, before, msgs);
     }, 'End Day');
+  }
+
+  /**
+   * The summary after End Day: gold spent or earned, each companion's and slave's relationship change over the night
+   * (or that they left), and everything that happened.
+   */
+  private daySummary(gold: number, before: { id: string; name: string; rel: number }[], msgs: string[]): void {
+    const state = requireState();
+    const layer = this.add.container(0, 0).setDepth(1000);
+    layer.add(this.add.rectangle(0, 0, WIDTH, HEIGHT, 0x000000, 0.7).setOrigin(0).setInteractive());
+    const W = 600;
+    const X = WIDTH / 2 - W / 2;
+    layer.add(panel(this, X, 40, W, HEIGHT - 80));
+    layer.add(text(this, WIDTH / 2, 54, `Day ${state.day} begins`, { fontSize: '24px', color: COLORS.gold }).setOrigin(0.5, 0));
+    const dGold = state.gold - gold;
+    layer.add(text(this, WIDTH / 2, 88, `Gold: ${gold} → ${state.gold} (${dGold >= 0 ? '+' : ''}${dGold})`, {
+      fontSize: '14px', color: dGold < 0 ? COLORS.text : COLORS.good,
+    }).setOrigin(0.5, 0));
+
+    const items: { obj: Phaser.GameObjects.Container; height: number }[] = [];
+    const add = (t: string, style: Phaser.Types.GameObjects.Text.TextStyle = {}) => {
+      const obj = text(this, 0, 0, t, { fontSize: '13px', wordWrap: { width: W - 60 }, lineSpacing: 2, ...style });
+      items.push({ obj: this.add.container(0, 0, [obj]), height: obj.height });
+    };
+    // Relationship: one line per companion and slave.
+    if (before.length) {
+      add('Relationships', { fontSize: '15px', color: COLORS.gold });
+      for (const b of before) {
+        const now = state.party.find((c) => c.id === b.id);
+        const bond = now && bondOf(now);
+        if (!bond) {
+          add(`  ${b.name}: left the party`, { color: COLORS.bad });
+          continue;
+        }
+        const d = Math.round(bond.relationship) - Math.round(b.rel);
+        add(`  ${b.name}: ${Math.round(b.rel)} → ${Math.round(bond.relationship)}  (${d > 0 ? '+' : ''}${d})`, {
+          color: d > 0 ? COLORS.good : d < 0 ? COLORS.bad : COLORS.dim,
+        });
+      }
+    }
+    add('What happened', { fontSize: '15px', color: COLORS.gold });
+    if (!msgs.length) add('  A quiet night.', { color: COLORS.dim });
+    for (const m of msgs) add(`• ${m}`);
+
+    const list = new ScrollList(this, X + 20, 116, W - 30, HEIGHT - 226, 4);
+    list.root.setDepth(1001);
+    list.setItems(items, 'top');
+    layer.add(button(this, WIDTH / 2 - 80, HEIGHT - 94, 160, 40, 'Continue', () => {
+      list.destroy();
+      layer.destroy();
+    }, { fontSize: 15 }));
   }
 
   /** A map pin: gold for open locations, grey for ones that aren't open yet. */

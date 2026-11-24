@@ -2,11 +2,11 @@
 // Pure logic (no Phaser): scenes call these and show the messages they return.
 import { MAX_PARTY_SIZE } from '../data/content';
 import { GUILD, isResidence, trainingXp, type CityLodging, type InnTier, type Ring } from '../data/guild';
-import { RANKS, type Character, type GameState, type Offer, type Quest, type Rank } from '../data/types';
+import { RANKS, type Character, type CompanionTerms, type GameState, type Offer, type Quest, type Rank } from '../data/types';
 import { dangerRating, makeQuest, postQuests } from './board';
 import { grantXp, type Rng } from './character';
 import {
-  bondOf, bounty, canFight, registrationFee, slaveTax, changeRelationship, isCompanion, isExpired, isHoused, isSlave, leaveParty, slaveContract, slavePrice, talentPriceFactor,
+  bondOf, bounty, canFight, registrationFee, slaveTax, changeRelationship, isCompanion, isHoused, isSlave, leaveParty, releaseTotal, proratedWages, wagesBetween, lastPayday, slaveContract, slavePrice, talentPriceFactor,
 } from './contracts';
 import {
   ACTIVITY_INFO, FOOD_EXPECT_TEXT, QUALITY_TEXT, activityOf, changeHealth, changeMorale, expectedQuality, foodOf, foodRelationship, healthLoss, healthOf,
@@ -63,15 +63,15 @@ export const mainCharacter = (state: GameState) => state.party.find((c) => c.id 
 // ---- lineup -------------------------------------------------------------------------------------------
 
 /**
- * Members going on the next quest, in party order (drag members in Manage Party to reorder). Anyone can be benched,
- * the main character too: the others can go on quests without them.
+ * Members going on the next quest, in lineup order (the five slots in Manage Party: who deploys first in battle).
+ * Anyone can be benched, the main character too: the others can go on quests without them.
  */
 export function lineupMembers(state: GameState): Character[] {
-  const picked = new Set(state.lineup);
-  return state.party.filter((c) => picked.has(c.id) && canFight(state, c)).slice(0, MAX_PARTY_SIZE);
+  const byId = new Map(state.party.map((c) => [c.id, c]));
+  return state.lineup.map((id) => byId.get(id)).filter((c): c is Character => !!c && canFight(state, c)).slice(0, MAX_PARTY_SIZE);
 }
 
-/** Put a member in or out of the lineup. Returns an error message if it can't be done. */
+/** Put a member in or out of the lineup (joining at the end). Returns an error message if it can't be done. */
 export function toggleLineup(state: GameState, id: string): string | null {
   if (state.lineup.includes(id)) {
     state.lineup = state.lineup.filter((x) => x !== id);
@@ -86,25 +86,74 @@ export function toggleLineup(state: GameState, id: string): string | null {
   return null;
 }
 
-/** Move a party member to position `to` in the party list (which also sets the lineup's order). */
+/**
+ * Drop a member into lineup slot `slot` (0-based). A member already in the lineup moves there (swapping with whoever
+ * held it); a benched one takes the slot, and whoever held it goes to the bench. An empty slot past the end just
+ * appends. Returns an error message if it can't be done.
+ */
+export function setLineupSlot(state: GameState, id: string, slot: number): string | null {
+  const c = state.party.find((m) => m.id === id);
+  if (!c) return 'Not in the party.';
+  if (!canFight(state, c)) return `${c.name}'s contract has run out. Renew it first.`;
+  tidyLineup(state);
+  const line = state.lineup;
+  const at = Math.max(0, Math.min(MAX_PARTY_SIZE - 1, slot));
+  const from = line.indexOf(id);
+  if (from >= 0) {
+    // Move within the lineup: swap with the slot's holder, or move to the end if the slot is empty.
+    if (at < line.length) [line[from], line[at]] = [line[at], line[from]];
+    else line.push(...line.splice(from, 1));
+  } else if (at < line.length) line[at] = id;
+  else line.push(id);
+  return null;
+}
+
+/** Bench a member: take them out of the lineup. */
+export function benchMember(state: GameState, id: string): void {
+  state.lineup = state.lineup.filter((x) => x !== id);
+}
+
+/** Move a party member to position `to` in the party list (the roster order; the lineup keeps its own order). */
 export function moveMember(state: GameState, id: string, to: number): void {
   const from = state.party.findIndex((c) => c.id === id);
   if (from < 0) return;
   const [c] = state.party.splice(from, 1);
   state.party.splice(Math.max(0, Math.min(state.party.length, to)), 0, c);
-  tidyLineup(state);
 }
 
-/** Drop lineup entries for members who left or can't fight (lapsed contracts), and keep it in party order. */
+/** Drop lineup entries for members who left or can't fight (lapsed contracts), keeping the lineup's order. */
 export function tidyLineup(state: GameState): void {
   state.lineup = lineupMembers(state).map((c) => c.id);
+}
+
+/** Renown a party loses when a member quits on it: ranks.quitRenownPerLevel x their level. */
+export const quitRenown = (c: Pick<Character, 'level'>) => GUILD.ranks.quitRenownPerLevel * c.level;
+
+/** A member quits the party (unpaid wages, Morale 0): no payout, but the party loses renown (quitRenown). */
+function quit(state: GameState, c: Character): number {
+  const lost = Math.min(state.renown, quitRenown(c));
+  state.renown -= lost;
+  leaveParty(state, c, isCompanion(c) ? c.contract.greed : 1);
+  return lost;
+}
+
+/** Release a companion, paying their wages since payday and, before their term ends, the buyout (releaseTotal). Returns an error message, or null. */
+export function releaseCompanion(state: GameState, id: string): string | null {
+  const c = state.party.find((m) => m.id === id);
+  if (!c || !isCompanion(c)) return 'Only companions can be released.';
+  const cost = releaseTotal(c, state.day, state.rank);
+  if (state.gold < cost) return `Not enough gold to release ${c.name} (${cost} needed).`;
+  state.gold -= cost;
+  leaveParty(state, c, c.contract.greed);
+  note(state, cost ? `Released ${c.name} from their contract: paid ${cost} gold.` : `${c.name} was released and went back to the guild hall.`);
+  return null;
 }
 
 /** Why the party can't set out on its quest right now (null if it can). */
 export function departBlock(state: GameState): string | null {
   if (!state.quest) return 'Accept a quest at the Adventurer Guild first.';
   if (state.lastQuestDay === state.day) return 'One quest a day: the party is back from a quest today. End the day first.';
-  if (lineupMembers(state).length === 0) return 'Nobody is in the lineup. Pick who goes in Manage Party.';
+  if (lineupMembers(state).length === 0) return 'No adventurers in the lineup. Pick who goes in Manage Party.';
   return null;
 }
 
@@ -332,8 +381,8 @@ export function obedienceDrift(state: GameState): string[] {
 export function moraleDepartures(state: GameState): string[] {
   const out: string[] = [];
   for (const c of state.party.filter((m) => m.id !== state.mainId && moraleOf(m) <= 0)) {
-    leaveParty(state, c, isCompanion(c) ? c.contract.greed : 1);
-    out.push(note(state, `${c.name} has had enough (Morale 0) and left the party.`));
+    const lost = quit(state, c);
+    out.push(note(state, `${c.name} has had enough (Morale 0) and left the party.${lost ? ` Renown -${Math.round(lost)}.` : ''}`));
   }
   return out;
 }
@@ -361,12 +410,22 @@ export function lodgingPrice(where: CityLodging): number {
 }
 
 /**
- * Lodging for one night. On the road (quests) it's free (food is still paid); in the city each housed member
- * pays for where they lodge (Manage Party).
+ * Housed members who spend the night in the city (where they lodge, set in Manage Party). On a 'city' night that's
+ * all of them. On a 'road' night (a multi-day quest) it's those not out on the quest (`away`); with no `away` list
+ * the whole party is on the road.
  */
-export function lodgingCost(state: GameState, night: 'road' | 'city' = 'road'): number {
-  if (night === 'road') return 0;
-  return boarders(state).reduce((s, c) => s + lodgingPrice(lodgingOf(state, c)), 0);
+export function cityBoarders(state: GameState, night: 'road' | 'city' = 'road', away?: string[]): Character[] {
+  if (night === 'road' && !away) return [];
+  const out = new Set(night === 'road' ? away : []);
+  return boarders(state).filter((c) => !out.has(c.id));
+}
+
+/**
+ * Lodging for one night: each housed member in the city pays for where they lodge (Manage Party); nights on the
+ * road (quests) are free (food is still paid). See cityBoarders.
+ */
+export function lodgingCost(state: GameState, night: 'road' | 'city' = 'road', away?: string[]): number {
+  return cityBoarders(state, night, away).reduce((s, c) => s + lodgingPrice(lodgingOf(state, c)), 0);
 }
 
 /** A day's food for everyone the party feeds, each at their own quality. */
@@ -375,7 +434,7 @@ export function foodCost(state: GameState): number {
 }
 
 /** Food and lodging for one day and night. */
-export const dailyUpkeep = (state: GameState, night: 'road' | 'city' = 'road') => lodgingCost(state, night) + foodCost(state);
+export const dailyUpkeep = (state: GameState, night: 'road' | 'city' = 'road', away?: string[]) => lodgingCost(state, night, away) + foodCost(state);
 
 /** Members lodging at a residence. */
 export function residents(state: GameState, ring: Ring): Character[] {
@@ -464,6 +523,11 @@ function runSchedule(state: GameState, away: string[]): string[] {
     const was = healthOf(c);
     changeHealth(c, GUILD.condition.healthPerDay * (act === 'recover' ? S.recoverMultiplier : 1));
     if (was < 100 && healthOf(c) === 100) out.push(`${c.name} has fully recovered.`);
+    // The schedule stays as the player set it, except Recover once Health is full: back to Day Off.
+    if (state.schedule[c.id] === 'recover' && healthOf(c) === 100) {
+      state.schedule[c.id] = 'dayOff';
+      out.push(`${c.name} is at full Health: back to Day Off.`);
+    }
     if (!act) continue;
     if (act === 'training') {
       const levels = grantXp(c, trainingXp(c.level));
@@ -477,8 +541,30 @@ function runSchedule(state: GameState, away: string[]): string[] {
   return out;
 }
 
+/** What the next payday's wages come to (the week ending on it, prorated for companions who joined or leave midweek). */
 export function weeklyWages(state: GameState): number {
-  return state.party.reduce((s, c) => s + (isCompanion(c) && !isExpired(c, state.day) ? c.contract.basePay : 0), 0);
+  const next = lastPayday(state.day) + 7;
+  return state.party.reduce((s, c) => s + (isCompanion(c) ? wagesBetween(c, next - 7, next) : 0), 0);
+}
+
+/**
+ * Renew a companion's contract on new terms. The wages they've earned under the old terms since payday are settled
+ * first; if the party can't pay them, it's like a missed payday (relationship falls).
+ */
+export function renewContract(state: GameState, id: string, terms: CompanionTerms): string[] {
+  const c = state.party.find((m) => m.id === id);
+  if (!c || !isCompanion(c)) return [];
+  const out: string[] = [];
+  const owed = proratedWages(c, state.day);
+  if (owed && state.gold >= owed) {
+    state.gold -= owed;
+    out.push(note(state, `Settled ${c.name}'s wages under the old contract: ${owed} gold.`));
+  } else if (owed) {
+    changeRelationship(c, GUILD.companion.relationshipUnpaid);
+    out.push(note(state, `You couldn't settle ${c.name}'s wages under the old contract (${owed} gold).`));
+  }
+  Object.assign(c.contract, { ...terms, startDay: state.day, endDay: state.day + terms.termWeeks * 7 });
+  return out;
 }
 
 /** Property tax on the party's slaves, due each payday (see slaveTax). */
@@ -496,19 +582,20 @@ export function advanceDays(state: GameState, days: number, rng: Rng): string[] 
 }
 
 /**
- * End the day with a night on the road (quests) or in the city (each housed member where they lodge), then start
- * the next one: the day's schedule and recovery, upkeep, housed companions' and slaves' feelings about their food and
- * where they slept, payday, contracts, the rest of the guild, the board and the market.
- * `away`: members out on a quest (they don't follow their schedule).
+ * End the day with a night in the city (each housed member where they lodge) or on the road (a multi-day quest),
+ * then start the next one: the day's schedule and recovery, upkeep, housed companions' and slaves' feelings about
+ * their food and where they slept, payday, contracts, the rest of the guild, the board and the market.
+ * `away`: on a road night, the members out on the quest: they sleep on the road for free and don't follow their
+ * schedule, while everyone else lives a normal city day and night. Without it, the whole party is on the road.
  */
-export function advanceDay(state: GameState, rng: Rng, night: 'road' | 'city' = 'road', away: string[] = []): string[] {
+export function advanceDay(state: GameState, rng: Rng, night: 'road' | 'city' = 'road', away?: string[]): string[] {
   const out: string[] = [];
   const say = (t: string) => out.push(note(state, t));
-  for (const t of runSchedule(state, away)) say(t);
+  for (const t of runSchedule(state, away ?? [])) say(t);
   state.day += 1;
 
   // Food and lodging.
-  const upkeep = dailyUpkeep(state, night);
+  const upkeep = dailyUpkeep(state, night, away);
   if (upkeep > state.gold) {
     say(`Not enough gold for food and lodging (${upkeep} needed). Your companions and slaves are unhappy.`);
     state.gold = 0;
@@ -525,11 +612,11 @@ export function advanceDay(state: GameState, rng: Rng, night: 'road' | 'city' = 
       meals.push(`${c.name} ${d > 0 ? '+' : ''}${d} (expects ${FOOD_EXPECT_TEXT[expectedQuality(c)]})`);
     }
     if (meals.length) say(`Food. Relationship: ${meals.join(', ')}.`);
-    // Housed companions and slaves compare where they slept with what someone of their rank expects.
-    if (night === 'city') {
+    // Housed companions and slaves who slept in the city compare it with what someone of their rank expects.
+    {
       const moods: string[] = [];
-      for (const c of state.party) {
-        if (!bondOf(c) || !isHoused(c)) continue;
+      for (const c of cityBoarders(state, night, away)) {
+        if (!bondOf(c)) continue;
         const where = lodgingOf(state, c);
         const d = lodgingRelationship(c, where);
         if (!d) continue;
@@ -555,16 +642,18 @@ export function advanceDay(state: GameState, rng: Rng, night: 'road' | 'city' = 
   if (isPayday(state.day)) {
     let paid = 0;
     for (const c of state.party.filter(isCompanion)) {
-      if (isExpired(c, state.day)) continue;
-      if (state.gold >= c.contract.basePay) {
-        state.gold -= c.contract.basePay;
-        paid += c.contract.basePay;
+      // The week just ended, prorated: companions who joined midweek, or whose term ended in it, get their days' worth.
+      const due = wagesBetween(c, state.day - 7, state.day);
+      if (!due) continue;
+      if (state.gold >= due) {
+        state.gold -= due;
+        paid += due;
       } else {
         c.contract.relationship = Math.max(0, c.contract.relationship + GUILD.companion.relationshipUnpaid);
-        say(`You couldn't pay ${c.name} (${c.contract.basePay} gold).`);
+        say(`You couldn't pay ${c.name} (${due} gold).`);
         if (c.contract.relationship <= 0) {
-          leaveParty(state, c, c.contract.greed);
-          say(`${c.name} quits over unpaid wages.`);
+          const lost = quit(state, c);
+          say(`${c.name} quits over unpaid wages.${lost ? ` Renown -${Math.round(lost)}.` : ''}`);
         }
       }
     }
@@ -589,8 +678,11 @@ export function advanceDay(state: GameState, rng: Rng, night: 'road' | 'city' = 
     const k = c.contract;
     if (k.endDay === state.day) say(`${c.name}'s contract has ended. Renew it within ${GUILD.companion.graceDays} days (Party screen) or they will leave.`);
     if (state.day > k.endDay + GUILD.companion.graceDays) {
+      // Settle the days of their term since the last payday.
+      const owed = Math.min(state.gold, proratedWages(c, state.day));
+      state.gold -= owed;
       leaveParty(state, c, k.greed);
-      say(`${c.name} left the party: their contract was not renewed.`);
+      say(`${c.name} left the party: their contract was not renewed.${owed ? ` Final wages: ${owed} gold.` : ''}`);
     }
   }
   tidyLineup(state);

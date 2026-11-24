@@ -136,6 +136,40 @@ export function companionContract(terms: CompanionTerms, day: number, greed: num
 export const daysLeft = (c: CompanionContract, day: number) => c.endDay - day;
 export const isExpired = (c: Character, day: number) => isCompanion(c) && c.contract.endDay <= day;
 
+/**
+ * Base pay a companion earns for the days from `from` to `to` (each day after `from`, up to `to`), prorated by the day:
+ * only days under contract count (after startDay, up to endDay).
+ */
+export function wagesBetween(c: Character & { contract: CompanionContract }, from: number, to: number): number {
+  const worked = Math.max(0, Math.min(to, c.contract.endDay) - Math.max(from, c.contract.startDay));
+  return Math.round((c.contract.basePay * worked) / 7);
+}
+
+/** The last payday on or before `day` (paydays are every 7th day). */
+export const lastPayday = (day: number) => day - (day % 7);
+
+/**
+ * Base pay a companion has earned since the last payday, prorated by the day: what they're owed if they leave (or
+ * renew) before the next one. Days after their term ended don't count.
+ */
+export const proratedWages = (c: Character & { contract: CompanionContract }, day: number) => wagesBetween(c, lastPayday(day), day);
+
+/** Everything releasing a companion costs: the wages they've earned since payday, plus the buyout (releaseCost). */
+export const releaseTotal = (c: Character & { contract: CompanionContract }, day: number, rank: Rank) => proratedWages(c, day) + releaseCost(c, day, rank);
+
+/**
+ * The buyout for releasing a companion before their term ends: the smaller of releaseMinWeeks weeks of their compensation
+ * and releaseShareOfRemaining of the compensation for the days left. Compensation is their total weekly worth: base
+ * pay + expected loot cut at the party's rank + food & lodging (see offerValue). Free once the term has ended.
+ */
+export function releaseCost(c: Character & { contract: CompanionContract }, day: number, rank: Rank): number {
+  const left = daysLeft(c.contract, day);
+  if (left <= 0) return 0;
+  const weekly = offerValue(c.contract, rank, c.level);
+  const weeks = Math.min(C.releaseMinWeeks, (C.releaseShareOfRemaining * left) / 7);
+  return round5(weekly * weeks);
+}
+
 // ---- slaves ---------------------------------------------------------------------------------------
 
 /** A slave's price: priceBase + pricePerLevel x level x talent (talentPriceFactor), with +-15% luck. */
