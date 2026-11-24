@@ -11,7 +11,7 @@ import {
 import { activityOf, lodgingOf, combatPenalty, expectedQuality, foodRelationship, healthOf, isInjured, moraleOf, moralePenalty, obediencePenalty } from '../src/game/condition';
 import { parseSave, serializeSave } from '../src/game/save';
 import {
-  companionContract, companionDemand, evaluateOffer, foodLodgingWeekly, joinParty, mercenaryRates, offerValue, openingTerms, punishSlave, slaveContract, bounty, registrationFee, slaveTax, slaveValue,
+  companionContract, companionDemand, evaluateOffer, foodLodgingWeekly, joinParty, mercenaryRates, offerValue, openingTerms, punishSlave, slaveContract, bounty, registrationFee, slaveTax, slaveValue, leaveParty,
 } from '../src/game/contracts';
 import { DEMO_STAGES, newDemo, resolveDemoBattle } from '../src/game/demo';
 import { dangerRating, expectedEnemies, fairReward, payRatio, questRenown, strength, totalThreat, usualCount } from '../src/game/board';
@@ -388,7 +388,16 @@ describe('contracts', () => {
     s.gold = 0;
     advanceDays(s, 7, makeRng(1));
     expect(s.party.find((m) => m.id === c.id)).toBeUndefined();
-    expect(s.guild.pool.some((a) => a.character.id === c.id)).toBe(true);
+    expect(s.log.some((n) => n.text.includes(`${c.name} quits over unpaid wages`))).toBe(true);
+    // Where they end up afterwards (the guild hall, a rival party, a rival's fallen) is up to the guild simulation.
+  });
+
+  it('a member who leaves the party goes back to the guild hall', () => {
+    const s = start();
+    const c = companion(s);
+    leaveParty(s, c);
+    expect(s.party.some((m) => m.id === c.id)).toBe(false);
+    expect(s.guild.pool.some((a) => a.character.id === c.id && !('contract' in a.character))).toBe(true);
   });
 
   it('a lapsed contract benches the companion, then they leave after the grace days', () => {
