@@ -34,8 +34,16 @@ export const totalThreat = (q: Pick<Quest, 'stage' | 'count'>) => q.count * stre
 /** The usual gold for a quest: its total threat x goldPerThreat (before the board's pay roll). */
 export const fairReward = (q: Pick<Quest, 'stage' | 'count'>) => totalThreat(q) * T.goldPerThreat;
 
-/** Renown for completing a quest: its total threat x renownPerThreat. */
-export const questRenown = (q: Pick<Quest, 'stage' | 'count'>) => Math.max(1, Math.round(totalThreat(q) * T.renownPerThreat));
+/**
+ * Renown for completing a quest, from its danger in skulls (dangerRating): threat.renown a x D^2 + b x D + c, then
+ * x (1 + renownPayFactor x (1 - pay)), so a quest that pays below the usual rate earns more renown and one that pays
+ * above it earns less. `pay` is the quest's pay roll (1 = usual).
+ */
+export function questRenown(q: Pick<Quest, 'stage' | 'count'>, pay = 1): number {
+  const { a, b, c } = T.renown;
+  const d = dangerRating(q);
+  return Math.max(1, Math.round((a * d * d + b * d + c) * Math.max(0, 1 + T.renownPayFactor * (1 - pay))));
+}
 
 /**
  * About how many enemies a quest sends: its group size over the average threat of its enemy types
@@ -112,7 +120,7 @@ export function makeQuest(rank: Rank, day: number, rng: Rng, promotion = false):
     rank,
     stage,
     reward: round5(fairReward({ stage, count }) * pay),
-    renown: questRenown({ stage, count }),
+    renown: questRenown({ stage, count }, pay),
     days: randInt(tier.days[0], tier.days[1], rng),
     expires: day + (promotion ? 365 : randInt(4, 8, rng)),
     description: `${promotion ? `The guild's ${rank}-rank trial. ` : ''}${names.join(' and ')} reported at ${place}.${size}`,

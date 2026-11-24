@@ -15,7 +15,7 @@ import {
 } from '../src/game/contracts';
 import { DEMO_STAGES, newDemo, resolveDemoBattle } from '../src/game/demo';
 import { dangerRating, expectedEnemies, fairReward, payRatio, questRenown, strength, totalThreat, usualCount } from '../src/game/board';
-import { adventurerCount, adventurerRank, deathFactor, leaderboard, questDifficulty, rankDifficulty, rivalPickQuest, rivalQuestChance, rankCounts, simulateGuildDay } from '../src/game/guild';
+import { adventurerCount, adventurerRank, deathFactor, leaderboard, promotionReady, questDifficulty, rankDifficulty, rivalPickQuest, rivalQuestChance, rankCounts, simulateGuildDay } from '../src/game/guild';
 
 /** Everyone the party houses lodges at `where`, then `n` days end in the city (what stayAtInn and friends used to do). */
 const nightsAt = (s: GameState, where: Parameters<typeof setLodging>[2], n: number, rng = makeRng(1)): string[] => {
@@ -110,14 +110,15 @@ describe('ranks and the leaderboard', () => {
     expect(s.log.some((n) => /now C rank/.test(n.text))).toBe(true);
   });
 
-  it('S rank: A-rank parties with enough renown get an S-rank promotion quest; S quests have level 21-25 foes', () => {
+  it('S rank: no promotion to S for now (highestPromotion A), even with the renown; S quests have level 21-25 foes', () => {
     const s = start();
     s.rank = 'A';
     s.renown = GUILD.ranks.renown.S;
     advanceDay(s, makeRng(5));
-    const promo = s.guild.board.find((q) => q.promotion)!;
-    expect(promo.rank).toBe('S');
-    expect(canTakeQuest(s, promo)).toBe(true);
+    expect(GUILD.ranks.highestPromotion).toBe('A');
+    expect(s.guild.board.some((q) => q.promotion)).toBe(false);
+    expect(promotionReady('A', GUILD.ranks.renown.S)).toBe(false);
+    expect(promotionReady('B', GUILD.ranks.renown.A)).toBe(true);
     for (let i = 0; i < 20; i++) {
       const q = makeQuest('S', 1, makeRng(i));
       expect(q.stage).toBeGreaterThanOrEqual(21);
@@ -194,9 +195,13 @@ describe('ranks and the leaderboard', () => {
     expect(strength(1)).toBeCloseTo(t.strengthAtLevel1);
     expect(strength(11) / strength(10)).toBeCloseTo(t.strengthGrowth);
     expect(totalThreat(q(8, 5))).toBeCloseTo(5 * strength(8));
-    // Gold and renown follow total threat.
+    // Gold follows total threat; renown follows danger in skulls, and the opposite way to the pay roll.
     expect(fairReward(q(8, 5))).toBeCloseTo(totalThreat(q(8, 5)) * t.goldPerThreat);
-    expect(questRenown(q(8, 5))).toBe(Math.round(totalThreat(q(8, 5)) * t.renownPerThreat));
+    const d = dangerRating(q(8, 5));
+    const base = t.renown.a * d * d + t.renown.b * d + t.renown.c;
+    expect(questRenown(q(8, 5))).toBe(Math.round(base));
+    expect(questRenown(q(8, 5), 0.75)).toBe(Math.round(base * (1 + t.renownPayFactor * (1 - 0.75)))); // poor pay: more renown
+    expect(questRenown(q(8, 5), 1.35)).toBe(Math.round(base * (1 + t.renownPayFactor * (1 - 1.35)))); // generous pay: less
     // Difficulty: a standard-sized group at level L is about L - 1; more enemies or higher levels make it harder.
     expect(questDifficulty(q(8, t.standardCount))).toBeCloseTo(7);
     expect(questDifficulty(q(8, t.standardCount * t.strengthGrowth))).toBeCloseTo(8); // a level's worth of extra threat
@@ -213,7 +218,10 @@ describe('ranks and the leaderboard', () => {
       for (const quest of quests) {
         expect(quest.count).toBeGreaterThanOrEqual(tier.count[0]);
         expect(quest.count).toBeLessThanOrEqual(tier.count[1]);
-        expect(quest.renown).toBe(questRenown(quest));
+        // Renown moves opposite to the pay roll (board.pay), between the best- and worst-paid versions of the quest.
+        const [lo, hi] = GUILD.board.pay;
+        expect(quest.renown).toBeGreaterThanOrEqual(questRenown(quest, hi));
+        expect(quest.renown).toBeLessThanOrEqual(questRenown(quest, lo));
         expect(payRatio(quest)).toBeGreaterThan(GUILD.board.pay[0] - 0.05);
         expect(payRatio(quest)).toBeLessThan(GUILD.board.pay[1] + 0.05);
       }

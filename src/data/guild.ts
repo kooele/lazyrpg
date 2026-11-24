@@ -15,7 +15,10 @@ export interface ThreatConfig {
   strengthAtLevel1: number;
   strengthGrowth: number;
   goldPerThreat: number;
-  renownPerThreat: number;
+  /** Renown for a quest: a x skulls^2 + b x skulls + c (skulls: its danger, 0.5-10). */
+  renown: { a: number; b: number; c: number };
+  /** Renown x (1 + renownPayFactor x (1 - pay roll)): low-paying quests earn more renown, high-paying ones less. */
+  renownPayFactor: number;
   standardCount: number;
   /** Difficulty shown as half a skull (from) and ten skulls (to); evenly in between. */
   skulls: { from: number; to: number };
@@ -56,7 +59,7 @@ export interface GuildConfig {
   startingRenown: number;
   maxRoster: number;
   partyRankWeights: Record<Rank, number>;
-  ranks: { renown: Record<Exclude<Rank, 'D'>, number>; demotionDays: number; failedQuestRenown: number; deathRenown: number };
+  ranks: { renown: Record<Exclude<Rank, 'D'>, number>; highestPromotion: Rank; demotionDays: number; failedQuestRenown: number; deathRenown: number };
   /** First level of each adventurer rank above D. */
   adventurerRanks: Record<'C' | 'B' | 'A' | 'S', number>;
   boardSize: number;
@@ -250,6 +253,11 @@ export function parseGuildConfig(data: unknown): GuildConfig {
     partyRankWeights,
     ranks: {
       renown: thresholds,
+      highestPromotion: (() => {
+        const r = rk.highestPromotion ?? 'S';
+        if (typeof r !== 'string' || !RANKS.includes(r as Rank)) fail('ranks.highestPromotion', 'must be a rank (D to S)');
+        return r as Rank;
+      })(),
       demotionDays: num(rk.demotionDays, 'ranks.demotionDays', 1, 365),
       failedQuestRenown: num(rk.failedQuestRenown, 'ranks.failedQuestRenown', 0, 10),
       deathRenown: num(rk.deathRenown, 'ranks.deathRenown', 0, 10),
@@ -271,7 +279,8 @@ export function parseGuildConfig(data: unknown): GuildConfig {
         strengthAtLevel1: num(t.strengthAtLevel1, 'threat.strengthAtLevel1', 0.01),
         strengthGrowth: num(t.strengthGrowth, 'threat.strengthGrowth', 1, 3),
         goldPerThreat: num(t.goldPerThreat, 'threat.goldPerThreat', 0),
-        renownPerThreat: num(t.renownPerThreat, 'threat.renownPerThreat', 0),
+        renown: numbers(t.renown, 'threat.renown', ['a', 'b', 'c']),
+        renownPayFactor: num(t.renownPayFactor, 'threat.renownPayFactor', 0, 10),
         standardCount: num(t.standardCount, 'threat.standardCount', 0.5),
         skulls: (() => {
           const k = obj(t.skulls, 'threat.skulls');
