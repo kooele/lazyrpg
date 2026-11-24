@@ -1,7 +1,7 @@
 // Arch City: the calendar, the quest board, food, upkeep and pay, the slave market and prisoners.
 // Pure logic (no Phaser): scenes call these and show the messages they return.
 import { MAX_PARTY_SIZE } from '../data/content';
-import { GUILD, isResidence, type CityLodging, type InnTier, type Ring } from '../data/guild';
+import { GUILD, isResidence, trainingXp, type CityLodging, type InnTier, type Ring } from '../data/guild';
 import { RANKS, type Character, type GameState, type Offer, type Quest, type Rank } from '../data/types';
 import { dangerRating, makeQuest, postQuests } from './board';
 import { grantXp, type Rng } from './character';
@@ -144,9 +144,6 @@ export function acceptQuest(state: GameState, questId: string): string | null {
   return null;
 }
 
-/** The level modifier on a member's quest XP: +levelStep per level the enemies are above them, -levelStep per level below (never under 0). */
-export const xpLevelFactor = (stage: number, level: number) => Math.max(0, 1 + GUILD.xp.levelStep * (stage - level));
-
 /** A quest's XP pool from its danger D in skulls (dangerRating, 0.5-10): xp.pool a x D^2 + b x D + c (300 at half a skull, 6000 at ten). */
 export function questXpPool(q: Pick<Quest, 'stage' | 'count'>): number {
   const { a, b, c } = GUILD.xp.pool;
@@ -155,14 +152,14 @@ export function questXpPool(q: Pick<Quest, 'stage' | 'count'>): number {
 }
 
 /**
- * XP each member who comes back from a quest gets: a day of training's worth (schedule.trainingXp), plus an equal
+ * XP each member who comes back from a quest gets: a day of training's worth at their level (trainingXp), plus an equal
  * share of the quest's XP pool (questXpPool) split among all of them, times `defeated` (the share of the enemies killed or captured: 1 for a
- * won quest), then x their level modifier (xpLevelFactor). Same order as `members`.
+ * won quest). Same order as `members`.
  */
 export function questXpShares(q: Pick<Quest, 'stage' | 'count'>, members: Pick<Character, 'level'>[], defeated = 1): number[] {
   if (members.length === 0) return [];
-  const each = GUILD.schedule.trainingXp + (questXpPool(q) * Math.max(0, Math.min(1, defeated))) / members.length;
-  return members.map((c) => Math.round(each * xpLevelFactor(q.stage, c.level)));
+  const share = (questXpPool(q) * Math.max(0, Math.min(1, defeated))) / members.length;
+  return members.map((c) => Math.round(trainingXp(c.level) + share));
 }
 
 /** Grant quest XP to the members who came back (see questXpShares) and report it. */
@@ -469,7 +466,7 @@ function runSchedule(state: GameState, away: string[]): string[] {
     if (was < 100 && healthOf(c) === 100) out.push(`${c.name} has fully recovered.`);
     if (!act) continue;
     if (act === 'training') {
-      const levels = grantXp(c, S.trainingXp);
+      const levels = grantXp(c, trainingXp(c.level));
       if (levels > 0) out.push(`${c.name} reached level ${c.level} through training! +${levels} skill point${levels > 1 ? 's' : ''}.`);
     } else if (act === 'oddJobs') state.gold += S.oddJobsGold;
     else if (act === 'dayOff') changeMorale(c, S.dayOffMorale);

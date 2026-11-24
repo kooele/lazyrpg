@@ -85,14 +85,13 @@
     "lowMoraleRelationshipPerDay": 2
   },
   "xp": {
-    "_comment": "XP for a won quest. Every member who comes back gets the same as a day of training (schedule.trainingXp), plus an equal share of the quest's pool XP split among all of them (so smaller parties learn faster). The pool is pool.a x D^2 + pool.b x D + pool.c, where D is the quest's danger in skulls (0.5 to 10): 300 at half a skull, 1350 at 4 skulls, 6000 at 10. Each member's total is then x (1 + levelStep x (enemy level - their level)): +25% per level the enemies are above them, -25% per level below, and nothing at 4 or more levels above. Failed quests give no XP.",
-    "pool": { "a": 50, "b": 75, "c": 250 },
-    "levelStep": 0.25
+    "_comment": "XP for a won quest. Every member who comes back gets the same as a day of training (schedule.trainingXp), plus an equal share of the quest's pool XP split among all of them (so smaller parties learn faster). The pool is pool.a x D^2 + pool.b x D + pool.c, where D is the quest's danger in skulls (0.5 to 10): 300 at half a skull, 1350 at 4 skulls, 6000 at 10. The members' levels don't change it: the level-up cost curve (stats.json xpPerLevel) already makes easy quests worth little to veterans. Failed quests give no XP.",
+    "pool": { "a": 50, "b": 75, "c": 250 }
   },
   "schedule": {
-    "_comment": "What members who aren't on a quest do each day (Manage Party). recover: recovers recoverMultiplier x healthPerDay. training: trainingXp XP. oddJobs: oddJobsGold gold. dayOff: dayOffMorale Morale.",
+    "_comment": "What members who aren't on a quest do each day (Manage Party). recover: recovers recoverMultiplier x healthPerDay. training: trainingXp.perLevel x level + trainingXp.flat XP (22 at level 1, 70 at level 25). oddJobs: oddJobsGold gold. dayOff: dayOffMorale Morale.",
     "recoverMultiplier": 2,
-    "trainingXp": 25,
+    "trainingXp": { "perLevel": 2, "flat": 20 },
     "oddJobsGold": 10,
     "dayOffMorale": 10
   },

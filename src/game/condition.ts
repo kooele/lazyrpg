@@ -109,7 +109,7 @@ export const ACTIVITY_INFO: Record<Activity, { name: string; describe: () => str
     name: 'Recover',
     describe: () => `Rest up: recovers ${GUILD.schedule.recoverMultiplier * GUILD.condition.healthPerDay} Health a day instead of ${GUILD.condition.healthPerDay}.`,
   },
-  training: { name: 'Training', describe: () => `Drills and sparring: +${GUILD.schedule.trainingXp} XP a day.` },
+  training: { name: 'Training', describe: () => `Drills and sparring: +${GUILD.schedule.trainingXp.perLevel} XP per level +${GUILD.schedule.trainingXp.flat} a day.` },
   oddJobs: { name: 'Odd Jobs', describe: () => `Work around the city: +${GUILD.schedule.oddJobsGold} gold a day.` },
   dayOff: { name: 'Day Off', describe: () => `Take it easy: +${GUILD.schedule.dayOffMorale} Morale a day.` },
 };

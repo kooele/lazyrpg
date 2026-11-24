@@ -88,9 +88,10 @@ export interface GuildConfig {
     drift: number;
     stockReference: number;
   };
-  /** Quest XP: each member gets schedule.trainingXp plus an equal share of the pool (a x skulls^2 + b x skulls + c), then x the level modifier (levelStep per level). */
-  xp: { pool: { a: number; b: number; c: number }; levelStep: number };
-  schedule: { recoverMultiplier: number; trainingXp: number; oddJobsGold: number; dayOffMorale: number };
+  /** Quest XP: each member gets a day of training XP plus an equal share of the pool (a x skulls^2 + b x skulls + c). */
+  xp: { pool: { a: number; b: number; c: number } };
+  /** trainingXp: XP for a day of training, perLevel x level + flat (see trainingXp()). */
+  schedule: { recoverMultiplier: number; trainingXp: { perLevel: number; flat: number }; oddJobsGold: number; dayOffMorale: number };
   /** Price multiplier from talent: max(min, 1 + weight x (average growth rate - 1)). */
   talentPrice: { weight: number; min: number };
   mercenary: { feePerLevel: number; cutBase: number; cutPerLevel: number };
@@ -292,9 +293,11 @@ export function parseGuildConfig(data: unknown): GuildConfig {
       'moraleFailedQuest', 'moralePerHealthLost', 'moraleMemberDied', 'lowMorale', 'lowMoraleRelationshipPerDay'], 100),
     xp: {
       pool: numbers(obj(d.xp, 'xp').pool, 'xp.pool', ['a', 'b', 'c']),
-      levelStep: numbers<{ levelStep: number }>(d.xp, 'xp', ['levelStep']).levelStep,
     },
-    schedule: numbers(d.schedule, 'schedule', ['recoverMultiplier', 'trainingXp', 'oddJobsGold', 'dayOffMorale']),
+    schedule: {
+      ...numbers<Omit<GuildConfig['schedule'], 'trainingXp'>>(d.schedule, 'schedule', ['recoverMultiplier', 'oddJobsGold', 'dayOffMorale']),
+      trainingXp: numbers(obj(d.schedule, 'schedule').trainingXp, 'schedule.trainingXp', ['perLevel', 'flat']),
+    },
     talentPrice: numbers(d.talentPrice ?? { weight: 2, min: 0.4 }, 'talentPrice', ['weight', 'min']),
     mercenary: numbers(d.mercenary, 'mercenary', ['feePerLevel', 'cutBase', 'cutPerLevel']),
     companion: {
@@ -337,3 +340,9 @@ export function parseGuildConfig(data: unknown): GuildConfig {
 }
 
 export const GUILD: GuildConfig = parseGuildConfig(raw);
+
+/** XP for a day of training at `level`: schedule.trainingXp perLevel x level + flat (22 at level 1). */
+export const trainingXp = (level: number) => {
+  const { perLevel, flat } = GUILD.schedule.trainingXp;
+  return Math.round(perLevel * Math.max(1, level) + flat);
+};
