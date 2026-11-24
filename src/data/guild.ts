@@ -55,12 +55,12 @@ export interface GuildConfig {
   startingGold: number;
   startingRenown: number;
   maxRoster: number;
-  rankWeights: Record<Rank, number>;
+  partyRankWeights: Record<Rank, number>;
   ranks: { renown: Record<Exclude<Rank, 'D'>, number>; demotionDays: number; failedQuestRenown: number; deathRenown: number };
   /** First level of each adventurer rank above D. */
   adventurerRanks: Record<'C' | 'B' | 'A' | 'S', number>;
   boardSize: number;
-  board: { maxPostsPerDay: number; pay: [number, number] };
+  board: { maxPostsPerDay: number; rankWeights: Record<Rank, number>; pay: [number, number] };
   quests: Record<Rank, QuestTier>;
   threat: ThreatConfig;
   food: Record<FoodTier, { name: string; pricePerPerson: number }> & { default: FoodTier; relationshipAbove: number; relationshipBelowPerStep: number };
@@ -214,8 +214,12 @@ function parseResidences(v: unknown): GuildConfig['residences'] {
 
 export function parseGuildConfig(data: unknown): GuildConfig {
   const d = obj(data, '(root)');
-  const rankWeights = perRank(d.rankWeights, 'rankWeights');
-  if (RANKS.reduce((s, r) => s + rankWeights[r], 0) <= 0) fail('rankWeights', 'at least one weight must be above 0');
+  const weights = (v: unknown, path: string) => {
+    const w = perRank(v, path);
+    if (RANKS.reduce((s, r) => s + w[r], 0) <= 0) fail(path, 'at least one weight must be above 0');
+    return w;
+  };
+  const partyRankWeights = weights(d.partyRankWeights, 'partyRankWeights');
   const rk = obj(d.ranks, 'ranks');
   const thresholds = numbers<Record<'C' | 'B' | 'A' | 'S', number>>(rk.renown, 'ranks.renown', ['C', 'B', 'A', 'S']);
   if (!(thresholds.C < thresholds.B && thresholds.B < thresholds.A && thresholds.A < thresholds.S)) fail('ranks.renown', 'must grow from C to B to A to S');
@@ -242,7 +246,7 @@ export function parseGuildConfig(data: unknown): GuildConfig {
     startingGold: num(d.startingGold, 'startingGold'),
     startingRenown: num(d.startingRenown, 'startingRenown'),
     maxRoster: num(d.maxRoster, 'maxRoster', 1, 20),
-    rankWeights,
+    partyRankWeights,
     ranks: {
       renown: thresholds,
       demotionDays: num(rk.demotionDays, 'ranks.demotionDays', 1, 365),
@@ -255,6 +259,7 @@ export function parseGuildConfig(data: unknown): GuildConfig {
       const b = obj(d.board, 'board');
       return {
         maxPostsPerDay: num(b.maxPostsPerDay, 'board.maxPostsPerDay', 1, 60),
+        rankWeights: weights(b.rankWeights, 'board.rankWeights'),
         pay: range(b.pay, 'board.pay', 0.1),
       };
     })(),

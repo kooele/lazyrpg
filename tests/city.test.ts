@@ -39,16 +39,19 @@ describe('guild.json', () => {
     bad.quests.C.count = [6, 3];
     expect(() => parseGuildConfig(bad)).toThrow(/quests\.C\.count\[1\]/);
     const shares = JSON.parse(JSON.stringify(guildJson));
-    shares.rankWeights = { S: 0, A: 0, B: 0, C: 0, D: 0 };
-    expect(() => parseGuildConfig(shares)).toThrow(/rankWeights.*above 0/);
+    shares.partyRankWeights = { S: 0, A: 0, B: 0, C: 0, D: 0 };
+    expect(() => parseGuildConfig(shares)).toThrow(/partyRankWeights.*above 0/);
+    const posts = JSON.parse(JSON.stringify(guildJson));
+    posts.board.rankWeights = { S: 0, A: 0, B: 0, C: 0, D: 0 };
+    expect(() => parseGuildConfig(posts)).toThrow(/board\.rankWeights.*above 0/);
   });
 });
 
 describe('ranks and the leaderboard', () => {
-  it('splits parties by weight: S 1, A 25, B 20, C 60, D 40 out of 146 (always at least one A)', () => {
-    expect(rankCounts(21)).toEqual({ S: 0, A: 4, B: 3, C: 8, D: 6 });
-    expect(rankCounts(20)).toEqual({ S: 0, A: 3, B: 3, C: 9, D: 5 });
-    expect(rankCounts(146)).toEqual({ S: 1, A: 25, B: 20, C: 60, D: 40 });
+  it('splits parties by weight: S 1, A 5, B 20, C 60, D 40 out of 126 (always at least one A)', () => {
+    expect(rankCounts(21)).toEqual({ S: 0, A: 1, B: 3, C: 10, D: 7 });
+    expect(rankCounts(20)).toEqual({ S: 0, A: 1, B: 3, C: 10, D: 6 });
+    expect(rankCounts(126)).toEqual({ S: 1, A: 5, B: 20, C: 60, D: 40 });
     expect(rankCounts(4)).toMatchObject({ A: 1 });
   });
 
