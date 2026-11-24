@@ -6,7 +6,7 @@ import enemiesJson from '../src/data/enemies.json';
 import { ENEMIES, parseEnemies } from '../src/data/enemies';
 import { STAT_CONFIG, parseStatConfig } from '../src/data/stats';
 import type { Character, SkillDef } from '../src/data/types';
-import { bestAction, caution, planTurn, preferredMode, runAiTurn, shouldDisengage, shouldSurrender, threatAt, tribeRouted, wantsToFlee } from '../src/game/ai';
+import { HOLD_FIRM_ODDS, bestAction, caution, holdsFirm, planTurn, preferredMode, runAiTurn, shouldDisengage, shouldSurrender, sideStrength, threatAt, tribeRouted, wantsToFlee } from '../src/game/ai';
 import { Battle, defenseMultiplier, resistChance, deploymentTiles, enemyTypesForStage, generateEnemies, makeEnemy, pickFoes, makeUnit, type Team } from '../src/game/battle';
 import { allSkills, bodyGain, skillBarLayout, swapBarSlots, bodyPoints as bodyPointsOf, bodyStats, createCharacter, deriveStats, freePoints, grantXp, isUnlocked, makeRng, pointsUsed, sanitizeLoadout } from '../src/game/character';
 import { randomAdventurer } from '../src/game/people';
@@ -29,6 +29,13 @@ function hero(weaponId = 'sword_shield', skillIds: string[] = [], name = 'H'): C
   return c;
 }
 
+/** A level-6 Sword & Shield user: Health 750, Defense 63 (x0.613 damage), Resist 50. */
+function tank(name = 'T'): Character {
+  const c = hero('sword_shield', [], name);
+  c.level = 6;
+  return c;
+}
+
 function setup(map: BattleMap, specs: { c: Character; team: Team; at: Point }[]) {
   const units = specs.map((s) => makeUnit(s.c, s.team, s.at));
   return { battle: new Battle(map, units, makeRng(1)), units };
@@ -36,13 +43,14 @@ function setup(map: BattleMap, specs: { c: Character; team: Team; at: Point }[])
 
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v));
 
-// Level-1 numbers used below: base Health 500, P.Atk 100, M.Atk 100, Defense 50.
-// Sword & Shield: P.Atk 100, M.Atk 80, Def 63 (x0.613 damage). Bow and Staff: Def 40 (x0.714 damage). Spear: Def 50 (x0.667).
+// Level-1 numbers used below: base Health 500, P.Atk 100, M.Atk 100, Defense 0 and Resist 0 (both +10 a level), so level-1
+// Adventurers take full damage. Sword & Shield: P.Atk 100, M.Atk 80. Where a test needs Defense, it uses a level-6
+// Sword & Shield user (tank()): Health 750, Defense 50 x 1.25 = 63 (x0.613 damage), Resist 50.
 
 describe('stats and content files', () => {
   it('loads the base stats from stats.json', () => {
-    expect(STAT_CONFIG.base).toMatchObject({ health: 500, pAtk: 100, mAtk: 100, defense: 50, movement: 16 });
-    expect(STAT_CONFIG.growthPerLevel).toMatchObject({ health: 50, defense: 5 });
+    expect(STAT_CONFIG.base).toMatchObject({ health: 500, pAtk: 100, mAtk: 100, defense: 0, resist: 0, movement: 16 });
+    expect(STAT_CONFIG.growthPerLevel).toMatchObject({ health: 50, defense: 10, resist: 10 });
   });
 
   it('rejects a broken stats config with a clear message', () => {
@@ -51,14 +59,16 @@ describe('stats and content files', () => {
 
   it('weapons multiply base stats; level growth is automatic', () => {
     const c = hero('sword_shield');
-    expect(deriveStats(c)).toMatchObject({ health: 500, pAtk: 100, mAtk: 80, defense: 63, movement: 16 }); // 50 x 1.25 = 62.5
+    expect(deriveStats(c)).toMatchObject({ health: 500, pAtk: 100, mAtk: 80, defense: 0, movement: 16 }); // 0 x 1.25
     c.weaponId = 'staff';
-    expect(deriveStats(c)).toMatchObject({ pAtk: 60, mAtk: 120, defense: 40 });
+    expect(deriveStats(c)).toMatchObject({ pAtk: 60, mAtk: 120, defense: 0 });
     c.weaponId = 'bow';
-    expect(deriveStats(c)).toMatchObject({ pAtk: 100, mAtk: 80, defense: 40 });
+    expect(deriveStats(c)).toMatchObject({ pAtk: 100, mAtk: 80, defense: 0 });
     grantXp(c, 250);
     expect(c.level).toBe(3);
     expect(deriveStats(c).health).toBe(600);
+    // Level 6: Defense and Resist 0 + 5 x 10 = 50; a shield makes Defense x1.25.
+    expect(deriveStats(tank())).toMatchObject({ health: 750, defense: 63, resist: 50 });
   });
 
   it('defense: 100 points = double effective health', () => {
@@ -96,7 +106,7 @@ describe('stats and content files', () => {
       'Effect: 120% M.Atk, a stack of Burn\nTags: Projectile, Debuff, Magical\nAP: Ends turn\nMana: 40\nCooldown: 2 turns');
     expect(skillStatText(SKILLS.ignite)).toBe(
       'Effect: 20% M.Atk, a stack of Burn\nTags: Debuff, Magical\nAP: 1 AP\nMana: 30\nCooldown: 1 turn');
-    expect(skillStats(SKILLS.arcane_weapon)[0].value).toBe('Toggle: Weapon attacks +50% M.Atk per hit (10 mana each); 10 mana a turn while on');
+    expect(skillStats(SKILLS.arcane_weapon)[0].value).toBe('Toggle: Weapon attacks +50% M.Atk per hit (10 mana each)');
     expect(skillStatText(SKILLS.sword_slash)).toBe('Effect: 100% P.Atk\nTags: Melee, Engage, Physical\nAP: Ends turn');
     expect(skillStats(SKILLS.engage)[0].value).toBe(SKILLS.engage.description);
     expect(skillStats(SKILLS.bow_attack)[0].value).toBe("Attacks based on the bow's mode.");
@@ -269,10 +279,10 @@ describe('skills', () => {
   it('sword slash: 100% P.Atk reduced by Defense', () => {
     const { battle, units: [a, e] } = setup(openMap(), [
       { c: hero('sword_shield'), team: 'player', at: { x: 1, y: 1 } },
-      { c: hero('sword_shield'), team: 'enemy', at: { x: 2, y: 2 } },
+      { c: tank(), team: 'enemy', at: { x: 2, y: 2 } },
     ]);
     battle.perform(a, 'sword_slash', { x: 2, y: 2 });
-    expect(e.hp).toBe(500 - 61); // 100 x 100/163
+    expect(e.hp).toBe(750 - 61); // 100 x 100/163
   });
 
   it('double strike hits with the weapon basic attack twice (second at 50%), at the weapon range', () => {
@@ -281,9 +291,9 @@ describe('skills', () => {
       { c: hero('bow'), team: 'enemy', at: { x: 2, y: 1 } },
     ]);
     const events = battle.perform(a, 'double_strike', { x: 2, y: 1 });
-    // Sword Slash on a bow user (Def 40): 100 x 100/140 = 71, then half of that: 50 x 100/140 = 36
-    expect(events.filter((ev) => ev.type === 'damage').map((ev) => ev.type === 'damage' && ev.amount)).toEqual([71, 36]);
-    expect(e.hp).toBe(500 - 107);
+    // Sword Slash on a level-1 bow user (Def 0): 100, then half of that: 50
+    expect(events.filter((ev) => ev.type === 'damage').map((ev) => ev.type === 'damage' && ev.amount)).toEqual([100, 50]);
+    expect(e.hp).toBe(500 - 150);
     // With a bow it reaches as far as the bow.
     const archer = setup(openMap(), [{ c: hero('bow', ['double_strike']), team: 'player', at: { x: 1, y: 1 } }]);
     expect(archer.battle.skillRange(archer.units[0], SKILLS.double_strike)).toBe(5);
@@ -311,9 +321,9 @@ describe('skills', () => {
     ]);
     battle.perform(a, 'shield_up', { x: 1, y: 1 });
     battle.endPhase();
-    battle.perform(e, 'bow_attack', { x: 1, y: 1 }); // Direct mode: 100 x 100/163 = 61
+    battle.perform(e, 'bow_attack', { x: 1, y: 1 }); // Direct mode: 100 (Def 0)
     expect(battle.shieldOf(a)).toBe(0); // the 50-point shield takes 50...
-    expect(a.hp).toBe(500 - 11); // ...and the rest gets through
+    expect(a.hp).toBe(500 - 50); // ...and the rest gets through
   });
 
   it('spear thrust uses normal range 2 and hits the first enemy on the way', () => {
@@ -326,7 +336,7 @@ describe('skills', () => {
     expect(battle.canTarget(s, SKILLS.spear_thrust, { x: 5, y: 2 })).toBe(true); // 2-over-1
     expect(battle.canTarget(s, SKILLS.spear_thrust, { x: 5, y: 1 })).toBe(false); // diagonal 2.83
     battle.perform(s, 'spear_thrust', { x: 5, y: 3 }); // aimed at the far one; the near one is in the way
-    expect(near.hp).toBe(500 - 71); // 100 x 100/140
+    expect(near.hp).toBe(500 - 100); // 100% P.Atk, Def 0
     expect(near).toMatchObject({ x: 4, y: 3 }); // knockback blocked by the far one
     expect(far.hp).toBe(500);
   });
@@ -337,7 +347,7 @@ describe('skills', () => {
       { c: hero('bow'), team: 'enemy', at: { x: 3, y: 3 } },
     ]);
     battle.perform(s, 'spear_thrust', { x: 3, y: 3 });
-    expect(e.hp).toBe(500 - 71);
+    expect(e.hp).toBe(500 - 100);
     expect(e).toMatchObject({ x: 3, y: 3 });
   });
 
@@ -378,7 +388,7 @@ describe('skills', () => {
     expect(battle.canTarget(m, SKILLS.arcane_pulse, { x: 4, y: 3 })).toBe(false); // range 1.5
     battle.perform(m, 'arcane_pulse', { x: 3, y: 3 });
     expect(e).toMatchObject({ x: 5, y: 3 });
-    expect(e.hp).toBe(500 - 86); // 120 x 100/140
+    expect(e.hp).toBe(500 - 120); // 100% of the staff's 120 M.Atk, Def 0
   });
 
   it('circle swing hits every unit within weapon range (allies too) with the basic attack and pushes them', () => {
@@ -391,7 +401,7 @@ describe('skills', () => {
     battle.perform(s, 'circle_swing', { x: 4, y: 3 });
     expect(ally.hp).toBeLessThan(500); // allies included
     expect(ally).toMatchObject({ x: 6, y: 5 });
-    expect(foe.hp).toBe(500 - 71); // Spear Thrust's 100% P.Atk on Def 40
+    expect(foe.hp).toBe(500 - 100); // Spear Thrust's 100% P.Atk on Def 0
     expect(foe).toMatchObject({ x: 2, y: 3 });
     expect(far.hp).toBe(500); // 3 tiles away: outside the spear's range 2
   });
@@ -411,7 +421,7 @@ describe('skills', () => {
     const r2 = b2.move(runner, { x: 5, y: 3 });
     expect(r2.interrupted).toBe(false);
     expect(r2.triggers).toHaveLength(1);
-    expect(runner).toMatchObject({ x: 5, y: 3, hp: 500 - 61 }); // Direct Shot: 100 P.Atk x 100/163
+    expect(runner).toMatchObject({ x: 5, y: 3, hp: 500 - 100 }); // Direct Shot: 100 P.Atk, Def 0
 
     // A spear's watch reaches as far as Spear Thrust (2).
     const { battle, units: [spear] } = setup(openMap(), [
@@ -474,7 +484,7 @@ describe('skills', () => {
   it('Burn: 5% of max health per stack at the end of the burning unit\'s turn, reduced by Defense and shields, then a stack drops off', () => {
     const { battle, units: [m, e, cleric] } = setup(openMap(), [
       { c: hero('staff', ['ignite']), team: 'player', at: { x: 1, y: 1 } },
-      { c: hero('bow'), team: 'enemy', at: { x: 4, y: 1 } },
+      { c: tank(), team: 'enemy', at: { x: 4, y: 1 } },
       { c: hero('staff', ['cleanse']), team: 'enemy', at: { x: 6, y: 1 } },
     ]);
     battle.perform(m, 'ignite', { x: 4, y: 1 });
@@ -483,15 +493,15 @@ describe('skills', () => {
     battle.endPhase(); // the enemy's turn starts: no damage yet, it gets to act first
     expect(e.hp).toBe(hp);
     const events = battle.endPhase(); // ...and burns as it ends
-    // 2 stacks x 5% of 500 = 50, x 100/140 for Def 40 = 36.
-    expect(events[0]).toMatchObject({ type: 'damage', cause: 'status', amount: 36, target: e.uid });
-    expect(e.hp).toBe(hp - 36);
+    // 2 stacks x 5% of 750 = 75, x 100/163 for Def 63 = 46.
+    expect(events[0]).toMatchObject({ type: 'damage', cause: 'status', amount: 46, target: e.uid });
+    expect(e.hp).toBe(hp - 46);
     expect(e.statuses.find((st) => st.id === 'burn')?.stacks).toBe(1);
-    // A shield soaks the next tick (1 stack: 25 x 100/140 = 18), then Burn is gone.
+    // A shield soaks the next tick (1 stack: 37.5 x 100/163 = 23), then Burn is gone.
     e.statuses.push({ id: 'shield', name: 'Shield', debuff: false, stacks: 0, amount: 100, turns: 2, tick: 'start' });
     battle.endPhase();
     const tick = battle.endPhase();
-    expect(tick[0]).toMatchObject({ type: 'damage', cause: 'status', amount: 0, absorbed: 18 });
+    expect(tick[0]).toMatchObject({ type: 'damage', cause: 'status', amount: 0, absorbed: 23 });
     expect(e.statuses.some((st) => st.id === 'burn')).toBe(false);
     // On its own turn, the burning team can Cleanse it before it ever ticks.
     battle.perform(m, 'ignite', { x: 4, y: 1 });
@@ -523,7 +533,7 @@ describe('skills', () => {
     ]);
     battle.perform(v, 'charge', { x: 5, y: 3 });
     expect(Math.hypot(v.x - 5, v.y - 3)).toBeLessThanOrEqual(1.5);
-    expect(e.hp).toBe(500 - 71); // 100% P.Atk on Def 40
+    expect(e.hp).toBe(500 - 100); // 100% P.Atk on Def 0
     expect(v.acted).toBe(false); // 1 AP: the action AP is still there
   });
 
@@ -545,14 +555,14 @@ describe('skills', () => {
     ]);
     e.hp = 200;
     battle.perform(a, 'execute', { x: 2, y: 1 });
-    expect(e.hp).toBe(200 - 104); // (100 + 45) x 100/140
+    expect(e.hp).toBe(200 - 145); // 100 + 15% of 300 missing, Def 0
   });
 });
 
 describe('engagement', () => {
   function duel() {
     return setup(openMap(), [
-      { c: hero('sword_shield'), team: 'player', at: { x: 3, y: 3 } },
+      { c: tank('A'), team: 'player', at: { x: 3, y: 3 } }, // Defense 63
       { c: hero('sword_shield'), team: 'enemy', at: { x: 4, y: 3 } },
       { c: hero('bow'), team: 'enemy', at: { x: 3, y: 5 } },
       { c: hero('sword_shield'), team: 'player', at: { x: 2, y: 5 } },
@@ -940,6 +950,33 @@ describe('progression and enemy behaviour', () => {
     expect(battle.outcome()).toBe('victory');
   });
 
+  it('human: holds firm while its friends fight on and the odds are fair; gives up once the fight is lost', () => {
+    const map = openMap(30, 21);
+    const make = (friendsHp: number) => {
+      const archer = makeUnit(makeEnemy('bandit', 4, makeRng(5)), 'enemy', { x: 15, y: 10 });
+      archer.character.weaponId = 'bow';
+      const friends = [8, 12, 14].map((y, i) => makeUnit(makeEnemy('bandit', 4, makeRng(10 + i)), 'enemy', { x: 25, y }));
+      const knights = [9, 10, 11].map((y) => makeUnit(hero('sword_shield', ['charge'], `K${y}`), 'player', { x: 12, y }));
+      const battle = new Battle(map, [archer, ...friends, ...knights], makeRng(1));
+      battle.endPhase();
+      archer.hp = Math.round(archer.stats.health * 0.2);
+      for (const f of friends) f.hp = Math.max(1, Math.round(f.stats.health * friendsHp));
+      return { battle, archer };
+    };
+    // Three healthy friends: an even fight, so the cornered archer fights on (falling back to them) instead of surrendering.
+    const even = make(1);
+    expect(holdsFirm(even.battle, even.archer)).toBe(true);
+    expect(wantsToFlee(even.battle, even.archer)).toBe(false);
+    expect(shouldSurrender(even.battle, even.archer)).toBe(false);
+    runAiTurn(even.battle, even.archer);
+    expect(even.archer.surrendered).toBeFalsy();
+    // Friends nearly dead: the fight is lost, and the cornered archer gives up.
+    const lost = make(0.05);
+    expect(sideStrength(lost.battle, 'enemy')).toBeLessThan(HOLD_FIRM_ODDS * sideStrength(lost.battle, 'player'));
+    expect(holdsFirm(lost.battle, lost.archer)).toBe(false);
+    expect(shouldSurrender(lost.battle, lost.archer)).toBe(true);
+  });
+
   it('human: a hurt enemy that isn\'t in mortal danger runs for the edge instead of surrendering', () => {
     const map = openMap(30, 21);
     const bandit = makeUnit(makeEnemy('bandit', 4, makeRng(5)), 'enemy', { x: 15, y: 10 });
@@ -1243,13 +1280,14 @@ describe('battles', () => {
 
 describe('resist', () => {
   it('uses the Defense curve: 50 = 33%, 100 = 50%, 0 or less = never', () => {
-    expect(STAT_CONFIG.base.resist).toBe(50);
-    expect(STAT_CONFIG.growthPerLevel.resist).toBe(5);
+    expect(STAT_CONFIG.base.resist).toBe(0);
+    expect(STAT_CONFIG.growthPerLevel.resist).toBe(10);
     expect(resistChance(50)).toBeCloseTo(1 / 3);
     expect(resistChance(100)).toBe(0.5);
     expect(resistChance(0)).toBe(0);
     expect(resistChance(-20)).toBe(0);
-    expect(deriveStats(hero()).resist).toBe(50);
+    expect(deriveStats(hero()).resist).toBe(0); // level 1: never resists
+    expect(deriveStats(tank()).resist).toBe(50); // level 6: 33%
   });
 
   it('debuffs are sometimes shrugged off (a resist event, no status); buffs and damage are not', () => {
@@ -1269,7 +1307,7 @@ describe('resist', () => {
     const n = 3000;
     for (let i = 0; i < n; i++) {
       const a = makeUnit(hero('staff', ['fireball']), 'player', { x: 1, y: 3 });
-      const e = makeUnit(hero(), 'enemy', { x: 4, y: 3 });
+      const e = makeUnit(tank(), 'enemy', { x: 4, y: 3 }); // Resist 50: 33%
       e.hp = 1e9;
       const battle = new Battle(openMap(), [a, e], makeRng(i + 1));
       if (battle.perform(a, 'fireball', { x: 4, y: 3 }).some((ev) => ev.type === 'resist')) resisted += 1;
@@ -1325,10 +1363,12 @@ describe('skill points and the Body tab', () => {
     const c = createCharacter('B', '#3d7be0', 'sword_shield', undefined, { health: 'S', defense: 'F' });
     c.body = { health: 2, defense: 1 };
     expect(bodyGain('health')).toBe(100);
+    expect(bodyGain('defense')).toBe(20);
+    expect(bodyGain('resist')).toBe(20);
     expect(bodyGain('movement')).toBe(0);
     expect(bodyStats()).not.toContain('movement');
-    // Level 1: 500 + 2 x 100; Defense (50 + 10) x 1.25 for the shield.
-    expect(deriveStats(c)).toMatchObject({ health: 700, defense: 75 });
+    // Level 1: 500 + 2 x 100; Defense (0 + 20) x 1.25 for the shield.
+    expect(deriveStats(c)).toMatchObject({ health: 700, defense: 25 });
     expect(pointsUsed(c)).toBe(3);
     expect(freePoints(c)).toBe(-1); // level 1 has 2 points
     sanitizeLoadout(c);
@@ -1675,19 +1715,19 @@ describe('skill-sheet systems: level locks, Disengage and the new skills', () =>
     const events = battle.perform(a, 'flicker_strike', { x: 4, y: 3 });
     expect(events).toContainEqual(expect.objectContaining({ type: 'move', kind: 'teleport' }));
     expect(a).toMatchObject({ x: 3, y: 3 });
-    expect(e.hp).toBe(500 - 71);
+    expect(e.hp).toBe(500 - 100);
     expect(a.engagedWith).toBe(e.uid);
   });
 
   it('Life-Risking Strike: 250% P.Atk with no Defense until your next turn; costs you if the target survives', () => {
     const { battle, units: [a, e] } = setup(openMap(), [
-      { c: hero('sword_shield', ['life_risking_strike']), team: 'player', at: { x: 3, y: 3 } },
-      { c: hero('sword_shield'), team: 'enemy', at: { x: 4, y: 3 } },
+      { c: (() => { const c = tank('A'); c.skillIds = ['life_risking_strike']; return c; })(), team: 'player', at: { x: 3, y: 3 } },
+      { c: tank('E'), team: 'enemy', at: { x: 4, y: 3 } },
     ]);
     battle.perform(a, 'life_risking_strike', { x: 4, y: 3 });
-    expect(e.hp).toBe(500 - 153); // 250 x 100/163
+    expect(e.hp).toBe(750 - 230); // 250% of 150 P.Atk x 100/163
     expect(battle.stat(a, 'defense')).toBe(0);
-    expect(a.hp).toBe(500 - 100); // 100% of own P.Atk, no Defense
+    expect(a.hp).toBe(750 - 150); // 100% of own P.Atk, no Defense
     battle.endPhase();
     battle.endPhase();
     expect(battle.stat(a, 'defense')).toBe(63);
@@ -1719,13 +1759,13 @@ describe('bow modes and damage types', () => {
     expect(battle.skillRange(a, SKILLS.bow_attack)).toBe(7.5); // weapon range 5 x 1.5
     expect(battle.skillLos(a, SKILLS.bow_attack)).toBeUndefined(); // arcs over cover
     battle.perform(a, 'bow_attack', { x: 7, y: 3 });
-    expect(e.hp).toBe(500 - 43); // 70% of 100 P.Atk x 100/163
+    expect(e.hp).toBe(500 - 70); // 70% of 100 P.Atk, Def 0
     battle.endPhase();
     battle.endPhase();
     battle.perform(a, 'switch_mode', { x: 1, y: 3 });
     expect(battle.modeName(a)).toBe('Melee');
     expect(battle.skillRange(a, SKILLS.bow_attack)).toBe(1.5);
-    expect(battle.previewHits(a, SKILLS.bow_attack, e)).toEqual([49]); // 80% of 100 x 100/163
+    expect(battle.previewHits(a, SKILLS.bow_attack, e)).toEqual([80]); // 80% of 100, Def 0
     battle.perform(a, 'switch_mode', { x: 1, y: 3 });
     expect(battle.modeName(a)).toBe('Direct');
     // Switch Mode never keeps a turn open on its own.
@@ -1746,7 +1786,7 @@ describe('bow modes and damage types', () => {
     // Circle Swing in Indirect mode still uses Melee: 1.5 tiles, 80% P.Atk.
     expect(battle.areaTiles(a, SKILLS.circle_swing, a)).toHaveLength(8);
     const events = battle.perform(a, 'circle_swing', { x: 3, y: 3 });
-    expect(events.filter((ev) => ev.type === 'damage')).toEqual([expect.objectContaining({ target: foe.uid, amount: 49, damageType: 'physical' })]);
+    expect(events.filter((ev) => ev.type === 'damage')).toEqual([expect.objectContaining({ target: foe.uid, amount: 80, damageType: 'physical' })]);
     expect(battle.modeName(a)).toBe('Indirect'); // the selected mode is kept
   });
 
@@ -1756,12 +1796,12 @@ describe('bow modes and damage types', () => {
       { c: hero('sword_shield'), team: 'enemy', at: { x: 3, y: 3 } },
     ]);
     const bolt = battle.perform(m, 'magic_bolt', { x: 3, y: 3 }).filter((ev) => ev.type === 'damage');
-    // 50% of 60 P.Atk and 50% of 120 M.Atk, each x 100/163
+    // 50% of 60 P.Atk and 50% of 120 M.Atk (Def 0)
     expect(bolt).toEqual([
-      expect.objectContaining({ damageType: 'physical', amount: 18 }),
-      expect.objectContaining({ damageType: 'magical', amount: 37 }),
+      expect.objectContaining({ damageType: 'physical', amount: 30 }),
+      expect.objectContaining({ damageType: 'magical', amount: 60 }),
     ]);
-    expect(battle.previewHits(m, SKILLS.magic_bolt, e)).toEqual([55]);
+    expect(battle.previewHits(m, SKILLS.magic_bolt, e)).toEqual([90]);
     battle.endPhase();
     battle.endPhase();
     const fire = battle.perform(m, 'fireball', { x: 3, y: 3 }).filter((ev) => ev.type === 'damage');
@@ -1952,7 +1992,7 @@ describe('Elementalist rework: Ignite, Freeze, Fireball, Iceblast and Burn explo
   /** A caster and a target; `() => 0.99` never rolls a Resist. */
   const duelOf = (skills: string[]) => {
     const m = makeUnit(hero('staff', skills), 'player', { x: 1, y: 3 });
-    const e = makeUnit(hero('bow'), 'enemy', { x: 4, y: 3 });
+    const e = makeUnit(tank(), 'enemy', { x: 4, y: 3 }); // Health 750, Defense 63
     return { battle: new Battle(openMap(), [m, e], () => 0.99), m, e };
   };
 
@@ -1961,7 +2001,7 @@ describe('Elementalist rework: Ignite, Freeze, Fireball, Iceblast and Burn explo
     expect(SKILLS.freeze).toMatchObject({ ap: 1, mana: 30, cooldown: 1, level: 1, hits: [{ mAtk: 0.2 }] });
     const { battle, m, e } = duelOf(['ignite', 'freeze']);
     battle.perform(m, 'ignite', { x: 4, y: 3 });
-    expect(e.hp).toBe(500 - 17); // 24 M.Atk x 100/140
+    expect(e.hp).toBe(750 - 15); // 24 M.Atk x 100/163
     expect(e.statuses.find((s) => s.id === 'burn')?.stacks).toBe(1);
     expect(m).toMatchObject({ acted: false, mp: m.stats.mana - 30 }); // 1 AP: the turn goes on
     battle.perform(m, 'freeze', { x: 4, y: 3 });
@@ -1974,7 +2014,7 @@ describe('Elementalist rework: Ignite, Freeze, Fireball, Iceblast and Burn explo
     expect(SKILLS.iceblast).toMatchObject({ level: 3, los: 'sight', hits: [{ mAtk: 1.2 }], applyStatus: [{ status: 'slow', stacks: 1 }] });
     const { battle, m, e } = duelOf(['iceblast']);
     battle.perform(m, 'iceblast', { x: 4, y: 3 });
-    expect(e.hp).toBe(500 - 103); // 144 M.Atk x 100/140
+    expect(e.hp).toBe(750 - 88); // 144 M.Atk x 100/163
     expect(e.statuses.find((s) => s.id === 'slow')?.stacks).toBe(1);
   });
 
@@ -1983,16 +2023,16 @@ describe('Elementalist rework: Ignite, Freeze, Fireball, Iceblast and Burn explo
     e.statuses.push({ id: 'burn', name: 'Burn', debuff: true, stacks: 2, amount: 0, turns: Infinity, tick: 'end' });
     const events = battle.perform(m, 'ignite', { x: 4, y: 3 });
     expect(events).toContainEqual(expect.objectContaining({ type: 'status', name: 'Explosion' }));
-    // 15% of 500 = 75, x 100/140 for Def 40 = 54; plus Ignite's own 17.
-    expect(events).toContainEqual(expect.objectContaining({ type: 'damage', cause: 'status', amount: 54 }));
-    expect(e.hp).toBe(500 - 17 - 54);
+    // 15% of 750 = 112.5, x 100/163 for Def 63 = 69; plus Ignite's own 15.
+    expect(events).toContainEqual(expect.objectContaining({ type: 'damage', cause: 'status', amount: 69 }));
+    expect(e.hp).toBe(750 - 15 - 69);
     expect(e.statuses.some((s) => s.id === 'burn' || s.id === 'explosion')).toBe(false);
     // Shields absorb it too.
     const b = duelOf(['ignite']);
     b.e.statuses.push({ id: 'burn', name: 'Burn', debuff: true, stacks: 2, amount: 0, turns: Infinity, tick: 'end' });
     b.e.statuses.push({ id: 'shield', name: 'Shield', debuff: false, stacks: 0, amount: 999, turns: 2, tick: 'start' });
     b.battle.perform(b.m, 'ignite', { x: 4, y: 3 });
-    expect(b.e.hp).toBe(500);
+    expect(b.e.hp).toBe(750);
   });
 
   it('Wraiths attack with Spectral Touch; Chill Touch (Slow) has a 1-turn cooldown', () => {
@@ -2028,21 +2068,22 @@ describe('Arcane Weapon (toggle)', () => {
     expect(on).toContainEqual({ type: 'toggle', target: a.uid, name: 'Arcane Weapon', on: true });
     expect(a).toMatchObject({ mp: mp - 10, ap: 2, acted: false });
     expect(battle.usableFreeActions(a)).not.toContain('arcane_weapon'); // never keeps the turn open
-    // Level 3: Sword Slash 120 P.Atk x 100/140 = 86 (Physical), then 50% of 96 M.Atk = 48 x 100/140 = 34 (Magical).
-    expect(battle.previewHits(a, SKILLS.sword_slash, e)).toEqual([86, 34]);
+    // Level 3: Sword Slash 120 P.Atk (Physical), then 50% of 96 M.Atk = 48 (Magical), on a level-1 bow user (Def 0).
+    expect(battle.previewHits(a, SKILLS.sword_slash, e)).toEqual([120, 48]);
     const hit = battle.perform(a, 'sword_slash', { x: 4, y: 3 }).filter((ev) => ev.type === 'damage');
     expect(hit).toEqual([
-      expect.objectContaining({ amount: 86, damageType: 'physical' }),
-      expect.objectContaining({ amount: 34, damageType: 'magical' }),
+      expect.objectContaining({ amount: 120, damageType: 'physical' }),
+      expect.objectContaining({ amount: 48, damageType: 'magical' }),
     ]);
     expect(a.mp).toBe(mp - 20);
-    // Next turn: 10 mana upkeep; switching off is free.
+    // Next turn: no upkeep for keeping it on; switching off is free.
     battle.endPhase();
     battle.endPhase();
-    expect(a.mp).toBe(mp - 30);
+    expect(a.mp).toBe(mp - 20);
+    expect(battle.isToggledOn(a, 'arcane_weapon')).toBe(true);
     const off = battle.perform(a, 'arcane_weapon', { x: 3, y: 3 });
     expect(off).toContainEqual({ type: 'toggle', target: a.uid, name: 'Arcane Weapon', on: false });
-    expect(a.mp).toBe(mp - 30);
+    expect(a.mp).toBe(mp - 20);
     expect(battle.isToggledOn(a, 'arcane_weapon')).toBe(false);
   });
 
@@ -2064,20 +2105,49 @@ describe('Arcane Weapon (toggle)', () => {
     expect(opp.map((ev) => ev.type === 'damage' && ev.damageType)).toEqual(['physical', 'magical']);
   });
 
-  it('switches off when it runs out of mana (per hit or per turn)', () => {
+  it('costs 10 mana per hit: Double Strike pays twice, Circle Swing once per target hit', () => {
+    const ds = setupAw('sword_shield', ['arcane_weapon', 'double_strike']);
+    ds.battle.perform(ds.a, 'arcane_weapon', { x: 3, y: 3 });
+    let mp = ds.a.mp;
+    ds.battle.perform(ds.a, 'double_strike', { x: 4, y: 3 });
+    expect(ds.a.mp).toBe(mp - SKILLS.double_strike.mana - 2 * 10);
+    const c = hero('sword_shield', ['arcane_weapon', 'circle_swing']);
+    c.level = 5;
+    const a = makeUnit(c, 'player', { x: 3, y: 3 });
+    const foes = [{ x: 4, y: 3 }, { x: 2, y: 3 }, { x: 3, y: 4 }].map((p) => makeUnit(hero('bow'), 'enemy', p));
+    const battle = new Battle(openMap(), [a, ...foes], () => 0.99);
+    battle.perform(a, 'arcane_weapon', { x: 3, y: 3 });
+    mp = a.mp;
+    const hits = battle.perform(a, 'circle_swing', { x: 3, y: 3 }).filter((ev) => ev.type === 'damage' && ev.damageType === 'magical');
+    expect(hits).toHaveLength(3);
+    expect(a.mp).toBe(mp - SKILLS.circle_swing.mana - 3 * 10);
+    // Not enough for every target: it pays for what it can, never goes below 0, then switches off.
+    const b2 = new Battle(openMap(), [makeUnit(c, 'player', { x: 3, y: 3 }), ...[{ x: 4, y: 3 }, { x: 2, y: 3 }, { x: 3, y: 4 }].map((p) => makeUnit(hero('bow'), 'enemy', p))], () => 0.99);
+    const a2 = b2.units[0];
+    b2.perform(a2, 'arcane_weapon', { x: 3, y: 3 });
+    a2.mp = SKILLS.circle_swing.mana + 15;
+    const ev = b2.perform(a2, 'circle_swing', { x: 3, y: 3 });
+    expect(ev.filter((x) => x.type === 'damage' && x.damageType === 'magical')).toHaveLength(1);
+    expect(a2.mp).toBe(5);
+    expect(b2.isToggledOn(a2, 'arcane_weapon')).toBe(false);
+  });
+
+  it('switches off when it runs out of mana for a hit, and has no upkeep', () => {
     const { battle, a } = setupAw();
     battle.perform(a, 'arcane_weapon', { x: 3, y: 3 });
     a.mp = 5;
     const events = battle.perform(a, 'sword_slash', { x: 4, y: 3 });
     expect(events).toContainEqual({ type: 'toggle', target: a.uid, name: 'Arcane Weapon', on: false, reason: 'mana' });
     expect(events.filter((ev) => ev.type === 'damage')).toHaveLength(1); // no extra hit
-    // Upkeep: on with too little mana for the next turn.
+    expect(a.mp).toBe(5);
+    // No upkeep: it stays on through turns even with no mana, until a hit needs paying for.
     const b = setupAw();
     b.battle.perform(b.a, 'arcane_weapon', { x: 3, y: 3 });
-    b.a.mp = 9;
+    b.a.mp = 0;
     b.battle.endPhase();
     const start = b.battle.endPhase();
-    expect(start).toContainEqual(expect.objectContaining({ type: 'toggle', on: false, reason: 'mana' }));
-    expect(b.a.mp).toBe(9);
+    expect(start).not.toContainEqual(expect.objectContaining({ type: 'toggle' }));
+    expect(b.a.mp).toBe(0);
+    expect(b.battle.isToggledOn(b.a, 'arcane_weapon')).toBe(true);
   });
 });

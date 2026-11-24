@@ -308,8 +308,34 @@ export function caution(battle: Battle, u: Unit): number {
 }
 
 /**
+ * A side's fighting strength: its total HP times its total attack (the larger of P.Atk and M.Atk per unit), so
+ * numbers count twice over, as they do in a real fight (two fighters deal twice the damage and take twice as long to kill).
+ */
+export function sideStrength(battle: Battle, team: Unit['team']): number {
+  const units = battle.living(team);
+  const hp = units.reduce((s, u) => s + u.hp, 0);
+  const atk = units.reduce((s, u) => s + Math.max(u.stats.pAtk, u.stats.mAtk), 0);
+  return hp * atk;
+}
+
+/** A human holds firm while its side's strength is at least this share of its foes'. */
+export const HOLD_FIRM_ODDS = 0.5;
+
+/**
+ * Is this human's side still in the fight? It has allies standing and the odds aren't too bad (its side's
+ * strength at least HOLD_FIRM_ODDS of the other side's). Then a hurt human falls back to its friends
+ * (wantsToRetreat) rather than running for the edge or giving up.
+ */
+export function holdsFirm(battle: Battle, u: Unit): boolean {
+  if (!battle.living(u.team).some((a) => a !== u)) return false;
+  const foes = sideStrength(battle, u.team === 'enemy' ? 'player' : 'enemy');
+  return foes <= 0 || sideStrength(battle, u.team) >= HOLD_FIRM_ODDS * foes;
+}
+
+/**
  * Does this enemy want out of the fight? Beasts once hurt; a tribal fighter when its group has broken;
- * a human when badly hurt, or hurt and in reach of a blow that could kill it. Evil never.
+ * a human when badly hurt, or hurt and in reach of a blow that could kill it, but only once its side is losing
+ * or it's on its own (see holdsFirm). Evil never.
  */
 export function wantsToFlee(battle: Battle, u: Unit): boolean {
   if (u.team !== 'enemy') return false;
@@ -317,7 +343,7 @@ export function wantsToFlee(battle: Battle, u: Unit): boolean {
     case 'evil': return false;
     case 'beast': return ratio(u) < BEAST_FLEE_AT;
     case 'tribal': return tribeRouted(battle, u.team);
-    default: return isLow(u) || (ratio(u) < 0.6 && threatAt(battle, u, u) >= u.hp);
+    default: return (isLow(u) || (ratio(u) < 0.6 && threatAt(battle, u, u) >= u.hp)) && !holdsFirm(battle, u);
   }
 }
 

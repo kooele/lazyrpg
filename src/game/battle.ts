@@ -1097,7 +1097,7 @@ export class Battle {
     const swings = this.isWeaponAttack(attacker, skill) ? (this.skillFor(attacker, skill).basicAttack ?? 1) : 0;
     skill = this.skillFor(attacker, skill);
     // Weapon on-hit effects (Arcane Weapon) the attacker can pay for.
-    if (swings) skill = { ...skill, hits: [...(skill.hits ?? []), ...this.procParts(attacker, swings)] };
+    if (swings) skill = { ...skill, hits: [...(skill.hits ?? []), ...this.procParts(attacker, swings, skill.mana)] };
     let hp = target.hp;
     let shield = this.shieldOf(target);
     const out: number[] = [];
@@ -1253,6 +1253,8 @@ export class Battle {
     if (!this.canTarget(u, skill, tile)) throw new Error('Target out of range');
 
     const events: BattleEvent[] = [];
+    // The skill's own mana comes first, so per-hit costs during it (Arcane Weapon) only spend what's left.
+    if (!switchingOff) u.mp -= skill.mana;
     const origin = { x: u.x, y: u.y };
     // Aim first (Flicker Strike picks its victim before it moves), then resolve.
     const aimed = skill.charge ? this.targetsOf(u, skill, tile) : null;
@@ -1268,11 +1270,9 @@ export class Battle {
     for (const a of skill.selfStatus ?? []) events.push(...this.applyStatus(u, u, a.status, a.turns, 1, true));
     if (skill.switchMode) events.push(...this.setWeaponMode(u, u.weaponMode + 1));
     // Toggles: switch the status on (paying the mana) or off again (free).
-    let free = false;
     if (skill.toggleStatus) {
       if (this.isToggledOn(u, skill.toggleStatus)) {
         events.push(this.toggleOff(u, skill.toggleStatus));
-        free = true;
       } else {
         const def = STATUSES[skill.toggleStatus];
         u.statuses.push({ id: def.id, name: def.name, debuff: def.debuff, stacks: 1, amount: 0, turns: Infinity, tick: def.tick });
@@ -1384,7 +1384,7 @@ export class Battle {
     events.push(...this.separationEvents());
     // Attacking gives a Stealthed unit away.
     if (this.isAttack(used) && used.affects !== 'ally') u.statuses = u.statuses.filter((st) => !STATUSES[st.id]?.stealth);
-    this.payFor(u, skillId, free);
+    this.payFor(u, skillId, true); // mana was paid up front (none when switching a toggle off)
     return events;
   }
 
@@ -1502,9 +1502,9 @@ export class Battle {
   }
 
   /** Extra damage each swing of a weapon attack would add on `target` (for previews), as hits. */
-  private procParts(u: Unit, swings: number): DamagePart[] {
+  private procParts(u: Unit, swings: number, reserved = 0): DamagePart[] {
     const out: DamagePart[] = [];
-    let mp = u.mp;
+    let mp = u.mp - reserved; // the skill's own mana is paid first
     for (let i = 0; i < swings; i++) {
       for (const s of this.weaponOnHits(u)) {
         const def = STATUSES[s.id];
