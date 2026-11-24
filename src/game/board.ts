@@ -122,7 +122,7 @@ export function makeQuest(rank: Rank, day: number, rng: Rng, promotion = false):
   };
 }
 
-/** A rank picked by the board's posting weights (board.rankWeights: S 1, A 25, B 20, C 60, D 40 out of 146). */
+/** A rank picked by the board's posting weights (board.rankWeights: S 1, A 7, B 20, C 60, D 40 out of 128). */
 function postedRank(rng: Rng): Rank {
   const w = GUILD.board.rankWeights;
   const total = RANKS.reduce((s, r) => s + w[r], 0);

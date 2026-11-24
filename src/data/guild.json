@@ -19,9 +19,9 @@
   },
   "boardSize": 40,
   "board": {
-    "_comment": "The guild's quest board is shared with the rival parties, who take quests from it (see simulation). Each day up to maxPostsPerDay new quests are posted until it holds boardSize; each quest's rank is picked by rankWeights, relative weights (S 1, A 25, B 20, C 60, D 40, out of 146: a rank's share is its weight over the total), with nothing set aside for the player: in a slow week the rivals may take every quest at the player's rank. Quests vary: each rolls its enemy level and group size (see quests and threat), and pay is extra luck on the reward, so some quests are much better deals than others.",
+    "_comment": "The guild's quest board is shared with the rival parties, who take quests from it (see simulation). Each day up to maxPostsPerDay new quests are posted until it holds boardSize; each quest's rank is picked by rankWeights, relative weights (S 1, A 7, B 20, C 60, D 40, out of 128: a rank's share is its weight over the total), with nothing set aside for the player: in a slow week the rivals may take every quest at the player's rank. Quests vary: each rolls its enemy level and group size (see quests and threat), and pay is extra luck on the reward, so some quests are much better deals than others.",
     "maxPostsPerDay": 8,
-    "rankWeights": { "S": 1, "A": 25, "B": 20, "C": 60, "D": 40 },
+    "rankWeights": { "S": 1, "A": 7, "B": 20, "C": 60, "D": 40 },
     "pay": [0.75, 1.35]
   },
   "quests": {
