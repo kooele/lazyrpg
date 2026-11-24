@@ -96,6 +96,27 @@ export function button(
   return c;
 }
 
+/**
+ * "Sort:" and a row of buttons, one per key; the current key is highlighted with ▲ (ascending) or ▼ (descending).
+ * Clicking calls onPick with that key (see nextSort for flipping the direction). Returns the right edge.
+ */
+export function sortBar<K extends string>(
+  scene: Phaser.Scene, x: number, y: number, keys: [K, string][], cur: { key: K; dir: 'asc' | 'desc' },
+  onPick: (key: K) => void, opts: { h?: number; fontSize?: number; widths?: Partial<Record<K, number>> } = {},
+): number {
+  const h = opts.h ?? 26;
+  const size = opts.fontSize ?? 12;
+  const label = text(scene, x, y + h / 2, 'Sort:', { fontSize: `${size}px`, color: COLORS.dim }).setOrigin(0, 0.5);
+  let cx = x + label.width + 6;
+  for (const [key, name] of keys) {
+    const sel = key === cur.key;
+    const w = opts.widths?.[key] ?? Math.round(name.length * size * 0.6 + 30);
+    button(scene, cx, y, w, h, sel ? `${name} ${cur.dir === 'asc' ? '▲' : '▼'}` : name, () => onPick(key), { selected: sel, fontSize: size });
+    cx += w + 4;
+  }
+  return cx - 4;
+}
+
 /** Modal yes/no dialog drawn on top of the scene. */
 export function confirmDialog(scene: Phaser.Scene, message: string, onYes: () => void, yesLabel = 'Yes', onNo?: () => void): void {
   const layer = scene.add.container(0, 0).setDepth(1000);

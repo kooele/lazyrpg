@@ -61,15 +61,17 @@ export const mainCharacter = (state: GameState) => state.party.find((c) => c.id 
 
 // ---- lineup -------------------------------------------------------------------------------------------
 
-/** Members going on the next quest, in lineup order. The main character always goes. */
+/**
+ * Members going on the next quest, in party order (drag members in Manage Party to reorder). Anyone can be benched,
+ * the main character too: the others can go on quests without them.
+ */
 export function lineupMembers(state: GameState): Character[] {
-  const ids = [state.mainId, ...state.lineup.filter((id) => id !== state.mainId)];
-  return ids.map((id) => state.party.find((c) => c.id === id)).filter((c): c is Character => !!c && canFight(state, c)).slice(0, MAX_PARTY_SIZE);
+  const picked = new Set(state.lineup);
+  return state.party.filter((c) => picked.has(c.id) && canFight(state, c)).slice(0, MAX_PARTY_SIZE);
 }
 
 /** Put a member in or out of the lineup. Returns an error message if it can't be done. */
 export function toggleLineup(state: GameState, id: string): string | null {
-  if (id === state.mainId) return 'Your main character leads the party and always goes.';
   if (state.lineup.includes(id)) {
     state.lineup = state.lineup.filter((x) => x !== id);
     return null;
@@ -79,19 +81,29 @@ export function toggleLineup(state: GameState, id: string): string | null {
   if (!canFight(state, c)) return `${c.name}'s contract has run out. Renew it first.`;
   if (lineupMembers(state).length >= MAX_PARTY_SIZE) return `At most ${MAX_PARTY_SIZE} members can go on a quest.`;
   state.lineup.push(id);
+  tidyLineup(state);
   return null;
 }
 
-/** Drop lineup entries for members who left or can't fight (lapsed contracts). */
+/** Move a party member to position `to` in the party list (which also sets the lineup's order). */
+export function moveMember(state: GameState, id: string, to: number): void {
+  const from = state.party.findIndex((c) => c.id === id);
+  if (from < 0) return;
+  const [c] = state.party.splice(from, 1);
+  state.party.splice(Math.max(0, Math.min(state.party.length, to)), 0, c);
+  tidyLineup(state);
+}
+
+/** Drop lineup entries for members who left or can't fight (lapsed contracts), and keep it in party order. */
 export function tidyLineup(state: GameState): void {
-  const keep = new Set(lineupMembers(state).map((c) => c.id));
-  state.lineup = [state.mainId, ...state.lineup.filter((id) => id !== state.mainId && keep.has(id))];
+  state.lineup = lineupMembers(state).map((c) => c.id);
 }
 
 /** Why the party can't set out on its quest right now (null if it can). */
 export function departBlock(state: GameState): string | null {
   if (!state.quest) return 'Accept a quest at the Adventurer Guild first.';
   if (state.lastQuestDay === state.day) return 'One quest a day: the party is back from a quest today. Find somewhere to sleep first.';
+  if (lineupMembers(state).length === 0) return 'Nobody is in the lineup. Pick who goes in Manage Party.';
   return null;
 }
 

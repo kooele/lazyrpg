@@ -5,7 +5,7 @@ import type { Character, GameState, Quest } from '../src/data/types';
 import { createCharacter, deriveStats, makeRng } from '../src/game/character';
 import { makeEnemy, makeUnit } from '../src/game/battle';
 import {
-  acceptQuest, advanceDay, advanceDays, askingPrice, buyDrinks, isShipmentDay, marketBuyPrice, marketDay, sellSlave, turnInPrisoner, buyResidence, buySlave, makeQuest, sellResidence, stayAtHome, stayAtInn, canTakeQuest, dailyUpkeep, foodCost, departBlock, lineupMembers, mainCharacter,
+  acceptQuest, advanceDay, advanceDays, askingPrice, buyDrinks, isShipmentDay, marketBuyPrice, marketDay, sellSlave, turnInPrisoner, buyResidence, buySlave, makeQuest, sellResidence, stayAtHome, stayAtInn, canTakeQuest, dailyUpkeep, foodCost, departBlock, lineupMembers, mainCharacter, moveMember,
   killBounty, newCampaign, questXpShares, registerPrisoner, resolveQuest, rewardShares, sleepOutside, toggleLineup, weeklyTaxes, xpLevelFactor,
 } from '../src/game/city';
 import { activityOf, combatPenalty, expectedQuality, foodRelationship, healthOf, isInjured, moraleOf, moralePenalty, obediencePenalty } from '../src/game/condition';
@@ -985,10 +985,54 @@ describe('contracts', () => {
     expect(r.state.party.find((m) => m.id === c.id)!.traits).toBeUndefined();
   });
 
-  it('the main character always goes and cannot be benched', () => {
+  it('the main character can be benched to recover while the others go on quests', () => {
     const s = start();
-    expect(toggleLineup(s, s.mainId)).toMatch(/always goes/);
-    expect(lineupMembers(s)[0].id).toBe(s.mainId);
+    const main = mainCharacter(s);
+    const c = companion(s);
+    if (c.contract?.type === 'companion') c.contract.endDay = 100;
+    expect(toggleLineup(s, c.id)).toBeNull();
+    expect(toggleLineup(s, s.mainId)).toBeNull();
+    expect(lineupMembers(s).map((m) => m.id)).toEqual([c.id]);
+    main.health = 40;
+    s.schedule[main.id] = 'recover';
+    acceptQuest(s, s.guild.board.find((x) => canTakeQuest(s, x))!.id);
+    s.quest!.days = 2;
+    expect(departBlock(s)).toBeNull();
+    const before = moraleOf(main);
+    const xp = main.xp;
+    resolveQuest(s, 'victory', makeRng(3));
+    // The main character stayed home: no quest Morale loss or XP, and the night on the road was spent recovering.
+    expect(moraleOf(main)).toBeGreaterThanOrEqual(before);
+    expect(main.xp).toBe(xp);
+    expect(healthOf(main)).toBeGreaterThan(40);
+    expect(s.questMembers).toEqual([c.id]);
+    // The lineup stays as it was: the main character is still benched.
+    expect(lineupMembers(s).map((m) => m.id)).toEqual([c.id]);
+  });
+
+  it('a party cannot set out with nobody in the lineup', () => {
+    const s = start();
+    toggleLineup(s, s.mainId);
+    acceptQuest(s, s.guild.board.find((x) => canTakeQuest(s, x))!.id);
+    expect(departBlock(s)).toMatch(/Nobody is in the lineup/);
+    expect(toggleLineup(s, s.mainId)).toBeNull();
+    expect(departBlock(s)).toBeNull();
+  });
+
+  it('moving a member reorders the party and the lineup with it', () => {
+    const s = start();
+    const a = companion(s);
+    const b = companion(s);
+    for (const m of [a, b]) if (m.contract?.type === 'companion') m.contract.endDay = 100;
+    toggleLineup(s, a.id);
+    toggleLineup(s, b.id);
+    expect(lineupMembers(s).map((m) => m.id)).toEqual([s.mainId, a.id, b.id]);
+    moveMember(s, b.id, 0);
+    expect(s.party.map((m) => m.id)).toEqual([b.id, s.mainId, a.id]);
+    expect(lineupMembers(s).map((m) => m.id)).toEqual([b.id, s.mainId, a.id]);
+    expect(s.lineup).toEqual([b.id, s.mainId, a.id]);
+    moveMember(s, b.id, 99);
+    expect(s.party.map((m) => m.id)).toEqual([s.mainId, a.id, b.id]);
   });
 });
 
