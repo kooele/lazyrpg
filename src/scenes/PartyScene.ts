@@ -4,7 +4,7 @@ import { ACTIVITIES, FOOD_TIERS, GUILD, INN_TIERS, LODGING_QUALITY, RINGS, isRes
 import { TRAITS } from '../data/traits';
 import type { Character, GameState } from '../data/types';
 import { bodyPoints, deriveStats, freePoints, skillPoints } from '../game/character';
-import { benchMember, lineupMembers, lodgingPrice, marketBuyPrice, moveMember, releaseCompanion, residents, scheduledMembers, sellSlave, setLineupSlot, setLodging } from '../game/city';
+import { benchMember, quitRenown, lineupMembers, lodgingPrice, marketBuyPrice, moveMember, releaseCompanion, residents, scheduledMembers, sellSlave, setLineupSlot, setLodging } from '../game/city';
 import {
   ACTIVITY_INFO, QUALITY_TEXT, activityOf, lodgingOf, lodgingRelationship, combatPenalty, expectedQuality, foodOf, healthOf, injuryPenalty, isInjured, moraleOf, moralePenalty,
   obediencePenalty, traitFactor,
@@ -393,7 +393,7 @@ export class PartyScene extends Phaser.Scene {
         enabled: left <= 7, fontSize: 14, selected: left <= 0,
       });
       const cost = releaseCost(c, state.day, state.rank);
-      const why = cost ? `Breaking the contract early costs ${cost} gold\n(half the rest of the term, but at least a week's pay\nor the rest of the term if shorter).` : 'Their term is over: no payout.';
+      const why = cost ? `Breaking the contract early costs ${cost} gold\n(half the rest of the term, at most a week's pay).` : 'Their term is over: no payout.';
       button(this, X + 286, by, 128, 44, cost ? `Release\n(${cost}g)` : 'Release', () => confirmDialog(this, `Release ${c.name} from their contract?\n${why}\nThey go back to the guild hall.`, () => {
         const err = releaseCompanion(state, c.id);
         if (err) return toast(this, err, COLORS.bad);
@@ -484,7 +484,7 @@ export class PartyScene extends Phaser.Scene {
       `Rises with a round of drinks at an inn and with Day Off (+${GUILD.schedule.dayOffMorale * k} a day)${k !== 1 ? `: gains x${k} (${(c.traits ?? []).map((t) => TRAITS[t].name).join(', ')})` : ''}.`,
       `In battle: -${GUILD.combat.percentPer5}% to all stats per 5 below 100${moralePenalty(c) ? ` (now -${Math.round(moralePenalty(c) * 100)}%)` : ''}.`,
       main ? 'Your main character never leaves, however low it gets.'
-        : `${c.contract?.type === 'mercenary' ? '' : `Below ${C.lowMorale} they lose ${C.lowMoraleRelationshipPerDay} relationship a day. `}At 0 they leave the party.`,
+        : `${c.contract?.type === 'mercenary' ? '' : `Below ${C.lowMorale} they lose ${C.lowMoraleRelationshipPerDay} relationship a day. `}At 0 they leave the party (renown -${quitRenown(c)}).`,
     ].join('\n');
   }
 
@@ -509,7 +509,7 @@ export class PartyScene extends Phaser.Scene {
     lines.push(`-${GUILD.condition.lowMoraleRelationshipPerDay} a day while Morale is below ${GUILD.condition.lowMorale}.`);
     if (k.type === 'companion') {
       lines.push(
-        `Unpaid wages: ${GUILD.companion.relationshipUnpaid} each payday. At 0 they quit, and you pay the release cost for the breach.`,
+        `Unpaid wages: ${GUILD.companion.relationshipUnpaid} each payday; they quit at 0 (renown -${quitRenown(c)}).`,
         `A higher relationship lowers their demands when you renew (up to -${Math.round(GUILD.companion.renewalDiscountAtMax * 100)}% at 100).`,
       );
     } else {

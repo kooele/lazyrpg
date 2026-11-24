@@ -59,7 +59,7 @@ export interface GuildConfig {
   startingRenown: number;
   maxRoster: number;
   partyRankWeights: Record<Rank, number>;
-  ranks: { renown: Record<Exclude<Rank, 'D'>, number>; highestPromotion: Rank; demotionDays: number; failedQuestRenown: number; deathRenown: number };
+  ranks: { renown: Record<Exclude<Rank, 'D'>, number>; highestPromotion: Rank; demotionDays: number; failedQuestRenown: number; deathRenown: number; quitRenownPerLevel: number };
   /** First level of each adventurer rank above D. */
   adventurerRanks: Record<'C' | 'B' | 'A' | 'S', number>;
   boardSize: number;
@@ -263,6 +263,7 @@ export function parseGuildConfig(data: unknown): GuildConfig {
       demotionDays: num(rk.demotionDays, 'ranks.demotionDays', 1, 365),
       failedQuestRenown: num(rk.failedQuestRenown, 'ranks.failedQuestRenown', 0, 10),
       deathRenown: num(rk.deathRenown, 'ranks.deathRenown', 0, 10),
+      quitRenownPerLevel: num(rk.quitRenownPerLevel, 'ranks.quitRenownPerLevel', 0, 1000),
     },
     adventurerRanks: advRanks,
     boardSize: num(d.boardSize, 'boardSize', 1, 60),

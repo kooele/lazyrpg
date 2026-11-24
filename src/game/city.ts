@@ -126,21 +126,15 @@ export function tidyLineup(state: GameState): void {
   state.lineup = lineupMembers(state).map((c) => c.id);
 }
 
-/**
- * Companions whose relationship has fallen to 0 quit: a breach of contract the party pays for as if it had released
- * them (releaseCost). The party pays what it can; anything it can't cover is lost with them.
- */
-export function relationshipDepartures(state: GameState): string[] {
-  const out: string[] = [];
-  for (const c of state.party.filter(isCompanion)) {
-    if (c.contract.relationship > 0) continue;
-    const cost = releaseCost(c, state.day, state.rank);
-    const paid = Math.min(cost, state.gold);
-    state.gold -= paid;
-    leaveParty(state, c, c.contract.greed);
-    out.push(note(state, `${c.name} quits (relationship 0)${cost ? `: breach of contract, the party pays ${paid} gold${paid < cost ? ` (all it has; ${cost} was owed)` : ''}` : ''}.`));
-  }
-  return out;
+/** Renown a party loses when a member quits on it: ranks.quitRenownPerLevel x their level. */
+export const quitRenown = (c: Pick<Character, 'level'>) => GUILD.ranks.quitRenownPerLevel * c.level;
+
+/** A member quits the party (unpaid wages, Morale 0): no payout, but the party loses renown (quitRenown). */
+function quit(state: GameState, c: Character): number {
+  const lost = Math.min(state.renown, quitRenown(c));
+  state.renown -= lost;
+  leaveParty(state, c, isCompanion(c) ? c.contract.greed : 1);
+  return lost;
 }
 
 /** Release a companion from their contract early, paying them releaseCost. Returns an error message, or null. */
@@ -387,8 +381,8 @@ export function obedienceDrift(state: GameState): string[] {
 export function moraleDepartures(state: GameState): string[] {
   const out: string[] = [];
   for (const c of state.party.filter((m) => m.id !== state.mainId && moraleOf(m) <= 0)) {
-    leaveParty(state, c, isCompanion(c) ? c.contract.greed : 1);
-    out.push(note(state, `${c.name} has had enough (Morale 0) and left the party.`));
+    const lost = quit(state, c);
+    out.push(note(state, `${c.name} has had enough (Morale 0) and left the party.${lost ? ` Renown -${Math.round(lost)}.` : ''}`));
   }
   return out;
 }
@@ -617,6 +611,10 @@ export function advanceDay(state: GameState, rng: Rng, night: 'road' | 'city' = 
       } else {
         c.contract.relationship = Math.max(0, c.contract.relationship + GUILD.companion.relationshipUnpaid);
         say(`You couldn't pay ${c.name} (${c.contract.basePay} gold).`);
+        if (c.contract.relationship <= 0) {
+          const lost = quit(state, c);
+          say(`${c.name} quits over unpaid wages.${lost ? ` Renown -${Math.round(lost)}.` : ''}`);
+        }
       }
     }
     if (paid) say(`Payday: ${paid} gold in wages.`);
@@ -634,8 +632,6 @@ export function advanceDay(state: GameState, rng: Rng, night: 'road' | 'city' = 
     }
     if (taxed) say(`Slave property tax: ${taxed} gold.`);
   }
-
-  out.push(...relationshipDepartures(state));
 
   // Contracts running out.
   for (const c of state.party.filter(isCompanion)) {
