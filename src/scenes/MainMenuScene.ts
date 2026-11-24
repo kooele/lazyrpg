@@ -21,15 +21,16 @@ export class MainMenuScene extends Phaser.Scene {
       ['Load Game', () => this.scene.start('SaveLoad', { mode: 'load' }), true],
       ['Quick Battle (Demo)', () => this.scene.start('DemoCamp'), true],
       ['Guide', () => this.scene.start('Glossary', { returnTo: 'MainMenu' }), true],
+      ['Settings', () => this.scene.start('Settings', { returnTo: 'MainMenu' }), true],
     ];
-    let y = 220;
+    let y = 196;
     for (const [label, action, enabled] of items) {
-      button(this, WIDTH / 2 - 130, y, 260, 50, label, action, { enabled, fontSize: 20 });
-      y += 60;
+      button(this, WIDTH / 2 - 130, y, 260, 46, label, action, { enabled, fontSize: 20 });
+      y += 54;
     }
 
     if (inGame && session.dirty) {
-      text(this, WIDTH / 2, y + 10, 'You have unsaved progress.', { color: COLORS.dim, fontSize: '14px' }).setOrigin(0.5);
+      text(this, WIDTH / 2, y + 4, 'You have unsaved progress.', { color: COLORS.dim, fontSize: '14px' }).setOrigin(0.5);
     }
     text(this, WIDTH / 2, HEIGHT - 24, 'Saves are plain JSON: export one, read it, tweak it, import it back.', {
       fontSize: '13px', color: COLORS.dim,

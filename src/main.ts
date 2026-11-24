@@ -14,18 +14,22 @@ import { MainMenuScene } from './scenes/MainMenuScene';
 import { SaveLoadScene } from './scenes/SaveLoadScene';
 import { GlossaryScene } from './scenes/GlossaryScene';
 import { session } from './game/session';
+import { loadGraphics } from './game/settings';
+import { SettingsScene } from './scenes/SettingsScene';
 import { COLORS, HEIGHT, UI_SCALE, WIDTH } from './ui/widgets';
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'game',
-  // Render at the screen's real resolution; scenes zoom their camera by UI_SCALE.
+  // Render at the Resolution setting; scenes zoom their camera by UI_SCALE.
   width: Math.round(WIDTH * UI_SCALE),
   height: Math.round(HEIGHT * UI_SCALE),
   backgroundColor: COLORS.bg,
   antialias: true,
+  // A turn-based game gains little past 60 frames a second; the player picks the cap in Settings.
+  fps: { limit: loadGraphics().frameCap },
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-  scene: [BootScene, MainMenuScene, CityScene, GuildScene, MarketScene, InnScene, EstateScene, NegotiateScene, PartyScene, DemoCampScene, CharacterCreatorScene, SaveLoadScene, GlossaryScene, BattleScene],
+  scene: [BootScene, MainMenuScene, CityScene, GuildScene, MarketScene, InnScene, EstateScene, NegotiateScene, PartyScene, DemoCampScene, CharacterCreatorScene, SaveLoadScene, GlossaryScene, SettingsScene, BattleScene],
 });
 
 // Handy for debugging from the browser console: `lazyrpg.scene.getScenes(true)`,
