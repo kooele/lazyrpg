@@ -11,7 +11,7 @@ import {
 import { activityOf, lodgingOf, combatPenalty, expectedQuality, foodRelationship, healthOf, isInjured, moraleOf, moralePenalty, obediencePenalty } from '../src/game/condition';
 import { parseSave, serializeSave } from '../src/game/save';
 import {
-  companionContract, companionDemand, evaluateOffer, joinParty, mercenaryRates, offerValue, openingTerms, punishSlave, slaveContract, bounty, registrationFee, slaveTax, slaveValue,
+  companionContract, companionDemand, evaluateOffer, foodLodgingWeekly, joinParty, mercenaryRates, offerValue, openingTerms, punishSlave, slaveContract, bounty, registrationFee, slaveTax, slaveValue,
 } from '../src/game/contracts';
 import { DEMO_STAGES, newDemo, resolveDemoBattle } from '../src/game/demo';
 import { dangerRating, expectedEnemies, fairReward, payRatio, questRenown, strength, totalThreat, usualCount } from '../src/game/board';
@@ -343,7 +343,11 @@ describe('contracts', () => {
 
   it('a loot cut is worth more to a candidate when the party is higher ranked', () => {
     const t = { basePay: 0, lootPct: 10, foodLodging: false, termWeeks: 4 };
-    expect(offerValue(t, 'B')).toBeGreaterThan(offerValue(t, 'D'));
+    expect(offerValue(t, 'B', 3)).toBeGreaterThan(offerValue(t, 'D', 3));
+    // Food & lodging are worth what the food and night their rank expects would cost: D poor food outside ... A luxury food at the Gilded Crown.
+    expect([1, 6, 11, 16, 21].map(foodLodgingWeekly)).toEqual([2 * 7, (6 + 10) * 7, (18 + 30) * 7, (54 + 90) * 7, (54 + 90) * 7]);
+    const fl = { basePay: 0, lootPct: 0, foodLodging: true, termWeeks: 4 };
+    expect(offerValue(fl, 'D', 11)).toBe(foodLodgingWeekly(11));
   });
 
   it('wages are paid every 7th day; unpaid companions sour and quit', () => {
@@ -513,7 +517,7 @@ describe('contracts', () => {
     const cap = GUILD.residences.capacity;
     expect(cap).toBe(6);
     expect([GUILD.inns.standard.pricePerPerson, GUILD.inns.highEnd.pricePerPerson, GUILD.inns.luxury.pricePerPerson]).toEqual([10, 30, 90]);
-    expect(['common', 'fine', 'luxury'].map((t) => GUILD.food[t as 'common'].pricePerPerson)).toEqual([5, 15, 45]);
+    expect(FOOD_TIERS.map((t) => GUILD.food[t].pricePerPerson)).toEqual([2, 6, 18, 54]);
     expect([GUILD.residences.outer.price, GUILD.residences.middle.price, GUILD.residences.inner.price]).toEqual([4000, 12000, 36000]);
     const main = mainCharacter(s);
     const slaves = Array.from({ length: cap }, (_, i) => {

@@ -126,7 +126,7 @@ export class NegotiateScene extends Phaser.Scene {
     }
     text(this, 30, 420, 'How they value things', { fontSize: '13px', color: COLORS.dim });
     text(this, 30, 440, [
-      `Food & lodging: ${foodLodgingWeekly()} gold/week`,
+      `Food & lodging: ${foodLodgingWeekly(c.level)} gold/week (what a ${adventurerRank(c.level)}-rank expects)`,
       `1% loot cut: ~${lootValue(1, state.rank).toFixed(1)} gold/week`,
       `(a ${state.rank}-rank party earns about ${GUILD.companion.expectedWeeklyLoot[state.rank]} a week)`,
       'Longer terms: they ask a bit less per week.',
@@ -161,9 +161,9 @@ export class NegotiateScene extends Phaser.Scene {
     GUILD.companion.terms.forEach((w, i) => button(this, X + 14 + i * 74, 336, 68, 34, `${w} wk`, set(() => (t.termWeeks = w)), {
       selected: t.termWeeks === w, fontSize: 14, enabled: !this.done,
     }));
-    const weekly = t.basePay + (t.foodLodging ? foodLodgingWeekly() : 0);
+    const weekly = t.basePay + (t.foodLodging ? foodLodgingWeekly(who.character.level) : 0);
     text(this, X + 14, 384, [
-      `Costs you ${weekly} gold a week${t.foodLodging ? ` (${t.basePay} pay + ${foodLodgingWeekly()} food)` : ''}`,
+      `Costs you ${weekly} gold a week${t.foodLodging ? ` (${t.basePay} pay + ${foodLodgingWeekly(who.character.level)} food & lodging)` : ''}`,
       `+ ${t.lootPct}% of rewards · ${weekly * t.termWeeks} gold over ${t.termWeeks} weeks`,
     ].join('\n'), { fontSize: '13px', lineSpacing: 4, wordWrap: { width: 292 } });
     button(this, X + 14, 456, 292, 46, 'Make offer', () => this.offer(), { fill: 0x2c4a2f, fontSize: 18, enabled: !this.done });

@@ -431,10 +431,10 @@ export class PartyScene extends Phaser.Scene {
   }
 }
 
-/** "Silver Lantern Inn · 30g", "Outer City House · free · 3/6", "Outside · free". */
+/** "Silver Lantern Inn · 30g", "Outer City House · 3/6" (residents), "Outside · free". */
 function lodgingLabel(state: GameState, where: CityLodging): string {
   if (where === 'outside') return GUILD.lodging.outsidePerPerson ? `Outside · ${GUILD.lodging.outsidePerPerson}g` : 'Outside · free';
-  if (isResidence(where)) return `${GUILD.residences[where].name} · free · ${residents(state, where).length}/${GUILD.residences.capacity}`;
+  if (isResidence(where)) return `${GUILD.residences[where].name} · ${residents(state, where).length}/${GUILD.residences.capacity}`;
   return `${GUILD.inns[where].name} · ${lodgingPrice(where)}g`;
 }
 
