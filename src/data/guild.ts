@@ -34,7 +34,7 @@ export interface InnConfig {
   drinksMorale: number;
 }
 
-/** Where the party spends a night: an inn, a residence (by ring), outside (free), or on the road during a quest. */
+/** Where a member spends a night: an inn, a residence (by ring), outside (free), or on the road during a quest. */
 export type Lodging = InnTier | Ring | 'outside' | 'road';
 /** A night in the city (not on the road). */
 export type CityLodging = Exclude<Lodging, 'road'>;
@@ -63,19 +63,17 @@ export interface GuildConfig {
   board: { maxPostsPerDay: number; minAtPartyRank: number; postWeights: Record<Rank, number>; pay: [number, number] };
   quests: Record<Rank, QuestTier>;
   threat: ThreatConfig;
-  /** foodLodgingPerDay: what food and lodging are worth to a companion (negotiations). Nights on the road are free (food is still paid). */
-  upkeep: { foodLodgingPerDay: number };
   food: Record<FoodTier, { name: string; pricePerPerson: number }> & { default: FoodTier; relationshipAbove: number; relationshipBelowPerStep: number };
   inns: Record<InnTier, InnConfig>;
   lodging: { expectedQuality: Record<'S' | Rank, number>; relationshipAbove: number; relationshipBelowPerStep: number; outsidePerPerson: number };
-  residences: Record<Ring, { name: string; price: number }> & { sellShare: number };
+  residences: Record<Ring, { name: string; price: number }> & { sellShare: number; capacity: number };
   condition: {
     maxHealthLoss: number;
     healthPerDay: number;
     lowMorale: number;
     lowMoraleRelationshipPerDay: number;
     startingMorale: number;
-    moralePerQuest: number;
+    moralePerTurn: number;
     moraleFailedQuest: number;
     moralePerHealthLost: number;
     moraleMemberDied: number;
@@ -205,7 +203,7 @@ function parseFood(v: unknown): GuildConfig['food'] {
 
 function parseResidences(v: unknown): GuildConfig['residences'] {
   const o = obj(v, 'residences');
-  const out = { sellShare: num(o.sellShare, 'residences.sellShare', 0, 1) } as GuildConfig['residences'];
+  const out = { sellShare: num(o.sellShare, 'residences.sellShare', 0, 1), capacity: num(o.capacity ?? 6, 'residences.capacity', 1, 99) } as GuildConfig['residences'];
   for (const r of RINGS) {
     const h = obj(o[r], `residences.${r}`);
     if (typeof h.name !== 'string' || !h.name) fail(`residences.${r}.name`, 'must be a name');
@@ -281,7 +279,6 @@ export function parseGuildConfig(data: unknown): GuildConfig {
         })(),
       };
     })(),
-    upkeep: numbers(d.upkeep, 'upkeep', ['foodLodgingPerDay']),
     food: parseFood(d.food),
     inns: parseInns(d.inns),
     lodging: {
@@ -289,7 +286,7 @@ export function parseGuildConfig(data: unknown): GuildConfig {
       expectedQuality: numbers(obj(d.lodging, 'lodging').expectedQuality, 'lodging.expectedQuality', ['S', ...RANKS], 3),
     },
     residences: parseResidences(d.residences),
-    condition: numbers<GuildConfig['condition']>(d.condition, 'condition', ['maxHealthLoss', 'healthPerDay', 'startingMorale', 'moralePerQuest',
+    condition: numbers<GuildConfig['condition']>(d.condition, 'condition', ['maxHealthLoss', 'healthPerDay', 'startingMorale', 'moralePerTurn',
       'moraleFailedQuest', 'moralePerHealthLost', 'moraleMemberDied', 'lowMorale', 'lowMoraleRelationshipPerDay'], 100),
     xp: numbers(d.xp, 'xp', ['pool', 'levelStep']),
     schedule: numbers(d.schedule, 'schedule', ['recoverMultiplier', 'trainingXp', 'oddJobsGold', 'dayOffMorale']),

@@ -82,6 +82,15 @@ export function lodgingRelationship(c: Character, where: CityLodging): number {
   return diff < 0 ? -GUILD.lodging.relationshipBelowPerStep * -diff : 0;
 }
 
+/**
+ * Where a member sleeps in the city: as set in Manage Party, else outside. A residence the party no longer owns
+ * counts as outside.
+ */
+export function lodgingOf(state: GameState, c: Pick<Character, 'id'>): CityLodging {
+  const l = state.lodging?.[c.id] ?? 'outside';
+  return isResidence(l) && !state.residences.includes(l) ? 'outside' : l;
+}
+
 /** The food a member gets each day: as set in Manage Party, else food.default. */
 export const foodOf = (state: GameState, c: Character): FoodTier => state.food[c.id] ?? GUILD.food.default;
 

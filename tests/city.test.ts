@@ -5,18 +5,28 @@ import type { Character, GameState, Quest } from '../src/data/types';
 import { createCharacter, deriveStats, makeRng } from '../src/game/character';
 import { makeEnemy, makeUnit } from '../src/game/battle';
 import {
-  acceptQuest, advanceDay, advanceDays, askingPrice, buyDrinks, isShipmentDay, marketBuyPrice, marketDay, sellSlave, turnInPrisoner, buyResidence, buySlave, makeQuest, sellResidence, stayAtHome, stayAtInn, canTakeQuest, dailyUpkeep, foodCost, departBlock, lineupMembers, mainCharacter,
-  killBounty, newCampaign, questXpShares, registerPrisoner, resolveQuest, rewardShares, sleepOutside, toggleLineup, weeklyTaxes, xpLevelFactor,
+  acceptQuest, advanceDay, advanceDays, askingPrice, buyDrinks, isShipmentDay, marketBuyPrice, marketDay, sellSlave, turnInPrisoner, buyResidence, buySlave, makeQuest, sellResidence, endDay, setLodging, boarders, lodgingCost, residents, canTakeQuest, dailyUpkeep, foodCost, departBlock, lineupMembers, mainCharacter, moveMember,
+  killBounty, newCampaign, questMoraleLoss, questXpShares, registerPrisoner, resolveQuest, rewardShares, toggleLineup, weeklyTaxes, xpLevelFactor,
 } from '../src/game/city';
-import { activityOf, combatPenalty, expectedQuality, foodRelationship, healthOf, isInjured, moraleOf, moralePenalty, obediencePenalty } from '../src/game/condition';
+import { activityOf, lodgingOf, combatPenalty, expectedQuality, foodRelationship, healthOf, isInjured, moraleOf, moralePenalty, obediencePenalty } from '../src/game/condition';
 import { parseSave, serializeSave } from '../src/game/save';
 import {
-  companionContract, companionDemand, evaluateOffer, joinParty, mercenaryRates, offerValue, openingTerms, punishSlave, slaveContract, bounty, registrationFee, slaveTax, slaveValue,
+  companionContract, companionDemand, evaluateOffer, foodLodgingWeekly, joinParty, mercenaryRates, offerValue, openingTerms, punishSlave, slaveContract, bounty, registrationFee, slaveTax, slaveValue,
 } from '../src/game/contracts';
 import { DEMO_STAGES, newDemo, resolveDemoBattle } from '../src/game/demo';
 import { dangerRating, expectedEnemies, fairReward, payRatio, questRenown, strength, totalThreat, usualCount } from '../src/game/board';
 import { adventurerCount, adventurerRank, deathFactor, leaderboard, questDifficulty, rankDifficulty, rivalPickQuest, rivalQuestChance, rankCounts, simulateGuildDay } from '../src/game/guild';
 
+/** Everyone the party houses lodges at `where`, then `n` days end in the city (what stayAtInn and friends used to do). */
+const nightsAt = (s: GameState, where: Parameters<typeof setLodging>[2], n: number, rng = makeRng(1)): string[] => {
+  for (const c of boarders(s)) {
+    const err = setLodging(s, c.id, where);
+    if (err) throw new Error(err);
+  }
+  const out: string[] = [];
+  for (let i = 0; i < n; i++) out.push(...endDay(s, rng));
+  return out;
+};
 const start = (seed = 1): GameState => newCampaign(createCharacter('Main', '#3d7be0', 'sword_shield'), 'Testers', makeRng(seed));
 /** Feed everyone exactly what their rank expects, so food doesn't move relationships (for tests about something else). */
 const neutralFood = (s: GameState) => {
@@ -86,7 +96,7 @@ describe('ranks and the leaderboard', () => {
       const q = promo ?? s.guild.board.find((x) => canTakeQuest(s, x))!;
       expect(acceptQuest(s, q.id)).toBeNull();
       resolveQuest(s, 'victory', rng);
-      stayAtInn(s, 'standard', 1, rng);
+      nightsAt(s, 'standard', 1, rng);
     }
     expect(promoQuests).toBe(1);
     expect(s.rank).toBe('C');
@@ -98,7 +108,7 @@ describe('ranks and the leaderboard', () => {
     s.rank = 'C';
     s.renown = 120;
     s.gold = 10000;
-    stayAtInn(s, 'standard', 3, makeRng(1));
+    nightsAt(s, 'standard', 3, makeRng(1));
     expect(s.renown).toBe(120);
     const q = s.guild.board.find((x) => canTakeQuest(s, x) && x.rank === 'C')!;
     acceptQuest(s, q.id);
@@ -108,15 +118,15 @@ describe('ranks and the leaderboard', () => {
     s.renown = 90; // below C's 100
     for (let i = 0; i < GUILD.ranks.demotionDays; i++) {
       expect(s.rank).toBe('C');
-      stayAtInn(s, 'standard', 1, makeRng(1));
+      nightsAt(s, 'standard', 1, makeRng(1));
     }
     expect(s.rank).toBe('D');
     // Climbing back above the line in time resets the clock.
     s.rank = 'C';
     s.belowRankSince = 0;
-    stayAtInn(s, 'standard', 3, makeRng(1));
+    nightsAt(s, 'standard', 3, makeRng(1));
     s.renown = 150;
-    stayAtInn(s, 'standard', GUILD.ranks.demotionDays, makeRng(1));
+    nightsAt(s, 'standard', GUILD.ranks.demotionDays, makeRng(1));
     expect(s.rank).toBe('C');
   });
 
@@ -333,7 +343,11 @@ describe('contracts', () => {
 
   it('a loot cut is worth more to a candidate when the party is higher ranked', () => {
     const t = { basePay: 0, lootPct: 10, foodLodging: false, termWeeks: 4 };
-    expect(offerValue(t, 'B')).toBeGreaterThan(offerValue(t, 'D'));
+    expect(offerValue(t, 'B', 3)).toBeGreaterThan(offerValue(t, 'D', 3));
+    // Food & lodging are worth what the food and night their rank expects would cost: D poor food outside ... A luxury food at the Gilded Crown.
+    expect([1, 6, 11, 16, 21].map(foodLodgingWeekly)).toEqual([2 * 7, (6 + 10) * 7, (18 + 30) * 7, (54 + 90) * 7, (54 + 90) * 7]);
+    const fl = { basePay: 0, lootPct: 0, foodLodging: true, termWeeks: 4 };
+    expect(offerValue(fl, 'D', 11)).toBe(foodLodgingWeekly(11));
   });
 
   it('wages are paid every 7th day; unpaid companions sour and quit', () => {
@@ -399,11 +413,11 @@ describe('contracts', () => {
     expect(foodRelationship(c, 'luxury')).toBe(GUILD.food.relationshipAbove);
     expect(foodRelationship(c, 'fine')).toBe(0);
     expect(foodRelationship(c, 'poor')).toBe(-2 * GUILD.food.relationshipBelowPerStep);
-    stayAtInn(s, 'highEnd', 1, makeRng(1));
+    nightsAt(s, 'highEnd', 1, makeRng(1));
     expect(s.gold).toBe(1000 - 2 * GUILD.inns.highEnd.pricePerPerson - foodCost(s));
     expect(c.contract.relationship).toBe(50 + GUILD.food.relationshipAbove);
     s.food[c.id] = 'poor';
-    stayAtInn(s, 'highEnd', 1, makeRng(1));
+    nightsAt(s, 'highEnd', 1, makeRng(1));
     expect(c.contract.relationship).toBe(50 + GUILD.food.relationshipAbove - 2 * GUILD.food.relationshipBelowPerStep);
     // Food choices survive a save; members who leave are forgotten.
     const r = parseSave(serializeSave(s));
@@ -424,10 +438,10 @@ describe('contracts', () => {
     s.gold = 1000;
     const food = foodCost(s);
     const rel = c.contract.relationship;
-    stayAtInn(s, 'standard', 1, makeRng(1));
+    nightsAt(s, 'standard', 1, makeRng(1));
     expect(s.gold).toBe(1000 - 2 * GUILD.inns.standard.pricePerPerson - food);
     expect(c.contract.relationship).toBe(rel);
-    stayAtInn(s, 'luxury', 2, makeRng(1));
+    nightsAt(s, 'luxury', 2, makeRng(1));
     expect(s.gold).toBe(1000 - 2 * GUILD.inns.standard.pricePerPerson - 4 * GUILD.inns.luxury.pricePerPerson - 3 * food);
     expect(c.contract.relationship).toBe(rel + 2 * GUILD.lodging.relationshipAbove);
     expect(s.day).toBe(4);
@@ -450,15 +464,15 @@ describe('contracts', () => {
       go();
       return (c.contract as { relationship: number }).relationship - 50;
     };
-    expect(night(3, () => sleepOutside(s, makeRng(1)))).toBe(0);
-    expect(night(8, () => sleepOutside(s, makeRng(1)))).toBe(-B);
-    expect(night(8, () => stayAtInn(s, 'standard', 1, makeRng(1)))).toBe(0);
-    expect(night(12, () => stayAtInn(s, 'standard', 1, makeRng(1)))).toBe(-B);
-    expect(night(12, () => stayAtInn(s, 'highEnd', 1, makeRng(1)))).toBe(0);
-    expect(night(18, () => stayAtInn(s, 'highEnd', 1, makeRng(1)))).toBe(-B);
-    expect(night(22, () => sleepOutside(s, makeRng(1)))).toBe(-3 * B);
-    expect(night(18, () => stayAtInn(s, 'luxury', 1, makeRng(1)))).toBe(0);
-    expect(night(12, () => stayAtInn(s, 'luxury', 1, makeRng(1)))).toBe(A);
+    expect(night(3, () => nightsAt(s, 'outside', 1, makeRng(1)))).toBe(0);
+    expect(night(8, () => nightsAt(s, 'outside', 1, makeRng(1)))).toBe(-B);
+    expect(night(8, () => nightsAt(s, 'standard', 1, makeRng(1)))).toBe(0);
+    expect(night(12, () => nightsAt(s, 'standard', 1, makeRng(1)))).toBe(-B);
+    expect(night(12, () => nightsAt(s, 'highEnd', 1, makeRng(1)))).toBe(0);
+    expect(night(18, () => nightsAt(s, 'highEnd', 1, makeRng(1)))).toBe(-B);
+    expect(night(22, () => nightsAt(s, 'outside', 1, makeRng(1)))).toBe(-3 * B);
+    expect(night(18, () => nightsAt(s, 'luxury', 1, makeRng(1)))).toBe(0);
+    expect(night(12, () => nightsAt(s, 'luxury', 1, makeRng(1)))).toBe(A);
   });
 
   it('residences: bought per ring, free nights that count like that ring\'s inn', () => {
@@ -470,29 +484,77 @@ describe('contracts', () => {
     c.contract.relationship = 50;
     s.schedule[c.id] = 'training';
     s.schedule[s.mainId] = 'training';
-    s.gold = 1999;
+    const [outer, middle] = [GUILD.residences.outer.price, GUILD.residences.middle.price];
+    s.gold = outer - 1;
     expect(buyResidence(s, 'outer')).toMatch(/Not enough gold/);
-    s.gold = 2000 + 10000;
+    s.gold = outer + middle;
     expect(buyResidence(s, 'outer')).toBeNull();
     expect(buyResidence(s, 'outer')).toMatch(/already own/);
     expect(buyResidence(s, 'middle')).toBeNull();
     expect(s.gold).toBe(0);
-    expect(() => stayAtHome(s, 'inner', 1, makeRng(1))).toThrow();
+    expect(setLodging(s, c.id, 'inner')).toMatch(/don't own/);
     c.level = 12; // B rank: the Inner City Townhouse is as good as a high-end inn
     neutralFood(s);
     s.gold = 100;
-    stayAtHome(s, 'middle', 1, makeRng(1));
+    nightsAt(s, 'middle', 1, makeRng(1));
     expect(c.contract.relationship).toBe(50);
-    stayAtHome(s, 'outer', 1, makeRng(1));
+    nightsAt(s, 'outer', 1, makeRng(1));
     expect(c.contract.relationship).toBe(50 - GUILD.lodging.relationshipBelowPerStep);
     expect(s.gold).toBe(100 - 2 * foodCost(s)); // free nights, but food still costs
     const r = parseSave(serializeSave(s));
     expect(r.ok && r.state.residences).toEqual(['outer', 'middle']);
     // The Estate Office buys them back for part of the price.
-    expect(sellResidence(s, 'outer')).toBe(Math.round(2000 * GUILD.residences.sellShare));
+    // Its residents sleep outside until they're moved.
+    expect(sellResidence(s, 'outer')).toBe(Math.round(outer * GUILD.residences.sellShare));
     expect(s.residences).toEqual(['middle']);
+    expect(lodgingOf(s, c)).toBe('outside');
     expect(sellResidence(s, 'outer')).toBe(0);
-    expect(() => stayAtHome(s, 'outer', 1, makeRng(1))).toThrow();
+    expect(setLodging(s, c.id, 'outer')).toMatch(/don't own/);
+  });
+
+  it('lodging is set per member: each pays their own night, residences hold at most 6', () => {
+    const s = start();
+    const cap = GUILD.residences.capacity;
+    expect(cap).toBe(6);
+    expect([GUILD.inns.standard.pricePerPerson, GUILD.inns.highEnd.pricePerPerson, GUILD.inns.luxury.pricePerPerson]).toEqual([10, 30, 90]);
+    expect(FOOD_TIERS.map((t) => GUILD.food[t].pricePerPerson)).toEqual([2, 6, 18, 54]);
+    expect([GUILD.residences.outer.price, GUILD.residences.middle.price, GUILD.residences.inner.price]).toEqual([4000, 12000, 36000]);
+    const main = mainCharacter(s);
+    const slaves = Array.from({ length: cap }, (_, i) => {
+      const c = createCharacter(`S${i}`);
+      c.contract = slaveContract('market', 100, makeRng(i));
+      s.party.push(c);
+      return c;
+    });
+    // Everyone starts outside: lodging is free.
+    expect(lodgingOf(s, main)).toBe('outside');
+    expect(lodgingCost(s, 'city')).toBe(0);
+    // Each member pays for their own inn.
+    setLodging(s, main.id, 'luxury');
+    setLodging(s, slaves[0].id, 'standard');
+    expect(lodgingCost(s, 'city')).toBe(90 + 10);
+    expect(lodgingCost(s, 'road')).toBe(0);
+    // A residence: free, but only 6 residents, whatever its tier.
+    s.residences = ['outer'];
+    for (const c of slaves) expect(setLodging(s, c.id, 'outer')).toBeNull();
+    expect(residents(s, 'outer')).toHaveLength(cap);
+    expect(setLodging(s, main.id, 'outer')).toMatch(/full/);
+    expect(setLodging(s, slaves[0].id, 'outer')).toBeNull(); // already living there
+    expect(lodgingCost(s, 'city')).toBe(90);
+    // Members who find their own lodging can't be given any.
+    const merc = companion(s);
+    if (merc.contract?.type === 'companion') merc.contract.foodLodging = false;
+    expect(setLodging(s, merc.id, 'standard')).toMatch(/finds their own/);
+    // End Day charges each member's night, and saves keep where everyone lodges.
+    s.gold = 1000;
+    const before = s.gold;
+    const food = foodCost(s);
+    endDay(s, makeRng(1));
+    expect(s.gold).toBe(before - 90 - food);
+    const r = parseSave(serializeSave(s));
+    if (!r.ok) throw new Error(r.error);
+    expect(r.state.lodging).toEqual(s.lodging);
+    expect(lodgingOf(r.state, main)).toBe('luxury');
   });
 
   it('quests do not end the day, and only one quest a day', () => {
@@ -504,10 +566,10 @@ describe('contracts', () => {
     const day = s.day;
     const lines = resolveQuest(s, 'victory', makeRng(3));
     expect(s.day).toBe(day);
-    expect(lines.some((l) => /sleep outside/.test(l))).toBe(true);
+    expect(lines.some((l) => /End the day/.test(l))).toBe(true);
     acceptQuest(s, s.guild.board.find((x) => canTakeQuest(s, x))!.id);
     expect(departBlock(s)).toMatch(/One quest a day/);
-    stayAtInn(s, 'standard', 1, makeRng(1));
+    nightsAt(s, 'standard', 1, makeRng(1));
     expect(departBlock(s)).toBeNull();
     // A 3-day trip: two nights on the road, back on the evening of the third day.
     s.quest!.days = 3;
@@ -540,9 +602,9 @@ describe('contracts', () => {
     // Everyone recovers each night; Recover doubles it (not on the quest day itself, which they spent on the quest).
     s.schedule[c.id] = 'recover';
     const h = healthOf(c);
-    stayAtInn(s, 'standard', 1, makeRng(1));
+    nightsAt(s, 'standard', 1, makeRng(1));
     expect(healthOf(c)).toBe(h + GUILD.condition.healthPerDay);
-    stayAtInn(s, 'standard', 1, makeRng(1));
+    nightsAt(s, 'standard', 1, makeRng(1));
     expect(healthOf(c)).toBe(Math.min(100, h + 3 * GUILD.condition.healthPerDay));
     // An injured leader can still set out.
     mainCharacter(s).health = 90;
@@ -566,6 +628,19 @@ describe('contracts', () => {
     expect(s.renown).toBeCloseTo(renown + q.renown - q.renown * GUILD.ranks.deathRenown);
   });
 
+  it('a quest costs Morale per turn of battle, not a flat amount', () => {
+    const C = GUILD.condition;
+    expect(questMoraleLoss(0, 'victory')).toBe(0);
+    expect(questMoraleLoss(9, 'victory')).toBe(9 * C.moralePerTurn);
+    expect(questMoraleLoss(3, 'defeat')).toBe(3 * C.moralePerTurn + C.moraleFailedQuest);
+    const s = start();
+    acceptQuest(s, s.guild.board.find((x) => canTakeQuest(s, x))!.id);
+    s.quest!.days = 1;
+    const lines = resolveQuest(s, 'victory', makeRng(3), [], [], undefined, 12);
+    expect(moraleOf(mainCharacter(s))).toBe(C.startingMorale - 12 * C.moralePerTurn);
+    expect(lines.join('\n')).toMatch(/Morale -12 \(12 turns of battle\)/);
+  });
+
   it('morale: quests, failures, injuries and deaths lower it; drinks and days off raise it', () => {
     const s = start();
     const C = GUILD.condition;
@@ -578,10 +653,11 @@ describe('contracts', () => {
     toggleLineup(s, c.id);
     acceptQuest(s, s.guild.board.find((x) => canTakeQuest(s, x))!.id);
     s.quest!.days = 1;
-    resolveQuest(s, 'defeat', makeRng(3), [{ id: main.id, lowestHp: 0.5, fell: false }, { id: c.id, lowestHp: 1, fell: false }]);
+    // A 6-turn battle: 6 x moralePerTurn each, plus the failed quest and injuries.
+    resolveQuest(s, 'defeat', makeRng(3), [{ id: main.id, lowestHp: 0.5, fell: false }, { id: c.id, lowestHp: 1, fell: false }], [], undefined, 6);
     const loss = C.maxHealthLoss / 2;
-    expect(moraleOf(c)).toBe(C.startingMorale - C.moralePerQuest - C.moraleFailedQuest);
-    expect(moraleOf(main)).toBe(C.startingMorale - C.moralePerQuest - C.moraleFailedQuest - Math.round(loss * C.moralePerHealthLost));
+    expect(moraleOf(c)).toBe(C.startingMorale - 6 * C.moralePerTurn - C.moraleFailedQuest);
+    expect(moraleOf(main)).toBe(C.startingMorale - 6 * C.moralePerTurn - C.moraleFailedQuest - Math.round(loss * C.moralePerHealthLost));
     const before = moraleOf(main);
     const cBefore = moraleOf(c);
     expect(buyDrinks(s, 'standard')).toBeNull();
@@ -589,10 +665,10 @@ describe('contracts', () => {
     expect(moraleOf(main)).toBe(before + 2 * GUILD.inns.standard.drinksMorale); // Protagonist: double gains
     expect(buyDrinks(s, 'standard')).toMatch(/already/);
     // Day off the next day (the quest day itself doesn't count for those who went).
-    stayAtInn(s, 'standard', 1, makeRng(1));
+    nightsAt(s, 'standard', 1, makeRng(1));
     s.schedule[c.id] = 'dayOff';
     const m = moraleOf(c);
-    stayAtInn(s, 'standard', 1, makeRng(1));
+    nightsAt(s, 'standard', 1, makeRng(1));
     expect(moraleOf(c)).toBe(m + GUILD.schedule.dayOffMorale);
   });
 
@@ -640,14 +716,14 @@ describe('contracts', () => {
     s.gold = 1000;
     s.schedule[c.id] = 'training';
     c.morale = C.lowMorale - 1;
-    sleepOutside(s, makeRng(1));
+    nightsAt(s, 'outside', 1, makeRng(1));
     expect(c.contract.relationship).toBe(50 - C.lowMoraleRelationshipPerDay);
     c.morale = C.lowMorale;
-    sleepOutside(s, makeRng(1));
+    nightsAt(s, 'outside', 1, makeRng(1));
     expect(c.contract.relationship).toBe(50 - C.lowMoraleRelationshipPerDay);
     c.morale = 0;
     mainCharacter(s).morale = 0;
-    const msgs = sleepOutside(s, makeRng(1));
+    const msgs = nightsAt(s, 'outside', 1, makeRng(1));
     expect(s.party.some((m) => m.id === c.id)).toBe(false);
     expect(s.guild.pool.some((a) => a.character.id === c.id)).toBe(true);
     expect(msgs.some((m) => /left the party/.test(m))).toBe(true);
@@ -664,7 +740,7 @@ describe('contracts', () => {
     s.schedule[s.mainId] = 'oddJobs';
     s.gold = 1000;
     const xp = c.xp;
-    stayAtInn(s, 'standard', 1, makeRng(1));
+    nightsAt(s, 'standard', 1, makeRng(1));
     expect(c.xp).toBe(xp + GUILD.schedule.trainingXp);
     expect(s.gold).toBe(1000 + GUILD.schedule.oddJobsGold - GUILD.inns.standard.pricePerPerson - foodCost(s));
     // The main character goes on a quest: no odd jobs for them that day, but the companion still trains.
@@ -673,7 +749,7 @@ describe('contracts', () => {
     s.quest!.reward = 0;
     resolveQuest(s, 'victory', makeRng(3));
     const gold = s.gold;
-    stayAtInn(s, 'standard', 1, makeRng(1));
+    nightsAt(s, 'standard', 1, makeRng(1));
     expect(s.gold).toBe(gold - GUILD.inns.standard.pricePerPerson - foodCost(s));
     expect(c.xp).toBe(xp + 2 * GUILD.schedule.trainingXp);
     expect(activityOf(s, mainCharacter(s))).toBe('oddJobs');
@@ -916,17 +992,17 @@ describe('contracts', () => {
     slave.morale = 100;
     k.obedience = 50;
     k.relationship = GUILD.slave.obedienceRiseFrom;
-    sleepOutside(s, makeRng(1));
+    nightsAt(s, 'outside', 1, makeRng(1));
     expect(k.obedience).toBe(51);
     k.relationship = 50; // in between: steady
-    sleepOutside(s, makeRng(1));
+    nightsAt(s, 'outside', 1, makeRng(1));
     expect(k.obedience).toBe(51);
     // Punishing: +20 Obedience, -20 relationship (to 30), once a day...
     expect(punishSlave(slave, s.day)).toBeNull();
     expect([k.obedience, k.relationship]).toEqual([71, 30]);
     expect(punishSlave(slave, s.day)).toMatch(/already/);
     // ...and with relationship below 40, Obedience drains away again.
-    for (let i = 0; i < 25; i++) sleepOutside(s, makeRng(1));
+    for (let i = 0; i < 25; i++) nightsAt(s, 'outside', 1, makeRng(1));
     expect(k.obedience).toBe(46);
     expect(k.relationship).toBe(30);
   });
@@ -943,7 +1019,7 @@ describe('contracts', () => {
     neutralFood(s);
     slave.morale = 100;
     const rel = slave.contract.relationship;
-    sleepOutside(s, makeRng(1));
+    nightsAt(s, 'outside', 1, makeRng(1));
     expect(slave.contract.relationship).toBe(rel - GUILD.lodging.relationshipBelowPerStep);
     toggleLineup(s, slave.id);
     acceptQuest(s, s.guild.board.find((x) => canTakeQuest(s, x))!.id);
@@ -966,7 +1042,7 @@ describe('contracts', () => {
       m.morale = 50;
       s.schedule[m.id] = 'dayOff';
     }
-    sleepOutside(s, makeRng(1));
+    nightsAt(s, 'outside', 1, makeRng(1));
     expect(main.health).toBe(50 + 2 * GUILD.condition.healthPerDay);
     expect(c.health).toBe(50 + GUILD.condition.healthPerDay);
     expect(main.morale).toBe(50 + 2 * GUILD.schedule.dayOffMorale);
@@ -975,8 +1051,8 @@ describe('contracts', () => {
     const before = main.morale!;
     acceptQuest(s, s.guild.board.find((x) => canTakeQuest(s, x))!.id);
     s.quest!.days = 1;
-    resolveQuest(s, 'victory', makeRng(3));
-    expect(main.morale).toBe(before - GUILD.condition.moralePerQuest);
+    resolveQuest(s, 'victory', makeRng(3), [], [], undefined, 4);
+    expect(main.morale).toBe(before - 4 * GUILD.condition.moralePerTurn);
     // Saves keep it, and older saves give it to the main character.
     delete main.traits;
     const r = parseSave(serializeSave(s));
@@ -985,10 +1061,54 @@ describe('contracts', () => {
     expect(r.state.party.find((m) => m.id === c.id)!.traits).toBeUndefined();
   });
 
-  it('the main character always goes and cannot be benched', () => {
+  it('the main character can be benched to recover while the others go on quests', () => {
     const s = start();
-    expect(toggleLineup(s, s.mainId)).toMatch(/always goes/);
-    expect(lineupMembers(s)[0].id).toBe(s.mainId);
+    const main = mainCharacter(s);
+    const c = companion(s);
+    if (c.contract?.type === 'companion') c.contract.endDay = 100;
+    expect(toggleLineup(s, c.id)).toBeNull();
+    expect(toggleLineup(s, s.mainId)).toBeNull();
+    expect(lineupMembers(s).map((m) => m.id)).toEqual([c.id]);
+    main.health = 40;
+    s.schedule[main.id] = 'recover';
+    acceptQuest(s, s.guild.board.find((x) => canTakeQuest(s, x))!.id);
+    s.quest!.days = 2;
+    expect(departBlock(s)).toBeNull();
+    const before = moraleOf(main);
+    const xp = main.xp;
+    resolveQuest(s, 'victory', makeRng(3));
+    // The main character stayed home: no quest Morale loss or XP, and the night on the road was spent recovering.
+    expect(moraleOf(main)).toBeGreaterThanOrEqual(before);
+    expect(main.xp).toBe(xp);
+    expect(healthOf(main)).toBeGreaterThan(40);
+    expect(s.questMembers).toEqual([c.id]);
+    // The lineup stays as it was: the main character is still benched.
+    expect(lineupMembers(s).map((m) => m.id)).toEqual([c.id]);
+  });
+
+  it('a party cannot set out with nobody in the lineup', () => {
+    const s = start();
+    toggleLineup(s, s.mainId);
+    acceptQuest(s, s.guild.board.find((x) => canTakeQuest(s, x))!.id);
+    expect(departBlock(s)).toMatch(/Nobody is in the lineup/);
+    expect(toggleLineup(s, s.mainId)).toBeNull();
+    expect(departBlock(s)).toBeNull();
+  });
+
+  it('moving a member reorders the party and the lineup with it', () => {
+    const s = start();
+    const a = companion(s);
+    const b = companion(s);
+    for (const m of [a, b]) if (m.contract?.type === 'companion') m.contract.endDay = 100;
+    toggleLineup(s, a.id);
+    toggleLineup(s, b.id);
+    expect(lineupMembers(s).map((m) => m.id)).toEqual([s.mainId, a.id, b.id]);
+    moveMember(s, b.id, 0);
+    expect(s.party.map((m) => m.id)).toEqual([b.id, s.mainId, a.id]);
+    expect(lineupMembers(s).map((m) => m.id)).toEqual([b.id, s.mainId, a.id]);
+    expect(s.lineup).toEqual([b.id, s.mainId, a.id]);
+    moveMember(s, b.id, 99);
+    expect(s.party.map((m) => m.id)).toEqual([s.mainId, a.id, b.id]);
   });
 });
 

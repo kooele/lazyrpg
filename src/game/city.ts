@@ -1,7 +1,7 @@
 // Arch City: the calendar, the quest board, food, upkeep and pay, the slave market and prisoners.
 // Pure logic (no Phaser): scenes call these and show the messages they return.
 import { MAX_PARTY_SIZE } from '../data/content';
-import { GUILD, isResidence, type InnTier, type Lodging, type Ring } from '../data/guild';
+import { GUILD, isResidence, type CityLodging, type InnTier, type Ring } from '../data/guild';
 import { RANKS, type Character, type GameState, type Offer, type Quest, type Rank } from '../data/types';
 import { makeQuest, postQuests } from './board';
 import { grantXp, type Rng } from './character';
@@ -10,7 +10,7 @@ import {
 } from './contracts';
 import {
   ACTIVITY_INFO, FOOD_EXPECT_TEXT, QUALITY_TEXT, activityOf, changeHealth, changeMorale, expectedQuality, foodOf, foodRelationship, healthLoss, healthOf,
-  lodgingName, lodgingRelationship, moraleOf,
+  lodgingName, lodgingOf, lodgingRelationship, moraleOf,
   type BattleCondition,
 } from './condition';
 import { createGuild, nextRank, promotionReady, rankThreshold, renownLoss, simulateGuildDay, updateRanks } from './guild';
@@ -39,6 +39,7 @@ export function newCampaign(main: Character, partyName: string, rng: Rng): GameS
     questMembers: [],
     schedule: {},
     food: {},
+    lodging: {},
     drinksDay: 0,
     belowRankSince: 0,
     residences: [],
@@ -61,15 +62,17 @@ export const mainCharacter = (state: GameState) => state.party.find((c) => c.id 
 
 // ---- lineup -------------------------------------------------------------------------------------------
 
-/** Members going on the next quest, in lineup order. The main character always goes. */
+/**
+ * Members going on the next quest, in party order (drag members in Manage Party to reorder). Anyone can be benched,
+ * the main character too: the others can go on quests without them.
+ */
 export function lineupMembers(state: GameState): Character[] {
-  const ids = [state.mainId, ...state.lineup.filter((id) => id !== state.mainId)];
-  return ids.map((id) => state.party.find((c) => c.id === id)).filter((c): c is Character => !!c && canFight(state, c)).slice(0, MAX_PARTY_SIZE);
+  const picked = new Set(state.lineup);
+  return state.party.filter((c) => picked.has(c.id) && canFight(state, c)).slice(0, MAX_PARTY_SIZE);
 }
 
 /** Put a member in or out of the lineup. Returns an error message if it can't be done. */
 export function toggleLineup(state: GameState, id: string): string | null {
-  if (id === state.mainId) return 'Your main character leads the party and always goes.';
   if (state.lineup.includes(id)) {
     state.lineup = state.lineup.filter((x) => x !== id);
     return null;
@@ -79,19 +82,29 @@ export function toggleLineup(state: GameState, id: string): string | null {
   if (!canFight(state, c)) return `${c.name}'s contract has run out. Renew it first.`;
   if (lineupMembers(state).length >= MAX_PARTY_SIZE) return `At most ${MAX_PARTY_SIZE} members can go on a quest.`;
   state.lineup.push(id);
+  tidyLineup(state);
   return null;
 }
 
-/** Drop lineup entries for members who left or can't fight (lapsed contracts). */
+/** Move a party member to position `to` in the party list (which also sets the lineup's order). */
+export function moveMember(state: GameState, id: string, to: number): void {
+  const from = state.party.findIndex((c) => c.id === id);
+  if (from < 0) return;
+  const [c] = state.party.splice(from, 1);
+  state.party.splice(Math.max(0, Math.min(state.party.length, to)), 0, c);
+  tidyLineup(state);
+}
+
+/** Drop lineup entries for members who left or can't fight (lapsed contracts), and keep it in party order. */
 export function tidyLineup(state: GameState): void {
-  const keep = new Set(lineupMembers(state).map((c) => c.id));
-  state.lineup = [state.mainId, ...state.lineup.filter((id) => id !== state.mainId && keep.has(id))];
+  state.lineup = lineupMembers(state).map((c) => c.id);
 }
 
 /** Why the party can't set out on its quest right now (null if it can). */
 export function departBlock(state: GameState): string | null {
   if (!state.quest) return 'Accept a quest at the Adventurer Guild first.';
-  if (state.lastQuestDay === state.day) return 'One quest a day: the party is back from a quest today. Find somewhere to sleep first.';
+  if (state.lastQuestDay === state.day) return 'One quest a day: the party is back from a quest today. End the day first.';
+  if (lineupMembers(state).length === 0) return 'Nobody is in the lineup. Pick who goes in Manage Party.';
   return null;
 }
 
@@ -174,7 +187,7 @@ export function rewardShares(members: Character[], reward: number): { name: stri
 /**
  * Settle the accepted quest after its battle: injuries and deaths (from `conditions`, one per member who fought),
  * Morale, rewards. Nights on the road pass for multi-day trips; the party gets back in the evening and still needs
- * somewhere to sleep (an inn, or outside). Enemies who `surrendered` are taken prisoner on a win. Returns report lines.
+ * to end the day (everyone sleeps where they lodge). Enemies who `surrendered` are taken prisoner on a win. `turns` is how many turns (rounds) the battle lasted: each costs Morale. Returns report lines.
  */
 /** How the enemies fared in a quest's battle: those killed (each worth a bounty) and how many there were in all. */
 export interface FoeTally {
@@ -182,12 +195,16 @@ export interface FoeTally {
   total: number;
 }
 
+/** Morale each member who went loses for a quest (before injuries): moralePerTurn per battle turn, and moraleFailedQuest more if it failed. */
+export const questMoraleLoss = (turns: number, outcome: 'victory' | 'defeat') =>
+  Math.round(Math.max(0, turns) * GUILD.condition.moralePerTurn) + (outcome === 'defeat' ? GUILD.condition.moraleFailedQuest : 0);
+
 /** The bounty for an enemy killed on a quest: as much as turning in a prisoner of its level. */
 export const killBounty = (level: number) => bounty(level);
 
 export function resolveQuest(
   state: GameState, outcome: 'victory' | 'defeat', rng: Rng, conditions: BattleCondition[] = [], surrendered: Character[] = [],
-  foes?: FoeTally,
+  foes?: FoeTally, turns = 0,
 ): string[] {
   const q = state.quest;
   if (!q) return [];
@@ -198,7 +215,7 @@ export function resolveQuest(
   // Injuries, deaths (Health 0) and Morale.
   const dead: Character[] = [];
   for (const c of went) {
-    changeMorale(c, -C.moralePerQuest - (outcome === 'defeat' ? C.moraleFailedQuest : 0));
+    changeMorale(c, -questMoraleLoss(turns, outcome));
     const r = conditions.find((x) => x.id === c.id);
     if (!r) continue;
     const loss = r.fell ? C.maxHealthLoss : healthLoss(r.lowestHp);
@@ -220,6 +237,7 @@ export function resolveQuest(
     state.lineup = state.lineup.filter((id) => id !== c.id);
     delete state.schedule[c.id];
     delete state.food[c.id];
+    delete state.lodging[c.id];
     lines.push(`${c.name}'s wounds were fatal (Health 0). They did not survive.`);
     note(state, `${c.name} died on "${q.title}".`);
   }
@@ -268,7 +286,7 @@ export function resolveQuest(
     state.gold += gold;
     lines.push(`Bounties: ${gold} gold for ${foes.killed.length} enem${foes.killed.length > 1 ? 'ies' : 'y'} slain.`);
   }
-  lines.push(`Morale: ${members.map((c) => `${c.name} ${c.morale}`).join(', ')}.`);
+  lines.push(`Morale -${questMoraleLoss(turns, outcome)} (${turns} turn${turns === 1 ? '' : 's'} of battle${outcome === 'defeat' ? ', a failed quest' : ''}): ${members.map((c) => `${c.name} ${c.morale}`).join(', ')}.`);
   lines.push(...moraleDepartures(state));
   // Mercenaries were hired for this quest only.
   for (const c of members.filter((m) => m.contract?.type === 'mercenary')) {
@@ -284,7 +302,7 @@ export function resolveQuest(
   state.questMembers = ids.filter((id) => state.party.some((c) => c.id === id));
   tidyLineup(state);
   lines.push(...rankNews(state));
-  lines.push(`Back in ${GUILD.city} on day ${state.day}. Find an inn for the night, or sleep outside.`);
+  lines.push(`Back in ${GUILD.city} on day ${state.day}. End the day when you're ready: everyone sleeps where they lodge.`);
   return lines;
 }
 
@@ -332,13 +350,19 @@ export function boarders(state: GameState): Character[] {
   return state.party.filter((c) => c.contract?.type === 'main' || c.contract?.type === 'slave' || (isCompanion(c) && c.contract.foodLodging));
 }
 
-/** Lodging for one night: on the road (quests), at an inn, a residence (free), or outside. */
-export function lodgingCost(state: GameState, lodging: Lodging = 'road'): number {
-  // Nights on the road cost nothing (food is still paid).
-  const per = lodging === 'road' ? 0
-    : lodging === 'outside' ? GUILD.lodging.outsidePerPerson
-      : isResidence(lodging) ? 0 : GUILD.inns[lodging].pricePerPerson;
-  return boarders(state).length * per;
+/** A night's lodging for one member at `where`: an inn's price, free in a residence, outsidePerPerson outside. */
+export function lodgingPrice(where: CityLodging): number {
+  if (where === 'outside') return GUILD.lodging.outsidePerPerson;
+  return isResidence(where) ? 0 : GUILD.inns[where].pricePerPerson;
+}
+
+/**
+ * Lodging for one night. On the road (quests) it's free (food is still paid); in the city each housed member
+ * pays for where they lodge (Manage Party).
+ */
+export function lodgingCost(state: GameState, night: 'road' | 'city' = 'road'): number {
+  if (night === 'road') return 0;
+  return boarders(state).reduce((s, c) => s + lodgingPrice(lodgingOf(state, c)), 0);
 }
 
 /** A day's food for everyone the party feeds, each at their own quality. */
@@ -347,13 +371,31 @@ export function foodCost(state: GameState): number {
 }
 
 /** Food and lodging for one day and night. */
-export const dailyUpkeep = (state: GameState, lodging: Lodging = 'road') => lodgingCost(state, lodging) + foodCost(state);
+export const dailyUpkeep = (state: GameState, night: 'road' | 'city' = 'road') => lodgingCost(state, night) + foodCost(state);
 
-/** Stay `nights` nights at an inn: the inn's price replaces the day's food and lodging. Returns the messages. */
-export function stayAtInn(state: GameState, inn: InnTier, nights: number, rng: Rng): string[] {
-  const out: string[] = [];
-  for (let i = 0; i < nights; i++) out.push(...advanceDay(state, rng, inn));
-  return out;
+/** Members lodging at a residence. */
+export function residents(state: GameState, ring: Ring): Character[] {
+  return boarders(state).filter((c) => lodgingOf(state, c) === ring);
+}
+
+/**
+ * Set where a member sleeps in the city. Only members the party houses (see boarders) need lodging; a residence
+ * must be owned and have room (residences.capacity). Returns an error message, or null.
+ */
+export function setLodging(state: GameState, id: string, where: CityLodging): string | null {
+  const c = state.party.find((m) => m.id === id);
+  if (!c) return 'Not in the party.';
+  if (!isHoused(c)) return `${c.name} finds their own lodging.`;
+  if (isResidence(where)) {
+    const home = GUILD.residences[where];
+    if (!state.residences.includes(where)) return `You don't own the ${home.name}.`;
+    if (lodgingOf(state, c) !== where && residents(state, where).length >= GUILD.residences.capacity) {
+      return `The ${home.name} is full (${GUILD.residences.capacity} residents).`;
+    }
+  }
+  if (where === 'outside') delete state.lodging[id];
+  else state.lodging[id] = where;
+  return null;
 }
 
 /** Buy a residence in a ring. Returns an error message, or null. */
@@ -370,27 +412,21 @@ export function buyResidence(state: GameState, ring: Ring): string | null {
 /** What the Estate Office pays for a residence. */
 export const residenceSellPrice = (ring: Ring) => Math.round(GUILD.residences[ring].price * GUILD.residences.sellShare);
 
-/** Sell a residence back to the Estate Office. Returns the gold received (0 if the party doesn't own it). */
+/** Sell a residence back to the Estate Office; its residents sleep outside until moved. Returns the gold received (0 if not owned). */
 export function sellResidence(state: GameState, ring: Ring): number {
   if (!state.residences.includes(ring)) return 0;
   const gold = residenceSellPrice(ring);
+  const moved = residents(state, ring);
+  for (const c of moved) delete state.lodging[c.id];
   state.residences = state.residences.filter((r) => r !== ring);
   state.gold += gold;
-  note(state, `Sold the ${GUILD.residences[ring].name} to the Estate Office for ${gold} gold.`);
+  note(state, `Sold the ${GUILD.residences[ring].name} to the Estate Office for ${gold} gold.${moved.length ? ` ${moved.map((c) => c.name).join(', ')} sleep${moved.length === 1 ? 's' : ''} outside until you find them somewhere.` : ''}`);
   return gold;
 }
 
-/** Stay `nights` nights at a residence the party owns: free. */
-export function stayAtHome(state: GameState, ring: Ring, nights: number, rng: Rng): string[] {
-  if (!state.residences.includes(ring)) throw new Error(`The party doesn't own the ${GUILD.residences[ring].name}`);
-  const out: string[] = [];
-  for (let i = 0; i < nights; i++) out.push(...advanceDay(state, rng, ring));
-  return out;
-}
-
-/** Sleep outside for the night: free, but housed companions resent it. */
-export function sleepOutside(state: GameState, rng: Rng): string[] {
-  return advanceDay(state, rng, 'outside');
+/** End the day in the city: every housed member spends the night where they lodge (see setLodging). Returns the messages. */
+export function endDay(state: GameState, rng: Rng): string[] {
+  return advanceDay(state, rng, 'city');
 }
 
 /** A round of drinks at an inn for the whole party (once a day). Returns an error message, or null. */
@@ -456,18 +492,19 @@ export function advanceDays(state: GameState, days: number, rng: Rng): string[] 
 }
 
 /**
- * End the day with a night at `lodging`, then start the next one: the day's schedule and recovery, upkeep,
- * housed companions' feelings about where they slept, payday, contracts, the rest of the guild, the board and the market.
+ * End the day with a night on the road (quests) or in the city (each housed member where they lodge), then start
+ * the next one: the day's schedule and recovery, upkeep, housed companions' and slaves' feelings about their food and
+ * where they slept, payday, contracts, the rest of the guild, the board and the market.
  * `away`: members out on a quest (they don't follow their schedule).
  */
-export function advanceDay(state: GameState, rng: Rng, lodging: Lodging = 'road', away: string[] = []): string[] {
+export function advanceDay(state: GameState, rng: Rng, night: 'road' | 'city' = 'road', away: string[] = []): string[] {
   const out: string[] = [];
   const say = (t: string) => out.push(note(state, t));
   for (const t of runSchedule(state, away)) say(t);
   state.day += 1;
 
   // Food and lodging.
-  const upkeep = dailyUpkeep(state, lodging);
+  const upkeep = dailyUpkeep(state, night);
   if (upkeep > state.gold) {
     say(`Not enough gold for food and lodging (${upkeep} needed). Your companions and slaves are unhappy.`);
     state.gold = 0;
@@ -484,17 +521,18 @@ export function advanceDay(state: GameState, rng: Rng, lodging: Lodging = 'road'
       meals.push(`${c.name} ${d > 0 ? '+' : ''}${d} (expects ${FOOD_EXPECT_TEXT[expectedQuality(c)]})`);
     }
     if (meals.length) say(`Food. Relationship: ${meals.join(', ')}.`);
-    // Housed companions and slaves compare the night with what someone of their rank expects.
-    if (lodging !== 'road') {
+    // Housed companions and slaves compare where they slept with what someone of their rank expects.
+    if (night === 'city') {
       const moods: string[] = [];
       for (const c of state.party) {
         if (!bondOf(c) || !isHoused(c)) continue;
-        const d = lodgingRelationship(c, lodging);
+        const where = lodgingOf(state, c);
+        const d = lodgingRelationship(c, where);
         if (!d) continue;
         changeRelationship(c, d);
-        moods.push(`${c.name} ${d > 0 ? '+' : ''}${d} (expects ${QUALITY_TEXT[expectedQuality(c)]})`);
+        moods.push(`${c.name} ${d > 0 ? '+' : ''}${d} (${where === 'outside' ? 'slept outside' : `at ${lodgingName(where)}`}; expects ${QUALITY_TEXT[expectedQuality(c)]})`);
       }
-      if (moods.length) say(`${lodging === 'outside' ? 'A night outside' : `A night at ${lodgingName(lodging)}`}. Relationship: ${moods.join(', ')}.`);
+      if (moods.length) say(`The night. Relationship: ${moods.join(', ')}.`);
     }
   }
 
@@ -646,6 +684,7 @@ export function sellSlave(state: GameState, id: string, rng: Rng): number {
   state.lineup = state.lineup.filter((x) => x !== c.id);
   delete state.schedule[c.id];
   delete state.food[c.id];
+  delete state.lodging[c.id];
   const { contract: _k, ...character } = c;
   state.market.slaves.push({ character, price: slavePrice(c.level, rng, talentPriceFactor(c)) });
   return gold;
@@ -657,6 +696,7 @@ function seizeSlave(state: GameState, c: Character, rng: Rng): void {
   state.lineup = state.lineup.filter((x) => x !== c.id);
   delete state.schedule[c.id];
   delete state.food[c.id];
+  delete state.lodging[c.id];
   const { contract: _k, ...character } = c;
   state.market.slaves.push({ character, price: slavePrice(c.level, rng, talentPriceFactor(c)) });
 }

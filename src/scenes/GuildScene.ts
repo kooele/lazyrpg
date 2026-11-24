@@ -8,8 +8,9 @@ import { joinParty, mercenaryRates, rosterFull, talentPriceFactor } from '../gam
 import { dangerRating, expectedEnemies, payRating } from '../game/board';
 import { adventurerCount, adventurerRank, leaderboard, nextRank, rankThreshold } from '../game/guild';
 import { markDirty, requireState, session } from '../game/session';
+import { PEOPLE_SORTS, QUEST_SORTS, nextSort, sortPeople, sortQuests, type PeopleSort, type QuestSort, type SortDir } from '../game/sorting';
 import { cityHeader, rankBadge } from '../ui/hud';
-import { ART_H, COLORS, HEIGHT, MONSTER_W, ScrollList, WIDTH, button, monsterKey, confirmDialog, figure, panel, setupCamera, talentTag, text, toast, type ScrollItem } from '../ui/widgets';
+import { ART_H, COLORS, HEIGHT, MONSTER_W, ScrollList, WIDTH, button, monsterKey, confirmDialog, figure, fittedList, panel, setupCamera, sortBar, talentTag, text, toast, type ScrollItem } from '../ui/widgets';
 
 type Tab = 'board' | 'hall' | 'ranks' | 'news';
 const CARD_H = 132;
@@ -20,6 +21,10 @@ export class GuildScene extends Phaser.Scene {
   private tab: Tab = 'board';
   /** Quest board filter: every quest, or only the ones the party can take. */
   private allQuests = false;
+  /** Quest board order (highest rank first by default). */
+  private questSort: { key: QuestSort; dir: SortDir } = { key: 'rank', dir: 'desc' };
+  /** Guild hall order (highest level first by default). */
+  private hallSort: { key: PeopleSort; dir: SortDir } = { key: 'level', dir: 'desc' };
 
   constructor() {
     super('Guild');
@@ -69,7 +74,7 @@ export class GuildScene extends Phaser.Scene {
     });
     const all = state.guild.board;
     const mine = all.filter((q) => canTakeQuest(state, q));
-    const quests = this.allQuests ? all : mine;
+    const quests = sortQuests(this.allQuests ? all : mine, this.questSort.key, this.questSort.dir);
     button(this, 16, 156, 200, 28, `Quests you can take (${mine.length})`, () => {
       this.allQuests = false;
       this.render();
@@ -78,7 +83,10 @@ export class GuildScene extends Phaser.Scene {
       this.allQuests = true;
       this.render();
     }, { selected: this.allQuests, fontSize: 12 });
-    text(this, 396, 162, 'Rival parties take quests from this board every day; the best deals go first.', { fontSize: '12px', color: COLORS.dim });
+    sortBar(this, 396, 157, QUEST_SORTS, this.questSort, (key) => {
+      this.questSort = nextSort(this.questSort, key);
+      this.render();
+    }, { widths: { rank: 66, gold: 62, renown: 78, difficulty: 92, enemy: 100 } });
     const list = new ScrollList(this, 16, 192, WIDTH - 32, HEIGHT - 208, 8);
     const rows: ScrollItem[] = [];
     for (let i = 0; i < quests.length; i += 2) {
@@ -244,11 +252,16 @@ export class GuildScene extends Phaser.Scene {
 
   private hall(): void {
     const state = requireState();
-    const pool = [...state.guild.pool].sort((a, b) => b.character.level - a.character.level || a.character.name.localeCompare(b.character.name));
+    const fee = (a: FreeAdventurer) => mercenaryRates(a.character.level, a.greed, talentPriceFactor(a.character)).fee;
+    const pool = sortPeople(state.guild.pool, (a) => a.character, fee, this.hallSort.key, this.hallSort.dir);
     text(this, 20, 118, `Free adventurers in the hall: ${pool.length}.  Hire one as a mercenary for your next quest, or negotiate a companion contract.`, {
       fontSize: '13px', wordWrap: { width: 920 },
     });
     text(this, 20, 138, `Your party: ${state.party.length}/${GUILD.maxRoster} members · ${state.gold} gold`, { fontSize: '12px', color: COLORS.dim });
+    sortBar(this, WIDTH - 16 - 318, 134, PEOPLE_SORTS, this.hallSort, (key) => {
+      this.hallSort = nextSort(this.hallSort, key);
+      this.render();
+    }, { h: 22, fontSize: 11, widths: { level: 66, talent: 68, name: 60, cost: 56 } });
     panel(this, 16, 160, WIDTH - 32, HEIGHT - 176);
     const list = new ScrollList(this, 24, 168, WIDTH - 46, HEIGHT - 192, 4);
     list.setItems(pool.map((a) => this.hallRow(a)), 'top');
@@ -267,7 +280,7 @@ export class GuildScene extends Phaser.Scene {
     row.add(talentTag(this, 64 + name.width + 12, 10, c, { fontSize: 12, detail: false }));
     row.add(text(this, 64, 28, `Level ${c.level} (${adventurerRank(c.level)}-rank) · ${WEAPONS[c.weaponId].name}`, { fontSize: '13px', color: COLORS.gold }));
     row.add(talentTag(this, 64, 47, c, { fontSize: 11, overall: false, sep: '   ' }));
-    row.add(text(this, 64, 64, c.skillIds.map((s) => SKILLS[s].name).join(', ') || 'No tree skills yet', { fontSize: '12px', color: COLORS.dim, wordWrap: { width: 300 } }));
+    row.add(fittedList(this, 64, 64, c.skillIds.map((s) => SKILLS[s].name), 1, { fontSize: '12px', color: COLORS.dim, wordWrap: { width: 316 } }, undefined, 'No tree skills yet'));
     const rates = mercenaryRates(c.level, a.greed, talentPriceFactor(c));
     row.add(text(this, 392, 8, 'Mercenary (next quest only)', { fontSize: '12px', color: COLORS.dim }));
     row.add(button(this, 392, 28, 248, 32, `Hire: ${rates.fee}g or ${rates.cutPct}%, whichever is more`, () => this.hireMerc(a, rates.fee, rates.cutPct), {
@@ -340,6 +353,6 @@ export class GuildScene extends Phaser.Scene {
       return { obj: this.add.container(0, 0, [t]), height: t.height };
     });
     list.setItems(items, 'top');
-    if (items.length === 0) text(this, WIDTH / 2, 300, 'Nothing yet. Stay at an inn or go on a quest and see what happens.', { color: COLORS.dim }).setOrigin(0.5);
+    if (items.length === 0) text(this, WIDTH / 2, 300, 'Nothing yet. End the day or go on a quest and see what happens.', { color: COLORS.dim }).setOrigin(0.5);
   }
 }

@@ -529,6 +529,8 @@ export interface GameState {
   schedule: Record<string, 'recover' | 'training' | 'oddJobs' | 'dayOff'>;
   /** Food quality for each member the party feeds (by character id; missing = food.default in guild.json). */
   food: Record<string, 'poor' | 'common' | 'fine' | 'luxury'>;
+  /** Where each housed member sleeps in the city (by character id; missing = outside): an inn tier or an owned residence. */
+  lodging: Record<string, 'outside' | 'standard' | 'highEnd' | 'luxury' | 'outer' | 'middle' | 'inner'>;
   /** Day the party last bought a round of drinks (once a day). */
   drinksDay: number;
   /** First day of the current stretch below the rank's renown threshold (0 = not below). A full week drops a rank. */

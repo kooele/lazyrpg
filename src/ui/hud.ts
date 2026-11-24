@@ -2,7 +2,7 @@
 import Phaser from 'phaser';
 import { GUILD } from '../data/guild';
 import type { Character, GameState, Rank } from '../data/types';
-import { boarders, foodCost, isPayday, weeklyTaxes, weeklyWages } from '../game/city';
+import { boarders, dailyUpkeep, foodCost, isPayday, lodgingCost, weeklyTaxes, weeklyWages } from '../game/city';
 import { daysLeft, isCompanion } from '../game/contracts';
 import { nextRank, rankThreshold } from '../game/guild';
 import { session } from '../game/session';
@@ -40,16 +40,19 @@ export function cityHeader(scene: Phaser.Scene, state: GameState, title: string)
   const sub = `${GUILD.city}  ·  Day ${state.day} (week ${Math.ceil(state.day / 7)})`;
   text(scene, 22, 42, sub, { fontSize: '13px', color: COLORS.dim });
   const toPay = (7 - (state.day % 7)) % 7;
-  const right = [
-    `${state.gold} gold`,
-    `Feeding ${boarders(state).length} (${foodCost(state)}g/day) · Wages ${weeklyWages(state)}${weeklyTaxes(state) ? ` + slave tax ${weeklyTaxes(state)}` : ''}/week ${isPayday(state.day) ? '(paid today)' : `(payday in ${toPay}d)`}`,
-  ];
-  text(scene, WIDTH - 20, 8, right[0], { fontSize: '20px', color: COLORS.gold }).setOrigin(1, 0);
-  text(scene, WIDTH - 20, 36, right[1], { fontSize: '12px', color: COLORS.dim }).setOrigin(1, 0);
+  // Right: gold, then upkeep on two short lines (so they stay clear of the party's renown in the middle).
+  text(scene, WIDTH - 20, 6, `${state.gold} gold`, { fontSize: '20px', color: COLORS.gold }).setOrigin(1, 0);
+  const feeding = text(scene, WIDTH - 20, 32, `Housing ${boarders(state).length}: ${dailyUpkeep(state, 'city')}g/day (food ${foodCost(state)}, lodging ${lodgingCost(state, 'city')})`, { fontSize: '11px', color: COLORS.dim }).setOrigin(1, 0);
+  const wages = text(scene, WIDTH - 20, 46,
+    `Wages ${weeklyWages(state)}${weeklyTaxes(state) ? ` + slave tax ${weeklyTaxes(state)}` : ''}/week ${isPayday(state.day) ? '(paid today)' : `(payday in ${toPay}d)`}`,
+    { fontSize: '11px', color: COLORS.dim }).setOrigin(1, 0);
+  // Middle: the party, with an "unsaved" tag beside its name, and its rank and renown underneath.
   rankBadge(scene, 330, 16, state.rank, 32);
-  text(scene, 372, 12, state.partyName, { fontSize: '15px' });
+  const name = text(scene, 372, 12, state.partyName, { fontSize: '15px' });
+  if (session.dirty) text(scene, name.x + name.width + 8, 15, 'unsaved', { fontSize: '11px', color: COLORS.dim, fontStyle: 'italic' });
   const up = nextRank(state.rank);
   const below = state.renown < rankThreshold(state.rank);
   const renown = `Renown ${Math.round(state.renown)}${up ? `/${rankThreshold(up)}` : ''}${below ? ` · below ${state.rank} (${rankThreshold(state.rank)})!` : ''}`;
-  text(scene, 372, 34, `${state.rank}-rank party · ${renown}${session.dirty ? ' · unsaved' : ''}`, { fontSize: '12px', color: below ? COLORS.bad : COLORS.dim });
+  const room = WIDTH - 20 - Math.max(feeding.width, wages.width) - 16 - 372;
+  text(scene, 372, 34, `${state.rank}-rank party · ${renown}`, { fontSize: '12px', color: below ? COLORS.bad : COLORS.dim, wordWrap: { width: Math.max(120, room) } });
 }

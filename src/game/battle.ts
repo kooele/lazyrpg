@@ -65,7 +65,7 @@ export interface Unit {
   acted: boolean;
   /** Mana left (starts at max; doesn't come back during a battle). */
   mp: number;
-  /** Something happened that can't be undone (free action, triggered overwatch): no undo move. */
+  /** Something happened that can't be undone (free action, triggered overwatch, or a teammate acted since): no undo move. */
   locked: boolean;
   /** Where the unit stood when its turn began (for undoing a move). */
   startPos: Point;
@@ -455,6 +455,7 @@ export class Battle {
     events.push({ type: 'disengage', source: u.uid, target: opp.uid, reason: 'disengage' });
     events.push(...this.opportunityAttack(opp, u));
     u.locked = true;
+    this.lockTeammates(u);
     u.startPos = { x: u.x, y: u.y };
     if (!u.alive) u.acted = true;
     return events;
@@ -683,6 +684,7 @@ export class Battle {
     u.moved = true;
     u.walked = true;
     u.ap -= 1;
+    this.lockTeammates(u);
     return this.walk(u, this.pathTo(reach, dest));
   }
 
@@ -705,6 +707,16 @@ export class Battle {
     // start of each of the unit's turns, so store N + 1 (it hits 0 on the turn it's usable).
     if (skill.cooldown > 0) u.cooldowns[skillId] = skill.cooldown + 1;
     u.locked = true;
+    this.lockTeammates(u);
+  }
+
+  /**
+   * `u` did something (moved, used a skill, broke away): its teammates can no longer undo their moves this turn.
+   * Otherwise undoing would be free movement: step aside to let an ally through, or out of an ally's area attack, then step back.
+   */
+  private lockTeammates(u: Unit): void {
+    // Only moves already made are locked in; a teammate that hasn't moved yet can still undo its own move later.
+    for (const o of this.units) if (o !== u && o.team === u.team && o.walked) o.locked = true;
   }
 
   private walk(u: Unit, full: Point[]): MoveResult {
@@ -763,7 +775,10 @@ export class Battle {
     return { events, interrupted };
   }
 
-  /** Only a regular move with nothing else done since (no skill, no overwatch shot) can be taken back. */
+  /**
+   * Only a regular move with nothing else done since (no skill, no overwatch shot) can be taken back, and only
+   * until a teammate does something (see lockTeammates).
+   */
   canUndoMove(u: Unit): boolean {
     const occupant = this.unitAt(u.startPos.x, u.startPos.y);
     return u.alive && u.walked && !u.acted && !u.locked && (!occupant || occupant === u);
@@ -1097,7 +1112,7 @@ export class Battle {
     const swings = this.isWeaponAttack(attacker, skill) ? (this.skillFor(attacker, skill).basicAttack ?? 1) : 0;
     skill = this.skillFor(attacker, skill);
     // Weapon on-hit effects (Arcane Weapon) the attacker can pay for.
-    if (swings) skill = { ...skill, hits: [...(skill.hits ?? []), ...this.procParts(attacker, swings)] };
+    if (swings) skill = { ...skill, hits: [...(skill.hits ?? []), ...this.procParts(attacker, swings, skill.mana)] };
     let hp = target.hp;
     let shield = this.shieldOf(target);
     const out: number[] = [];
@@ -1253,6 +1268,8 @@ export class Battle {
     if (!this.canTarget(u, skill, tile)) throw new Error('Target out of range');
 
     const events: BattleEvent[] = [];
+    // The skill's own mana comes first, so per-hit costs during it (Arcane Weapon) only spend what's left.
+    if (!switchingOff) u.mp -= skill.mana;
     const origin = { x: u.x, y: u.y };
     // Aim first (Flicker Strike picks its victim before it moves), then resolve.
     const aimed = skill.charge ? this.targetsOf(u, skill, tile) : null;
@@ -1268,11 +1285,9 @@ export class Battle {
     for (const a of skill.selfStatus ?? []) events.push(...this.applyStatus(u, u, a.status, a.turns, 1, true));
     if (skill.switchMode) events.push(...this.setWeaponMode(u, u.weaponMode + 1));
     // Toggles: switch the status on (paying the mana) or off again (free).
-    let free = false;
     if (skill.toggleStatus) {
       if (this.isToggledOn(u, skill.toggleStatus)) {
         events.push(this.toggleOff(u, skill.toggleStatus));
-        free = true;
       } else {
         const def = STATUSES[skill.toggleStatus];
         u.statuses.push({ id: def.id, name: def.name, debuff: def.debuff, stacks: 1, amount: 0, turns: Infinity, tick: def.tick });
@@ -1384,7 +1399,7 @@ export class Battle {
     events.push(...this.separationEvents());
     // Attacking gives a Stealthed unit away.
     if (this.isAttack(used) && used.affects !== 'ally') u.statuses = u.statuses.filter((st) => !STATUSES[st.id]?.stealth);
-    this.payFor(u, skillId, free);
+    this.payFor(u, skillId, true); // mana was paid up front (none when switching a toggle off)
     return events;
   }
 
@@ -1502,9 +1517,9 @@ export class Battle {
   }
 
   /** Extra damage each swing of a weapon attack would add on `target` (for previews), as hits. */
-  private procParts(u: Unit, swings: number): DamagePart[] {
+  private procParts(u: Unit, swings: number, reserved = 0): DamagePart[] {
     const out: DamagePart[] = [];
-    let mp = u.mp;
+    let mp = u.mp - reserved; // the skill's own mana is paid first
     for (let i = 0; i < swings; i++) {
       for (const s of this.weaponOnHits(u)) {
         const def = STATUSES[s.id];

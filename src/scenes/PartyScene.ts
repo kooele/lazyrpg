@@ -1,24 +1,29 @@
 import Phaser from 'phaser';
 import { MAX_PARTY_SIZE, SKILLS, WEAPONS, xpToNext } from '../data/content';
-import { ACTIVITIES, FOOD_TIERS, GUILD } from '../data/guild';
+import { ACTIVITIES, FOOD_TIERS, GUILD, INN_TIERS, LODGING_QUALITY, RINGS, isResidence, type CityLodging } from '../data/guild';
 import { TRAITS } from '../data/traits';
-import type { Character } from '../data/types';
+import type { Character, GameState } from '../data/types';
 import { bodyPoints, deriveStats, freePoints, skillPoints } from '../game/character';
-import { lineupMembers, marketBuyPrice, scheduledMembers, sellSlave, toggleLineup } from '../game/city';
+import { lineupMembers, lodgingPrice, marketBuyPrice, moveMember, residents, scheduledMembers, sellSlave, setLodging, toggleLineup } from '../game/city';
 import {
-  ACTIVITY_INFO, QUALITY_TEXT, activityOf, combatPenalty, expectedQuality, foodOf, healthOf, injuryPenalty, isInjured, moraleOf, moralePenalty,
+  ACTIVITY_INFO, QUALITY_TEXT, activityOf, lodgingOf, lodgingRelationship, combatPenalty, expectedQuality, foodOf, healthOf, injuryPenalty, isInjured, moraleOf, moralePenalty,
   obediencePenalty, traitFactor,
 } from '../game/condition';
-import { daysLeft, isCompanion, isHoused, isSlave, leaveParty, punishSlave } from '../game/contracts';
+import { bondOf, daysLeft, isCompanion, isHoused, isSlave, leaveParty, punishSlave } from '../game/contracts';
 import { adventurerRank } from '../game/guild';
 import { markDirty, requireState, session } from '../game/session';
 import { MEMBER_COLOR, MEMBER_LABEL, cityHeader, memberStatus } from '../ui/hud';
 import { COLORS, HEIGHT, ScrollList, Tooltip, WIDTH, button, confirmDialog, figure, panel, setupCamera, talentTag, text, toast } from '../ui/widgets';
 
+const ROW_H = 58;
+const ROW_GAP = 4;
+
 /** Manage Party: everyone in the party, the lineup for the next quest, loadouts and contracts. */
 export class PartyScene extends Phaser.Scene {
   private selected = '';
   private tip!: Tooltip;
+  /** A roster row is being dragged (so letting go doesn't also select it). */
+  private dragging = false;
 
   constructor() {
     super('Party');
@@ -34,8 +39,58 @@ export class PartyScene extends Phaser.Scene {
       return;
     }
     setupCamera(this);
+    // A click that wanders a little still selects; past this, it drags the row.
+    this.input.dragDistanceThreshold = 8;
     this.input.keyboard?.on('keydown-ESC', () => this.scene.start('City'));
     this.render();
+  }
+
+  /**
+   * Drag a roster row up or down to move that member in the party list. The lineup follows the same order
+   * (it's who deploys first in battle). A gold line shows where the row will land.
+   */
+  private dragRow(list: ScrollList, row: Phaser.GameObjects.Container, handle: Phaser.GameObjects.Rectangle, id: string): void {
+    const step = ROW_H + ROW_GAP;
+    let startY = 0;
+    let grabY = 0;
+    let from = 0;
+    let target = 0;
+    const marker = this.add.rectangle(0, 0, 308, 3, COLORS.accent).setOrigin(0, 0.5).setVisible(false);
+    const where = () => {
+      const count = requireState().party.length;
+      // The slot nearest the dragged row (rows are laid out from the list's scroll offset).
+      const slot = Math.round(row.y / step) + list.getOffset();
+      return Math.max(0, Math.min(count - 1, slot));
+    };
+    handle.on('dragstart', (p: Phaser.Input.Pointer) => {
+      this.dragging = true;
+      from = requireState().party.findIndex((c) => c.id === id);
+      target = from;
+      startY = row.y;
+      grabY = p.worldY;
+      list.root.bringToTop(row);
+      list.root.add(marker);
+      handle.setFillStyle(0x2f3956, 1);
+    });
+    handle.on('drag', (p: Phaser.Input.Pointer) => {
+      row.y = Math.max(-ROW_H / 2, Math.min(list.h - ROW_H / 2, startY + p.worldY - grabY));
+      target = where();
+      // The line goes above the slot when moving up, below it when moving down.
+      const slotY = (target - list.getOffset()) * step;
+      const lineY = target > from ? slotY + ROW_H + ROW_GAP / 2 : slotY - ROW_GAP / 2;
+      marker.setY(Math.max(2, Math.min(list.h - 2, lineY))).setVisible(target !== from);
+    });
+    handle.on('dragend', () => {
+      // Re-render on the next tick: this row's own pointerup may still be on its way.
+      this.time.delayedCall(0, () => {
+        this.dragging = false;
+        if (target !== from) {
+          moveMember(requireState(), id, target);
+          markDirty();
+        }
+        this.render();
+      });
+    });
   }
 
   private render(): void {
@@ -48,29 +103,34 @@ export class PartyScene extends Phaser.Scene {
 
     // ---- roster ----
     panel(this, 16, 76, 330, HEIGHT - 148);
-    text(this, 28, 84, `Members ${state.party.length}/${GUILD.maxRoster} · Lineup ${lineup.size}/${MAX_PARTY_SIZE}`, { fontSize: '13px', color: COLORS.dim });
-    const list = new ScrollList(this, 22, 106, 318, HEIGHT - 184, 4);
-    list.setItems(state.party.map((c) => {
+    text(this, 28, 84, `Members ${state.party.length}/${GUILD.maxRoster} · Lineup ${lineup.size}/${MAX_PARTY_SIZE} · drag to reorder`, { fontSize: '13px', color: COLORS.dim });
+    const list = new ScrollList(this, 22, 106, 318, HEIGHT - 184, ROW_GAP);
+    const rows = state.party.map((c) => {
       const row = this.add.container(0, 0);
       const sel = c.id === this.selected;
-      const bg = this.add.rectangle(0, 0, 308, 58, sel ? 0x4a3d1c : COLORS.panelLight, sel ? 1 : 0.5).setOrigin(0)
-        .setStrokeStyle(2, sel ? COLORS.accent : COLORS.border).setInteractive({ useHandCursor: true });
+      const bg = this.add.rectangle(0, 0, 308, ROW_H, sel ? 0x4a3d1c : COLORS.panelLight, sel ? 1 : 0.5).setOrigin(0)
+        .setStrokeStyle(2, sel ? COLORS.accent : COLORS.border).setInteractive({ useHandCursor: true, draggable: true });
       bg.on('pointerup', () => {
+        if (this.dragging) return;
         this.selected = c.id;
         this.render();
       });
+      this.dragRow(list, row, bg, c.id);
       row.add(bg);
       row.add(figure(this, 28, 56, 52, c.appearance, c.weaponId, { base: false }));
       row.add(text(this, 58, 6, `${c.name}  Lv ${c.level} (${adventurerRank(c.level)})`, { fontSize: '15px' }));
       row.add(text(this, 58, 26, memberStatus(state, c), { fontSize: '11px', color: MEMBER_COLOR[c.contract?.type ?? 'main'], wordWrap: { width: 200 } }));
-      if (lineup.has(c.id)) row.add(text(this, 300, 6, '⚔ lineup', { fontSize: '11px', color: COLORS.gold }).setOrigin(1, 0));
+      if (lineup.has(c.id)) row.add(text(this, 284, 6, '⚔ lineup', { fontSize: '11px', color: COLORS.gold }).setOrigin(1, 0));
+      // A grip: rows can be dragged up and down to reorder the party (and the lineup).
+      row.add(text(this, 300, ROW_H / 2, '⋮⋮', { fontSize: '14px', color: COLORS.dim }).setOrigin(1, 0.5));
       const pen = Math.round(combatPenalty(c) * 100);
       const obey = isSlave(c) ? ` · Obd ${c.contract.obedience}` : '';
       const cond = `${isInjured(c) ? `Hurt ${healthOf(c)}` : 'Healthy'} · Mor ${moraleOf(c)}${obey}${pen ? ` · -${pen}%` : ''} · ${ACTIVITY_INFO[activityOf(state, c)].name}`;
       const low = moraleOf(c) < GUILD.condition.lowMorale;
       row.add(text(this, 58, 40, cond, { fontSize: '11px', color: isInjured(c) || low ? COLORS.bad : COLORS.dim }));
-      return { obj: row, height: 58 };
-    }), 'keep');
+      return { obj: row, height: ROW_H };
+    });
+    list.setItems(rows, 'keep');
 
     const c = state.party.find((m) => m.id === this.selected)!;
     this.detail(c, lineup.has(c.id));
@@ -144,7 +204,7 @@ export class PartyScene extends Phaser.Scene {
     const k = c.contract;
     const lines: string[] = [];
     if (!k || k.type === 'main') {
-      lines.push('Your own character: permanent, always leads the party on quests.', 'The party pays your food (set below) and lodging.');
+      lines.push('Your own character: permanent. Bench them to rest in the city while the others go on quests.', 'The party pays your food (set below) and lodging.');
     } else if (k.type === 'mercenary') {
       lines.push(`Paid ${k.fee} gold up front; takes more from the reward if ${k.cutPct}% of it is worth more.`, 'Leaves after the next quest, win or lose. Finds their own food.');
     } else if (k.type === 'slave') {
@@ -179,7 +239,7 @@ export class PartyScene extends Phaser.Scene {
     }
 
     // ---- schedule: what they do on days they aren't on a quest ----
-    const sy = 440;
+    const sy = 410;
     const busy = !scheduledMembers(state).some((m) => m.id === c.id);
     text(this, X + 16, sy, `Schedule${busy ? ' (back from a quest today: starts tomorrow)' : ' (days not on a quest)'}`, { fontSize: '13px', color: COLORS.gold });
     const now = activityOf(state, c);
@@ -188,10 +248,10 @@ export class PartyScene extends Phaser.Scene {
       markDirty();
       this.render();
     }, { fontSize: 13, selected: a === now }));
-    text(this, X + 16, sy + 56, ACTIVITY_INFO[now].describe(), { fontSize: '11px', color: COLORS.dim, wordWrap: { width: W - 32 } });
+    text(this, X + 16, sy + 54, ACTIVITY_INFO[now].describe(), { fontSize: '11px', color: COLORS.dim, wordWrap: { width: W - 32 } });
 
     // ---- food: for members the party feeds; others find their own (greyed out) ----
-    const fy = sy + 74;
+    const fy = sy + 68;
     const fed = isHoused(c);
     const food = foodOf(state, c);
     const expects = FOOD_TIERS[expectedQuality(c)];
@@ -205,15 +265,28 @@ export class PartyScene extends Phaser.Scene {
       this.render();
     }, { fontSize: 12, selected: fed && t === food, enabled: fed }));
 
+    // ---- lodging: where they sleep in the city (members the party houses); others find their own ----
+    const ly = fy + 32;
+    const where = lodgingOf(state, c);
+    text(this, X + 16, ly, 'Lodging', { fontSize: '13px', color: fed ? COLORS.gold : COLORS.dim });
+    text(this, X + 16, ly + 16, fed ? (c.id === state.mainId ? 'no complaints' : `expects ${['nothing', 'an inn', 'high-end', 'luxury'][expectedQuality(c)]}`) : 'finds their own', {
+      fontSize: '10px', color: COLORS.dim,
+    });
+    button(this, X + 110, ly - 2, 300, 28, fed ? `${lodgingLabel(state, where)}  ▾` : '—', () => this.lodgingMenu(c, X + 110, ly - 2), { fontSize: 12, enabled: fed });
+    if (fed) {
+      const q = LODGING_QUALITY[where];
+      const d = c.id === state.mainId ? 0 : lodgingRelationship(c, where);
+      text(this, X + 420, ly + 4, `quality ${q}${bondOf(c) && d ? ` · ${d > 0 ? '+' : ''}${d} rel/night` : ''}`, { fontSize: '11px', color: d < 0 ? COLORS.bad : COLORS.dim });
+    }
+
     // ---- actions ----
     const by = HEIGHT - 76;
-    const isMain = c.id === state.mainId;
     button(this, X + 16, by, 140, 44, inLineup ? 'Bench' : 'Add to lineup', () => {
       const err = toggleLineup(state, c.id);
       if (err) return toast(this, err, COLORS.bad);
       markDirty();
       this.render();
-    }, { enabled: !isMain, selected: inLineup && !isMain, fontSize: 14 });
+    }, { selected: inLineup, fontSize: 14 });
     button(this, X + 166, by, 130, 44, 'Loadout', () => this.scene.start('CharacterCreator', { mode: 'edit', characterId: c.id }), {
       enabled: k?.type !== 'mercenary', fontSize: 14, selected: free > 0 && k?.type !== 'mercenary',
     });
@@ -253,6 +326,34 @@ export class PartyScene extends Phaser.Scene {
     }
   }
 
+  /**
+   * Pick where `c` lodges: outside, one of the inns, or a residence the party owns (with room). Opens above (x, y);
+   * clicking outside it closes it.
+   */
+  private lodgingMenu(c: Character, x: number, y: number): void {
+    const state = requireState();
+    const current = lodgingOf(state, c);
+    const options: CityLodging[] = ['outside', ...INN_TIERS, ...RINGS.filter((r) => state.residences.includes(r))];
+    const rowH = 30;
+    const h = options.length * rowH + 12;
+    const top = y - h - 4;
+    const layer = this.add.container(0, 0).setDepth(900);
+    const shade = this.add.rectangle(0, 0, WIDTH, HEIGHT, 0x000000, 0.35).setOrigin(0).setInteractive();
+    shade.on('pointerup', () => layer.destroy());
+    layer.add([shade, panel(this, x - 6, top, 352, h)]);
+    options.forEach((o, i) => {
+      const full = isResidence(o) && o !== current && residents(state, o).length >= GUILD.residences.capacity;
+      const label = `${lodgingLabel(state, o)}${full ? ' (full)' : ''}`;
+      layer.add(button(this, x, top + 6 + i * rowH, 340, rowH - 4, label, () => {
+        layer.destroy();
+        const err = setLodging(state, c.id, o);
+        if (err) return toast(this, err, COLORS.bad);
+        markDirty();
+        this.render();
+      }, { fontSize: 12, selected: o === current, enabled: !full }));
+    });
+  }
+
   /** An invisible hover area that shows a floating tooltip. */
   private hoverTip(x: number, y: number, w: number, h: number, tip: () => string): void {
     const zone = this.add.zone(x, y, w, h).setOrigin(0).setInteractive({ useHandCursor: true });
@@ -279,7 +380,7 @@ export class PartyScene extends Phaser.Scene {
     const main = c.contract?.type === 'main';
     return [
       `Morale ${moraleOf(c)}/100.`,
-      `Falls ${C.moralePerQuest} for each quest (${C.moraleFailedQuest} more if it fails), 1 per ${Math.round(1 / C.moralePerHealthLost)} Health lost to injuries, and ${C.moraleMemberDied} for everyone when a member dies.`,
+      `Falls ${C.moralePerTurn} for each turn of a quest's battle (${C.moraleFailedQuest} more if it fails), 1 per ${Math.round(1 / C.moralePerHealthLost)} Health lost to injuries, and ${C.moraleMemberDied} for everyone when a member dies.`,
       `Rises with a round of drinks at an inn and with Day Off (+${GUILD.schedule.dayOffMorale * k} a day)${k !== 1 ? `: gains x${k} (${(c.traits ?? []).map((t) => TRAITS[t].name).join(', ')})` : ''}.`,
       `In battle: -${GUILD.combat.percentPer5}% to all stats per 5 below 100${moralePenalty(c) ? ` (now -${Math.round(moralePenalty(c) * 100)}%)` : ''}.`,
       main ? 'Your main character never leaves, however low it gets.'
@@ -328,6 +429,13 @@ export class PartyScene extends Phaser.Scene {
       `Market slaves start at ${S.obedienceMarket[0]}-${S.obedienceMarket[1]}, registered prisoners at ${S.obedienceCaptive[0]}-${S.obedienceCaptive[1]}.`,
     ].join('\n');
   }
+}
+
+/** "Silver Lantern Inn · 30g", "Outer City House · 3/6" (residents), "Outside · free". */
+function lodgingLabel(state: GameState, where: CityLodging): string {
+  if (where === 'outside') return GUILD.lodging.outsidePerPerson ? `Outside · ${GUILD.lodging.outsidePerPerson}g` : 'Outside · free';
+  if (isResidence(where)) return `${GUILD.residences[where].name} · ${residents(state, where).length}/${GUILD.residences.capacity}`;
+  return `${GUILD.inns[where].name} · ${lodgingPrice(where)}g`;
 }
 
 /** Which way a slave's Obedience is heading, from their relationship. */
