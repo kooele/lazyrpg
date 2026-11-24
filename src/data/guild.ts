@@ -96,7 +96,6 @@ export interface GuildConfig {
   /** trainingXp: XP for a day of training, perLevel x level + flat (see trainingXp()). */
   schedule: { recoverMultiplier: number; trainingXp: { perLevel: number; flat: number }; oddJobsGold: number; dayOffMorale: number };
   /** Price multiplier from talent: max(min, 1 + weight x (average growth rate - 1)). */
-  talentPrice: { weight: number; min: number };
   mercenary: { feePerLevel: number; cutBase: number; cutPerLevel: number };
   companion: {
     wageBase: number;
@@ -307,7 +306,6 @@ export function parseGuildConfig(data: unknown): GuildConfig {
       ...numbers<Omit<GuildConfig['schedule'], 'trainingXp'>>(d.schedule, 'schedule', ['recoverMultiplier', 'oddJobsGold', 'dayOffMorale']),
       trainingXp: numbers(obj(d.schedule, 'schedule').trainingXp, 'schedule.trainingXp', ['perLevel', 'flat']),
     },
-    talentPrice: numbers(d.talentPrice ?? { weight: 2, min: 0.4 }, 'talentPrice', ['weight', 'min']),
     mercenary: numbers(d.mercenary, 'mercenary', ['feePerLevel', 'cutBase', 'cutPerLevel']),
     companion: {
       ...numbers<Omit<GuildConfig['companion'], 'terms' | 'termDemand' | 'expectedWeeklyLoot' | 'relationshipUnpaid'>>(c, 'companion',
