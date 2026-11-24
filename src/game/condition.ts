@@ -79,7 +79,7 @@ export function lodgingName(l: Lodging): string {
 /** Relationship change for a night spent at `where` (better than expected: up; worse: down per step). */
 export function lodgingRelationship(c: Character, where: CityLodging): number {
   const diff = LODGING_QUALITY[where] - expectedQuality(c);
-  if (diff > 0) return GUILD.lodging.relationshipAbove;
+  if (diff > 0) return GUILD.lodging.relationshipAbovePerStep * diff;
   return diff < 0 ? -GUILD.lodging.relationshipBelowPerStep * -diff : 0;
 }
 
@@ -98,7 +98,7 @@ export const foodOf = (state: GameState, c: Character): FoodTier => state.food[c
 /** Relationship change for a day's food (better than they expect: up; worse: down per step). */
 export function foodRelationship(c: Character, tier: FoodTier): number {
   const diff = foodQuality(tier) - expectedQuality(c);
-  if (diff > 0) return GUILD.food.relationshipAbove;
+  if (diff > 0) return GUILD.food.relationshipAbovePerStep * diff;
   return diff < 0 ? -GUILD.food.relationshipBelowPerStep * -diff : 0;
 }
 

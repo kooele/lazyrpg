@@ -64,7 +64,7 @@ export function glossaryEntries(): GlossaryEntry[] {
   add('City life', 'Food and lodging expectations',
     `Each member you house eats at a food tier and sleeps at a lodging you pick in Manage Party. Each has a quality from 0 to 3.\n\n`
     + `Adventurers of every rank expect quality ${adventurerQ}: ${FOOD_TIERS[adventurerQ]} food (${food(adventurerQ)} gold a day) and an inn (${night(adventurerQ)} gold a night). Slaves expect quality ${L.slaveExpectedQuality}: ${FOOD_TIERS[L.slaveExpectedQuality]} food and the stables.\n\n`
-    + `Each night, companions and slaves gain ${L.relationshipAbove} relationship for sleeping better than they expect and lose ${L.relationshipBelowPerStep} per step worse. Food works the same way: +${G.food.relationshipAbove} for better, −${G.food.relationshipBelowPerStep} per step worse. Food is paid on the road too.`);
+    + `Each night, companions and slaves gain ${L.relationshipAbovePerStep} relationship per step of lodging better than they expect and lose ${L.relationshipBelowPerStep} per step worse. Food works the same way: +${G.food.relationshipAbovePerStep} per step better, −${G.food.relationshipBelowPerStep} per step worse. Food is paid on the road too.`);
   add('City life', 'Stables',
     `Everyone's default lodging: ${L.stablesPerPerson} gold a night per person, quality 0. Slaves are content there; adventurers lose ${L.relationshipBelowPerStep} relationship per night in it.\n\n`
     + `Members also end up in the stables when you sell the residence they live in.`);

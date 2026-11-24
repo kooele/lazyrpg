@@ -1,12 +1,12 @@
 import Phaser from 'phaser';
 import { MAX_PARTY_SIZE, SKILLS, WEAPONS, xpToNext } from '../data/content';
-import { ACTIVITIES, FOOD_TIERS, GUILD, INN_TIERS, LODGING_QUALITY, RINGS, isResidence, type CityLodging } from '../data/guild';
+import { ACTIVITIES, FOOD_TIERS, GUILD, INN_TIERS, LODGING_QUALITY, RINGS, foodQuality, isResidence, type CityLodging, type FoodTier } from '../data/guild';
 import { TRAITS } from '../data/traits';
 import type { Character, GameState } from '../data/types';
 import { bodyPoints, deriveStats, freePoints, skillPoints } from '../game/character';
 import { benchMember, quitRenown, lineupMembers, lodgingPrice, marketBuyPrice, moveMember, releaseCompanion, residents, scheduledMembers, sellSlave, setLineupSlot, setLodging } from '../game/city';
 import {
-  ACTIVITY_INFO, QUALITY_TEXT, activityOf, lodgingOf, lodgingRelationship, combatPenalty, expectedQuality, foodOf, healthOf, injuryPenalty, isInjured, moraleOf, moralePenalty,
+  ACTIVITY_INFO, QUALITY_TEXT, activityOf, lodgingOf, lodgingRelationship, combatPenalty, expectedQuality, foodOf, foodRelationship, healthOf, injuryPenalty, isInjured, moraleOf, moralePenalty,
   obediencePenalty, traitFactor,
 } from '../game/condition';
 import { bondOf, canFight, daysLeft, isCompanion, isHoused, isSlave, leaveParty, punishSlave, releaseCost, slaveTax, slaveValue } from '../game/contracts';
@@ -353,34 +353,50 @@ export class PartyScene extends Phaser.Scene {
     }, { fontSize: 13, selected: a === now }));
     text(this, X + 16, sy + 54, ACTIVITY_INFO[now].describe(), { fontSize: '11px', color: COLORS.dim, wordWrap: { width: W - 32 } });
 
-    // ---- food: for members the party feeds; others find their own (greyed out) ----
+    // ---- food and lodging: dropdowns for members the party houses; others find their own (greyed out) ----
     const fy = sy + 68;
     const fed = isHoused(c);
+    const main = c.id === state.mainId;
     const food = foodOf(state, c);
-    const expects = FOOD_TIERS[expectedQuality(c)];
     text(this, X + 16, fy, 'Food', { fontSize: '13px', color: fed ? COLORS.gold : COLORS.dim });
-    text(this, X + 16, fy + 16, fed ? (c.id === state.mainId ? 'no complaints' : `expects ${GUILD.food[expects].name}`) : 'finds their own', {
+    text(this, X + 16, fy + 16, fed ? (main ? 'no complaints' : `expects ${GUILD.food[FOOD_TIERS[expectedQuality(c)]].name}`) : 'finds their own', {
       fontSize: '10px', color: COLORS.dim,
     });
-    FOOD_TIERS.forEach((t, i) => button(this, X + 110 + i * 114, fy - 2, 108, 28, `${GUILD.food[t].name} ${GUILD.food[t].pricePerPerson}g`, () => {
-      state.food[c.id] = t;
-      markDirty();
-      this.render();
-    }, { fontSize: 12, selected: fed && t === food, enabled: fed }));
+    const foodOption = (t: FoodTier): MenuOption => ({
+      label: `${GUILD.food[t].name} · ${GUILD.food[t].pricePerPerson}g`,
+      ...effectOf(c, foodQuality(t), main ? 0 : foodRelationship(c, t), 'day'),
+      selected: t === food,
+      pick: () => {
+        state.food[c.id] = t;
+        markDirty();
+        this.render();
+      },
+    });
+    this.dropdown(X + 110, fy - 2, DROP_W, fed ? foodOption(food) : null, () => FOOD_TIERS.map(foodOption));
 
-    // ---- lodging: where they sleep in the city (members the party houses); others find their own ----
     const ly = fy + 32;
     const where = lodgingOf(state, c);
     text(this, X + 16, ly, 'Lodging', { fontSize: '13px', color: fed ? COLORS.gold : COLORS.dim });
-    text(this, X + 16, ly + 16, fed ? (c.id === state.mainId ? 'no complaints' : `expects ${['the stables', 'an inn', 'high-end', 'luxury'][expectedQuality(c)]}`) : 'finds their own', {
+    text(this, X + 16, ly + 16, fed ? (main ? 'no complaints' : `expects ${['the stables', 'an inn', 'high-end', 'luxury'][expectedQuality(c)]}`) : 'finds their own', {
       fontSize: '10px', color: COLORS.dim,
     });
-    button(this, X + 110, ly - 2, 300, 28, fed ? `${lodgingLabel(state, where)}  ▾` : '—', () => this.lodgingMenu(c, X + 110, ly - 2), { fontSize: 12, enabled: fed });
-    if (fed) {
-      const q = LODGING_QUALITY[where];
-      const d = c.id === state.mainId ? 0 : lodgingRelationship(c, where);
-      text(this, X + 420, ly + 4, `quality ${q}${bondOf(c) && d ? ` · ${d > 0 ? '+' : ''}${d} rel/night` : ''}`, { fontSize: '11px', color: d < 0 ? COLORS.bad : COLORS.dim });
-    }
+    const lodgingOption = (o: CityLodging): MenuOption => {
+      const full = isResidence(o) && o !== where && residents(state, o).length >= GUILD.residences.capacity;
+      return {
+        label: `${lodgingLabel(state, o)}${full ? ' (full)' : ''}`,
+        ...effectOf(c, LODGING_QUALITY[o], main ? 0 : lodgingRelationship(c, o), 'night'),
+        selected: o === where,
+        enabled: !full,
+        pick: () => {
+          const err = setLodging(state, c.id, o);
+          if (err) return toast(this, err, COLORS.bad);
+          markDirty();
+          this.render();
+        },
+      };
+    };
+    const lodgings: CityLodging[] = ['outside', ...INN_TIERS, ...RINGS.filter((r) => state.residences.includes(r))];
+    this.dropdown(X + 110, ly - 2, DROP_W, fed ? lodgingOption(where) : null, () => lodgings.map(lodgingOption));
 
     // ---- actions ----
     const by = HEIGHT - 76;
@@ -426,32 +442,39 @@ export class PartyScene extends Phaser.Scene {
     }
   }
 
+  /** A row for a dropdown: the option's name on the left, its quality and relationship effect on the right. */
+  private optionRow(x: number, y: number, w: number, h: number, o: MenuOption, onClick: () => void, arrow = false): Phaser.GameObjects.Container {
+    const enabled = o.enabled ?? true;
+    const row = button(this, x, y, w, h, '', onClick, { fontSize: 12, selected: o.selected && !arrow, enabled });
+    row.add(text(this, 10, h / 2, o.label, { fontSize: '12px', color: enabled ? COLORS.text : '#5d6480' }).setOrigin(0, 0.5));
+    row.add(text(this, w - (arrow ? 24 : 10), h / 2, o.effect, { fontSize: '11px', color: enabled ? o.color : '#5d6480' }).setOrigin(1, 0.5));
+    if (arrow) row.add(text(this, w - 8, h / 2, '▾', { fontSize: '12px' }).setOrigin(1, 0.5));
+    return row;
+  }
+
   /**
-   * Pick where `c` lodges: the stables, one of the inns, or a residence the party owns (with room). Opens above (x, y);
-   * clicking outside it closes it.
+   * A dropdown: a button showing the current option (or a greyed-out dash when `current` is null) that opens the
+   * options above it; clicking outside closes it.
    */
-  private lodgingMenu(c: Character, x: number, y: number): void {
-    const state = requireState();
-    const current = lodgingOf(state, c);
-    const options: CityLodging[] = ['outside', ...INN_TIERS, ...RINGS.filter((r) => state.residences.includes(r))];
-    const rowH = 30;
-    const h = options.length * rowH + 12;
-    const top = y - h - 4;
-    const layer = this.add.container(0, 0).setDepth(900);
-    const shade = this.add.rectangle(0, 0, WIDTH, HEIGHT, 0x000000, 0.35).setOrigin(0).setInteractive();
-    shade.on('pointerup', () => layer.destroy());
-    layer.add([shade, panel(this, x - 6, top, 352, h)]);
-    options.forEach((o, i) => {
-      const full = isResidence(o) && o !== current && residents(state, o).length >= GUILD.residences.capacity;
-      const label = `${lodgingLabel(state, o)}${full ? ' (full)' : ''}`;
-      layer.add(button(this, x, top + 6 + i * rowH, 340, rowH - 4, label, () => {
+  private dropdown(x: number, y: number, w: number, current: MenuOption | null, options: () => MenuOption[]): void {
+    if (!current) {
+      button(this, x, y, w, 28, '—', () => undefined, { fontSize: 12, enabled: false });
+      return;
+    }
+    this.optionRow(x, y, w, 28, current, () => {
+      const opts = options();
+      const rowH = 30;
+      const h = opts.length * rowH + 12;
+      const top = y - h - 4;
+      const layer = this.add.container(0, 0).setDepth(900);
+      const shade = this.add.rectangle(0, 0, WIDTH, HEIGHT, 0x000000, 0.35).setOrigin(0).setInteractive();
+      shade.on('pointerup', () => layer.destroy());
+      layer.add([shade, panel(this, x - 6, top, w + 12, h)]);
+      opts.forEach((o, i) => layer.add(this.optionRow(x, top + 6 + i * rowH, w, rowH - 4, o, () => {
         layer.destroy();
-        const err = setLodging(state, c.id, o);
-        if (err) return toast(this, err, COLORS.bad);
-        markDirty();
-        this.render();
-      }, { fontSize: 12, selected: o === current, enabled: !full }));
-    });
+        o.pick();
+      })));
+    }, true);
   }
 
   /** An invisible hover area that shows a floating tooltip. */
@@ -501,7 +524,7 @@ export class PartyScene extends Phaser.Scene {
     ];
     if (isHoused(c)) {
       lines.push(
-        `Every night: +${L.relationshipAbove} for lodging better than they expect, -${L.relationshipBelowPerStep} per step worse. Every day, food: +${F.relationshipAbove} / -${F.relationshipBelowPerStep} per step.`,
+        `Every night: +${L.relationshipAbovePerStep} per step of lodging better than they expect, -${L.relationshipBelowPerStep} per step worse. Every day, food: +${F.relationshipAbovePerStep} / -${F.relationshipBelowPerStep} per step.`,
         `As ${adventurerRank(c.level)}-rank, they expect ${QUALITY_TEXT[q]} and ${F[FOOD_TIERS[q]].name.toLowerCase()} food (now: ${F[foodOf(state, c)].name.toLowerCase()}).`,
         'If the party can\'t pay food and lodging: -5.',
       );
@@ -529,6 +552,28 @@ export class PartyScene extends Phaser.Scene {
       `Market slaves start at ${S.obedienceMarket[0]}-${S.obedienceMarket[1]}, registered prisoners at ${S.obedienceCaptive[0]}-${S.obedienceCaptive[1]}.`,
     ].join('\n');
   }
+}
+
+const DROP_W = 460;
+
+interface MenuOption {
+  label: string;
+  /** "quality 2 · +2 rel/night" */
+  effect: string;
+  color: string;
+  selected?: boolean;
+  enabled?: boolean;
+  pick: () => void;
+}
+
+/** What a food or lodging choice means for `c`: its quality and, for companions and slaves, the relationship it moves. */
+function effectOf(c: Character, quality: number, rel: number, per: 'day' | 'night'): { effect: string; color: string } {
+  const bond = !!bondOf(c) && c.contract?.type !== 'main';
+  if (!bond) return { effect: `quality ${quality}`, color: COLORS.dim };
+  return {
+    effect: `quality ${quality} · ${rel ? `${rel > 0 ? '+' : ''}${rel} rel/${per}` : 'as expected'}`,
+    color: rel > 0 ? COLORS.good : rel < 0 ? COLORS.bad : COLORS.dim,
+  };
 }
 
 /** "Silver Lantern Inn · 24g", "Outer City House · 3/6" (residents), "Stables · 6g". */

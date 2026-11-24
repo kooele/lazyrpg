@@ -66,9 +66,9 @@ export interface GuildConfig {
   board: { maxPostsPerDay: number; rankWeights: Record<Rank, number>; pay: [number, number] };
   quests: Record<Rank, QuestTier>;
   threat: ThreatConfig;
-  food: Record<FoodTier, { name: string; pricePerPerson: number }> & { default: FoodTier; relationshipAbove: number; relationshipBelowPerStep: number };
+  food: Record<FoodTier, { name: string; pricePerPerson: number }> & { default: FoodTier; relationshipAbovePerStep: number; relationshipBelowPerStep: number };
   inns: Record<InnTier, InnConfig>;
-  lodging: { expectedQuality: Record<'S' | Rank, number>; slaveExpectedQuality: number; relationshipAbove: number; relationshipBelowPerStep: number; stablesPerPerson: number };
+  lodging: { expectedQuality: Record<'S' | Rank, number>; slaveExpectedQuality: number; relationshipAbovePerStep: number; relationshipBelowPerStep: number; stablesPerPerson: number };
   residences: Record<Ring, { name: string; price: number }> & { sellShare: number; capacity: number };
   condition: {
     maxHealthLoss: number;
@@ -194,7 +194,7 @@ function parseInns(v: unknown): Record<InnTier, InnConfig> {
 function parseFood(v: unknown): GuildConfig['food'] {
   const o = obj(v, 'food');
   const out = {
-    relationshipAbove: num(o.relationshipAbove, 'food.relationshipAbove', 0, 100),
+    relationshipAbovePerStep: num(o.relationshipAbovePerStep, 'food.relationshipAbovePerStep', 0, 100),
     relationshipBelowPerStep: num(o.relationshipBelowPerStep, 'food.relationshipBelowPerStep', 0, 100),
   } as GuildConfig['food'];
   for (const t of FOOD_TIERS) {
@@ -297,7 +297,7 @@ export function parseGuildConfig(data: unknown): GuildConfig {
     food: parseFood(d.food),
     inns: parseInns(d.inns),
     lodging: {
-      ...numbers<Omit<GuildConfig['lodging'], 'expectedQuality'>>(d.lodging, 'lodging', ['relationshipAbove', 'relationshipBelowPerStep', 'stablesPerPerson']),
+      ...numbers<Omit<GuildConfig['lodging'], 'expectedQuality'>>(d.lodging, 'lodging', ['relationshipAbovePerStep', 'relationshipBelowPerStep', 'stablesPerPerson']),
       expectedQuality: numbers(obj(d.lodging, 'lodging').expectedQuality, 'lodging.expectedQuality', [...RANKS], 3),
       slaveExpectedQuality: num(obj(d.lodging, 'lodging').slaveExpectedQuality ?? 0, 'lodging.slaveExpectedQuality', 0, 3),
     },
