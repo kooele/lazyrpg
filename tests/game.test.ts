@@ -4,6 +4,7 @@ import weaponsJson from '../src/data/weapons.json';
 import { SKILLS, STATUSES, TREE_SKILLS, WEAPONS, maxBodyRank, modeWithTag, parseContent, resolveWeaponSkill, skillEffect, skillPointsForLevel, skillStatText, skillStats, xpToNext } from '../src/data/content';
 import enemiesJson from '../src/data/enemies.json';
 import { ENEMIES, parseEnemies } from '../src/data/enemies';
+import statsJson from '../src/data/stats.json';
 import { STAT_CONFIG, parseStatConfig } from '../src/data/stats';
 import type { Character, SkillDef } from '../src/data/types';
 import { HOLD_FIRM_ODDS, bestAction, caution, holdsFirm, planTurn, preferredMode, runAiTurn, shouldDisengage, shouldSurrender, sideStrength, threatAt, tribeRouted, wantsToFlee } from '../src/game/ai';
@@ -43,13 +44,18 @@ function setup(map: BattleMap, specs: { c: Character; team: Team; at: Point }[])
 
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v));
 
-// Level-1 numbers used below: base Health 500, P.Atk 100, M.Atk 100, Defense 0 and Resist 0 (both +10 a level), so level-1
-// Adventurers take full damage. Sword & Shield: P.Atk 100, M.Atk 80. Where a test needs Defense, it uses a level-6
+// The battle tests below pin base Defense and Resist to 0 so their damage numbers don't move whenever armor is
+// rebalanced in stats.json (the real values are checked in the first test). Level-1 numbers used below: base Health
+// 500, P.Atk 100, M.Atk 100, Defense 0 and Resist 0 (both +10 a level), so level-1 Adventurers take full damage. Sword & Shield: P.Atk 100, M.Atk 80. Where a test needs Defense, it uses a level-6
 // Sword & Shield user (tank()): Health 750, Defense 50 x 1.25 = 63 (x0.613 damage), Resist 50.
+
+STAT_CONFIG.base.defense = 0;
+STAT_CONFIG.base.resist = 0;
 
 describe('stats and content files', () => {
   it('loads the base stats from stats.json', () => {
-    expect(STAT_CONFIG.base).toMatchObject({ health: 500, pAtk: 100, mAtk: 100, defense: 0, resist: 0, movement: 16 });
+    expect(parseStatConfig(statsJson).base).toMatchObject({ health: 500, pAtk: 100, mAtk: 100, defense: 20, resist: 20, movement: 16 });
+    expect(STAT_CONFIG.base).toMatchObject({ health: 500, pAtk: 100, mAtk: 100, defense: 0, resist: 0, movement: 16 }); // pinned above
     expect(STAT_CONFIG.growthPerLevel).toMatchObject({ health: 50, defense: 10, resist: 10 });
   });
 
@@ -445,14 +451,21 @@ describe('skills', () => {
     expect(battle.commandableUnits()).toEqual([]);
   });
 
-  it('heal and cleanse work on enemies (and on yourself)', () => {
-    const { battle, units: [h, e] } = setup(openMap(), [
+  it('cleric skills work on allies and yourself, never on enemies', () => {
+    const { battle, units: [h, , a] } = setup(openMap(), [
       { c: hero('staff', ['heal', 'cleanse']), team: 'player', at: { x: 1, y: 1 } },
       { c: hero('bow'), team: 'enemy', at: { x: 4, y: 1 } },
+      { c: hero('sword_shield', [], 'Ally'), team: 'player', at: { x: 1, y: 3 } },
     ]);
-    e.hp = 300;
-    battle.perform(h, 'heal', { x: 4, y: 1 });
-    expect(e.hp).toBe(300 + 96); // 80% of 120 M.Atk
+    for (const id of ['heal', 'cleanse', 'protection', 'barrier']) {
+      expect(SKILLS[id].affects).toBe('ally');
+      expect(battle.targetsOf(h, SKILLS[id], { x: 4, y: 1 })).toEqual([]);
+      expect(battle.targetsOf(h, SKILLS[id], { x: 1, y: 3 })).toEqual([a]);
+      expect(battle.targetsOf(h, SKILLS[id], { x: 1, y: 1 })).toEqual([h]);
+    }
+    a.hp = 300;
+    battle.perform(h, 'heal', { x: 1, y: 3 });
+    expect(a.hp).toBe(300 + 96); // 80% of 120 M.Atk
     battle.endPhase();
     battle.endPhase();
     h.statuses.push({ id: 'burn', name: 'Burn', debuff: true, stacks: 1, amount: 0, turns: Infinity, tick: 'end' });
@@ -712,10 +725,10 @@ describe('engagement', () => {
     battle.endPhase();
     expect(a.engagedWith).toBe(e.uid);
     expect(battle.canTarget(a, SKILLS.heal, { x: ally.x, y: ally.y })).toBe(false);
-    expect(battle.engagementBlock(a, SKILLS.heal, { x: 4, y: 3 })).toMatch(/can't target anyone else/);
+    expect(battle.engagementBlock(a, SKILLS.heal, { x: ally.x, y: ally.y })).toMatch(/can't target anyone else/);
     expect(battle.canTarget(a, SKILLS.heal, { x: 3, y: 3 })).toBe(true);
     expect(battle.canTarget(a, SKILLS.cleanse, { x: ally.x, y: ally.y })).toBe(false);
-    expect(battle.engagementBlock(a, SKILLS.cleanse, { x: 4, y: 3 })).toMatch(/can't target anyone else/);
+    expect(battle.engagementBlock(a, SKILLS.cleanse, { x: ally.x, y: ally.y })).toMatch(/can't target anyone else/);
     expect(battle.canTarget(a, SKILLS.cleanse, { x: 3, y: 3 })).toBe(true);
   });
 
@@ -875,7 +888,8 @@ describe('enemies', () => {
     expect(rankForStage(1)).toBe('D');
     expect(rankForStage(5)).toBe('D');
     expect(rankForStage(6)).toBe('C');
-    expect(rankForStage(30)).toBe('A');
+    expect(rankForStage(21)).toBe('S');
+    expect(rankForStage(30)).toBe('S');
   });
 
   it('enemies.json is validated with precise errors', () => {

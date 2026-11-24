@@ -55,12 +55,12 @@ export interface GuildConfig {
   startingGold: number;
   startingRenown: number;
   maxRoster: number;
-  startingRankShares: Record<Rank, number>;
+  partyRankWeights: Record<Rank, number>;
   ranks: { renown: Record<Exclude<Rank, 'D'>, number>; demotionDays: number; failedQuestRenown: number; deathRenown: number };
   /** First level of each adventurer rank above D. */
   adventurerRanks: Record<'C' | 'B' | 'A' | 'S', number>;
   boardSize: number;
-  board: { maxPostsPerDay: number; minAtPartyRank: number; postWeights: Record<Rank, number>; pay: [number, number] };
+  board: { maxPostsPerDay: number; rankWeights: Record<Rank, number>; pay: [number, number] };
   quests: Record<Rank, QuestTier>;
   threat: ThreatConfig;
   food: Record<FoodTier, { name: string; pricePerPerson: number }> & { default: FoodTier; relationshipAbove: number; relationshipBelowPerStep: number };
@@ -214,12 +214,15 @@ function parseResidences(v: unknown): GuildConfig['residences'] {
 
 export function parseGuildConfig(data: unknown): GuildConfig {
   const d = obj(data, '(root)');
-  const startingRankShares = perRank(d.startingRankShares, 'startingRankShares', 1);
-  const total = RANKS.reduce((s, r) => s + startingRankShares[r], 0);
-  if (Math.abs(total - 1) > 0.001) fail('startingRankShares', `must add up to 1 (they add up to ${total})`);
+  const weights = (v: unknown, path: string) => {
+    const w = perRank(v, path);
+    if (RANKS.reduce((s, r) => s + w[r], 0) <= 0) fail(path, 'at least one weight must be above 0');
+    return w;
+  };
+  const partyRankWeights = weights(d.partyRankWeights, 'partyRankWeights');
   const rk = obj(d.ranks, 'ranks');
-  const thresholds = numbers<Record<'C' | 'B' | 'A', number>>(rk.renown, 'ranks.renown', ['C', 'B', 'A']);
-  if (!(thresholds.C < thresholds.B && thresholds.B < thresholds.A)) fail('ranks.renown', 'must grow from C to B to A');
+  const thresholds = numbers<Record<'C' | 'B' | 'A' | 'S', number>>(rk.renown, 'ranks.renown', ['C', 'B', 'A', 'S']);
+  if (!(thresholds.C < thresholds.B && thresholds.B < thresholds.A && thresholds.A < thresholds.S)) fail('ranks.renown', 'must grow from C to B to A to S');
   const advRanks = numbers<Record<'C' | 'B' | 'A' | 'S', number>>(d.adventurerRanks, 'adventurerRanks', ['C', 'B', 'A', 'S']);
   if (!(1 < advRanks.C && advRanks.C < advRanks.B && advRanks.B < advRanks.A && advRanks.A < advRanks.S)) fail('adventurerRanks', 'must grow from C to B to A to S (and C above 1)');
   const q = obj(d.quests, 'quests');
@@ -243,7 +246,7 @@ export function parseGuildConfig(data: unknown): GuildConfig {
     startingGold: num(d.startingGold, 'startingGold'),
     startingRenown: num(d.startingRenown, 'startingRenown'),
     maxRoster: num(d.maxRoster, 'maxRoster', 1, 20),
-    startingRankShares,
+    partyRankWeights,
     ranks: {
       renown: thresholds,
       demotionDays: num(rk.demotionDays, 'ranks.demotionDays', 1, 365),
@@ -256,8 +259,7 @@ export function parseGuildConfig(data: unknown): GuildConfig {
       const b = obj(d.board, 'board');
       return {
         maxPostsPerDay: num(b.maxPostsPerDay, 'board.maxPostsPerDay', 1, 60),
-        minAtPartyRank: num(b.minAtPartyRank, 'board.minAtPartyRank', 0, 60),
-        postWeights: perRank(b.postWeights, 'board.postWeights'),
+        rankWeights: weights(b.rankWeights, 'board.rankWeights'),
         pay: range(b.pay, 'board.pay', 0.1),
       };
     })(),
@@ -283,7 +285,7 @@ export function parseGuildConfig(data: unknown): GuildConfig {
     inns: parseInns(d.inns),
     lodging: {
       ...numbers<Omit<GuildConfig['lodging'], 'expectedQuality'>>(d.lodging, 'lodging', ['relationshipAbove', 'relationshipBelowPerStep', 'outsidePerPerson']),
-      expectedQuality: numbers(obj(d.lodging, 'lodging').expectedQuality, 'lodging.expectedQuality', ['S', ...RANKS], 3),
+      expectedQuality: numbers(obj(d.lodging, 'lodging').expectedQuality, 'lodging.expectedQuality', [...RANKS], 3),
     },
     residences: parseResidences(d.residences),
     condition: numbers<GuildConfig['condition']>(d.condition, 'condition', ['maxHealthLoss', 'healthPerDay', 'startingMorale', 'moralePerTurn',

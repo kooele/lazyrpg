@@ -906,10 +906,6 @@ export class BattleScene extends Phaser.Scene {
         return `No enemy there: ${s.name} will hit nothing${s.charge && !s.teleport ? ' (you will only dash)' : ''}.\nUse it anyway?`;
       }
     }
-    if ((s.heal || s.cleanse) && occupant && occupant.team !== u.team) {
-      const effect = s.heal ? 'restore their Health' : 'remove their debuffs';
-      return `${occupant.character.name} is an enemy: ${s.name} will ${effect}.\nUse it anyway?`;
-    }
     return null;
   }
 

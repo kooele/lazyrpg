@@ -353,9 +353,9 @@ export interface Character {
 // ---- management: contracts, the guild, Arch City ----------------------------------------
 
 /** Party and quest ranks, best first. */
-export type Rank = 'A' | 'B' | 'C' | 'D';
-export const RANKS: readonly Rank[] = ['A', 'B', 'C', 'D'];
-/** An adventurer's own rank, from their level (S is beyond the party ranks). */
+export type Rank = 'S' | 'A' | 'B' | 'C' | 'D';
+export const RANKS: readonly Rank[] = ['S', 'A', 'B', 'C', 'D'];
+/** An adventurer's own rank, from their level (the same letters as party ranks). */
 export type AdventurerRank = 'S' | Rank;
 export const ADVENTURER_RANKS: readonly AdventurerRank[] = ['S', 'A', 'B', 'C', 'D'];
 

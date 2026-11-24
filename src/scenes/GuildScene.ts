@@ -316,9 +316,9 @@ export class GuildScene extends Phaser.Scene {
   private ranks(): void {
     const state = requireState();
     const board = leaderboard(state);
-    const counts = { A: 0, B: 0, C: 0, D: 0 };
+    const counts = { S: 0, A: 0, B: 0, C: 0, D: 0 };
     for (const e of board) counts[e.rank] += 1;
-    text(this, 20, 118, `${board.length} parties · ${adventurerCount(state)} active adventurers · A ${counts.A}, B ${counts.B}, C ${counts.C}, D ${counts.D}. Rank up at C ${GUILD.ranks.renown.C} / B ${GUILD.ranks.renown.B} / A ${GUILD.ranks.renown.A} renown + a promotion quest.`, {
+    text(this, 20, 118, `${board.length} parties · ${adventurerCount(state)} active adventurers · S ${counts.S}, A ${counts.A}, B ${counts.B}, C ${counts.C}, D ${counts.D}. Rank up at C ${GUILD.ranks.renown.C} / B ${GUILD.ranks.renown.B} / A ${GUILD.ranks.renown.A} / S ${GUILD.ranks.renown.S} renown + a promotion quest.`, {
       fontSize: '13px', wordWrap: { width: 920 },
     });
     panel(this, 16, 144, WIDTH - 32, HEIGHT - 160);

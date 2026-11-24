@@ -8,7 +8,7 @@ import { nextRank, rankThreshold } from '../game/guild';
 import { session } from '../game/session';
 import { COLORS, WIDTH, panel, text } from './widgets';
 
-export const RANK_COLORS: Record<Rank, number> = { A: 0xe0b44c, B: 0x9fb7d8, C: 0xc08a5a, D: 0x7a8296 };
+export const RANK_COLORS: Record<Rank, number> = { S: 0xb87fe0, A: 0xe0b44c, B: 0x9fb7d8, C: 0xc08a5a, D: 0x7a8296 };
 
 /** A small square badge with the rank letter. (x, y) is the top-left corner. */
 export function rankBadge(scene: Phaser.Scene, x: number, y: number, rank: Rank, size = 26): Phaser.GameObjects.Container {

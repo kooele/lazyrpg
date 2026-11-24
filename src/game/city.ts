@@ -601,7 +601,7 @@ export function advanceDay(state: GameState, rng: Rng, night: 'road' | 'city' = 
 // ---- the slave market --------------------------------------------------------------------------------------
 
 /** Levels of slaves for sale: around the party's rank's adventurers. */
-const MARKET_LEVELS: Record<Rank, [number, number]> = { D: [1, 5], C: [4, 10], B: [9, 15], A: [14, 20] };
+const MARKET_LEVELS: Record<Rank, [number, number]> = { D: [1, 5], C: [4, 10], B: [9, 15], A: [14, 20], S: [19, 25] };
 const round5 = (v: number) => Math.max(5, Math.round(v / 5) * 5);
 
 /** A slave for sale: a random adventurer near the party's rank, valued by level and talent. */

@@ -11,7 +11,7 @@ import {
 import { activityOf, lodgingOf, combatPenalty, expectedQuality, foodRelationship, healthOf, isInjured, moraleOf, moralePenalty, obediencePenalty } from '../src/game/condition';
 import { parseSave, serializeSave } from '../src/game/save';
 import {
-  companionContract, companionDemand, evaluateOffer, foodLodgingWeekly, joinParty, mercenaryRates, offerValue, openingTerms, punishSlave, slaveContract, bounty, registrationFee, slaveTax, slaveValue,
+  companionContract, companionDemand, evaluateOffer, foodLodgingWeekly, joinParty, mercenaryRates, offerValue, openingTerms, punishSlave, slaveContract, bounty, registrationFee, slaveTax, slaveValue, leaveParty,
 } from '../src/game/contracts';
 import { DEMO_STAGES, newDemo, resolveDemoBattle } from '../src/game/demo';
 import { dangerRating, expectedEnemies, fairReward, payRatio, questRenown, strength, totalThreat, usualCount } from '../src/game/board';
@@ -39,15 +39,20 @@ describe('guild.json', () => {
     bad.quests.C.count = [6, 3];
     expect(() => parseGuildConfig(bad)).toThrow(/quests\.C\.count\[1\]/);
     const shares = JSON.parse(JSON.stringify(guildJson));
-    shares.startingRankShares.A = 0.5;
-    expect(() => parseGuildConfig(shares)).toThrow(/startingRankShares.*add up to 1/);
+    shares.partyRankWeights = { S: 0, A: 0, B: 0, C: 0, D: 0 };
+    expect(() => parseGuildConfig(shares)).toThrow(/partyRankWeights.*above 0/);
+    const posts = JSON.parse(JSON.stringify(guildJson));
+    posts.board.rankWeights = { S: 0, A: 0, B: 0, C: 0, D: 0 };
+    expect(() => parseGuildConfig(posts)).toThrow(/board\.rankWeights.*above 0/);
   });
 });
 
 describe('ranks and the leaderboard', () => {
-  it('splits parties 5% A, 20% B, 60% C, 15% D', () => {
-    expect(rankCounts(21)).toEqual({ A: 1, B: 4, C: 13, D: 3 });
-    expect(rankCounts(20)).toEqual({ A: 1, B: 4, C: 12, D: 3 });
+  it('splits parties by weight: S 1, A 5, B 20, C 60, D 40 out of 126 (always at least one A)', () => {
+    expect(rankCounts(21)).toEqual({ S: 0, A: 1, B: 3, C: 10, D: 7 });
+    expect(rankCounts(20)).toEqual({ S: 0, A: 1, B: 3, C: 10, D: 6 });
+    expect(rankCounts(126)).toEqual({ S: 1, A: 5, B: 20, C: 60, D: 40 });
+    expect(rankCounts(4)).toMatchObject({ A: 1 });
   });
 
   it('a new game: about 100 adventurers in 20 parties, and the player starts at D rank', () => {
@@ -58,7 +63,7 @@ describe('ranks and the leaderboard', () => {
     expect(s.rank).toBe('D');
     const lb = leaderboard(s);
     expect(lb.at(-1)!.isPlayer).toBe(true);
-    expect(lb.filter((e) => e.rank === 'A')).toHaveLength(1);
+    expect(lb.filter((e) => e.rank === 'A')).toHaveLength(rankCounts(GUILD.simulation.targetParties + 1).A);
   });
 
   it('stays near 100 adventurers and 20 parties over two years, with wipes and newcomers', () => {
@@ -86,21 +91,41 @@ describe('ranks and the leaderboard', () => {
     const s = start(4);
     const rng = makeRng(9);
     let promoQuests = 0;
-    for (let i = 0; i < 30 && s.rank === 'D'; i++) {
+    for (let i = 0; i < 90 && s.rank === 'D'; i++) {
       const promo = s.guild.board.find((x) => x.promotion);
       if (promo) {
         expect(promo.rank).toBe('C');
         expect(s.renown).toBeGreaterThanOrEqual(GUILD.ranks.renown.C);
         promoQuests += 1;
       }
-      const q = promo ?? s.guild.board.find((x) => canTakeQuest(s, x))!;
-      expect(acceptQuest(s, q.id)).toBeNull();
-      resolveQuest(s, 'victory', rng);
-      nightsAt(s, 'standard', 1, rng);
+      const q = promo ?? s.guild.board.find((x) => canTakeQuest(s, x));
+      if (q) {
+        expect(acceptQuest(s, q.id)).toBeNull();
+        resolveQuest(s, 'victory', rng);
+      }
+      nightsAt(s, 'standard', 1, rng); // a slow day: rivals took every quest the party could do
     }
     expect(promoQuests).toBe(1);
     expect(s.rank).toBe('C');
     expect(s.log.some((n) => /now C rank/.test(n.text))).toBe(true);
+  });
+
+  it('S rank: A-rank parties with enough renown get an S-rank promotion quest; S quests have level 21-25 foes', () => {
+    const s = start();
+    s.rank = 'A';
+    s.renown = GUILD.ranks.renown.S;
+    advanceDay(s, makeRng(5));
+    const promo = s.guild.board.find((q) => q.promotion)!;
+    expect(promo.rank).toBe('S');
+    expect(canTakeQuest(s, promo)).toBe(true);
+    for (let i = 0; i < 20; i++) {
+      const q = makeQuest('S', 1, makeRng(i));
+      expect(q.stage).toBeGreaterThanOrEqual(21);
+      expect(q.stage).toBeLessThanOrEqual(25);
+      expect(q.foes?.length).toBeGreaterThan(0);
+    }
+    s.rank = 'S';
+    expect(canTakeQuest(s, makeQuest('D', 1, makeRng(1)))).toBe(true);
   });
 
   it('renown doesn\'t fade; failing and deaths cost renown; a full week below the threshold drops a rank', () => {
@@ -116,6 +141,7 @@ describe('ranks and the leaderboard', () => {
     resolveQuest(s, 'defeat', makeRng(1));
     expect(s.renown).toBe(Math.max(0, 120 - q.renown * GUILD.ranks.failedQuestRenown));
     s.renown = 90; // below C's 100
+    s.belowRankSince = s.day; // ...from today
     for (let i = 0; i < GUILD.ranks.demotionDays; i++) {
       expect(s.rank).toBe('C');
       nightsAt(s, 'standard', 1, makeRng(1));
@@ -264,10 +290,9 @@ describe('ranks and the leaderboard', () => {
     expect(dangerRating({ stage: 8, count: 6 })).toBeGreaterThanOrEqual(dangerRating({ stage: 8, count: 3 }));
   });
 
-  it('the board is shared and busy: plenty of quests across the ranks, always some at the party\'s rank', () => {
+  it('the board is shared and busy: plenty of quests across the ranks', () => {
     const s = start();
     expect(s.guild.board.length).toBeGreaterThanOrEqual(GUILD.boardSize);
-    expect(s.guild.board.filter((q) => q.rank === s.rank).length).toBeGreaterThanOrEqual(GUILD.board.minAtPartyRank);
     expect(new Set(s.guild.board.map((q) => q.rank)).size).toBeGreaterThan(2);
     for (const q of s.guild.board) {
       expect(q.count).toBeGreaterThanOrEqual(GUILD.quests[q.rank].count[0]);
@@ -285,7 +310,6 @@ describe('ranks and the leaderboard', () => {
       taken += before.filter((q) => !s.guild.board.includes(q)).length;
     }
     expect(taken).toBeGreaterThan(20);
-    expect(s.guild.board.filter((q) => q.rank === s.rank).length).toBeGreaterThanOrEqual(GUILD.board.minAtPartyRank);
     expect(s.guild.news.some((n) => /completed "|failed "/.test(n.text)) || s.guild.rivals.some((p) => /completed "|failed "/.test(p.last))).toBe(true);
   });
 
@@ -364,7 +388,16 @@ describe('contracts', () => {
     s.gold = 0;
     advanceDays(s, 7, makeRng(1));
     expect(s.party.find((m) => m.id === c.id)).toBeUndefined();
-    expect(s.guild.pool.some((a) => a.character.id === c.id)).toBe(true);
+    expect(s.log.some((n) => n.text.includes(`${c.name} quits over unpaid wages`))).toBe(true);
+    // Where they end up afterwards (the guild hall, a rival party, a rival's fallen) is up to the guild simulation.
+  });
+
+  it('a member who leaves the party goes back to the guild hall', () => {
+    const s = start();
+    const c = companion(s);
+    leaveParty(s, c);
+    expect(s.party.some((m) => m.id === c.id)).toBe(false);
+    expect(s.guild.pool.some((a) => a.character.id === c.id && !('contract' in a.character))).toBe(true);
   });
 
   it('a lapsed contract benches the companion, then they leave after the grace days', () => {
@@ -941,6 +974,8 @@ describe('contracts', () => {
     // Broke on the next payday: the city takes the slave.
     for (let d = 0; d < 6; d++) advanceDay(s, makeRng(3 + d));
     s.gold = 0;
+    // Keep the market at its minimum stock so the day's sales can't sell the seized slave straight away.
+    s.market.slaves = s.market.slaves.slice(0, GUILD.market.stock[0] - 1);
     advanceDay(s, makeRng(10));
     expect(s.party.some((m) => m.id === c.id)).toBe(false);
     expect(s.market.slaves.some((o) => o.character.id === c.id)).toBe(true);

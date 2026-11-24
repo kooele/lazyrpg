@@ -29,10 +29,12 @@ describe('talent', () => {
   });
 
   it('scales level growth by grade (C = 100%, S = 160%, F = 60%)', () => {
-    expect(levelStats(5)).toMatchObject({ health: 700, mana: 280, pAtk: 140, defense: 40, resist: 40 });
+    const def = STAT_CONFIG.base.defense;
+    const res = STAT_CONFIG.base.resist;
+    expect(levelStats(5)).toMatchObject({ health: 700, mana: 280, pAtk: 140, defense: def + 40, resist: res + 40 });
     expect(levelStats(5, all('C'))).toEqual(levelStats(5));
-    expect(levelStats(5, all('S'))).toMatchObject({ health: 820, mana: 328, pAtk: 164, mAtk: 164, defense: 64, resist: 64, movement: 16 });
-    expect(levelStats(5, all('F'))).toMatchObject({ health: 620, pAtk: 124, defense: 24 });
+    expect(levelStats(5, all('S'))).toMatchObject({ health: 820, mana: 328, pAtk: 164, mAtk: 164, defense: def + 64, resist: res + 64, movement: 16 });
+    expect(levelStats(5, all('F'))).toMatchObject({ health: 620, pAtk: 124, defense: def + 24 });
     expect(levelStats(1, all('S'))).toEqual(levelStats(1)); // talent only affects growth
     const c = createCharacter('T', '#3d7be0', 'sword_shield', undefined, { health: 'A', pAtk: 'D' });
     c.level = 3;
