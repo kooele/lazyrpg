@@ -56,7 +56,7 @@ export function demotionCheck(rank: Rank, renown: number, belowSince: number, da
   return { rank: down, belowSince: renown >= rankThreshold(down) ? 0 : day };
 }
 
-/** How many of `n` parties start at each rank (rankWeights: S 1, A 5, B 20, C 60, D 40 out of 126 by default). */
+/** How many of `n` parties start at each rank (rankWeights: S 1, A 25, B 20, C 60, D 40 out of 146 by default). */
 export function rankCounts(n: number): Record<Rank, number> {
   const w = GUILD.rankWeights;
   const total = RANKS.reduce((t, r) => t + w[r], 0);

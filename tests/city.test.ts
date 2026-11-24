@@ -45,10 +45,11 @@ describe('guild.json', () => {
 });
 
 describe('ranks and the leaderboard', () => {
-  it('splits parties by weight: S 1, A 5, B 20, C 60, D 40 out of 126 (always at least one A)', () => {
-    expect(rankCounts(21)).toEqual({ S: 0, A: 1, B: 3, C: 10, D: 7 });
-    expect(rankCounts(20)).toEqual({ S: 0, A: 1, B: 3, C: 10, D: 6 });
-    expect(rankCounts(126)).toEqual({ S: 1, A: 5, B: 20, C: 60, D: 40 });
+  it('splits parties by weight: S 1, A 25, B 20, C 60, D 40 out of 146 (always at least one A)', () => {
+    expect(rankCounts(21)).toEqual({ S: 0, A: 4, B: 3, C: 8, D: 6 });
+    expect(rankCounts(20)).toEqual({ S: 0, A: 3, B: 3, C: 9, D: 5 });
+    expect(rankCounts(146)).toEqual({ S: 1, A: 25, B: 20, C: 60, D: 40 });
+    expect(rankCounts(4)).toMatchObject({ A: 1 });
   });
 
   it('a new game: about 100 adventurers in 20 parties, and the player starts at D rank', () => {
@@ -59,7 +60,7 @@ describe('ranks and the leaderboard', () => {
     expect(s.rank).toBe('D');
     const lb = leaderboard(s);
     expect(lb.at(-1)!.isPlayer).toBe(true);
-    expect(lb.filter((e) => e.rank === 'A')).toHaveLength(1);
+    expect(lb.filter((e) => e.rank === 'A')).toHaveLength(rankCounts(GUILD.simulation.targetParties + 1).A);
   });
 
   it('stays near 100 adventurers and 20 parties over two years, with wipes and newcomers', () => {
