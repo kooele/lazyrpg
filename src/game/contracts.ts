@@ -137,15 +137,16 @@ export const daysLeft = (c: CompanionContract, day: number) => c.endDay - day;
 export const isExpired = (c: Character, day: number) => isCompanion(c) && c.contract.endDay <= day;
 
 /**
- * What it costs to release a companion before their term ends: the larger of releaseMinWeeks weeks of their total
- * weekly compensation (base pay + expected loot cut at the party's rank + food & lodging, see offerValue) and
- * releaseShareOfRemaining of the compensation for the days left. Free once the term has ended.
+ * What breaking a companion's contract early costs (releasing them, or them quitting at 0 relationship): the larger
+ * of releaseShareOfRemaining of the compensation for the days left, and a minimum of releaseMinWeeks weeks or the
+ * rest of the term, whichever is smaller. Compensation is their total weekly worth: base pay + expected loot cut at
+ * the party's rank + food & lodging (see offerValue). Free once the term has ended.
  */
 export function releaseCost(c: Character & { contract: CompanionContract }, day: number, rank: Rank): number {
   const left = daysLeft(c.contract, day);
   if (left <= 0) return 0;
   const weekly = offerValue(c.contract, rank, c.level);
-  const weeks = Math.max(C.releaseMinWeeks, (C.releaseShareOfRemaining * left) / 7);
+  const weeks = Math.max(Math.min(C.releaseMinWeeks, left / 7), (C.releaseShareOfRemaining * left) / 7);
   return round5(weekly * weeks);
 }
 

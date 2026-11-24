@@ -146,10 +146,10 @@ export function glossaryEntries(): GlossaryEntry[] {
   add('Party members', 'Contracts and renewal',
     `Contracts run ${K.terms.join(', ')} weeks. Base pay is due every payday. When a contract ends, the companion sits out of quests and you have ${K.graceDays} days to renew it in Manage Party before they leave.\n\n`
     + `A good relationship lowers their demands on renewal, by up to ${pct(K.renewalDiscountAtMax)} at 100. Walking out of a renewal ends the contract on the spot.\n\n`
-    + `Releasing a companion before their term ends breaks the contract: you pay them the larger of ${K.releaseMinWeeks} week${K.releaseMinWeeks === 1 ? '' : 's'} of their total compensation (base pay, loot cut and food & lodging) and ${pct(K.releaseShareOfRemaining)} of what the rest of the term is worth. Once the term has ended, releasing them is free.`);
+    + `Releasing a companion before their term ends breaks the contract: you pay them ${pct(K.releaseShareOfRemaining)} of what the rest of the term is worth (base pay, loot cut and food & lodging), but at least ${K.releaseMinWeeks} week${K.releaseMinWeeks === 1 ? '' : 's'} of it, or the rest of the term if that's shorter. A companion who quits at 0 relationship is a breach too, and you pay the same. Once the term has ended, it's free.`);
   add('Party members', 'Relationship',
     `Companions and slaves have a relationship from 0 to 100. It rises by ${K.relationshipPerQuest} for every quest completed together, and moves with food and lodging, low Morale and missed pay.\n\n`
-    + `Unpaid companions lose ${-K.relationshipUnpaid} relationship each payday and quit at 0. Slaves' relationship drives their Obedience.`);
+    + `Unpaid companions lose ${-K.relationshipUnpaid} relationship each payday. A companion at 0 relationship quits, and you pay them for breaking the contract (see Contracts and renewal). Slaves' relationship drives their Obedience.`);
   add('Party members', 'Protagonist',
     `Your main character's trait: they recover Health twice as fast and gain Morale twice as fast (drinks, days off). Morale losses aren't doubled.\n\n`
     + `The main character can't be dismissed or die from 0 Health (they pull through at 1), and they don't complain about food or lodging.`);

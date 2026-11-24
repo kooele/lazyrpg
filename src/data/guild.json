@@ -112,7 +112,7 @@
     "relationshipUnpaid": -20,
     "renewalDiscountAtMax": 0.3,
     "graceDays": 3,
-    "_comment": "Releasing a companion before their term ends costs a payout: the larger of releaseMinWeeks weeks of their total compensation (base pay + expected loot cut + food & lodging, see offerValue) and releaseShareOfRemaining of the compensation for the days left. Free once the term has ended.",
+    "_comment": "Breaking a companion's contract before their term ends (releasing them, or them quitting at 0 relationship) costs a payout: the larger of releaseShareOfRemaining of their compensation for the days left and a minimum of releaseMinWeeks weeks or the rest of the term, whichever is smaller. Compensation is base pay + expected loot cut + food & lodging (see offerValue). Free once the term has ended.",
     "releaseMinWeeks": 1,
     "releaseShareOfRemaining": 0.5
   },

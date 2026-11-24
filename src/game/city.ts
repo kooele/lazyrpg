@@ -126,6 +126,23 @@ export function tidyLineup(state: GameState): void {
   state.lineup = lineupMembers(state).map((c) => c.id);
 }
 
+/**
+ * Companions whose relationship has fallen to 0 quit: a breach of contract the party pays for as if it had released
+ * them (releaseCost). The party pays what it can; anything it can't cover is lost with them.
+ */
+export function relationshipDepartures(state: GameState): string[] {
+  const out: string[] = [];
+  for (const c of state.party.filter(isCompanion)) {
+    if (c.contract.relationship > 0) continue;
+    const cost = releaseCost(c, state.day, state.rank);
+    const paid = Math.min(cost, state.gold);
+    state.gold -= paid;
+    leaveParty(state, c, c.contract.greed);
+    out.push(note(state, `${c.name} quits (relationship 0)${cost ? `: breach of contract, the party pays ${paid} gold${paid < cost ? ` (all it has; ${cost} was owed)` : ''}` : ''}.`));
+  }
+  return out;
+}
+
 /** Release a companion from their contract early, paying them releaseCost. Returns an error message, or null. */
 export function releaseCompanion(state: GameState, id: string): string | null {
   const c = state.party.find((m) => m.id === id);
@@ -600,10 +617,6 @@ export function advanceDay(state: GameState, rng: Rng, night: 'road' | 'city' = 
       } else {
         c.contract.relationship = Math.max(0, c.contract.relationship + GUILD.companion.relationshipUnpaid);
         say(`You couldn't pay ${c.name} (${c.contract.basePay} gold).`);
-        if (c.contract.relationship <= 0) {
-          leaveParty(state, c, c.contract.greed);
-          say(`${c.name} quits over unpaid wages.`);
-        }
       }
     }
     if (paid) say(`Payday: ${paid} gold in wages.`);
@@ -621,6 +634,8 @@ export function advanceDay(state: GameState, rng: Rng, night: 'road' | 'city' = 
     }
     if (taxed) say(`Slave property tax: ${taxed} gold.`);
   }
+
+  out.push(...relationshipDepartures(state));
 
   // Contracts running out.
   for (const c of state.party.filter(isCompanion)) {

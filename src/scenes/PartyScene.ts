@@ -393,7 +393,7 @@ export class PartyScene extends Phaser.Scene {
         enabled: left <= 7, fontSize: 14, selected: left <= 0,
       });
       const cost = releaseCost(c, state.day, state.rank);
-      const why = cost ? `Breaking the contract early costs ${cost} gold\n(the larger of a week's pay and half the rest of the term).` : 'Their term is over: no payout.';
+      const why = cost ? `Breaking the contract early costs ${cost} gold\n(half the rest of the term, but at least a week's pay\nor the rest of the term if shorter).` : 'Their term is over: no payout.';
       button(this, X + 286, by, 128, 44, cost ? `Release\n(${cost}g)` : 'Release', () => confirmDialog(this, `Release ${c.name} from their contract?\n${why}\nThey go back to the guild hall.`, () => {
         const err = releaseCompanion(state, c.id);
         if (err) return toast(this, err, COLORS.bad);
@@ -509,7 +509,7 @@ export class PartyScene extends Phaser.Scene {
     lines.push(`-${GUILD.condition.lowMoraleRelationshipPerDay} a day while Morale is below ${GUILD.condition.lowMorale}.`);
     if (k.type === 'companion') {
       lines.push(
-        `Unpaid wages: ${GUILD.companion.relationshipUnpaid} each payday; they quit at 0.`,
+        `Unpaid wages: ${GUILD.companion.relationshipUnpaid} each payday. At 0 they quit, and you pay the release cost for the breach.`,
         `A higher relationship lowers their demands when you renew (up to -${Math.round(GUILD.companion.renewalDiscountAtMax * 100)}% at 100).`,
       );
     } else {
