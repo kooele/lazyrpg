@@ -40,7 +40,7 @@ const PLACES: Record<District, Place[]> = {
     { name: 'Tailor', blurb: 'Clothes and fittings.', at: [497, 167] },
     { name: 'Auction House', blurb: 'Rare goods to the highest bidder.', at: [1010, 173] },
     { name: 'Church', blurb: 'Prayer and healing.', at: [277, 343] },
-    { name: GUILD.inns.standard.name, blurb: `Inn: drinks for the party. Members can lodge here for ${GUILD.inns.standard.pricePerPerson} gold a night (Manage Party); what C-rank adventurers expect.`, at: [255, 480], scene: 'Inn', data: { tier: 'standard' } },
+    { name: GUILD.inns.standard.name, blurb: `Inn: drinks for the party. Members can lodge here for ${GUILD.inns.standard.pricePerPerson} gold a night (Manage Party); what adventurers expect.`, at: [255, 480], scene: 'Inn', data: { tier: 'standard' } },
     { name: GUILD.residences.outer.name, blurb: `A home of your own (${GUILD.residences.outer.price} gold at the Estate Office): free nights for up to ${GUILD.residences.capacity}, as good as an inn.`, at: [900, 805], scene: 'Inn', data: { ring: 'outer' } },
   ],
   inner: [
@@ -49,8 +49,8 @@ const PLACES: Record<District, Place[]> = {
     { name: 'Central Government Office', blurb: 'Permits, taxes and the city\'s business, in the long hall beside the Lord\'s Manor.', at: [890, 425] },
     { name: 'Library', blurb: 'Books, maps and old records.', at: [530, 300] },
     { name: 'Estate Office', blurb: 'Buy and sell residences across the city.', at: [990, 330], scene: 'Estate' },
-    { name: GUILD.inns.highEnd.name, blurb: `High-end inn: drinks for the party. Lodging ${GUILD.inns.highEnd.pricePerPerson} gold a night (Manage Party); what B-rank adventurers expect.`, at: [995, 570], scene: 'Inn', data: { tier: 'highEnd' } },
-    { name: GUILD.inns.luxury.name, blurb: `Luxury inn: drinks for the party. Lodging ${GUILD.inns.luxury.pricePerPerson} gold a night (Manage Party); what A and S-rank adventurers expect.`, at: [880, 500], scene: 'Inn', data: { tier: 'luxury' } },
+    { name: GUILD.inns.highEnd.name, blurb: `High-end inn: drinks for the party. Lodging ${GUILD.inns.highEnd.pricePerPerson} gold a night (Manage Party); better than adventurers expect.`, at: [995, 570], scene: 'Inn', data: { tier: 'highEnd' } },
+    { name: GUILD.inns.luxury.name, blurb: `Luxury inn: drinks for the party. Lodging ${GUILD.inns.luxury.pricePerPerson} gold a night (Manage Party); far better than adventurers expect.`, at: [880, 500], scene: 'Inn', data: { tier: 'luxury' } },
     { name: GUILD.residences.middle.name, blurb: `A townhouse inside the inner wall (${GUILD.residences.middle.price} gold at the Estate Office): free nights for up to ${GUILD.residences.capacity}, as good as a high-end inn.`, at: [520, 585], scene: 'Inn', data: { ring: 'middle' } },
     { name: GUILD.residences.inner.name, blurb: `A mansion by the cathedral (${GUILD.residences.inner.price} gold at the Estate Office): free nights for up to ${GUILD.residences.capacity}, as good as a luxury inn.`, at: [640, 505], scene: 'Inn', data: { ring: 'inner' } },
   ],
@@ -144,10 +144,11 @@ export class CityScene extends Phaser.Scene {
     }), 'top');
 
     // ---- bottom ---------------------------------------------------------------------------------
-    button(this, 16, HEIGHT - 60, 136, 46, 'Main Menu', () => this.scene.start('MainMenu'), { fontSize: 15 });
-    button(this, 160, HEIGHT - 60, 136, 46, 'Save Game', () => this.scene.start('SaveLoad', { mode: 'save', returnTo: 'City' }), { fontSize: 15 });
-    button(this, 304, HEIGHT - 60, 150, 46, 'Manage Party', () => this.scene.start('Party'), { fontSize: 15 });
-    button(this, 462, HEIGHT - 60, 158, 46, `End Day\n(${dailyUpkeep(requireState(), 'city')} gold)`, () => this.endDay(), { fontSize: 13, fill: 0x2a3348 });
+    button(this, 16, HEIGHT - 60, 104, 46, 'Main Menu', () => this.scene.start('MainMenu'), { fontSize: 14 });
+    button(this, 126, HEIGHT - 60, 104, 46, 'Save Game', () => this.scene.start('SaveLoad', { mode: 'save', returnTo: 'City' }), { fontSize: 14 });
+    button(this, 236, HEIGHT - 60, 82, 46, 'Guide', () => this.scene.start('Glossary', { returnTo: 'City' }), { fontSize: 14 });
+    button(this, 324, HEIGHT - 60, 136, 46, 'Manage Party', () => this.scene.start('Party'), { fontSize: 14 });
+    button(this, 466, HEIGHT - 60, 154, 46, `End Day\n(${dailyUpkeep(requireState(), 'city')} gold)`, () => this.endDay(), { fontSize: 13, fill: 0x2a3348 });
 
     if (prisonersAtGate(state)) this.gate();
   }

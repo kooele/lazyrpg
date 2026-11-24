@@ -20,11 +20,12 @@ export class MainMenuScene extends Phaser.Scene {
       ['Save Game', () => this.scene.start('SaveLoad', { mode: 'save' }), inGame],
       ['Load Game', () => this.scene.start('SaveLoad', { mode: 'load' }), true],
       ['Quick Battle (Demo)', () => this.scene.start('DemoCamp'), true],
+      ['Guide', () => this.scene.start('Glossary', { returnTo: 'MainMenu' }), true],
     ];
-    let y = 236;
+    let y = 220;
     for (const [label, action, enabled] of items) {
       button(this, WIDTH / 2 - 130, y, 260, 50, label, action, { enabled, fontSize: 20 });
-      y += 66;
+      y += 60;
     }
 
     if (inGame && session.dirty) {

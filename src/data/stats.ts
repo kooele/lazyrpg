@@ -39,7 +39,6 @@ export interface StatConfig {
   talent: TalentRules;
   defenseScale: number;
   forestDefense: number;
-  /** XP to go from level L to L + 1: base + step x (L - 1). */
   /** XP to go from level L to L + 1: a x L^2 + b x L + c. */
   xpPerLevel: { a: number; b: number; c: number };
   map: MapRules;
