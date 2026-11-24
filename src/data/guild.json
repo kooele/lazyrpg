@@ -111,7 +111,10 @@
     "relationshipPerQuest": 6,
     "relationshipUnpaid": -20,
     "renewalDiscountAtMax": 0.3,
-    "graceDays": 3
+    "graceDays": 3,
+    "_comment": "Releasing a companion before their term ends costs a payout: the larger of releaseMinWeeks weeks of their total compensation (base pay + expected loot cut + food & lodging, see offerValue) and releaseShareOfRemaining of the compensation for the days left. Free once the term has ended.",
+    "releaseMinWeeks": 1,
+    "releaseShareOfRemaining": 0.5
   },
   "slave": {
     "priceBase": 500,

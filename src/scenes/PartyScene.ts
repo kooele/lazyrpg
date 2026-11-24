@@ -4,12 +4,12 @@ import { ACTIVITIES, FOOD_TIERS, GUILD, INN_TIERS, LODGING_QUALITY, RINGS, isRes
 import { TRAITS } from '../data/traits';
 import type { Character, GameState } from '../data/types';
 import { bodyPoints, deriveStats, freePoints, skillPoints } from '../game/character';
-import { lineupMembers, lodgingPrice, marketBuyPrice, moveMember, residents, scheduledMembers, sellSlave, setLodging, toggleLineup } from '../game/city';
+import { benchMember, lineupMembers, lodgingPrice, marketBuyPrice, moveMember, releaseCompanion, residents, scheduledMembers, sellSlave, setLineupSlot, setLodging } from '../game/city';
 import {
   ACTIVITY_INFO, QUALITY_TEXT, activityOf, lodgingOf, lodgingRelationship, combatPenalty, expectedQuality, foodOf, healthOf, injuryPenalty, isInjured, moraleOf, moralePenalty,
   obediencePenalty, traitFactor,
 } from '../game/condition';
-import { bondOf, daysLeft, isCompanion, isHoused, isSlave, leaveParty, punishSlave } from '../game/contracts';
+import { bondOf, canFight, daysLeft, isCompanion, isHoused, isSlave, leaveParty, punishSlave, releaseCost, slaveTax, slaveValue } from '../game/contracts';
 import { adventurerRank } from '../game/guild';
 import { markDirty, requireState, session } from '../game/session';
 import { MEMBER_COLOR, MEMBER_LABEL, cityHeader, memberStatus } from '../ui/hud';
@@ -17,6 +17,13 @@ import { COLORS, HEIGHT, ScrollList, Tooltip, WIDTH, button, confirmDialog, figu
 
 const ROW_H = 58;
 const ROW_GAP = 4;
+/** The lineup slots along the top of the roster panel. */
+const SLOT_X = 24;
+const SLOT_Y = 104;
+const SLOT_W = 60;
+const SLOT_H = 78;
+const SLOT_GAP = 3.5;
+const LIST_Y = SLOT_Y + SLOT_H + 26;
 
 /** Manage Party: everyone in the party, the lineup for the next quest, loadouts and contracts. */
 export class PartyScene extends Phaser.Scene {
@@ -24,6 +31,7 @@ export class PartyScene extends Phaser.Scene {
   private tip!: Tooltip;
   /** A roster row is being dragged (so letting go doesn't also select it). */
   private dragging = false;
+  private slotFrames: Phaser.GameObjects.Rectangle[] = [];
 
   constructor() {
     super('Party');
@@ -45,22 +53,37 @@ export class PartyScene extends Phaser.Scene {
     this.render();
   }
 
+  /** The lineup slot under a point, or -1. */
+  private slotAt(x: number, y: number): number {
+    if (y < SLOT_Y - 6 || y > SLOT_Y + SLOT_H + 6) return -1;
+    const i = Math.floor((x - SLOT_X + SLOT_GAP / 2) / (SLOT_W + SLOT_GAP));
+    return i >= 0 && i < MAX_PARTY_SIZE ? i : -1;
+  }
+
+  /** Highlight the lineup slot a dragged member would land in (-1: none). */
+  private hoverSlot(i: number): void {
+    this.slotFrames.forEach((f, j) => f.setStrokeStyle(2, j === i ? COLORS.accent : COLORS.border));
+  }
+
   /**
-   * Drag a roster row up or down to move that member in the party list. The lineup follows the same order
-   * (it's who deploys first in battle). A gold line shows where the row will land.
+   * Drag a roster row: drop it on a lineup slot at the top to put that member in the lineup there, or move it up
+   * or down the list to reorder the roster (a gold line shows where it will land).
    */
   private dragRow(list: ScrollList, row: Phaser.GameObjects.Container, handle: Phaser.GameObjects.Rectangle, id: string): void {
     const step = ROW_H + ROW_GAP;
     let startY = 0;
     let grabY = 0;
+    // Carried up to the lineup slots: a tag with the member's name (the row itself stays inside the list).
+    let ghost: Phaser.GameObjects.Text | null = null;
     let from = 0;
     let target = 0;
+    let slot = -1;
     const marker = this.add.rectangle(0, 0, 308, 3, COLORS.accent).setOrigin(0, 0.5).setVisible(false);
     const where = () => {
       const count = requireState().party.length;
       // The slot nearest the dragged row (rows are laid out from the list's scroll offset).
-      const slot = Math.round(row.y / step) + list.getOffset();
-      return Math.max(0, Math.min(count - 1, slot));
+      const at = Math.round(row.y / step) + list.getOffset();
+      return Math.max(0, Math.min(count - 1, at));
     };
     handle.on('dragstart', (p: Phaser.Input.Pointer) => {
       this.dragging = true;
@@ -71,8 +94,23 @@ export class PartyScene extends Phaser.Scene {
       list.root.bringToTop(row);
       list.root.add(marker);
       handle.setFillStyle(0x2f3956, 1);
+      const c = requireState().party.find((m) => m.id === id);
+      ghost = text(this, p.worldX, p.worldY, `⚔ ${c?.name ?? ''}`, {
+        fontSize: '13px', color: COLORS.gold, backgroundColor: '#14182ae0', padding: { x: 6, y: 3 },
+      }).setOrigin(0.5).setDepth(100).setVisible(false);
     });
     handle.on('drag', (p: Phaser.Input.Pointer) => {
+      slot = this.slotAt(p.worldX, p.worldY);
+      this.hoverSlot(slot);
+      // Above the list: carrying the member toward the lineup slots.
+      const lifted = p.worldY < LIST_Y - 4;
+      ghost?.setPosition(p.worldX, p.worldY).setVisible(lifted);
+      if (lifted) {
+        row.y = startY;
+        marker.setVisible(false);
+        target = from;
+        return;
+      }
       row.y = Math.max(-ROW_H / 2, Math.min(list.h - ROW_H / 2, startY + p.worldY - grabY));
       target = where();
       // The line goes above the slot when moving up, below it when moving down.
@@ -81,16 +119,77 @@ export class PartyScene extends Phaser.Scene {
       marker.setY(Math.max(2, Math.min(list.h - 2, lineY))).setVisible(target !== from);
     });
     handle.on('dragend', () => {
+      ghost?.destroy();
       // Re-render on the next tick: this row's own pointerup may still be on its way.
       this.time.delayedCall(0, () => {
         this.dragging = false;
-        if (target !== from) {
-          moveMember(requireState(), id, target);
+        const state = requireState();
+        if (slot >= 0) {
+          const err = setLineupSlot(state, id, slot);
+          if (err) toast(this, err, COLORS.bad);
+          else markDirty();
+        } else if (target !== from) {
+          moveMember(state, id, target);
           markDirty();
         }
         this.render();
       });
     });
+  }
+
+  /**
+   * The lineup slots: a member in one can be dragged to another slot (they swap) or anywhere off the slots to bench
+   * them. Clicking one selects that member.
+   */
+  private lineupSlots(lineup: Character[]): void {
+    this.slotFrames = [];
+    for (let i = 0; i < MAX_PARTY_SIZE; i++) {
+      const x = SLOT_X + i * (SLOT_W + SLOT_GAP);
+      const c = lineup[i];
+      const frame = this.add.rectangle(x, SLOT_Y, SLOT_W, SLOT_H, c ? COLORS.panelLight : 0x0b0d14, c ? 0.7 : 0.6).setOrigin(0)
+        .setStrokeStyle(2, COLORS.border);
+      this.slotFrames.push(frame);
+      if (!c) {
+        text(this, x + SLOT_W / 2, SLOT_Y + SLOT_H / 2, `${i + 1}\nempty`, { fontSize: '11px', color: COLORS.dim, align: 'center' }).setOrigin(0.5);
+        continue;
+      }
+      const card = this.add.container(x, SLOT_Y);
+      const hit = this.add.rectangle(0, 0, SLOT_W, SLOT_H, 0xffffff, 0.001).setOrigin(0).setInteractive({ useHandCursor: true, draggable: true });
+      if (c.id === this.selected) frame.setFillStyle(0x4a3d1c, 1);
+      card.add(hit);
+      card.add(figure(this, SLOT_W / 2, SLOT_H - 16, 50, c.appearance, c.weaponId, { base: false }));
+      card.add(text(this, 4, 2, `${i + 1}`, { fontSize: '11px', color: COLORS.gold }));
+      card.add(text(this, SLOT_W / 2, SLOT_H - 14, c.name, { fontSize: '10px', color: isInjured(c) ? COLORS.bad : COLORS.text, fixedWidth: SLOT_W - 4, align: 'center' }).setOrigin(0.5, 0));
+      hit.on('pointerup', () => {
+        if (this.dragging) return;
+        this.selected = c.id;
+        this.render();
+      });
+      let target = i;
+      let grabX = 0;
+      let grabY = 0;
+      hit.on('dragstart', (p: Phaser.Input.Pointer) => {
+        this.dragging = true;
+        grabX = p.worldX;
+        grabY = p.worldY;
+        card.setDepth(60);
+      });
+      hit.on('drag', (p: Phaser.Input.Pointer) => {
+        card.setPosition(x + p.worldX - grabX, SLOT_Y + p.worldY - grabY);
+        target = this.slotAt(p.worldX, p.worldY);
+        this.hoverSlot(target);
+      });
+      hit.on('dragend', () => {
+        this.time.delayedCall(0, () => {
+          this.dragging = false;
+          const state = requireState();
+          if (target < 0) benchMember(state, c.id);
+          else if (target !== i) setLineupSlot(state, c.id, target);
+          if (target !== i) markDirty();
+          this.render();
+        });
+      });
+    }
   }
 
   private render(): void {
@@ -99,12 +198,15 @@ export class PartyScene extends Phaser.Scene {
     cityHeader(this, state, 'Manage Party');
     this.tip = new Tooltip(this, 320);
     if (!state.party.some((c) => c.id === this.selected)) this.selected = state.mainId;
-    const lineup = new Set(lineupMembers(state).map((c) => c.id));
+    const members = lineupMembers(state);
+    const lineup = new Set(members.map((c) => c.id));
 
-    // ---- roster ----
+    // ---- lineup slots, then the roster ----
     panel(this, 16, 76, 330, HEIGHT - 148);
-    text(this, 28, 84, `Members ${state.party.length}/${GUILD.maxRoster} · Lineup ${lineup.size}/${MAX_PARTY_SIZE} · drag to reorder`, { fontSize: '13px', color: COLORS.dim });
-    const list = new ScrollList(this, 22, 106, 318, HEIGHT - 184, ROW_GAP);
+    text(this, 28, 84, `Lineup ${lineup.size}/${MAX_PARTY_SIZE} · drag members into the slots`, { fontSize: '13px', color: COLORS.dim });
+    this.lineupSlots(members);
+    text(this, 28, LIST_Y - 20, `Members ${state.party.length}/${GUILD.maxRoster} · drag off the slots to bench`, { fontSize: '13px', color: COLORS.dim });
+    const list = new ScrollList(this, 22, LIST_Y, 318, HEIGHT - 78 - LIST_Y, ROW_GAP);
     const rows = state.party.map((c) => {
       const row = this.add.container(0, 0);
       const sel = c.id === this.selected;
@@ -120,8 +222,9 @@ export class PartyScene extends Phaser.Scene {
       row.add(figure(this, 28, 56, 52, c.appearance, c.weaponId, { base: false }));
       row.add(text(this, 58, 6, `${c.name}  Lv ${c.level} (${adventurerRank(c.level)})`, { fontSize: '15px' }));
       row.add(text(this, 58, 26, memberStatus(state, c), { fontSize: '11px', color: MEMBER_COLOR[c.contract?.type ?? 'main'], wordWrap: { width: 200 } }));
-      if (lineup.has(c.id)) row.add(text(this, 284, 6, '⚔ lineup', { fontSize: '11px', color: COLORS.gold }).setOrigin(1, 0));
-      // A grip: rows can be dragged up and down to reorder the party (and the lineup).
+      if (lineup.has(c.id)) row.add(text(this, 284, 6, `⚔ slot ${members.findIndex((m) => m.id === c.id) + 1}`, { fontSize: '11px', color: COLORS.gold }).setOrigin(1, 0));
+      else if (!canFight(state, c)) row.add(text(this, 284, 6, 'can\'t go', { fontSize: '11px', color: COLORS.bad }).setOrigin(1, 0));
+      // A grip: rows can be dragged into the lineup slots, or up and down to reorder the roster.
       row.add(text(this, 300, ROW_H / 2, '⋮⋮', { fontSize: '14px', color: COLORS.dim }).setOrigin(1, 0.5));
       const pen = Math.round(combatPenalty(c) * 100);
       const obey = isSlave(c) ? ` · Obd ${c.contract.obedience}` : '';
@@ -133,13 +236,13 @@ export class PartyScene extends Phaser.Scene {
     list.setItems(rows, 'keep');
 
     const c = state.party.find((m) => m.id === this.selected)!;
-    this.detail(c, lineup.has(c.id));
+    this.detail(c);
 
     button(this, 16, HEIGHT - 60, 200, 46, `Back to ${GUILD.city}`, () => this.scene.start('City'));
     button(this, 226, HEIGHT - 60, 120, 46, 'Hire', () => this.scene.start('Guild', { tab: 'hall' }), { fontSize: 15 });
   }
 
-  private detail(c: Character, inLineup: boolean): void {
+  private detail(c: Character): void {
     const state = requireState();
     const X = 360;
     const W = WIDTH - X - 16;
@@ -204,11 +307,11 @@ export class PartyScene extends Phaser.Scene {
     const k = c.contract;
     const lines: string[] = [];
     if (!k || k.type === 'main') {
-      lines.push('Your own character: permanent. Bench them to rest in the city while the others go on quests.', 'The party pays your food (set below) and lodging.');
+      lines.push('Your own character: permanent. Drag them off the lineup slots to rest in the city while the others go on quests.', 'The party pays your food (set below) and lodging.');
     } else if (k.type === 'mercenary') {
       lines.push(`Paid ${k.fee} gold up front; takes more from the reward if ${k.cutPct}% of it is worth more.`, 'Leaves after the next quest, win or lose. Finds their own food.');
     } else if (k.type === 'slave') {
-      lines.push(`${k.origin === 'prisoner' ? 'A registered prisoner' : `Bought for ${k.price} gold`}. No wages.`, 'The party pays their food (set below) and lodging.');
+      lines.push(`Market value ${Math.round(slaveValue(c))} gold · property tax ${slaveTax(c)} gold a week (paid on payday). No wages.`, 'The party pays their food (set below) and lodging.');
     } else if (isCompanion(c)) {
       const left = daysLeft(c.contract, state.day);
       lines.push(
@@ -281,44 +384,41 @@ export class PartyScene extends Phaser.Scene {
 
     // ---- actions ----
     const by = HEIGHT - 76;
-    button(this, X + 16, by, 140, 44, inLineup ? 'Bench' : 'Add to lineup', () => {
-      const err = toggleLineup(state, c.id);
-      if (err) return toast(this, err, COLORS.bad);
-      markDirty();
-      this.render();
-    }, { selected: inLineup, fontSize: 14 });
-    button(this, X + 166, by, 130, 44, 'Loadout', () => this.scene.start('CharacterCreator', { mode: 'edit', characterId: c.id }), {
+    button(this, X + 16, by, 130, 44, 'Loadout', () => this.scene.start('CharacterCreator', { mode: 'edit', characterId: c.id }), {
       enabled: k?.type !== 'mercenary', fontSize: 14, selected: free > 0 && k?.type !== 'mercenary',
     });
     if (isCompanion(c)) {
       const left = daysLeft(c.contract, state.day);
-      button(this, X + 306, by, 120, 44, 'Renew', () => this.scene.start('Negotiate', { mode: 'renew', id: c.id }), {
+      button(this, X + 156, by, 120, 44, 'Renew', () => this.scene.start('Negotiate', { mode: 'renew', id: c.id }), {
         enabled: left <= 7, fontSize: 14, selected: left <= 0,
       });
-      button(this, X + 436, by, 128, 44, 'Release', () => confirmDialog(this, `Release ${c.name} from their contract?\nThey go back to the guild hall.`, () => {
-        leaveParty(state, c, c.contract.greed);
+      const cost = releaseCost(c, state.day, state.rank);
+      const why = cost ? `Breaking the contract early costs ${cost} gold\n(the larger of a week's pay and half the rest of the term).` : 'Their term is over: no payout.';
+      button(this, X + 286, by, 128, 44, cost ? `Release\n(${cost}g)` : 'Release', () => confirmDialog(this, `Release ${c.name} from their contract?\n${why}\nThey go back to the guild hall.`, () => {
+        const err = releaseCompanion(state, c.id);
+        if (err) return toast(this, err, COLORS.bad);
         markDirty();
         this.render();
-      }, 'Release'), { fontSize: 14 });
-      if (left > 7) text(this, X + 306, by - 18, 'Renewal opens in the last week.', { fontSize: '11px', color: COLORS.dim });
+      }, 'Release'), { fontSize: cost ? 12 : 14 });
+      if (left > 7) text(this, X + 156, by - 18, 'Renewal opens in the last week.', { fontSize: '11px', color: COLORS.dim });
     } else if (k?.type === 'slave') {
-      button(this, X + 306, by, 140, 44, 'Sell', () => confirmDialog(this, `Sell ${c.name} to the slave market for ${marketBuyPrice(state, c)} gold?`, () => {
+      button(this, X + 156, by, 140, 44, 'Sell', () => confirmDialog(this, `Sell ${c.name} to the slave market for ${marketBuyPrice(state, c)} gold?`, () => {
         const gold = sellSlave(state, c.id, Math.random);
         markDirty();
         this.render();
         toast(this, `Sold for ${gold} gold.`);
       }, 'Sell'), { fontSize: 14 });
       const punished = isSlave(c) && c.contract.punishedDay === state.day;
-      button(this, X + 456, by, 112, 44, 'Punish', () => confirmDialog(this,
+      button(this, X + 306, by, 112, 44, 'Punish', () => confirmDialog(this,
         `Punish ${c.name}?\nObedience +${GUILD.slave.punishObedience}, relationship -${GUILD.slave.punishRelationship}.\nObedience will drift back down while relationship stays below ${GUILD.slave.obedienceFallBelow}.`, () => {
           const err = punishSlave(c, state.day);
           if (err) return toast(this, err, COLORS.bad);
           markDirty();
           this.render();
         }, 'Punish'), { fontSize: 14, enabled: !punished });
-      if (punished) text(this, X + 456, by - 18, 'Punished today.', { fontSize: '11px', color: COLORS.dim });
+      if (punished) text(this, X + 306, by - 18, 'Punished today.', { fontSize: '11px', color: COLORS.dim });
     } else if (k?.type === 'mercenary') {
-      button(this, X + 306, by, 140, 44, 'Dismiss', () => confirmDialog(this, `Dismiss ${c.name}? No refund.`, () => {
+      button(this, X + 156, by, 140, 44, 'Dismiss', () => confirmDialog(this, `Dismiss ${c.name}? No refund.`, () => {
         leaveParty(state, c);
         markDirty();
         this.render();

@@ -136,6 +136,19 @@ export function companionContract(terms: CompanionTerms, day: number, greed: num
 export const daysLeft = (c: CompanionContract, day: number) => c.endDay - day;
 export const isExpired = (c: Character, day: number) => isCompanion(c) && c.contract.endDay <= day;
 
+/**
+ * What it costs to release a companion before their term ends: the larger of releaseMinWeeks weeks of their total
+ * weekly compensation (base pay + expected loot cut at the party's rank + food & lodging, see offerValue) and
+ * releaseShareOfRemaining of the compensation for the days left. Free once the term has ended.
+ */
+export function releaseCost(c: Character & { contract: CompanionContract }, day: number, rank: Rank): number {
+  const left = daysLeft(c.contract, day);
+  if (left <= 0) return 0;
+  const weekly = offerValue(c.contract, rank, c.level);
+  const weeks = Math.max(C.releaseMinWeeks, (C.releaseShareOfRemaining * left) / 7);
+  return round5(weekly * weeks);
+}
+
 // ---- slaves ---------------------------------------------------------------------------------------
 
 /** A slave's price: priceBase + pricePerLevel x level x talent (talentPriceFactor), with +-15% luck. */

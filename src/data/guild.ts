@@ -109,6 +109,9 @@ export interface GuildConfig {
     relationshipUnpaid: number;
     renewalDiscountAtMax: number;
     graceDays: number;
+    /** Releasing a companion early pays them the larger of releaseMinWeeks of their compensation and releaseShareOfRemaining of what the rest of the term is worth. */
+    releaseMinWeeks: number;
+    releaseShareOfRemaining: number;
   };
   slave: {
     priceBase: number;
@@ -310,7 +313,7 @@ export function parseGuildConfig(data: unknown): GuildConfig {
     mercenary: numbers(d.mercenary, 'mercenary', ['feePerLevel', 'cutBase', 'cutPerLevel']),
     companion: {
       ...numbers<Omit<GuildConfig['companion'], 'terms' | 'termDemand' | 'expectedWeeklyLoot' | 'relationshipUnpaid'>>(c, 'companion',
-        ['wageBase', 'wagePerLevel', 'patience', 'startingRelationship', 'relationshipPerQuest', 'renewalDiscountAtMax', 'graceDays']),
+        ['wageBase', 'wagePerLevel', 'patience', 'startingRelationship', 'relationshipPerQuest', 'renewalDiscountAtMax', 'graceDays', 'releaseMinWeeks', 'releaseShareOfRemaining']),
       relationshipUnpaid: num(c.relationshipUnpaid, 'companion.relationshipUnpaid', -100, 0),
       terms,
       termDemand: termDemand as Record<string, number>,

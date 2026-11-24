@@ -3,7 +3,7 @@ import Phaser from 'phaser';
 import { GUILD } from '../data/guild';
 import type { Character, GameState, Rank } from '../data/types';
 import { boarders, dailyUpkeep, foodCost, isPayday, lodgingCost, weeklyTaxes, weeklyWages } from '../game/city';
-import { daysLeft, isCompanion } from '../game/contracts';
+import { daysLeft, isCompanion, slaveTax, slaveValue } from '../game/contracts';
 import { nextRank, rankThreshold } from '../game/guild';
 import { session } from '../game/session';
 import { COLORS, WIDTH, panel, text } from './widgets';
@@ -29,7 +29,7 @@ export function memberStatus(state: GameState, c: Character): string {
     const left = daysLeft(c.contract, state.day);
     return `Companion · ${left > 0 ? `${left} day${left === 1 ? '' : 's'} left` : 'contract ended!'}`;
   }
-  if (k.type === 'slave') return `Slave · ${k.origin === 'prisoner' ? 'former prisoner' : 'bought'}`;
+  if (k.type === 'slave') return `Slave · value ${Math.round(slaveValue(c))}g · tax ${slaveTax(c)}g/wk`;
   return 'Leader · permanent';
 }
 

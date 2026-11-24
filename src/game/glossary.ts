@@ -133,7 +133,7 @@ export function glossaryEntries(): GlossaryEntry[] {
 
   // ---- Party members ----------------------------------------------------------------------------
   add('Party members', 'Lineup and roster',
-    `The party holds up to ${G.maxRoster} members, and up to ${MAX_PARTY_SIZE} go on a quest: the lineup, set in Manage Party.\n\n`
+    `The party holds up to ${G.maxRoster} members, and up to ${MAX_PARTY_SIZE} go on a quest: the lineup. In Manage Party, drag members into the ${MAX_PARTY_SIZE} lineup slots at the top; the slot order is who deploys first. Drag a member out of the slots to bench them.\n\n`
     + `Anyone can be benched, the main character too, as long as one member goes. Benched members stay in the city and follow their schedule, so you can rest an injured leader while the others work.`);
   add('Party members', 'Mercenaries',
     `A mercenary goes on one quest, win or lose, then leaves. They're paid the larger of two amounts: their fee (${G.mercenary.feePerLevel} × level, paid up front) or their cut (${G.mercenary.cutBase} + ${G.mercenary.cutPerLevel} × level % of a won quest's reward).\n\n`
@@ -145,7 +145,8 @@ export function glossaryEntries(): GlossaryEntry[] {
     `An offer close to what a candidate wants gets a counter-offer; a low one offends them. Each rejected offer uses up patience (counters cost 1, insults 2). Once it runs out they walk away and won't talk to you for a week.`);
   add('Party members', 'Contracts and renewal',
     `Contracts run ${K.terms.join(', ')} weeks. Base pay is due every payday. When a contract ends, the companion sits out of quests and you have ${K.graceDays} days to renew it in Manage Party before they leave.\n\n`
-    + `A good relationship lowers their demands on renewal, by up to ${pct(K.renewalDiscountAtMax)} at 100. Walking out of a renewal ends the contract on the spot.`);
+    + `A good relationship lowers their demands on renewal, by up to ${pct(K.renewalDiscountAtMax)} at 100. Walking out of a renewal ends the contract on the spot.\n\n`
+    + `Releasing a companion before their term ends breaks the contract: you pay them the larger of ${K.releaseMinWeeks} week${K.releaseMinWeeks === 1 ? '' : 's'} of their total compensation (base pay, loot cut and food & lodging) and ${pct(K.releaseShareOfRemaining)} of what the rest of the term is worth. Once the term has ended, releasing them is free.`);
   add('Party members', 'Relationship',
     `Companions and slaves have a relationship from 0 to 100. It rises by ${K.relationshipPerQuest} for every quest completed together, and moves with food and lodging, low Morale and missed pay.\n\n`
     + `Unpaid companions lose ${-K.relationshipUnpaid} relationship each payday and quit at 0. Slaves' relationship drives their Obedience.`);

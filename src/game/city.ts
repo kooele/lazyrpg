@@ -6,7 +6,7 @@ import { RANKS, type Character, type GameState, type Offer, type Quest, type Ran
 import { dangerRating, makeQuest, postQuests } from './board';
 import { grantXp, type Rng } from './character';
 import {
-  bondOf, bounty, canFight, registrationFee, slaveTax, changeRelationship, isCompanion, isExpired, isHoused, isSlave, leaveParty, slaveContract, slavePrice, talentPriceFactor,
+  bondOf, bounty, canFight, registrationFee, slaveTax, changeRelationship, isCompanion, isExpired, isHoused, isSlave, leaveParty, releaseCost, slaveContract, slavePrice, talentPriceFactor,
 } from './contracts';
 import {
   ACTIVITY_INFO, FOOD_EXPECT_TEXT, QUALITY_TEXT, activityOf, changeHealth, changeMorale, expectedQuality, foodOf, foodRelationship, healthLoss, healthOf,
@@ -63,15 +63,15 @@ export const mainCharacter = (state: GameState) => state.party.find((c) => c.id 
 // ---- lineup -------------------------------------------------------------------------------------------
 
 /**
- * Members going on the next quest, in party order (drag members in Manage Party to reorder). Anyone can be benched,
- * the main character too: the others can go on quests without them.
+ * Members going on the next quest, in lineup order (the five slots in Manage Party: who deploys first in battle).
+ * Anyone can be benched, the main character too: the others can go on quests without them.
  */
 export function lineupMembers(state: GameState): Character[] {
-  const picked = new Set(state.lineup);
-  return state.party.filter((c) => picked.has(c.id) && canFight(state, c)).slice(0, MAX_PARTY_SIZE);
+  const byId = new Map(state.party.map((c) => [c.id, c]));
+  return state.lineup.map((id) => byId.get(id)).filter((c): c is Character => !!c && canFight(state, c)).slice(0, MAX_PARTY_SIZE);
 }
 
-/** Put a member in or out of the lineup. Returns an error message if it can't be done. */
+/** Put a member in or out of the lineup (joining at the end). Returns an error message if it can't be done. */
 export function toggleLineup(state: GameState, id: string): string | null {
   if (state.lineup.includes(id)) {
     state.lineup = state.lineup.filter((x) => x !== id);
@@ -86,25 +86,63 @@ export function toggleLineup(state: GameState, id: string): string | null {
   return null;
 }
 
-/** Move a party member to position `to` in the party list (which also sets the lineup's order). */
+/**
+ * Drop a member into lineup slot `slot` (0-based). A member already in the lineup moves there (swapping with whoever
+ * held it); a benched one takes the slot, and whoever held it goes to the bench. An empty slot past the end just
+ * appends. Returns an error message if it can't be done.
+ */
+export function setLineupSlot(state: GameState, id: string, slot: number): string | null {
+  const c = state.party.find((m) => m.id === id);
+  if (!c) return 'Not in the party.';
+  if (!canFight(state, c)) return `${c.name}'s contract has run out. Renew it first.`;
+  tidyLineup(state);
+  const line = state.lineup;
+  const at = Math.max(0, Math.min(MAX_PARTY_SIZE - 1, slot));
+  const from = line.indexOf(id);
+  if (from >= 0) {
+    // Move within the lineup: swap with the slot's holder, or move to the end if the slot is empty.
+    if (at < line.length) [line[from], line[at]] = [line[at], line[from]];
+    else line.push(...line.splice(from, 1));
+  } else if (at < line.length) line[at] = id;
+  else line.push(id);
+  return null;
+}
+
+/** Bench a member: take them out of the lineup. */
+export function benchMember(state: GameState, id: string): void {
+  state.lineup = state.lineup.filter((x) => x !== id);
+}
+
+/** Move a party member to position `to` in the party list (the roster order; the lineup keeps its own order). */
 export function moveMember(state: GameState, id: string, to: number): void {
   const from = state.party.findIndex((c) => c.id === id);
   if (from < 0) return;
   const [c] = state.party.splice(from, 1);
   state.party.splice(Math.max(0, Math.min(state.party.length, to)), 0, c);
-  tidyLineup(state);
 }
 
-/** Drop lineup entries for members who left or can't fight (lapsed contracts), and keep it in party order. */
+/** Drop lineup entries for members who left or can't fight (lapsed contracts), keeping the lineup's order. */
 export function tidyLineup(state: GameState): void {
   state.lineup = lineupMembers(state).map((c) => c.id);
+}
+
+/** Release a companion from their contract early, paying them releaseCost. Returns an error message, or null. */
+export function releaseCompanion(state: GameState, id: string): string | null {
+  const c = state.party.find((m) => m.id === id);
+  if (!c || !isCompanion(c)) return 'Only companions can be released.';
+  const cost = releaseCost(c, state.day, state.rank);
+  if (state.gold < cost) return `Not enough gold to buy out ${c.name}'s contract (${cost} needed).`;
+  state.gold -= cost;
+  leaveParty(state, c, c.contract.greed);
+  note(state, cost ? `Released ${c.name} from their contract early: paid ${cost} gold.` : `${c.name} was released and went back to the guild hall.`);
+  return null;
 }
 
 /** Why the party can't set out on its quest right now (null if it can). */
 export function departBlock(state: GameState): string | null {
   if (!state.quest) return 'Accept a quest at the Adventurer Guild first.';
   if (state.lastQuestDay === state.day) return 'One quest a day: the party is back from a quest today. End the day first.';
-  if (lineupMembers(state).length === 0) return 'Nobody is in the lineup. Pick who goes in Manage Party.';
+  if (lineupMembers(state).length === 0) return 'No adventurers in the lineup. Pick who goes in Manage Party.';
   return null;
 }
 

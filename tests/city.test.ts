@@ -6,12 +6,12 @@ import { createCharacter, deriveStats, makeRng } from '../src/game/character';
 import { makeEnemy, makeUnit } from '../src/game/battle';
 import {
   acceptQuest, advanceDay, advanceDays, askingPrice, buyDrinks, isShipmentDay, marketBuyPrice, marketDay, sellSlave, turnInPrisoner, buyResidence, buySlave, makeQuest, sellResidence, endDay, setLodging, boarders, lodgingCost, residents, canTakeQuest, dailyUpkeep, foodCost, departBlock, lineupMembers, mainCharacter, moveMember,
-  killBounty, newCampaign, questMoraleLoss, questXpPool, questXpShares, registerPrisoner, resolveQuest, rewardShares, toggleLineup, weeklyTaxes,
+  killBounty, newCampaign, questMoraleLoss, questXpPool, questXpShares, registerPrisoner, resolveQuest, rewardShares, toggleLineup, weeklyTaxes, setLineupSlot, benchMember, releaseCompanion,
 } from '../src/game/city';
 import { activityOf, lodgingOf, combatPenalty, expectedQuality, foodRelationship, healthOf, isInjured, moraleOf, moralePenalty, obediencePenalty } from '../src/game/condition';
 import { parseSave, serializeSave } from '../src/game/save';
 import {
-  companionContract, companionDemand, evaluateOffer, foodLodgingWeekly, joinParty, mercenaryRates, offerValue, openingTerms, punishSlave, slaveContract, bounty, registrationFee, slaveTax, slaveValue, leaveParty,
+  companionContract, companionDemand, evaluateOffer, foodLodgingWeekly, joinParty, mercenaryRates, offerValue, openingTerms, punishSlave, slaveContract, bounty, registrationFee, slaveTax, slaveValue, leaveParty, isCompanion, releaseCost,
 } from '../src/game/contracts';
 import { DEMO_STAGES, newDemo, resolveDemoBattle } from '../src/game/demo';
 import { dangerRating, expectedEnemies, fairReward, payRatio, questRenown, strength, totalThreat, usualCount } from '../src/game/board';
@@ -1139,12 +1139,12 @@ describe('contracts', () => {
     const s = start();
     toggleLineup(s, s.mainId);
     acceptQuest(s, s.guild.board.find((x) => canTakeQuest(s, x))!.id);
-    expect(departBlock(s)).toMatch(/Nobody is in the lineup/);
+    expect(departBlock(s)).toMatch(/No adventurers in the lineup/);
     expect(toggleLineup(s, s.mainId)).toBeNull();
     expect(departBlock(s)).toBeNull();
   });
 
-  it('moving a member reorders the party and the lineup with it', () => {
+  it('moving a member reorders the party but not the lineup', () => {
     const s = start();
     const a = companion(s);
     const b = companion(s);
@@ -1154,10 +1154,52 @@ describe('contracts', () => {
     expect(lineupMembers(s).map((m) => m.id)).toEqual([s.mainId, a.id, b.id]);
     moveMember(s, b.id, 0);
     expect(s.party.map((m) => m.id)).toEqual([b.id, s.mainId, a.id]);
-    expect(lineupMembers(s).map((m) => m.id)).toEqual([b.id, s.mainId, a.id]);
-    expect(s.lineup).toEqual([b.id, s.mainId, a.id]);
+    expect(lineupMembers(s).map((m) => m.id)).toEqual([s.mainId, a.id, b.id]);
     moveMember(s, b.id, 99);
     expect(s.party.map((m) => m.id)).toEqual([s.mainId, a.id, b.id]);
+  });
+
+  it('dragging members into lineup slots places, swaps, replaces and benches them', () => {
+    const s = start();
+    const a = companion(s);
+    const b = companion(s);
+    for (const m of [a, b]) if (m.contract?.type === 'companion') m.contract.endDay = 100;
+    // An empty slot past the end appends.
+    expect(setLineupSlot(s, a.id, 4)).toBeNull();
+    expect(s.lineup).toEqual([s.mainId, a.id]);
+    // A benched member dropped on a filled slot takes it; the holder is benched.
+    expect(setLineupSlot(s, b.id, 0)).toBeNull();
+    expect(s.lineup).toEqual([b.id, a.id]);
+    // A lineup member dropped on another filled slot swaps with it.
+    expect(setLineupSlot(s, a.id, 0)).toBeNull();
+    expect(lineupMembers(s).map((m) => m.id)).toEqual([a.id, b.id]);
+    benchMember(s, a.id);
+    expect(s.lineup).toEqual([b.id]);
+    // Lapsed contracts can't be placed.
+    if (a.contract?.type === 'companion') a.contract.endDay = s.day;
+    expect(setLineupSlot(s, a.id, 1)).toMatch(/run out/);
+  });
+
+  it('releasing a companion early pays the larger of a week and half the rest of the term', () => {
+    const s = start();
+    const c = companion(s);
+    if (!isCompanion(c)) throw new Error('not a companion');
+    s.gold = 100000;
+    const weekly = offerValue(c.contract, s.rank, c.level);
+    c.contract.endDay = s.day + 56;
+    expect(releaseCost(c, s.day, s.rank)).toBe(Math.max(0, Math.round((weekly * 4) / 5) * 5));
+    c.contract.endDay = s.day + 7;
+    expect(releaseCost(c, s.day, s.rank)).toBe(Math.max(0, Math.round(weekly / 5) * 5));
+    c.contract.endDay = s.day;
+    expect(releaseCost(c, s.day, s.rank)).toBe(0);
+    c.contract.endDay = s.day + 28;
+    const cost = releaseCost(c, s.day, s.rank);
+    s.gold = cost - 1;
+    expect(releaseCompanion(s, c.id)).toMatch(/Not enough gold/);
+    s.gold = cost;
+    expect(releaseCompanion(s, c.id)).toBeNull();
+    expect(s.gold).toBe(0);
+    expect(s.party.some((m) => m.id === c.id)).toBe(false);
   });
 });
 
