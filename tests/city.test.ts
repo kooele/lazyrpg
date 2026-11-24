@@ -382,8 +382,8 @@ describe('contracts', () => {
   it('a loot cut is worth more to a candidate when the party is higher ranked', () => {
     const t = { basePay: 0, lootPct: 10, foodLodging: false, termWeeks: 4 };
     expect(offerValue(t, 'B', 3)).toBeGreaterThan(offerValue(t, 'D', 3));
-    // Food & lodging are worth what the food and night their rank expects would cost: D poor food outside ... A luxury food at the Gilded Crown.
-    expect([1, 6, 11, 16, 21].map(foodLodgingWeekly)).toEqual([2 * 7, (6 + 9) * 7, (12 + 18) * 7, (20 + 30) * 7, (20 + 30) * 7]);
+    // Food & lodging are worth what the food and night their rank expects would cost: D/C common food at the Sleeping Griffin ... S luxury food at the Gilded Crown.
+    expect([1, 6, 11, 16, 21].map(foodLodgingWeekly)).toEqual([(6 + 9) * 7, (6 + 9) * 7, (12 + 18) * 7, (12 + 18) * 7, (20 + 30) * 7]);
     const fl = { basePay: 0, lootPct: 0, foodLodging: true, termWeeks: 4 };
     expect(offerValue(fl, 'D', 11)).toBe(foodLodgingWeekly(11));
   });
@@ -494,7 +494,7 @@ describe('contracts', () => {
     expect(s.day).toBe(4);
   });
 
-  it('expectations by rank: D is fine outside, C wants an inn, B a high-end inn, A and S a luxury inn', () => {
+  it('expectations by rank: D and C want an inn, B and A a high-end inn, S a luxury inn', () => {
     const s = start();
     const c = companion(s);
     if (c.contract?.type !== 'companion') throw new Error('not a companion');
@@ -503,7 +503,7 @@ describe('contracts', () => {
     s.gold = 100000;
     const B = GUILD.lodging.relationshipBelowPerStep;
     const A = GUILD.lodging.relationshipAbove;
-    expect([3, 8, 12, 18, 22].map((level) => expectedQuality({ ...c, level }))).toEqual([0, 1, 2, 3, 3]);
+    expect([3, 8, 12, 18, 22].map((level) => expectedQuality({ ...c, level }))).toEqual([1, 1, 2, 2, 3]);
     const night = (level: number, go: () => void) => {
       c.level = level;
       neutralFood(s);
@@ -511,15 +511,16 @@ describe('contracts', () => {
       go();
       return (c.contract as { relationship: number }).relationship - 50;
     };
-    expect(night(3, () => nightsAt(s, 'outside', 1, makeRng(1)))).toBe(0);
-    expect(night(8, () => nightsAt(s, 'outside', 1, makeRng(1)))).toBe(-B);
+    expect(night(3, () => nightsAt(s, 'outside', 1, makeRng(1)))).toBe(-B);
+    expect(night(3, () => nightsAt(s, 'standard', 1, makeRng(1)))).toBe(0);
     expect(night(8, () => nightsAt(s, 'standard', 1, makeRng(1)))).toBe(0);
     expect(night(12, () => nightsAt(s, 'standard', 1, makeRng(1)))).toBe(-B);
     expect(night(12, () => nightsAt(s, 'highEnd', 1, makeRng(1)))).toBe(0);
-    expect(night(18, () => nightsAt(s, 'highEnd', 1, makeRng(1)))).toBe(-B);
+    expect(night(18, () => nightsAt(s, 'highEnd', 1, makeRng(1)))).toBe(0);
+    expect(night(22, () => nightsAt(s, 'highEnd', 1, makeRng(1)))).toBe(-B);
     expect(night(22, () => nightsAt(s, 'outside', 1, makeRng(1)))).toBe(-3 * B);
-    expect(night(18, () => nightsAt(s, 'luxury', 1, makeRng(1)))).toBe(0);
-    expect(night(12, () => nightsAt(s, 'luxury', 1, makeRng(1)))).toBe(A);
+    expect(night(22, () => nightsAt(s, 'luxury', 1, makeRng(1)))).toBe(0);
+    expect(night(18, () => nightsAt(s, 'luxury', 1, makeRng(1)))).toBe(A);
   });
 
   it('residences: bought per ring, free nights that count like that ring\'s inn', () => {
@@ -763,14 +764,14 @@ describe('contracts', () => {
     s.gold = 1000;
     s.schedule[c.id] = 'training';
     c.morale = C.lowMorale - 1;
-    nightsAt(s, 'outside', 1, makeRng(1));
+    nightsAt(s, 'standard', 1, makeRng(1));
     expect(c.contract.relationship).toBe(50 - C.lowMoraleRelationshipPerDay);
     c.morale = C.lowMorale;
-    nightsAt(s, 'outside', 1, makeRng(1));
+    nightsAt(s, 'standard', 1, makeRng(1));
     expect(c.contract.relationship).toBe(50 - C.lowMoraleRelationshipPerDay);
     c.morale = 0;
     mainCharacter(s).morale = 0;
-    const msgs = nightsAt(s, 'outside', 1, makeRng(1));
+    const msgs = nightsAt(s, 'standard', 1, makeRng(1));
     expect(s.party.some((m) => m.id === c.id)).toBe(false);
     expect(s.guild.pool.some((a) => a.character.id === c.id)).toBe(true);
     expect(msgs.some((m) => /left the party/.test(m))).toBe(true);
@@ -1032,7 +1033,7 @@ describe('contracts', () => {
     const s = start();
     s.gold = 10000;
     const a = s.guild.pool[0];
-    a.character.level = 2; // D rank: fine sleeping outside, so nights don't move relationship
+    a.character.level = 2; // D rank: the Sleeping Griffin is what they expect, so nights there don't move relationship
     s.market.slaves.push({ character: a.character, price: 10 });
     expect(buySlave(s, a.character.id, makeRng(1))).toBeNull();
     const slave = s.party.at(-1)!;
@@ -1042,17 +1043,17 @@ describe('contracts', () => {
     slave.morale = 100;
     k.obedience = 50;
     k.relationship = GUILD.slave.obedienceRiseFrom;
-    nightsAt(s, 'outside', 1, makeRng(1));
+    nightsAt(s, 'standard', 1, makeRng(1));
     expect(k.obedience).toBe(51);
     k.relationship = 50; // in between: steady
-    nightsAt(s, 'outside', 1, makeRng(1));
+    nightsAt(s, 'standard', 1, makeRng(1));
     expect(k.obedience).toBe(51);
     // Punishing: +20 Obedience, -20 relationship (to 30), once a day...
     expect(punishSlave(slave, s.day)).toBeNull();
     expect([k.obedience, k.relationship]).toEqual([71, 30]);
     expect(punishSlave(slave, s.day)).toMatch(/already/);
     // ...and with relationship below 40, Obedience drains away again.
-    for (let i = 0; i < 25; i++) nightsAt(s, 'outside', 1, makeRng(1));
+    for (let i = 0; i < 25; i++) nightsAt(s, 'standard', 1, makeRng(1));
     expect(k.obedience).toBe(46);
     expect(k.relationship).toBe(30);
   });

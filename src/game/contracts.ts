@@ -53,8 +53,8 @@ export function mercenaryRates(level: number, greed: number, talent = 1): { fee:
 
 /**
  * What food and lodging are worth per week to an adventurer of `level`: what the party would pay to give them the
- * food and the night their rank expects (lodging.expectedQuality): D-rank poor food outside, C-rank common food at
- * the Sleeping Griffin, B-rank fine food at the Silver Lantern, A and S-rank luxury food at the Gilded Crown.
+ * food and the night their rank expects (lodging.expectedQuality): D and C-rank common food at the Sleeping Griffin,
+ * B and A-rank fine food at the Silver Lantern, S-rank luxury food at the Gilded Crown.
  */
 export function foodLodgingWeekly(level: number): number {
   const q = GUILD.lodging.expectedQuality[adventurerRank(level)];
