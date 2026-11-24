@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { figureSvg, lookModel } from '../art/unitArt';
 import { DEFAULT_WEAPON, WEAPONS } from '../data/content';
 import { STAT_INFO, type Appearance, type Character, type Look } from '../data/types';
+import { loadGraphics, uiScaleFor, type ResolutionSetting } from '../game/settings';
 import { TALENT_COLORS, overallTalent, overallTalentLabel, talentOf, talentStats } from '../game/talent';
 
 export const WIDTH = 960;
@@ -9,18 +10,22 @@ export const HEIGHT = 640;
 export const FONT = '"Trebuchet MS", "Segoe UI", sans-serif';
 
 /**
- * The game is laid out in a fixed 960x640 coordinate space but rendered at the
- * real pixel size of the player's screen (up to 4x = 4K) so it stays sharp.
- * Every scene zooms its camera by this factor (see setupCamera) and text is
- * rasterized at the same resolution.
+ * The game is laid out in a fixed 960x640 coordinate space but rendered at more real pixels so it stays sharp
+ * on high-resolution screens. How many is the player's Resolution setting (src/game/settings.ts), read once at
+ * startup. Every scene zooms its camera by this factor (see setupCamera) and text is rasterized at the same
+ * resolution.
  */
+export const ACTIVE_RESOLUTION: ResolutionSetting = loadGraphics().resolution;
+
 function computeUiScale(): number {
   if (typeof window === 'undefined') return 1;
-  const dpr = window.devicePixelRatio || 1;
-  const w = Math.max(window.screen?.width ?? 0, window.innerWidth) * dpr;
-  const h = Math.max(window.screen?.height ?? 0, window.innerHeight) * dpr;
-  const scale = Math.min(w / WIDTH, h / HEIGHT);
-  return Math.max(1, Math.min(4, Math.round(scale * 4) / 4));
+  return uiScaleFor(ACTIVE_RESOLUTION, {
+    devicePixelRatio: window.devicePixelRatio || 1,
+    windowWidth: window.innerWidth,
+    windowHeight: window.innerHeight,
+    screenWidth: window.screen?.width ?? 0,
+    screenHeight: window.screen?.height ?? 0,
+  });
 }
 export const UI_SCALE = computeUiScale();
 
