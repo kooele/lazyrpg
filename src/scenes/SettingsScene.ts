@@ -18,7 +18,12 @@ export class SettingsScene extends Phaser.Scene {
   private settings: GraphicsSettings = loadGraphics();
   private stored = true;
   private fpsText?: Phaser.GameObjects.Text;
-  private fpsTimer = 0;
+  /**
+   * Frames rendered since `fpsSince` (a performance.now() time). Counted here because Phaser's
+   * `loop.actualFps` counts every browser animation frame, including those the frame cap skips.
+   */
+  private fpsFrames = 0;
+  private fpsSince = 0;
 
   constructor() {
     super('Settings');
@@ -35,11 +40,15 @@ export class SettingsScene extends Phaser.Scene {
     this.render();
   }
 
-  update(_time: number, delta: number): void {
-    this.fpsTimer += delta;
-    if (this.fpsText && this.fpsTimer >= 500) {
-      this.fpsTimer = 0;
-      this.fpsText.setText(`Running at ${Math.round(this.game.loop.actualFps)} FPS`);
+  update(): void {
+    // update() runs once per frame the game renders, so the cap is reflected here.
+    this.fpsFrames++;
+    const now = performance.now();
+    const elapsed = now - this.fpsSince;
+    if (elapsed >= 1000) {
+      this.fpsText?.setText(`Running at ${Math.round((this.fpsFrames * 1000) / elapsed)} FPS`);
+      this.fpsFrames = 0;
+      this.fpsSince = now;
     }
   }
 
@@ -97,7 +106,9 @@ export class SettingsScene extends Phaser.Scene {
     y = 306;
     panel(this, X, y, W, 156);
     text(this, X + 16, y + 12, 'Frame rate cap', { fontSize: '20px', color: COLORS.gold });
-    this.fpsText = text(this, X + 180, y + 17, `Running at ${Math.round(this.game.loop.actualFps)} FPS`, { fontSize: '14px', color: COLORS.dim });
+    this.fpsText = text(this, X + 180, y + 17, 'Measuring FPS…', { fontSize: '14px', color: COLORS.dim });
+    this.fpsFrames = 0;
+    this.fpsSince = performance.now();
     const m = FRAME_CAP_OPTIONS.length;
     const fw = (W - 32 - (m - 1) * GAP) / m;
     FRAME_CAP_OPTIONS.forEach((o, i) => {
