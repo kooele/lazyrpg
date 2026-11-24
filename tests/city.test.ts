@@ -1168,6 +1168,24 @@ describe('contracts', () => {
     expect(activityOf(s, c)).toBe('training');
   });
 
+  it('on a multi-day quest, members at home pay for and feel their city lodging; the questers sleep on the road for free', () => {
+    const s = start();
+    const home = companion(s);
+    if (!isCompanion(home)) throw new Error('not a companion');
+    Object.assign(home.contract, { foodLodging: true, endDay: 100, relationship: 50 });
+    home.level = 7; // expects an inn
+    home.morale = 100;
+    neutralFood(s);
+    setLodging(s, s.mainId, 'luxury');
+    setLodging(s, home.id, 'outside');
+    s.gold = 1000;
+    const food = foodCost(s);
+    expect(lodgingCost(s, 'road', [s.mainId])).toBe(GUILD.lodging.stablesPerPerson);
+    advanceDay(s, makeRng(1), 'road', [s.mainId]);
+    expect(s.gold).toBe(1000 - food - GUILD.lodging.stablesPerPerson);
+    expect(home.contract.relationship).toBe(50 - GUILD.lodging.relationshipBelowPerStep);
+  });
+
   it('a set schedule stays, except Recover goes back to Day Off once Health is full', () => {
     const s = start();
     const c = companion(s);

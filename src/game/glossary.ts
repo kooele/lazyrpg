@@ -43,7 +43,7 @@ export function glossaryEntries(): GlossaryEntry[] {
   // ---- City life -------------------------------------------------------------------------------
   add('City life', 'Days and End Day',
     `Time only passes when you press End Day. Everyone the party houses eats and sleeps where you lodge them, and the schedule runs for members who didn't quest that day.\n\n`
-    + `You can go on one quest a day: coming back from one doesn't end the day, but the next one has to wait until tomorrow. Multi-day quests spend the nights before the last one on the road (free lodging, food still paid).\n\n`
+    + `You can go on one quest a day: coming back from one doesn't end the day, but the next one has to wait until tomorrow. Multi-day quests spend the nights before the last one on the road: free lodging for the members on the quest, food still paid. Members who stayed home live those days as usual, paying for and sleeping where they lodge.\n\n`
     + `Every 7th day is payday: companion wages and slave taxes are due.`);
   add('City life', 'Health (not battle HP)',
     `Health is a member's condition between battles, out of 100. It isn't their HP in battle.\n\n`

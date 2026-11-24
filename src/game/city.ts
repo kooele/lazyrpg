@@ -410,12 +410,22 @@ export function lodgingPrice(where: CityLodging): number {
 }
 
 /**
- * Lodging for one night. On the road (quests) it's free (food is still paid); in the city each housed member
- * pays for where they lodge (Manage Party).
+ * Housed members who spend the night in the city (where they lodge, set in Manage Party). On a 'city' night that's
+ * all of them. On a 'road' night (a multi-day quest) it's those not out on the quest (`away`); with no `away` list
+ * the whole party is on the road.
  */
-export function lodgingCost(state: GameState, night: 'road' | 'city' = 'road'): number {
-  if (night === 'road') return 0;
-  return boarders(state).reduce((s, c) => s + lodgingPrice(lodgingOf(state, c)), 0);
+export function cityBoarders(state: GameState, night: 'road' | 'city' = 'road', away?: string[]): Character[] {
+  if (night === 'road' && !away) return [];
+  const out = new Set(night === 'road' ? away : []);
+  return boarders(state).filter((c) => !out.has(c.id));
+}
+
+/**
+ * Lodging for one night: each housed member in the city pays for where they lodge (Manage Party); nights on the
+ * road (quests) are free (food is still paid). See cityBoarders.
+ */
+export function lodgingCost(state: GameState, night: 'road' | 'city' = 'road', away?: string[]): number {
+  return cityBoarders(state, night, away).reduce((s, c) => s + lodgingPrice(lodgingOf(state, c)), 0);
 }
 
 /** A day's food for everyone the party feeds, each at their own quality. */
@@ -424,7 +434,7 @@ export function foodCost(state: GameState): number {
 }
 
 /** Food and lodging for one day and night. */
-export const dailyUpkeep = (state: GameState, night: 'road' | 'city' = 'road') => lodgingCost(state, night) + foodCost(state);
+export const dailyUpkeep = (state: GameState, night: 'road' | 'city' = 'road', away?: string[]) => lodgingCost(state, night, away) + foodCost(state);
 
 /** Members lodging at a residence. */
 export function residents(state: GameState, ring: Ring): Character[] {
@@ -572,19 +582,20 @@ export function advanceDays(state: GameState, days: number, rng: Rng): string[] 
 }
 
 /**
- * End the day with a night on the road (quests) or in the city (each housed member where they lodge), then start
- * the next one: the day's schedule and recovery, upkeep, housed companions' and slaves' feelings about their food and
- * where they slept, payday, contracts, the rest of the guild, the board and the market.
- * `away`: members out on a quest (they don't follow their schedule).
+ * End the day with a night in the city (each housed member where they lodge) or on the road (a multi-day quest),
+ * then start the next one: the day's schedule and recovery, upkeep, housed companions' and slaves' feelings about
+ * their food and where they slept, payday, contracts, the rest of the guild, the board and the market.
+ * `away`: on a road night, the members out on the quest: they sleep on the road for free and don't follow their
+ * schedule, while everyone else lives a normal city day and night. Without it, the whole party is on the road.
  */
-export function advanceDay(state: GameState, rng: Rng, night: 'road' | 'city' = 'road', away: string[] = []): string[] {
+export function advanceDay(state: GameState, rng: Rng, night: 'road' | 'city' = 'road', away?: string[]): string[] {
   const out: string[] = [];
   const say = (t: string) => out.push(note(state, t));
-  for (const t of runSchedule(state, away)) say(t);
+  for (const t of runSchedule(state, away ?? [])) say(t);
   state.day += 1;
 
   // Food and lodging.
-  const upkeep = dailyUpkeep(state, night);
+  const upkeep = dailyUpkeep(state, night, away);
   if (upkeep > state.gold) {
     say(`Not enough gold for food and lodging (${upkeep} needed). Your companions and slaves are unhappy.`);
     state.gold = 0;
@@ -601,11 +612,11 @@ export function advanceDay(state: GameState, rng: Rng, night: 'road' | 'city' = 
       meals.push(`${c.name} ${d > 0 ? '+' : ''}${d} (expects ${FOOD_EXPECT_TEXT[expectedQuality(c)]})`);
     }
     if (meals.length) say(`Food. Relationship: ${meals.join(', ')}.`);
-    // Housed companions and slaves compare where they slept with what someone of their rank expects.
-    if (night === 'city') {
+    // Housed companions and slaves who slept in the city compare it with what someone of their rank expects.
+    {
       const moods: string[] = [];
-      for (const c of state.party) {
-        if (!bondOf(c) || !isHoused(c)) continue;
+      for (const c of cityBoarders(state, night, away)) {
+        if (!bondOf(c)) continue;
         const where = lodgingOf(state, c);
         const d = lodgingRelationship(c, where);
         if (!d) continue;
