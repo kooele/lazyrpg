@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { figureSvg, lookModel } from '../art/unitArt';
 import { DEFAULT_WEAPON, WEAPONS } from '../data/content';
 import { STAT_INFO, type Appearance, type Character, type Look } from '../data/types';
-import { loadGraphics, uiScaleFor, type ResolutionSetting } from '../game/settings';
+import { STARTUP_GRAPHICS, uiScaleFor } from '../game/settings';
 import { TALENT_COLORS, overallTalent, overallTalentLabel, talentOf, talentStats } from '../game/talent';
 
 export const WIDTH = 960;
@@ -15,11 +15,9 @@ export const FONT = '"Trebuchet MS", "Segoe UI", sans-serif';
  * startup. Every scene zooms its camera by this factor (see setupCamera) and text is rasterized at the same
  * resolution.
  */
-export const ACTIVE_RESOLUTION: ResolutionSetting = loadGraphics().resolution;
-
 function computeUiScale(): number {
   if (typeof window === 'undefined') return 1;
-  return uiScaleFor(ACTIVE_RESOLUTION, {
+  return uiScaleFor(STARTUP_GRAPHICS.resolution, {
     devicePixelRatio: window.devicePixelRatio || 1,
     windowWidth: window.innerWidth,
     windowHeight: window.innerHeight,
@@ -233,13 +231,12 @@ export function figure(
   const scale = height / ART_H;
   const parts: Phaser.GameObjects.GameObject[] = [];
   if (opts.base !== false) {
-    const g = scene.add.graphics();
-    const rx = 17 * scale;
-    const ry = 6 * scale;
-    g.fillStyle(0x000000, 0.35).fillEllipse(0, 1.5 * scale, rx * 2 + 4, ry * 2 + 3);
-    g.fillStyle(hex(appearance.color), 1).fillEllipse(0, 0, rx * 2, ry * 2);
-    g.lineStyle(Math.max(1.5, 2 * scale), opts.enemy ? 0x2a0a0a : 0xffffff, 0.9).strokeEllipse(0, 0, rx * 2, ry * 2);
-    parts.push(g);
+    const w = 34 * scale;
+    const h = 12 * scale;
+    parts.push(baseImage(scene, {
+      color: hex(appearance.color), rim: opts.enemy ? 0x2a0a0a : 0xffffff, w, h,
+      shadowW: w + 4, shadowH: h + 3, shadowDy: 1.5 * scale, line: Math.max(1.5, 2 * scale),
+    }));
   }
   const art = weaponArt(weaponId);
   const key = appearance.look ? lookKey(appearance.look, appearance.color, art) : unitKey(appearance.model ?? 'm1', art);
@@ -262,6 +259,77 @@ export function figure(
     });
   }
   return scene.add.container(x, feetY, parts);
+}
+
+let bakeId = 0;
+
+/**
+ * Phaser re-tessellates every Graphics shape and re-uploads it to the GPU on every frame, which adds up for
+ * static drawings (maps, icons, badges). This draws `g` once into a texture at the render resolution (sharp at
+ * any Resolution setting) and returns an image showing it in the same place. `bounds` is the area to keep, in g's
+ * own coordinates. With `key` the texture is shared and kept (reused if it exists); without one, it is removed
+ * when the image is destroyed. `g` is destroyed either way, unless textures can't be made: then it is returned.
+ */
+export function bakeGraphics(
+  scene: Phaser.Scene, g: Phaser.GameObjects.Graphics, bounds: { x: number; y: number; w: number; h: number }, key?: string,
+): Phaser.GameObjects.Image | Phaser.GameObjects.Graphics {
+  const tw = Math.max(1, Math.ceil(bounds.w * UI_SCALE));
+  const th = Math.max(1, Math.ceil(bounds.h * UI_SCALE));
+  const k = key ?? `baked-${++bakeId}`;
+  if (!scene.textures.exists(k)) {
+    const dt = scene.textures.addDynamicTexture(k, tw, th);
+    if (!dt) {
+      if (!g.displayList) scene.add.existing(g);
+      return g;
+    }
+    g.setScale(UI_SCALE).setPosition(-bounds.x * UI_SCALE, -bounds.y * UI_SCALE);
+    dt.draw(g).render();
+  }
+  g.destroy();
+  const img = scene.add.image(bounds.x, bounds.y, k).setOrigin(0).setDisplaySize(tw / UI_SCALE, th / UI_SCALE);
+  if (!key) img.once('destroy', () => scene.textures.remove(k));
+  return img;
+}
+
+interface BaseSpec {
+  color: number;
+  rim: number;
+  /** Size of the coloured ellipse. */
+  w: number;
+  h: number;
+  /** The shadow under it, shifted down by shadowDy. */
+  shadowW: number;
+  shadowH: number;
+  shadowDy: number;
+  line: number;
+}
+
+/**
+ * The coloured ellipse a figure stands on, centred on (0, 0). Graphics are re-tessellated every frame, and a
+ * battle can have 30+ figures, so each distinct base is drawn once into a texture (at the render resolution)
+ * and shown as an image.
+ */
+function baseImage(scene: Phaser.Scene, b: BaseSpec): Phaser.GameObjects.Image | Phaser.GameObjects.Graphics {
+  const r = (v: number) => Math.round(v * 100) / 100;
+  const key = `base-${b.color.toString(16)}-${b.rim.toString(16)}-${[b.w, b.h, b.shadowW, b.shadowH, b.shadowDy, b.line].map(r).join('-')}`;
+  // Room for the shadow, the outline and a pixel of antialiasing all round.
+  const halfW = Math.max(b.shadowW, b.w + b.line) / 2 + 1;
+  const top = Math.max(b.shadowH / 2 - b.shadowDy, (b.h + b.line) / 2) + 1;
+  const bottom = Math.max(b.shadowH / 2 + b.shadowDy, (b.h + b.line) / 2) + 1;
+  const draw = (g: Phaser.GameObjects.Graphics) => g
+    .fillStyle(0x000000, 0.35).fillEllipse(0, b.shadowDy, b.shadowW, b.shadowH)
+    .fillStyle(b.color, 1).fillEllipse(0, 0, b.w, b.h)
+    .lineStyle(b.line, b.rim, 0.9).strokeEllipse(0, 0, b.w, b.h);
+  const tw = Math.ceil(halfW * 2 * UI_SCALE);
+  const th = Math.ceil((top + bottom) * UI_SCALE);
+  if (!scene.textures.exists(key)) {
+    const dt = scene.textures.addDynamicTexture(key, tw, th);
+    if (!dt) return draw(scene.add.graphics());
+    const g = draw(scene.make.graphics({}, false)).setScale(UI_SCALE).setPosition(halfW * UI_SCALE, top * UI_SCALE);
+    dt.draw(g).render();
+    g.destroy();
+  }
+  return scene.add.image(0, 0, key).setOrigin((halfW * UI_SCALE) / tw, (top * UI_SCALE) / th).setDisplaySize(tw / UI_SCALE, th / UI_SCALE);
 }
 
 /** Texture key of a custom look holding a weapon. */
@@ -494,15 +562,20 @@ export class ScrollList {
   private layout(): void {
     this.offset = Math.max(0, Math.min(this.maxOffset(), this.offset));
     let yy = 0;
+    let bottom = 0;
     this.items.forEach((it, i) => {
       // Items from the offset down; the last one may be cut off by the mask.
       const visible = i >= this.offset && yy < this.h;
       it.obj.setVisible(visible);
       if (visible) {
         it.obj.setPosition(0, yy);
+        bottom = yy + it.height;
         yy += it.height + this.gap;
       }
     });
+    // The mask renders the list through an offscreen buffer the size of the whole canvas every frame:
+    // only use it while an item is actually cut off at the bottom.
+    this.root.renderFilters = bottom > this.h + 0.5;
     // Scroll bar: only when there is more than fits.
     const max = this.maxOffset();
     this.bar.clear();
@@ -539,11 +612,10 @@ export const monsterKey = (kind: string) => `monster-${kind}`;
  */
 export function monsterFigure(scene: Phaser.Scene, x: number, feetY: number, height: number, kind: string): Phaser.GameObjects.Container {
   const kb = height / ART_H;
-  const g = scene.add.graphics();
-  g.fillStyle(0x000000, 0.35).fillEllipse(0, 1.5 * kb, 36 * kb, 14 * kb);
-  g.fillStyle(hex('#c0392b'), 1).fillEllipse(0, 0, 34 * kb, 12 * kb);
-  g.lineStyle(Math.max(1.5, 2 * kb), 0x2a0a0a, 0.9).strokeEllipse(0, 0, 34 * kb, 12 * kb);
-  const parts: Phaser.GameObjects.GameObject[] = [g];
+  const parts: Phaser.GameObjects.GameObject[] = [baseImage(scene, {
+    color: hex('#c0392b'), rim: 0x2a0a0a, w: 34 * kb, h: 12 * kb,
+    shadowW: 36 * kb, shadowH: 14 * kb, shadowDy: 1.5 * kb, line: Math.max(1.5, 2 * kb),
+  })];
   const key = monsterKey(kind);
   if (scene.textures.exists(key)) {
     // Creatures only use the lower part of the canvas, so they're drawn a little larger than people.

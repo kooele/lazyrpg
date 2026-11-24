@@ -14,7 +14,7 @@ import { lineupMembers, resolveQuest } from '../game/city';
 import { rankForStage, usualCount } from '../game/board';
 import { DEMO_STAGES, requireDemo, resolveDemoBattle } from '../game/demo';
 import { markDirty, requireState } from '../game/session';
-import { COLORS, HEIGHT, ScrollList, UI_SCALE, WIDTH, button, confirmDialog, figure, monsterFigure, panel, setupCamera, text } from '../ui/widgets';
+import { COLORS, HEIGHT, ScrollList, UI_SCALE, WIDTH, bakeGraphics, button, confirmDialog, figure, monsterFigure, panel, setupCamera, text } from '../ui/widgets';
 import { ENCOUNTER, ENEMIES } from '../data/enemies';
 
 /** Tile size in layout pixels; set per battle so the map fits the 672x500 board area. */
@@ -251,6 +251,12 @@ export class BattleScene extends Phaser.Scene {
     g.lineStyle(1, 0x000000, 0.25);
     for (let x = 0; x <= map.width; x++) g.lineBetween(MAP_X + x * TILE, MAP_Y, MAP_X + x * TILE, MAP_Y + map.height * TILE);
     for (let y = 0; y <= map.height; y++) g.lineBetween(MAP_X, MAP_Y + y * TILE, MAP_X + map.width * TILE, MAP_Y + y * TILE);
+    this.bakeMap(g, map.width * TILE, map.height * TILE);
+  }
+
+  /** The map never changes during a battle: draw it once into a texture (see bakeGraphics). */
+  private bakeMap(g: Phaser.GameObjects.Graphics, w: number, h: number): void {
+    bakeGraphics(this, g, { x: MAP_X, y: MAP_Y, w, h });
   }
 
   /** Adventurers and human enemies use the body art; monsters use their own figure. */

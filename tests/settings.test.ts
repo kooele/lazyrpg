@@ -36,8 +36,10 @@ describe('graphics settings', () => {
   it('reads stored settings, keeping defaults for anything missing or invalid', () => {
     expect(parseGraphics(null)).toEqual(DEFAULT_GRAPHICS);
     expect(parseGraphics('not json')).toEqual(DEFAULT_GRAPHICS);
-    expect(parseGraphics('{"resolution":"high","frameCap":30}')).toEqual({ resolution: 'high', frameCap: 30 });
-    expect(parseGraphics('{"resolution":"huge","frameCap":45}')).toEqual(DEFAULT_GRAPHICS);
-    expect(parseGraphics('{"frameCap":0}')).toEqual({ resolution: 'auto', frameCap: 0 });
+    expect(parseGraphics('{"resolution":"high","frameCap":30,"gpu":"high-performance"}'))
+      .toEqual({ resolution: 'high', frameCap: 30, gpu: 'high-performance' });
+    expect(parseGraphics('{"resolution":"huge","frameCap":45,"gpu":"turbo"}')).toEqual(DEFAULT_GRAPHICS);
+    // Settings saved before the graphics chip option existed.
+    expect(parseGraphics('{"resolution":"low","frameCap":0}')).toEqual({ resolution: 'low', frameCap: 0, gpu: 'default' });
   });
 });

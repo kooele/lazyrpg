@@ -10,7 +10,7 @@ import { adventurerCount, adventurerRank, leaderboard, nextRank, rankThreshold }
 import { markDirty, requireState, session } from '../game/session';
 import { PEOPLE_SORTS, QUEST_SORTS, nextSort, sortPeople, sortQuests, type PeopleSort, type QuestSort, type SortDir } from '../game/sorting';
 import { cityHeader, rankBadge } from '../ui/hud';
-import { ART_H, COLORS, HEIGHT, MONSTER_W, ScrollList, WIDTH, button, monsterKey, confirmDialog, figure, fittedList, panel, setupCamera, sortBar, talentTag, text, toast, type ScrollItem } from '../ui/widgets';
+import { ART_H, COLORS, HEIGHT, MONSTER_W, ScrollList, WIDTH, bakeGraphics, button, monsterKey, confirmDialog, figure, fittedList, panel, setupCamera, sortBar, talentTag, text, toast, type ScrollItem } from '../ui/widgets';
 
 type Tab = 'board' | 'hall' | 'ranks' | 'news';
 const CARD_H = 132;
@@ -172,8 +172,8 @@ export class GuildScene extends Phaser.Scene {
    */
   private questIcons(x: number, y: number, enemies: number, danger: number, cardW: number, allowed: boolean, types: string[]): Phaser.GameObjects.Container {
     const box = this.add.container(0, 0);
-    const g = this.add.graphics();
-    box.add(g);
+    // Drawn off the display list, then baked into a texture once everything is drawn (see bakeGraphics).
+    const g = this.make.graphics({}, false);
     for (let i = 0; i < enemies; i++) this.foeIcon(box, g, x + 9 + i * 16, y, allowed, types[i % types.length]);
     // Skulls: white up to `danger` (in halves) for 0.5-5, then red laid over them for 5.5-10; the rest dark.
     const fromX = cardW - 12 - 5 * 18;
@@ -200,6 +200,8 @@ export class GuildScene extends Phaser.Scene {
       g.fillStyle(0x181c2b, 1).fillCircle(cx - 2.3, y - 1.5, 1.7).fillCircle(cx + 2.3, y - 1.5, 1.7);
       g.fillRect(cx - 2, y + 4.5, 1, 2.5).fillRect(cx + 1, y + 4.5, 1, 2.5);
     }
+    // Badges reach from x - 3 (goblin ears) to the last skull at cardW - 16, and y - 9 to y + 8.
+    box.addAt(bakeGraphics(this, g, { x: x - 4, y: y - 11, w: cardW - x + 4, h: 22 }), 0);
     const crowd = enemies <= 2 ? 'A couple of foes' : enemies <= 4 ? 'A handful of foes' : enemies <= 7 ? 'A sizeable band' : 'A horde';
     const peril = danger <= 2 ? 'Work for beginners' : danger <= 4 ? 'Work for seasoned hands' : danger <= 6 ? 'A job for veterans'
       : danger <= 8 ? 'A job for elites' : 'Only for the very best';

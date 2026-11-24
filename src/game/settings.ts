@@ -2,20 +2,23 @@
  * Graphics settings, chosen in the Settings screen and kept in the browser (not in save files).
  *
  * Resolution is how many real pixels the game draws per unit of its 960x640 layout. It is fixed when the game
- * starts (the canvas and the unit art are made at that size), so a change applies after a reload.
- * The frame cap applies at once.
+ * starts (the canvas and the unit art are made at that size), so a change applies after a reload. So does the
+ * graphics chip preference, which is asked for when the WebGL context is created. The frame cap applies at once.
  */
 
 export type ResolutionSetting = 'auto' | 'low' | 'medium' | 'high' | 'ultra';
 export type FrameCapSetting = 30 | 60 | 0;
+/** WebGL's powerPreference: which graphics chip a computer with two should use. */
+export type GpuSetting = 'default' | 'high-performance' | 'low-power';
 
 export interface GraphicsSettings {
   resolution: ResolutionSetting;
   /** Frames per second; 0 = as fast as the display refreshes. */
   frameCap: FrameCapSetting;
+  gpu: GpuSetting;
 }
 
-export const DEFAULT_GRAPHICS: GraphicsSettings = { resolution: 'auto', frameCap: 60 };
+export const DEFAULT_GRAPHICS: GraphicsSettings = { resolution: 'auto', frameCap: 60, gpu: 'default' };
 
 export const RESOLUTION_OPTIONS: { id: ResolutionSetting; label: string; hint: string }[] = [
   { id: 'auto', label: 'Auto', hint: 'Matches the browser window, up to 2x. Sharp and fast on most screens.' },
@@ -29,6 +32,12 @@ export const FRAME_CAP_OPTIONS: { id: FrameCapSetting; label: string; hint: stri
   { id: 30, label: '30 FPS', hint: 'Least work for the computer; animations are a little choppier.' },
   { id: 60, label: '60 FPS', hint: 'Smooth, and half the work of a 120 Hz display.' },
   { id: 0, label: 'Display rate', hint: 'As fast as the display refreshes (up to 120 Hz or more).' },
+];
+
+export const GPU_OPTIONS: { id: GpuSetting; label: string; hint: string }[] = [
+  { id: 'default', label: 'Automatic', hint: 'The browser decides; on laptops with two graphics chips this is usually the slower, built-in one.' },
+  { id: 'high-performance', label: 'Fast', hint: 'Asks for the faster graphics chip on laptops that have two (e.g. older MacBook Pros). Runs hotter and uses more battery.' },
+  { id: 'low-power', label: 'Battery saver', hint: 'Asks for the built-in graphics chip, to save battery and heat.' },
 ];
 
 const FIXED_SCALE: Partial<Record<ResolutionSetting, number>> = { low: 1, medium: 1.5, high: 2 };
@@ -69,6 +78,7 @@ export function parseGraphics(raw: string | null | undefined): GraphicsSettings 
     const v = JSON.parse(raw) as Partial<GraphicsSettings>;
     if (RESOLUTION_OPTIONS.some((o) => o.id === v.resolution)) out.resolution = v.resolution!;
     if (FRAME_CAP_OPTIONS.some((o) => o.id === v.frameCap)) out.frameCap = v.frameCap!;
+    if (GPU_OPTIONS.some((o) => o.id === v.gpu)) out.gpu = v.gpu!;
   } catch {
     // Keep the defaults.
   }
@@ -104,3 +114,6 @@ export function saveGraphics(s: GraphicsSettings): boolean {
     return false;
   }
 }
+
+/** The settings the game started with: resolution and graphics chip can only change on a reload. */
+export const STARTUP_GRAPHICS: Readonly<GraphicsSettings> = loadGraphics();

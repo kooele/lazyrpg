@@ -6,7 +6,7 @@ import { adventurerRank } from '../game/guild';
 import { registrationFee, slaveTax } from '../game/contracts';
 import { markDirty, requireState, session } from '../game/session';
 import { cityHeader, rankBadge } from '../ui/hud';
-import { COLORS, HEIGHT, ScrollList, WIDTH, button, confirmDialog, figure, panel, setupCamera, talentTag, text, toast } from '../ui/widgets';
+import { COLORS, HEIGHT, ScrollList, UI_SCALE, WIDTH, bakeGraphics, button, confirmDialog, figure, panel, setupCamera, talentTag, text, toast } from '../ui/widgets';
 
 export const CITY_MAP_KEY = 'city-map';
 
@@ -223,19 +223,31 @@ export class CityScene extends Phaser.Scene {
   /** A map pin: gold for open locations, grey for ones that aren't open yet. */
   private pin(p: Place, x: number, y: number): void {
     const open = !!p.scene;
-    const g = this.add.graphics();
-    const draw = (hover: boolean) => {
-      g.clear();
-      g.fillStyle(0x000000, 0.4).fillCircle(x + 1, y + 2, 9);
-      g.fillStyle(open ? (hover ? 0xffd77a : COLORS.accent) : (hover ? 0xb0b6c8 : 0x7a8296), 1).fillCircle(x, y, 8);
-      g.lineStyle(2, 0x1a1410, 1).strokeCircle(x, y, 8);
-      g.fillStyle(0x1a1410, 1).fillCircle(x, y, 2.5);
+    // Four looks (open or not, hovered or not), each drawn once into a shared texture.
+    const bounds = { x: -10, y: -10, w: 22, h: 23 };
+    const look = (hover: boolean) => {
+      const key = `city-pin-${open ? 'open' : 'closed'}-${hover ? 'hover' : 'idle'}`;
+      const g = this.make.graphics({}, false);
+      g.fillStyle(0x000000, 0.4).fillCircle(1, 2, 9);
+      g.fillStyle(open ? (hover ? 0xffd77a : COLORS.accent) : (hover ? 0xb0b6c8 : 0x7a8296), 1).fillCircle(0, 0, 8);
+      g.lineStyle(2, 0x1a1410, 1).strokeCircle(0, 0, 8);
+      g.fillStyle(0x1a1410, 1).fillCircle(0, 0, 2.5);
+      const img = bakeGraphics(this, g, bounds, key);
+      img.destroy();
+      return key;
     };
-    draw(false);
+    const idle = look(false);
+    const hovered = look(true);
+    const pinImg = this.add.image(x + bounds.x, y + bounds.y, idle).setOrigin(0);
+    pinImg.setDisplaySize(Math.ceil(bounds.w * UI_SCALE) / UI_SCALE, Math.ceil(bounds.h * UI_SCALE) / UI_SCALE);
+    const draw = (hover: boolean) => {
+      if (this.textures.exists(idle)) pinImg.setTexture(hover ? hovered : idle);
+    };
     const label = text(this, x, y - 12, p.name, {
       fontSize: '12px', color: open ? '#f4ecd8' : '#b8bccb', backgroundColor: '#14182acc', padding: { x: 5, y: 2 },
     }).setOrigin(0.5, 1);
-    const hit = this.add.circle(x, y, 14, 0xffffff, 0).setInteractive({ useHandCursor: true });
+    // A zone, not an invisible circle: zones aren't drawn.
+    const hit = this.add.zone(x, y, 28, 28).setInteractive({ hitArea: new Phaser.Geom.Circle(14, 14, 14), hitAreaCallback: Phaser.Geom.Circle.Contains, useHandCursor: true });
     for (const o of [hit, label.setInteractive({ useHandCursor: true })]) {
       o.on('pointerover', () => {
         draw(true);
