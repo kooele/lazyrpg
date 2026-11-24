@@ -17,7 +17,7 @@
     "_comment": "An adventurer's own rank comes from their level: the level each rank starts at (below C is D). Quests of a rank have enemies of that rank's levels, and parties of a rank are made of adventurers of about that rank.",
     "C": 6, "B": 11, "A": 16, "S": 21
   },
-  "boardSize": 24,
+  "boardSize": 40,
   "board": {
     "_comment": "The guild's quest board is shared with the rival parties, who take quests from it (see simulation). Each day up to maxPostsPerDay new quests are posted until it holds boardSize; each quest's rank is picked by rankWeights (S 1, A 5, B 20, C 60, D 40, out of 126), with nothing set aside for the player: in a slow week the rivals may take every quest at the player's rank. Quests vary: each rolls its enemy level and group size (see quests and threat), and pay is extra luck on the reward, so some quests are much better deals than others.",
     "maxPostsPerDay": 8,
