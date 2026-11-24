@@ -8,7 +8,7 @@
   "_partyRankWeights": "How the rival parties are spread over the ranks when a new game starts, as relative weights (a rank's share is its weight over the total: D is 40/126, about 32%); there is always at least one A-rank party. After that, ranks follow renown (see ranks). Quest postings have their own weights (board.rankWeights).",
   "ranks": {
     "_comment": "Party ranks. renown: the renown a party needs for each rank (D needs none). Reaching the next rank's renown puts a promotion quest of that rank on the board; completing it promotes the party. A party whose renown stays below its own rank's threshold for demotionDays days in a row drops a rank. Renown doesn't fade: a failed quest loses failedQuestRenown x that quest's renown, and each member who dies loses deathRenown x the quest's renown.",
-    "renown": { "C": 100, "B": 400, "A": 1600, "S": 6400 },
+    "renown": {"C": 40, "B": 450, "A": 1900, "S": 6000},
     "demotionDays": 7,
     "failedQuestRenown": 1,
     "deathRenown": 0.5
@@ -37,7 +37,7 @@
     "strengthAtLevel1": 10,
     "strengthGrowth": 1.165,
     "goldPerThreat": 1.75,
-    "renownPerThreat": 0.26,
+    "renownPerThreat": 0.3,
     "standardCount": 4,
     "skulls": { "from": -4, "to": 24 }
   },
@@ -85,8 +85,8 @@
     "lowMoraleRelationshipPerDay": 2
   },
   "xp": {
-    "_comment": "XP for a won quest. Every member who comes back gets the same as a day of training (schedule.trainingXp), plus an equal share of the quest's pool XP split among all of them (so smaller parties learn faster). The pool is pool.a x D^2 + pool.b x D + pool.c, where D is the quest's danger in skulls (0.5 to 10): 300 at half a skull, 1350 at 4 skulls, 6000 at 10. The members' levels don't change it: the level-up cost curve (stats.json xpPerLevel) already makes easy quests worth little to veterans. Failed quests give no XP.",
-    "pool": { "a": 50, "b": 75, "c": 250 }
+    "_comment": "XP for a won quest. Every member who comes back gets the same as a day of training (schedule.trainingXp), plus an equal share of the quest's pool XP split among all of them (so smaller parties learn faster). The pool is pool.a x D^2 + pool.b x D + pool.c, where D is the quest's danger in skulls (0.5 to 10): 105 at half a skull, 560 at 4 skulls, 2480 at 10. The members' levels don't change it: the level-up cost curve (stats.json xpPerLevel) already makes easy quests worth little to veterans. Failed quests give no XP.",
+    "pool": { "a": 20, "b": 40, "c": 80 }
   },
   "schedule": {
     "_comment": "What members who aren't on a quest do each day (Manage Party). recover: recovers recoverMultiplier x healthPerDay. training: trainingXp.perLevel x level + trainingXp.flat XP (22 at level 1, 70 at level 25). oddJobs: oddJobsGold gold. dayOff: dayOffMorale Morale.",

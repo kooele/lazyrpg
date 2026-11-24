@@ -74,7 +74,7 @@ Every 7th day is **payday** for companions.
 
 **Adventurer ranks** come from level: **D** 1–5, **C** 6–10, **B** 11–15, **A** 16–20, **S** 21+ (`adventurerRanks` in `guild.json`). They're shown next to every adventurer's level.
 
-**Party ranks** (D to S) come from **renown**: **C at 100**, **B at 400**, **A at 1600**, **S at 6400** (`ranks` in `guild.json`). Reaching the next rank's renown posts that rank's **promotion quest** on the Quest Board (gold frame); completing it promotes the party. Renown doesn't fade: completing a quest earns it, **failing a quest loses that quest's renown**, and **each party member who dies loses half of it**. A party that stays **below its rank's renown for a full week drops a rank**. The **Leaderboard** lists every party by rank, then renown. Your party starts at D. Parties hold up to **12 members** and take up to **5** on a quest.
+**Party ranks** (D to S) come from **renown**: **C at 40**, **B at 450**, **A at 1900**, **S at 6000** (`ranks` in `guild.json`). Reaching the next rank's renown posts that rank's **promotion quest** on the Quest Board (gold frame); completing it promotes the party. Renown doesn't fade: completing a quest earns it, **failing a quest loses that quest's renown**, and **each party member who dies loses half of it**. A party that stays **below its rank's renown for a full week drops a rank**. The **Leaderboard** lists every party by rank, then renown. Your party starts at D. Parties hold up to **12 members** and take up to **5** on a quest.
 
 The **Quest Board** is shared with every rival party. It holds up to **40 quests** across all ranks (usually about 25): up to 8 new ones are posted each day by rank weight (C 60, D 40, B 20, A 7, S 1, out of 128: about 47% C, 31% D, 16% B, 5% A, 0.8% S; `board.rankWeights` in `guild.json`), and each stays up 4–8 days. Nothing is held back for you: in a slow week the rivals may snap up every quest at your rank. **Rival parties take quests from it every day**, and they go for the best deals first, so a generous quest may not last. You can take quests at your rank or below (the board shows those by default; **All quests** shows the rest, locked). **Sort** the board by rank (the default, highest first), gold reward, renown, difficulty or enemy type; click the selected sort again to reverse it (▲/▼). The promotion quest always stays on top. The Guild Hall and the Slave Market sort the same way by level (the default, highest first), talent, name or cost (a mercenary's fee, a slave's asking price). Quests vary in risk and reward:
 
@@ -82,7 +82,7 @@ The **Quest Board** is shared with every rival party. It holds up to **40 quests
 - **Quest cards** show the foes as pictures rather than numbers: an icon per enemy to expect (a small copy of the monster's battle art; goblins, bandits, skeletons, orcs, sellswords and renegades get their own head badges), and **skulls from ½ to 10, in halves**, for how hard the quest is on one fixed scale for the whole game: ½–5 fill five white skulls, and 5½–10 lay red skulls over them. Skulls rise evenly with the quest's difficulty (the average party level it calls for, from its total threat): half a skull at difficulty −4, ten at 24 (`threat.skulls` in `guild.json`). D quests show about ½–3, C 3–6, B 5½–8, A 7½–10. Hover them for the same in words. The enemy level is in the description, and the card says how long the journey is and the day the notice comes down.
 - **Pay**: on top of that, the reward is 0.75–1.35× the usual for the quest's level and group size. Cards flag **Generous pay** and **Poor pay**.
 
-**Total threat** = group size × strength. Group size is in threat points (each enemy type's `threat` in `enemies.json`: a bandit is 1, a rat 0.5, so weak types come in bigger packs). Strength is how strong one enemy is at the quest's level: 10 at level 1, about 16.5% more per level (a level-20 enemy is about 18× a level-1 one). Usual gold is total threat × 1.75 and renown total threat × 0.26; the pay roll then adds luck to the gold. (`quests` and `threat` in `guild.json`.)
+**Total threat** = group size × strength. Group size is in threat points (each enemy type's `threat` in `enemies.json`: a bandit is 1, a rat 0.5, so weak types come in bigger packs). Strength is how strong one enemy is at the quest's level: 10 at level 1, about 16.5% more per level (a level-20 enemy is about 18× a level-1 one). Usual gold is total threat × 1.75 and renown total threat × 0.3; the pay roll then adds luck to the gold. (`quests` and `threat` in `guild.json`.)
 
 | Rank | Enemy levels | Group size | Total threat | Usual gold | Renown |
 |---|---|---|---|---|---|
@@ -94,18 +94,18 @@ The **Quest Board** is shared with every rival party. It holds up to **40 quests
 
 Promotion quests use the easier half of the rank's levels, its middle group size and usual pay.
 
-**XP** from a quest: every member who comes back gets a day of Training's XP (2 x their level + 20) plus an **equal share of the quest's XP pool**, so smaller parties learn faster. The pool grows with the quest's danger in skulls (D, 0.5 to 10): **50 x D² + 75 x D + 250**. The members' levels don't change it: there is no bonus or penalty for the level gap, because the level-up cost curve already makes easy quests worth little to veterans. A **failed quest** pays no reward, but still gives the training XP plus the pool's share for the fraction of enemies defeated (killed or surrendered): beating 3 of 4 before falling back is worth 75% of it. (`xp` in `guild.json`.)
+**XP** from a quest: every member who comes back gets a day of Training's XP (2 x their level + 20) plus an **equal share of the quest's XP pool**, so smaller parties learn faster. The pool grows with the quest's danger in skulls (D, 0.5 to 10): **20 x D² + 40 x D + 80**. The members' levels don't change it: there is no bonus or penalty for the level gap, because the level-up cost curve already makes easy quests worth little to veterans. A **failed quest** pays no reward, but still gives the training XP plus the pool's share for the fraction of enemies defeated (killed or surrendered): beating 3 of 4 before falling back is worth 75% of it. (`xp` in `guild.json`.)
 
 **Bounties**: every enemy the party kills is worth a bounty of 9 gold per level (the same as turning in a prisoner), claimed when the party gets back to the city, whether the quest succeeded or not.
 
 | Skulls | XP pool | Each of 4 members (pool share, before training XP) |
 |---|---|---|
-| 0.5 | 300 | 75 |
-| 1 | 375 | 94 |
-| 2.5 | 750 | 188 |
-| 5 | 1,875 | 469 |
-| 7.5 | 3,625 | 906 |
-| 10 | 6,000 | 1,500 |
+| 0.5 | 105 | 26 |
+| 1 | 140 | 35 |
+| 2.5 | 305 | 76 |
+| 5 | 780 | 195 |
+| 7.5 | 1,505 | 376 |
+| 10 | 2,480 | 620 |
 
 XP from level L to L + 1 is **5 x L² + 15 x L + 60**: 80 from level 1 to 2, 110 to 3, 710 from 10 to 11, 2,360 from 20 to 21, 3,560 from 25 to 26 (`xpPerLevel` in `stats.json`). Early levels come after a win or two; later ones take several, or harder quests.
 

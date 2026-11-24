@@ -140,7 +140,7 @@ describe('ranks and the leaderboard', () => {
     s.quest!.days = 1;
     resolveQuest(s, 'defeat', makeRng(1));
     expect(s.renown).toBe(Math.max(0, 120 - q.renown * GUILD.ranks.failedQuestRenown));
-    s.renown = 90; // below C's 100
+    s.renown = GUILD.ranks.renown.C - 10; // below C's threshold
     s.belowRankSince = s.day; // ...from today
     for (let i = 0; i < GUILD.ranks.demotionDays; i++) {
       expect(s.rank).toBe('C');
@@ -259,7 +259,7 @@ describe('ranks and the leaderboard', () => {
     expect(questXpShares(q, [{ level: q.stage }], 0)).toEqual([trainingXp(q.stage)]); // nothing defeated: training only
   });
 
-  it('quest XP pool: 50 x skulls^2 + 75 x skulls + 250, from half a skull (300) to ten (6000)', () => {
+  it('quest XP pool: 20 x skulls^2 + 40 x skulls + 80, from half a skull (105) to ten (2480)', () => {
     const at = (skulls: number) => {
       const { from, to } = GUILD.threat.skulls;
       // A level-1 quest whose difficulty sits exactly on this skull step, sized by its threat count.
@@ -268,7 +268,7 @@ describe('ranks and the leaderboard', () => {
     };
     expect(dangerRating(at(0.5))).toBe(0.5);
     expect(dangerRating(at(10))).toBe(10);
-    expect([0.5, 1, 4, 10].map((s) => questXpPool(at(s)))).toEqual([300, 375, 1350, 6000]);
+    expect([0.5, 1, 4, 10].map((s) => questXpPool(at(s)))).toEqual([105, 140, 560, 2480]);
   });
 
   it('quest cards: about how many foes to expect, and skulls (0.5-10 in halves) on one scale for the whole game', () => {
