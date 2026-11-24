@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { GUILD } from '../data/guild';
 import { WEAPONS } from '../data/content';
-import { departBlock, lineupMembers, prisonersAtGate, registerPrisoner, sleepOutside, turnInPrisoner } from '../game/city';
+import { dailyUpkeep, departBlock, endDay, foodCost, lineupMembers, lodgingCost, prisonersAtGate, registerPrisoner, turnInPrisoner } from '../game/city';
 import { adventurerRank } from '../game/guild';
 import { registrationFee, slaveTax } from '../game/contracts';
 import { markDirty, requireState, session } from '../game/session';
@@ -40,8 +40,8 @@ const PLACES: Record<District, Place[]> = {
     { name: 'Tailor', blurb: 'Clothes and fittings.', at: [497, 167] },
     { name: 'Auction House', blurb: 'Rare goods to the highest bidder.', at: [1010, 173] },
     { name: 'Church', blurb: 'Prayer and healing.', at: [277, 343] },
-    { name: GUILD.inns.standard.name, blurb: `Inn: lodging at ${GUILD.inns.standard.pricePerPerson} gold per person a night, and drinks. What C-rank adventurers expect.`, at: [255, 480], scene: 'Inn', data: { tier: 'standard' } },
-    { name: GUILD.residences.outer.name, blurb: `A home of your own (${GUILD.residences.outer.price} gold at the Estate Office): free nights, as good as an inn.`, at: [900, 805], scene: 'Inn', data: { ring: 'outer' } },
+    { name: GUILD.inns.standard.name, blurb: `Inn: drinks for the party. Members can lodge here for ${GUILD.inns.standard.pricePerPerson} gold a night (Manage Party); what C-rank adventurers expect.`, at: [255, 480], scene: 'Inn', data: { tier: 'standard' } },
+    { name: GUILD.residences.outer.name, blurb: `A home of your own (${GUILD.residences.outer.price} gold at the Estate Office): free nights for up to ${GUILD.residences.capacity}, as good as an inn.`, at: [900, 805], scene: 'Inn', data: { ring: 'outer' } },
   ],
   inner: [
     { name: "Lord's Manor", blurb: 'Seat of the Lord of Arch City.', at: [860, 378] },
@@ -49,10 +49,10 @@ const PLACES: Record<District, Place[]> = {
     { name: 'Central Government Office', blurb: 'Permits, taxes and the city\'s business, in the long hall beside the Lord\'s Manor.', at: [890, 425] },
     { name: 'Library', blurb: 'Books, maps and old records.', at: [530, 300] },
     { name: 'Estate Office', blurb: 'Buy and sell residences across the city.', at: [990, 330], scene: 'Estate' },
-    { name: GUILD.inns.highEnd.name, blurb: `High-end inn: ${GUILD.inns.highEnd.pricePerPerson} gold per person a night, and drinks. What B-rank adventurers expect.`, at: [995, 570], scene: 'Inn', data: { tier: 'highEnd' } },
-    { name: GUILD.inns.luxury.name, blurb: `Luxury inn: ${GUILD.inns.luxury.pricePerPerson} gold per person a night, and drinks. What A and S-rank adventurers expect.`, at: [880, 500], scene: 'Inn', data: { tier: 'luxury' } },
-    { name: GUILD.residences.middle.name, blurb: `A townhouse inside the inner wall (${GUILD.residences.middle.price} gold at the Estate Office): free nights, as good as a high-end inn.`, at: [520, 585], scene: 'Inn', data: { ring: 'middle' } },
-    { name: GUILD.residences.inner.name, blurb: `A mansion by the cathedral (${GUILD.residences.inner.price} gold at the Estate Office): free nights, as good as a luxury inn.`, at: [640, 505], scene: 'Inn', data: { ring: 'inner' } },
+    { name: GUILD.inns.highEnd.name, blurb: `High-end inn: drinks for the party. Lodging ${GUILD.inns.highEnd.pricePerPerson} gold a night (Manage Party); what B-rank adventurers expect.`, at: [995, 570], scene: 'Inn', data: { tier: 'highEnd' } },
+    { name: GUILD.inns.luxury.name, blurb: `Luxury inn: drinks for the party. Lodging ${GUILD.inns.luxury.pricePerPerson} gold a night (Manage Party); what A and S-rank adventurers expect.`, at: [880, 500], scene: 'Inn', data: { tier: 'luxury' } },
+    { name: GUILD.residences.middle.name, blurb: `A townhouse inside the inner wall (${GUILD.residences.middle.price} gold at the Estate Office): free nights for up to ${GUILD.residences.capacity}, as good as a high-end inn.`, at: [520, 585], scene: 'Inn', data: { ring: 'middle' } },
+    { name: GUILD.residences.inner.name, blurb: `A mansion by the cathedral (${GUILD.residences.inner.price} gold at the Estate Office): free nights for up to ${GUILD.residences.capacity}, as good as a luxury inn.`, at: [640, 505], scene: 'Inn', data: { ring: 'inner' } },
   ],
 };
 
@@ -62,7 +62,7 @@ const VIEWS: Record<District, { x: number; y: number; w: number }> = {
   inner: { x: 380, y: 190, w: 760 },
 };
 
-/** Arch City: the hub. Pick a district and a location (inns to rest), or set out on an accepted quest. */
+/** Arch City: the hub. Pick a district and a location, end the day, or set out on an accepted quest. */
 export class CityScene extends Phaser.Scene {
   private tip!: Phaser.GameObjects.Text;
   private district: District = 'outer';
@@ -147,7 +147,7 @@ export class CityScene extends Phaser.Scene {
     button(this, 16, HEIGHT - 60, 136, 46, 'Main Menu', () => this.scene.start('MainMenu'), { fontSize: 15 });
     button(this, 160, HEIGHT - 60, 136, 46, 'Save Game', () => this.scene.start('SaveLoad', { mode: 'save', returnTo: 'City' }), { fontSize: 15 });
     button(this, 304, HEIGHT - 60, 150, 46, 'Manage Party', () => this.scene.start('Party'), { fontSize: 15 });
-    button(this, 462, HEIGHT - 60, 158, 46, 'Sleep outside\n(free)', () => this.sleepOut(), { fontSize: 13, fill: 0x2a3348 });
+    button(this, 462, HEIGHT - 60, 158, 46, `End Day\n(${dailyUpkeep(requireState(), 'city')} gold)`, () => this.endDay(), { fontSize: 13, fill: 0x2a3348 });
 
     if (prisonersAtGate(state)) this.gate();
   }
@@ -206,15 +206,17 @@ export class CityScene extends Phaser.Scene {
     }, { fontSize: 14 }));
   }
 
-  /** End the day without an inn: free, but housed companions resent it. */
-  private sleepOut(): void {
+  /** End the day: everyone the party houses sleeps where they lodge (set in Manage Party), and the next day begins. */
+  private endDay(): void {
     const state = requireState();
-    confirmDialog(this, `Sleep outside tonight?\nIt's free, but companions you house lose relationship (more if they expect a high-end inn). Or find an inn (Outer and Inner City).`, () => {
-      const msgs = sleepOutside(state, Math.random);
+    const total = dailyUpkeep(state, 'city');
+    const short = total > state.gold ? '\nYou can\'t afford it: companions and slaves will be unhappy.' : '';
+    confirmDialog(this, `End the day?\nTonight: ${total} gold (lodging ${lodgingCost(state, 'city')} + food ${foodCost(state)}).\nSet where each member lodges in Manage Party.${short}`, () => {
+      const msgs = endDay(state, Math.random);
       markDirty();
       this.render();
-      toast(this, `Day ${state.day}. ${msgs.length ? msgs[msgs.length - 1] : 'A cold night under the stars.'}`);
-    }, 'Sleep outside');
+      toast(this, `Day ${state.day}. ${msgs.length ? msgs[msgs.length - 1] : 'A quiet night.'}`);
+    }, 'End Day');
   }
 
   /** A map pin: gold for open locations, grey for ones that aren't open yet. */

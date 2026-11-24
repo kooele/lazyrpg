@@ -353,6 +353,6 @@ export class GuildScene extends Phaser.Scene {
       return { obj: this.add.container(0, 0, [t]), height: t.height };
     });
     list.setItems(items, 'top');
-    if (items.length === 0) text(this, WIDTH / 2, 300, 'Nothing yet. Stay at an inn or go on a quest and see what happens.', { color: COLORS.dim }).setOrigin(0.5);
+    if (items.length === 0) text(this, WIDTH / 2, 300, 'Nothing yet. End the day or go on a quest and see what happens.', { color: COLORS.dim }).setOrigin(0.5);
   }
 }

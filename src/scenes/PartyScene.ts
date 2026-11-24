@@ -1,15 +1,15 @@
 import Phaser from 'phaser';
 import { MAX_PARTY_SIZE, SKILLS, WEAPONS, xpToNext } from '../data/content';
-import { ACTIVITIES, FOOD_TIERS, GUILD } from '../data/guild';
+import { ACTIVITIES, FOOD_TIERS, GUILD, INN_TIERS, LODGING_QUALITY, RINGS, isResidence, type CityLodging } from '../data/guild';
 import { TRAITS } from '../data/traits';
-import type { Character } from '../data/types';
+import type { Character, GameState } from '../data/types';
 import { bodyPoints, deriveStats, freePoints, skillPoints } from '../game/character';
-import { lineupMembers, marketBuyPrice, moveMember, scheduledMembers, sellSlave, toggleLineup } from '../game/city';
+import { lineupMembers, lodgingPrice, marketBuyPrice, moveMember, residents, scheduledMembers, sellSlave, setLodging, toggleLineup } from '../game/city';
 import {
-  ACTIVITY_INFO, QUALITY_TEXT, activityOf, combatPenalty, expectedQuality, foodOf, healthOf, injuryPenalty, isInjured, moraleOf, moralePenalty,
+  ACTIVITY_INFO, QUALITY_TEXT, activityOf, lodgingOf, lodgingRelationship, combatPenalty, expectedQuality, foodOf, healthOf, injuryPenalty, isInjured, moraleOf, moralePenalty,
   obediencePenalty, traitFactor,
 } from '../game/condition';
-import { daysLeft, isCompanion, isHoused, isSlave, leaveParty, punishSlave } from '../game/contracts';
+import { bondOf, daysLeft, isCompanion, isHoused, isSlave, leaveParty, punishSlave } from '../game/contracts';
 import { adventurerRank } from '../game/guild';
 import { markDirty, requireState, session } from '../game/session';
 import { MEMBER_COLOR, MEMBER_LABEL, cityHeader, memberStatus } from '../ui/hud';
@@ -239,7 +239,7 @@ export class PartyScene extends Phaser.Scene {
     }
 
     // ---- schedule: what they do on days they aren't on a quest ----
-    const sy = 440;
+    const sy = 410;
     const busy = !scheduledMembers(state).some((m) => m.id === c.id);
     text(this, X + 16, sy, `Schedule${busy ? ' (back from a quest today: starts tomorrow)' : ' (days not on a quest)'}`, { fontSize: '13px', color: COLORS.gold });
     const now = activityOf(state, c);
@@ -248,10 +248,10 @@ export class PartyScene extends Phaser.Scene {
       markDirty();
       this.render();
     }, { fontSize: 13, selected: a === now }));
-    text(this, X + 16, sy + 56, ACTIVITY_INFO[now].describe(), { fontSize: '11px', color: COLORS.dim, wordWrap: { width: W - 32 } });
+    text(this, X + 16, sy + 54, ACTIVITY_INFO[now].describe(), { fontSize: '11px', color: COLORS.dim, wordWrap: { width: W - 32 } });
 
     // ---- food: for members the party feeds; others find their own (greyed out) ----
-    const fy = sy + 74;
+    const fy = sy + 68;
     const fed = isHoused(c);
     const food = foodOf(state, c);
     const expects = FOOD_TIERS[expectedQuality(c)];
@@ -264,6 +264,20 @@ export class PartyScene extends Phaser.Scene {
       markDirty();
       this.render();
     }, { fontSize: 12, selected: fed && t === food, enabled: fed }));
+
+    // ---- lodging: where they sleep in the city (members the party houses); others find their own ----
+    const ly = fy + 32;
+    const where = lodgingOf(state, c);
+    text(this, X + 16, ly, 'Lodging', { fontSize: '13px', color: fed ? COLORS.gold : COLORS.dim });
+    text(this, X + 16, ly + 16, fed ? (c.id === state.mainId ? 'no complaints' : `expects ${['nothing', 'an inn', 'high-end', 'luxury'][expectedQuality(c)]}`) : 'finds their own', {
+      fontSize: '10px', color: COLORS.dim,
+    });
+    button(this, X + 110, ly - 2, 300, 28, fed ? `${lodgingLabel(state, where)}  ▾` : '—', () => this.lodgingMenu(c, X + 110, ly - 2), { fontSize: 12, enabled: fed });
+    if (fed) {
+      const q = LODGING_QUALITY[where];
+      const d = c.id === state.mainId ? 0 : lodgingRelationship(c, where);
+      text(this, X + 420, ly + 4, `quality ${q}${bondOf(c) && d ? ` · ${d > 0 ? '+' : ''}${d} rel/night` : ''}`, { fontSize: '11px', color: d < 0 ? COLORS.bad : COLORS.dim });
+    }
 
     // ---- actions ----
     const by = HEIGHT - 76;
@@ -310,6 +324,34 @@ export class PartyScene extends Phaser.Scene {
         this.render();
       }, 'Dismiss'), { fontSize: 14 });
     }
+  }
+
+  /**
+   * Pick where `c` lodges: outside, one of the inns, or a residence the party owns (with room). Opens above (x, y);
+   * clicking outside it closes it.
+   */
+  private lodgingMenu(c: Character, x: number, y: number): void {
+    const state = requireState();
+    const current = lodgingOf(state, c);
+    const options: CityLodging[] = ['outside', ...INN_TIERS, ...RINGS.filter((r) => state.residences.includes(r))];
+    const rowH = 30;
+    const h = options.length * rowH + 12;
+    const top = y - h - 4;
+    const layer = this.add.container(0, 0).setDepth(900);
+    const shade = this.add.rectangle(0, 0, WIDTH, HEIGHT, 0x000000, 0.35).setOrigin(0).setInteractive();
+    shade.on('pointerup', () => layer.destroy());
+    layer.add([shade, panel(this, x - 6, top, 352, h)]);
+    options.forEach((o, i) => {
+      const full = isResidence(o) && o !== current && residents(state, o).length >= GUILD.residences.capacity;
+      const label = `${lodgingLabel(state, o)}${full ? ' (full)' : ''}`;
+      layer.add(button(this, x, top + 6 + i * rowH, 340, rowH - 4, label, () => {
+        layer.destroy();
+        const err = setLodging(state, c.id, o);
+        if (err) return toast(this, err, COLORS.bad);
+        markDirty();
+        this.render();
+      }, { fontSize: 12, selected: o === current, enabled: !full }));
+    });
   }
 
   /** An invisible hover area that shows a floating tooltip. */
@@ -387,6 +429,13 @@ export class PartyScene extends Phaser.Scene {
       `Market slaves start at ${S.obedienceMarket[0]}-${S.obedienceMarket[1]}, registered prisoners at ${S.obedienceCaptive[0]}-${S.obedienceCaptive[1]}.`,
     ].join('\n');
   }
+}
+
+/** "Silver Lantern Inn · 30g", "Outer City House · free · 3/6", "Outside · free". */
+function lodgingLabel(state: GameState, where: CityLodging): string {
+  if (where === 'outside') return GUILD.lodging.outsidePerPerson ? `Outside · ${GUILD.lodging.outsidePerPerson}g` : 'Outside · free';
+  if (isResidence(where)) return `${GUILD.residences[where].name} · free · ${residents(state, where).length}/${GUILD.residences.capacity}`;
+  return `${GUILD.inns[where].name} · ${lodgingPrice(where)}g`;
 }
 
 /** Which way a slave's Obedience is heading, from their relationship. */

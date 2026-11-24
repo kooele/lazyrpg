@@ -300,6 +300,18 @@ function validateFood(raw: unknown, party: Character[]): GameState['food'] {
 }
 
 const RINGS = ['outer', 'middle', 'inner'] as const;
+const CITY_LODGINGS = ['outside', 'standard', 'highEnd', 'luxury', ...RINGS] as const;
+
+/** Lodging per member (unknown members and places are dropped; residences the party doesn't own fall back to outside later). */
+function validateLodging(raw: unknown, party: Character[]): GameState['lodging'] {
+  if (raw === undefined) return {};
+  const o = obj(raw, 'lodging');
+  const out: GameState['lodging'] = {};
+  for (const [id, l] of Object.entries(o)) {
+    if (party.some((c) => c.id === id) && (CITY_LODGINGS as readonly unknown[]).includes(l)) out[id] = l as GameState['lodging'][string];
+  }
+  return out;
+}
 
 function validateState(raw: Record<string, unknown>): GameState {
   const progress = obj(raw.progress, 'progress');
@@ -357,6 +369,7 @@ function validateState(raw: Record<string, unknown>): GameState {
     questMembers: raw.questMembers === undefined ? [] : arr(raw.questMembers, 'questMembers').filter((id): id is string => typeof id === 'string'),
     schedule: validateSchedule(raw.schedule, party),
     food: validateFood(raw.food, party),
+    lodging: validateLodging(raw.lodging, party),
     drinksDay: raw.drinksDay === undefined ? 0 : int(raw.drinksDay, 'drinksDay'),
     belowRankSince: raw.belowRankSince === undefined ? 0 : int(raw.belowRankSince, 'belowRankSince'),
     residences: raw.residences === undefined ? [] : [...new Set(arr(raw.residences, 'residences').map((r, i) => oneOf(r, RINGS, `residences[${i}]`)))],

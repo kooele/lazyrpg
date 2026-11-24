@@ -2,7 +2,7 @@
 import Phaser from 'phaser';
 import { GUILD } from '../data/guild';
 import type { Character, GameState, Rank } from '../data/types';
-import { boarders, foodCost, isPayday, weeklyTaxes, weeklyWages } from '../game/city';
+import { boarders, dailyUpkeep, foodCost, isPayday, lodgingCost, weeklyTaxes, weeklyWages } from '../game/city';
 import { daysLeft, isCompanion } from '../game/contracts';
 import { nextRank, rankThreshold } from '../game/guild';
 import { session } from '../game/session';
@@ -42,7 +42,7 @@ export function cityHeader(scene: Phaser.Scene, state: GameState, title: string)
   const toPay = (7 - (state.day % 7)) % 7;
   // Right: gold, then upkeep on two short lines (so they stay clear of the party's renown in the middle).
   text(scene, WIDTH - 20, 6, `${state.gold} gold`, { fontSize: '20px', color: COLORS.gold }).setOrigin(1, 0);
-  const feeding = text(scene, WIDTH - 20, 32, `Feeding ${boarders(state).length} (${foodCost(state)}g/day)`, { fontSize: '11px', color: COLORS.dim }).setOrigin(1, 0);
+  const feeding = text(scene, WIDTH - 20, 32, `Housing ${boarders(state).length}: ${dailyUpkeep(state, 'city')}g/day (food ${foodCost(state)}, lodging ${lodgingCost(state, 'city')})`, { fontSize: '11px', color: COLORS.dim }).setOrigin(1, 0);
   const wages = text(scene, WIDTH - 20, 46,
     `Wages ${weeklyWages(state)}${weeklyTaxes(state) ? ` + slave tax ${weeklyTaxes(state)}` : ''}/week ${isPayday(state.day) ? '(paid today)' : `(payday in ${toPay}d)`}`,
     { fontSize: '11px', color: COLORS.dim }).setOrigin(1, 0);

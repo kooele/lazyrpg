@@ -6,7 +6,7 @@ A small turn-based tactical RPG that runs in the browser, built with [Phaser 4](
 
 1. **Main menu**: New Game, Continue, Save Game, Load Game, and **Quick Battle (Demo)**: the original game on its own. Recruit up to 4 Adventurers for free at a camp (any look, weapon and skills), then fight stages 1 to 5; every victory is worth exactly one level, and clearing stage 5 completes the demo. The **Enemies** slider at camp raises the difficulty: it multiplies the encounter's size from 1x to 5x in 0.5 steps (5x at stage 1 is 30 rats, whatever the size of your party). Big encounters deploy further toward the middle of the map. The demo is separate from your Arch City campaign and isn't saved.
 2. **Your character**: a new game starts by creating your main character (name, sex, skin, face, hair, hair colour, clothes colour, weapon, skills) and naming your party. The main character is permanent: they can't be dismissed, but they can be **benched** (Manage Party) to rest in the city while the rest of the party goes on quests without them.
-3. **Arch City**: the hub is a map of the walled city (`public/art/city/arch-city.webp`) with two tabs: the **Outer City**, between the outer and inner walls and out to the harbour (Adventurer Guild, the domed hall in the south-west; Docks, Marketplace, Slave Market, Slums, Customs Office, Tailor, Auction House, Church, Sleeping Griffin Inn, Outer City House), and the **Inner City**, inside the inner wall (Lord's Manor, Central Church, Central Government Office, Library, Estate Office, Silver Lantern Inn, Gilded Crown Inn, Inner City Townhouse, Inner City Mansion). Click a pin on the map or a button below it. Open so far: the **Adventurer Guild**, the **Slave Market**, the **Estate Office**, the three **inns** and the three **residences**; the rest are greyed out. **Manage Party** (bottom bar) handles your members and their schedule, **Sleep outside** ends the day for free, and the side panel sets out on an accepted quest. See [Arch City and the guild](#arch-city-and-the-adventurer-guild).
+3. **Arch City**: the hub is a map of the walled city (`public/art/city/arch-city.webp`) with two tabs: the **Outer City**, between the outer and inner walls and out to the harbour (Adventurer Guild, the domed hall in the south-west; Docks, Marketplace, Slave Market, Slums, Customs Office, Tailor, Auction House, Church, Sleeping Griffin Inn, Outer City House), and the **Inner City**, inside the inner wall (Lord's Manor, Central Church, Central Government Office, Library, Estate Office, Silver Lantern Inn, Gilded Crown Inn, Inner City Townhouse, Inner City Mansion). Click a pin on the map or a button below it. Open so far: the **Adventurer Guild**, the **Slave Market**, the **Estate Office**, the three **inns** and the three **residences**; the rest are greyed out. **Manage Party** (bottom bar) handles your members, their schedule, food and lodging, **End Day** ends the day, and the side panel sets out on an accepted quest. See [Arch City and the guild](#arch-city-and-the-adventurer-guild).
 4. **Adventurers**: There are no fixed classes. Every party member is an Adventurer, and you build them by mixing a weapon with picks from the skill trees. Up to 4 go on each quest (the lineup); the party can have up to 8 members.
 5. **Tactical battle**: XCOM-style alternating turns. On your turn, every Adventurer has **2 AP** (action points), a movement AP and an action AP, and can spend them in any order (click a unit or press Tab). See [Action points and mana](#action-points-and-mana). Skills sit on the **skill bar** under the map: press **1–0** (or click a slot) to use one. Each slot shows its AP cost along the bottom (**Ends Turn**, **1AP**, **2AP** or **free**) and its mana cost at the top. By default slot 1 is the basic attack, 2 Overwatch, 3 Dash, and the rest follow; newly learned skills go after the last used slot. **Drag a slot onto another** to swap them (the layout is saved per character). With more than 10 skills the bar gets more pages: flip with ▲ ▼ or **[ ]**, and while dragging, hover ▲ ▼ to carry a skill to another page (or to a new empty one). The battle log is in the sidebar. Hover a skill to see its range box; any tile in range can be targeted. The map is 18×13 tiles (set in `stats.json`). Terrain: grass costs 4 Movement, forest 6 (and gives +20 Defense), river 8. Rock and deep water block movement, and rock blocks line of sight.
 
@@ -14,29 +14,31 @@ A small turn-based tactical RPG that runs in the browser, built with [Phaser 4](
 
 The management and simulation side of the game (Arch City, the guild, contracts, days) is the **Strategic Layer**; battles are the **Tactical Layer**.
 
-Time passes in days, and **every day ends with a night somewhere**: an **inn** (1 night, 3 nights or a week), a **residence** the party owns, or **sleeping outside** (free; button in the city's bottom bar). A quest doesn't end the day: the party comes back in the evening and still needs a bed, and you can only go on **one quest a day** (you can accept the next one, but set out tomorrow). A quest that takes several days spends the nights before the last on the road. The party pays food and lodging for the main character, slaves, and companions whose contract includes it. Lodging:
+Time passes in days. **End Day** (the city's bottom bar) ends the day: everyone the party houses (the main character, slaves, and companions whose contract includes food and lodging) spends the night **where they lodge**, set per member in **Manage Party**: **outside**, one of the three **inns**, or a **residence** the party owns. Each member pays for their own night. A quest doesn't end the day: the party comes back in the evening, and you can only go on **one quest a day** (you can accept the next one, but set out tomorrow). A quest that takes several days spends the nights before the last on the road. Lodging:
 
 | Where | Per person per night | Quality |
 |---|---|---|
-| Sleeping outside | free | 0 |
-| Sleeping Griffin Inn (Outer City) | 8 gold | 1 |
-| Silver Lantern Inn (Inner City, high-end) | 16 gold | 2 |
-| Gilded Crown Inn (Inner City, luxury) | 30 gold | 3 |
-| Your residence (Outer City House / Inner City Townhouse / Mansion) | free | 1 / 2 / 3 |
+| Outside (everyone's default) | free | 0 |
+| Sleeping Griffin Inn (Outer City) | 10 gold | 1 |
+| Silver Lantern Inn (Inner City, high-end) | 30 gold | 2 |
+| Gilded Crown Inn (Inner City, luxury) | 90 gold | 3 |
+| Your residence (Outer City House / Inner City Townhouse / Mansion), up to 6 residents each | free | 1 / 2 / 3 |
 | On the road (multi-day quests) | free (food is still paid) | doesn't count |
+
+**Inns** are otherwise just for **drinks** (a round for the whole party, once a day); more is coming there later.
 
 **Food** is paid every day (in the city and on the road) and set per member in **Manage Party** (`food` in `guild.json`):
 
 | Food | Per person per day | Quality |
 |---|---|---|
 | Poor | 2 gold | 0 |
-| Common (default) | 4 gold | 1 |
-| Fine | 8 gold | 2 |
-| Luxury | 16 gold | 3 |
+| Common (default) | 5 gold | 1 |
+| Fine | 15 gold | 2 |
+| Luxury | 45 gold | 3 |
 
-Companions whose contract doesn't include food and lodging find their own (their food buttons are greyed out), as do mercenaries.
+Companions whose contract doesn't include food and lodging find their own (their food and lodging choices are greyed out), as do mercenaries.
 
-**Residences** are bought and sold at the **Estate Office** (Inner City): the **Outer City House 2,000 gold**, the **Inner City Townhouse 10,000** and the **Inner City Mansion 50,000**; the office buys one back for 70% of its price. Nights there are free and count as good as the Sleeping Griffin, the Silver Lantern and the Gilded Crown respectively. Each residence has its own pin on the map, where the party can stay once it owns it.
+**Residences** are bought and sold at the **Estate Office** (Inner City): the **Outer City House 4,000 gold**, the **Inner City Townhouse 12,000** and the **Inner City Mansion 36,000**; the office buys one back for 70% of its price. Each houses **at most 6 residents** whatever its tier (`residences.capacity`), and nights there are free and count as good as the Sleeping Griffin, the Silver Lantern and the Gilded Crown respectively. Each residence has its own pin on the map showing who lives there (the Estate Office lists them too). Selling a residence sends its residents outside until you move them.
 
 **Expectations** follow each adventurer's rank (see below): **D**-rank adventurers are fine sleeping outside, **C** expect an inn or the Outer City House, **B** a high-end inn or the Townhouse, **A** and **S** the luxury inn or the Mansion. Each night, every companion the party houses gains **+2 relationship** if they slept better than they expect, and loses **3 per quality step** worse: an A-rank companion loses 9 for a night outside. Food works the same way against the same expectations (D poor, C common, B fine, A and S luxury), at **+1** for better food and **−2 per step** worse; slaves count too. (`lodging`, `food` and `residences` in `guild.json`.)
 

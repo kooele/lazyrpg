@@ -190,6 +190,7 @@ export function leaveParty(state: GameState, c: Character, greed = 1): void {
   state.lineup = state.lineup.filter((id) => id !== c.id);
   delete state.schedule[c.id];
   delete state.food[c.id];
+  delete state.lodging[c.id];
   const { contract: _contract, ...character } = c;
   state.guild.pool.push({ character, greed, patience: GUILD.companion.patience, refusedUntil: state.day + 3 });
 }

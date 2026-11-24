@@ -34,7 +34,7 @@ export interface InnConfig {
   drinksMorale: number;
 }
 
-/** Where the party spends a night: an inn, a residence (by ring), outside (free), or on the road during a quest. */
+/** Where a member spends a night: an inn, a residence (by ring), outside (free), or on the road during a quest. */
 export type Lodging = InnTier | Ring | 'outside' | 'road';
 /** A night in the city (not on the road). */
 export type CityLodging = Exclude<Lodging, 'road'>;
@@ -68,7 +68,7 @@ export interface GuildConfig {
   food: Record<FoodTier, { name: string; pricePerPerson: number }> & { default: FoodTier; relationshipAbove: number; relationshipBelowPerStep: number };
   inns: Record<InnTier, InnConfig>;
   lodging: { expectedQuality: Record<'S' | Rank, number>; relationshipAbove: number; relationshipBelowPerStep: number; outsidePerPerson: number };
-  residences: Record<Ring, { name: string; price: number }> & { sellShare: number };
+  residences: Record<Ring, { name: string; price: number }> & { sellShare: number; capacity: number };
   condition: {
     maxHealthLoss: number;
     healthPerDay: number;
@@ -205,7 +205,7 @@ function parseFood(v: unknown): GuildConfig['food'] {
 
 function parseResidences(v: unknown): GuildConfig['residences'] {
   const o = obj(v, 'residences');
-  const out = { sellShare: num(o.sellShare, 'residences.sellShare', 0, 1) } as GuildConfig['residences'];
+  const out = { sellShare: num(o.sellShare, 'residences.sellShare', 0, 1), capacity: num(o.capacity ?? 6, 'residences.capacity', 1, 99) } as GuildConfig['residences'];
   for (const r of RINGS) {
     const h = obj(o[r], `residences.${r}`);
     if (typeof h.name !== 'string' || !h.name) fail(`residences.${r}.name`, 'must be a name');

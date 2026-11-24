@@ -1,27 +1,28 @@
 import Phaser from 'phaser';
 import { GUILD, LODGING_QUALITY, isResidence, type InnTier, type Ring } from '../data/guild';
-import { boarders, buyDrinks, dailyUpkeep, drinksCost, foodCost, isPayday, lodgingCost, stayAtHome, stayAtInn, weeklyTaxes, weeklyWages } from '../game/city';
-import { QUALITY_TEXT, foodOf, foodRelationship, lodgingName, lodgingRelationship, moraleOf } from '../game/condition';
-import { bondOf, isHoused } from '../game/contracts';
+import { buyDrinks, drinksCost, residents } from '../game/city';
+import { QUALITY_TEXT, moraleOf } from '../game/condition';
 import { markDirty, requireState, session } from '../game/session';
 import { cityHeader } from '../ui/hud';
-import { COLORS, HEIGHT, ScrollList, WIDTH, button, figure, panel, setupCamera, text } from '../ui/widgets';
+import { COLORS, HEIGHT, WIDTH, button, figure, panel, setupCamera, text } from '../ui/widgets';
 
 type Place = InnTier | Ring;
 
 const BLURB: Record<Place, string> = {
-  standard: 'A busy common-room inn by the outer wall: stew, ale and a straw mattress. It does the job.',
-  highEnd: 'A respectable Inner City inn just inside the inner wall: clean sheets, a private room each and a decent wine list.',
-  luxury: 'The finest house in the Inner City: feather beds, hot baths and a cellar to match. Seasoned adventurers expect nothing less.',
+  standard: 'A busy common-room inn by the outer wall: stew, ale and a roaring fire.',
+  highEnd: 'A respectable Inner City inn just inside the inner wall, with a decent wine list.',
+  luxury: 'The finest house in the Inner City: a cellar to match its feather beds and hot baths.',
   outer: 'A sturdy townhouse inside the outer wall. Your own roof: nights here cost nothing.',
   middle: 'A handsome townhouse inside the inner wall, among merchants and guild masters. Nights here cost nothing.',
   inner: 'A mansion in the heart of the Inner City, a street away from the Lord\'s Manor. Nights here cost nothing.',
 };
 
-/** An inn or one of the party's residences: end the day with a night's lodging (or several). Inns also sell drinks. */
+/**
+ * An inn (drinks for the party; more to come) or one of the city's residences (who lives there).
+ * Where members sleep is set per member in Manage Party; the day ends with End Day on the city screen.
+ */
 export class InnScene extends Phaser.Scene {
   private place: Place = 'standard';
-  private report: string[] = [];
 
   constructor() {
     super('Inn');
@@ -29,7 +30,6 @@ export class InnScene extends Phaser.Scene {
 
   init(data: { tier?: InnTier; ring?: Ring }): void {
     this.place = data.ring ?? data.tier ?? 'standard';
-    this.report = [];
   }
 
   create(): void {
@@ -45,80 +45,56 @@ export class InnScene extends Phaser.Scene {
   private render(): void {
     this.children.removeAll(true);
     const state = requireState();
-    const home = isResidence(this.place) ? this.place : null;
-    const inn = home ? null : GUILD.inns[this.place as InnTier];
-    const owned = !!home && state.residences.includes(home);
-    cityHeader(this, state, home ? GUILD.residences[home].name : inn!.name);
+    const place = this.place;
+    cityHeader(this, state, isResidence(place) ? GUILD.residences[place].name : GUILD.inns[place].name);
     button(this, WIDTH - 176, 74, 160, 34, `Back to ${GUILD.city}`, () => this.scene.start('City'), { fontSize: 14 });
-
-    panel(this, 16, 116, 560, HEIGHT - 132);
-    text(this, 30, 126, BLURB[this.place], { fontSize: '14px', wordWrap: { width: 532 }, lineSpacing: 3 });
-    const guests = boarders(state);
-    const perNight = dailyUpkeep(state, this.place);
-    const price = home ? (owned ? 'Yours: free nights (food still costs)' : `For sale: ${GUILD.residences[home].price} gold`) : `${inn!.pricePerPerson} gold per person a night`;
-    text(this, 30, 184, price, { fontSize: '18px', color: COLORS.gold });
-    const quality = LODGING_QUALITY[this.place];
-    const perks = [
-      `Counts as ${QUALITY_TEXT[quality]} (quality ${quality} of 3). D-rank adventurers are fine outside; C-rank expect an inn, B-rank a high-end inn, A and S-rank a luxury one (or a residence as good).`,
-      `The party houses ${guests.length}: you, your slaves, and companions whose contract includes food & lodging. Those companions, and slaves, like a better night than they expect and resent a worse one.`,
-    ];
-    text(this, 30, 214, perks.join('\n'), { fontSize: '12px', color: COLORS.dim, wordWrap: { width: 532 }, lineSpacing: 3 });
-    guests.forEach((c, i) => figure(this, 52 + i * 52, 372, 62, c.appearance, c.weaponId));
-    text(this, 30, 378, guests.map((c) => c.name).join(', '), { fontSize: '12px', color: COLORS.dim, wordWrap: { width: 532 } });
-
-    const toPay = (7 - (state.day % 7)) % 7;
-    text(this, 30, 408, `Tonight: ${perNight} gold (lodging ${lodgingCost(state, this.place)} + food ${foodCost(state)}).   Gold: ${state.gold}.\nNext payday ${isPayday(state.day) ? 'is today' : `in ${toPay} day${toPay === 1 ? '' : 's'}`}: ${weeklyWages(state)} gold in wages${weeklyTaxes(state) ? ` and ${weeklyTaxes(state)} in slave tax` : ''}.`, {
-      fontSize: '13px', lineSpacing: 4,
-    });
-    if (home && !owned) {
-      button(this, 30, 452, 530, 46, `For sale at the Estate Office (Inner City): ${GUILD.residences[home].price} gold`, () => this.scene.start('Estate'), { fontSize: 15 });
-    } else {
-      const stays: [number, string][] = [[1, 'Stay the night'], [3, 'Stay 3 nights'], [7, 'Stay a week']];
-      stays.forEach(([n, label], i) => button(this, 30 + i * 180, 452, 170, 46, `${label}\n${perNight * n} gold${home ? ' (food)' : ''}`, () => this.stay(n), {
-        fontSize: 14, enabled: state.gold >= perNight * n, fill: 0x2c4a2f,
-      }));
-      if (state.gold < perNight) text(this, 30, 502, 'You can\'t afford a night here.', { fontSize: '13px', color: COLORS.bad });
-    }
-    const housed = state.party.filter((c) => bondOf(c) && isHoused(c));
-    if (housed.length) {
-      const mood = housed.map((c) => {
-        const d = lodgingRelationship(c, this.place) + foodRelationship(c, foodOf(state, c));
-        const rel = Math.round(bondOf(c)?.relationship ?? 0);
-        return `${c.name} ${rel}${d ? ` (${d > 0 ? '+' : ''}${d}/night)` : ''}`;
-      });
-      text(this, 30, 520, `Relationship here (lodging + food): ${mood.join(', ')}`, { fontSize: '12px', color: '#e05a9b', wordWrap: { width: 532 } });
-    }
-    if (inn) {
-      const tier = this.place as InnTier;
-      const drinks = drinksCost(state, tier);
-      const hadRound = state.drinksDay === state.day;
-      button(this, 30, HEIGHT - 76, 250, 44, hadRound ? 'Drinks: already had a round today' : `Buy a round of drinks · ${drinks} gold`, () => {
-        if (buyDrinks(state, tier)) return;
-        this.report.push(`Day ${state.day}: a round of drinks for everyone (${drinks} gold). Morale +${inn.drinksMorale}.`);
-        markDirty();
-        this.render();
-      }, { fontSize: 12, enabled: !hadRound && state.gold >= drinks });
-      text(this, 292, HEIGHT - 76, `Morale +${inn.drinksMorale} for the whole party (once a day).\n${state.party.map((c) => `${c.name} ${moraleOf(c)}`).join(', ')}`, {
-        fontSize: '11px', color: COLORS.dim, wordWrap: { width: 276 }, lineSpacing: 2,
-      });
-    }
-
-    panel(this, 588, 116, 356, HEIGHT - 132);
-    text(this, 600, 124, 'During your stay', { fontSize: '13px', color: COLORS.dim });
-    const list = new ScrollList(this, 598, 146, 338, HEIGHT - 170, 6);
-    list.setItems(this.report.map((line) => {
-      const t = text(this, 0, 0, line, { fontSize: '12px', wordWrap: { width: 324 }, lineSpacing: 1 });
-      return { obj: this.add.container(0, 0, [t]), height: t.height };
-    }), 'end');
-    if (!this.report.length) text(this, 766, 300, 'Nothing yet.', { color: COLORS.dim }).setOrigin(0.5);
+    text(this, 20, 82, BLURB[place], { fontSize: '14px', wordWrap: { width: WIDTH - 220 }, lineSpacing: 3 });
+    if (isResidence(place)) this.residence(place);
+    else this.inn(place);
   }
 
-  private stay(nights: number): void {
+  /** An inn: a round of drinks for the party. The rest of the room is kept free for what the inn will offer later. */
+  private inn(tier: InnTier): void {
     const state = requireState();
-    const from = state.day;
-    const msgs = isResidence(this.place) ? stayAtHome(state, this.place, nights, Math.random) : stayAtInn(state, this.place, nights, Math.random);
-    this.report.push(`Day ${from} to day ${state.day}: ${nights} night${nights > 1 ? 's' : ''} at ${lodgingName(this.place)}.`, ...msgs.map((m) => `• ${m}`));
-    markDirty();
-    this.render();
+    const inn = GUILD.inns[tier];
+    panel(this, 16, 130, WIDTH - 32, 104);
+    text(this, 30, 140, 'Drinks', { fontSize: '16px', color: COLORS.gold });
+    const drinks = drinksCost(state, tier);
+    const hadRound = state.drinksDay === state.day;
+    button(this, 30, 166, 280, 44, hadRound ? 'Already had a round today' : `Buy a round of drinks · ${drinks} gold`, () => {
+      if (buyDrinks(state, tier)) return;
+      markDirty();
+      this.render();
+    }, { fontSize: 13, enabled: !hadRound && state.gold >= drinks });
+    text(this, 326, 166, `${inn.drinksPerPerson} gold a head. Morale +${inn.drinksMorale} for the whole party, once a day.\n${state.party.map((c) => `${c.name} ${moraleOf(c)}`).join(', ')}`, {
+      fontSize: '12px', color: COLORS.dim, wordWrap: { width: WIDTH - 370 }, lineSpacing: 3,
+    });
+  }
+
+  /** A residence: who lives there (set in Manage Party), or where to buy it. */
+  private residence(ring: Ring): void {
+    const state = requireState();
+    const home = GUILD.residences[ring];
+    const owned = state.residences.includes(ring);
+    const q = LODGING_QUALITY[ring];
+    panel(this, 16, 130, WIDTH - 32, HEIGHT - 146);
+    text(this, 30, 140, owned ? 'Yours: nights here are free (food still costs).' : `For sale at the Estate Office: ${home.price} gold.`, {
+      fontSize: '16px', color: owned ? '#6fdc8c' : COLORS.gold,
+    });
+    text(this, 30, 164, `Night quality ${q} of 3: counts as ${QUALITY_TEXT[q]}. Room for ${GUILD.residences.capacity} residents.`, { fontSize: '12px', color: COLORS.dim });
+    if (!owned) {
+      button(this, 30, 196, 300, 44, 'Go to the Estate Office', () => this.scene.start('Estate'), { fontSize: 14 });
+      return;
+    }
+    const people = residents(state, ring);
+    text(this, 30, 196, `Residents ${people.length}/${GUILD.residences.capacity}`, { fontSize: '15px', color: COLORS.gold });
+    people.forEach((c, i) => {
+      const x = 70 + i * 140;
+      figure(this, x, 350, 110, c.appearance, c.weaponId);
+      text(this, x, 362, c.name, { fontSize: '13px', align: 'center', wordWrap: { width: 130 } }).setOrigin(0.5, 0);
+    });
+    if (!people.length) text(this, 30, 226, 'Nobody lives here yet.', { fontSize: '13px', color: COLORS.dim });
+    text(this, 30, 404, 'Choose where each member lodges in Manage Party.', { fontSize: '12px', color: COLORS.dim });
+    button(this, 30, 426, 200, 40, 'Manage Party', () => this.scene.start('Party'), { fontSize: 14 });
   }
 }
