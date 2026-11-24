@@ -60,8 +60,9 @@
   },
   "_inns": "pricePerPerson: a night's lodging for one member assigned to the inn (Manage Party). drinksPerPerson / drinksMorale: a round of drinks for the whole party (once a day) costs drinksPerPerson per member and raises everyone's Morale by drinksMorale.",
   "lodging": {
-    "_comment": "Every day ends (End Day on the city screen) with a night for each housed member where they lodge, set per member in Manage Party: an inn, a residence the party owns (free; at most residences.capacity residents each), or outside (outsidePerPerson). Night quality: outside 0; the Sleeping Griffin or the Outer City House 1; the Silver Lantern or the Inner City Townhouse 2; the Gilded Crown or the Inner City Mansion 3. expectedQuality is what an adventurer of each rank (from their level) expects. Each night, housed companions (food & lodging in their contract) and slaves gain relationshipAbove when they sleep better than they expect, and lose relationshipBelowPerStep for each step worse. Nights on the road during multi-day quests are free (food is still paid) and don't count.",
-    "expectedQuality": { "D": 1, "C": 1, "B": 2, "A": 2, "S": 3 },
+    "_comment": "Every day ends (End Day on the city screen) with a night for each housed member where they lodge, set per member in Manage Party: an inn, a residence the party owns (free; at most residences.capacity residents each), or outside (outsidePerPerson). Night quality: outside 0; the Sleeping Griffin or the Outer City House 1; the Silver Lantern or the Inner City Townhouse 2; the Gilded Crown or the Inner City Mansion 3. expectedQuality is what an adventurer of each rank (from their level) expects (common food and an inn at every rank for now); slaves expect slaveExpectedQuality instead, whatever their rank (poor food, outside). Each night, housed companions (food & lodging in their contract) and slaves gain relationshipAbove when they sleep better than they expect, and lose relationshipBelowPerStep for each step worse. Nights on the road during multi-day quests are free (food is still paid) and don't count.",
+    "expectedQuality": { "D": 1, "C": 1, "B": 1, "A": 1, "S": 1 },
+    "slaveExpectedQuality": 0,
     "relationshipAbove": 2,
     "relationshipBelowPerStep": 3,
     "outsidePerPerson": 0

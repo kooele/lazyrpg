@@ -60,8 +60,9 @@ export function healthLoss(lowestHp: number): number {
   return Math.round(GUILD.condition.maxHealthLoss * (1 - clamp(lowestHp, 1)));
 }
 
-/** The night quality an adventurer expects, from their rank: D 0 (outside is fine) up to A/S 3 (luxury). */
+/** The food and night quality a member expects: slaves lodging.slaveExpectedQuality, everyone else lodging.expectedQuality for their rank. */
 export function expectedQuality(c: Character): number {
+  if (c.contract?.type === 'slave') return GUILD.lodging.slaveExpectedQuality;
   return GUILD.lodging.expectedQuality[adventurerRank(c.level)];
 }
 

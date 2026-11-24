@@ -68,7 +68,7 @@ export interface GuildConfig {
   threat: ThreatConfig;
   food: Record<FoodTier, { name: string; pricePerPerson: number }> & { default: FoodTier; relationshipAbove: number; relationshipBelowPerStep: number };
   inns: Record<InnTier, InnConfig>;
-  lodging: { expectedQuality: Record<'S' | Rank, number>; relationshipAbove: number; relationshipBelowPerStep: number; outsidePerPerson: number };
+  lodging: { expectedQuality: Record<'S' | Rank, number>; slaveExpectedQuality: number; relationshipAbove: number; relationshipBelowPerStep: number; outsidePerPerson: number };
   residences: Record<Ring, { name: string; price: number }> & { sellShare: number; capacity: number };
   condition: {
     maxHealthLoss: number;
@@ -295,6 +295,7 @@ export function parseGuildConfig(data: unknown): GuildConfig {
     lodging: {
       ...numbers<Omit<GuildConfig['lodging'], 'expectedQuality'>>(d.lodging, 'lodging', ['relationshipAbove', 'relationshipBelowPerStep', 'outsidePerPerson']),
       expectedQuality: numbers(obj(d.lodging, 'lodging').expectedQuality, 'lodging.expectedQuality', [...RANKS], 3),
+      slaveExpectedQuality: num(obj(d.lodging, 'lodging').slaveExpectedQuality ?? 0, 'lodging.slaveExpectedQuality', 0, 3),
     },
     residences: parseResidences(d.residences),
     condition: numbers<GuildConfig['condition']>(d.condition, 'condition', ['maxHealthLoss', 'healthPerDay', 'startingMorale', 'moralePerTurn',
