@@ -383,7 +383,7 @@ describe('contracts', () => {
     const t = { basePay: 0, lootPct: 10, foodLodging: false, termWeeks: 4 };
     expect(offerValue(t, 'B', 3)).toBeGreaterThan(offerValue(t, 'D', 3));
     // Food & lodging are worth what the food and night their rank expects would cost: D poor food outside ... A luxury food at the Gilded Crown.
-    expect([1, 6, 11, 16, 21].map(foodLodgingWeekly)).toEqual([2 * 7, (6 + 10) * 7, (18 + 30) * 7, (54 + 90) * 7, (54 + 90) * 7]);
+    expect([1, 6, 11, 16, 21].map(foodLodgingWeekly)).toEqual([2 * 7, (6 + 9) * 7, (12 + 18) * 7, (20 + 30) * 7, (20 + 30) * 7]);
     const fl = { basePay: 0, lootPct: 0, foodLodging: true, termWeeks: 4 };
     expect(offerValue(fl, 'D', 11)).toBe(foodLodgingWeekly(11));
   });
@@ -563,9 +563,9 @@ describe('contracts', () => {
     const s = start();
     const cap = GUILD.residences.capacity;
     expect(cap).toBe(6);
-    expect([GUILD.inns.standard.pricePerPerson, GUILD.inns.highEnd.pricePerPerson, GUILD.inns.luxury.pricePerPerson]).toEqual([10, 30, 90]);
-    expect(FOOD_TIERS.map((t) => GUILD.food[t].pricePerPerson)).toEqual([2, 6, 18, 54]);
-    expect([GUILD.residences.outer.price, GUILD.residences.middle.price, GUILD.residences.inner.price]).toEqual([4000, 12000, 36000]);
+    expect([GUILD.inns.standard.pricePerPerson, GUILD.inns.highEnd.pricePerPerson, GUILD.inns.luxury.pricePerPerson]).toEqual([9, 18, 30]);
+    expect(FOOD_TIERS.map((t) => GUILD.food[t].pricePerPerson)).toEqual([2, 6, 12, 20]);
+    expect([GUILD.residences.outer.price, GUILD.residences.middle.price, GUILD.residences.inner.price]).toEqual([4000, 10000, 25000]);
     const main = mainCharacter(s);
     const slaves = Array.from({ length: cap }, (_, i) => {
       const c = createCharacter(`S${i}`);
@@ -579,7 +579,7 @@ describe('contracts', () => {
     // Each member pays for their own inn.
     setLodging(s, main.id, 'luxury');
     setLodging(s, slaves[0].id, 'standard');
-    expect(lodgingCost(s, 'city')).toBe(90 + 10);
+    expect(lodgingCost(s, 'city')).toBe(30 + 9);
     expect(lodgingCost(s, 'road')).toBe(0);
     // A residence: free, but only 6 residents, whatever its tier.
     s.residences = ['outer'];
@@ -587,7 +587,7 @@ describe('contracts', () => {
     expect(residents(s, 'outer')).toHaveLength(cap);
     expect(setLodging(s, main.id, 'outer')).toMatch(/full/);
     expect(setLodging(s, slaves[0].id, 'outer')).toBeNull(); // already living there
-    expect(lodgingCost(s, 'city')).toBe(90);
+    expect(lodgingCost(s, 'city')).toBe(30);
     // Members who find their own lodging can't be given any.
     const merc = companion(s);
     if (merc.contract?.type === 'companion') merc.contract.foodLodging = false;
@@ -597,7 +597,7 @@ describe('contracts', () => {
     const before = s.gold;
     const food = foodCost(s);
     endDay(s, makeRng(1));
-    expect(s.gold).toBe(before - 90 - food);
+    expect(s.gold).toBe(before - 30 - food);
     const r = parseSave(serializeSave(s));
     if (!r.ok) throw new Error(r.error);
     expect(r.state.lodging).toEqual(s.lodging);

@@ -47,16 +47,16 @@
     "_comment": "Food for every member the party feeds (the main character, slaves, and companions with food & lodging in their contract), set per member in Manage Party. Each day, a fed member costs that tier's pricePerPerson. Quality: poor 0, common 1, fine 2, luxury 3, compared with lodging.expectedQuality for their rank like a night's lodging: companions and slaves gain relationshipAbove when they eat better than they expect and lose relationshipBelowPerStep for each step worse. default is the tier for members nobody has set.",
     "poor": { "name": "Poor", "pricePerPerson": 2 },
     "common": { "name": "Common", "pricePerPerson": 6 },
-    "fine": { "name": "Fine", "pricePerPerson": 18 },
-    "luxury": { "name": "Luxury", "pricePerPerson": 54 },
+    "fine": { "name": "Fine", "pricePerPerson": 12 },
+    "luxury": { "name": "Luxury", "pricePerPerson": 20 },
     "default": "common",
     "relationshipAbove": 1,
     "relationshipBelowPerStep": 2
   },
   "inns": {
-    "standard": { "name": "Sleeping Griffin Inn", "pricePerPerson": 10, "drinksPerPerson": 4, "drinksMorale": 8 },
-    "highEnd": { "name": "Silver Lantern Inn", "pricePerPerson": 30, "drinksPerPerson": 8, "drinksMorale": 12 },
-    "luxury": { "name": "Gilded Crown Inn", "pricePerPerson": 90, "drinksPerPerson": 12, "drinksMorale": 15 }
+    "standard": { "name": "Sleeping Griffin Inn", "pricePerPerson": 9, "drinksPerPerson": 4, "drinksMorale": 8 },
+    "highEnd": { "name": "Silver Lantern Inn", "pricePerPerson": 18, "drinksPerPerson": 8, "drinksMorale": 12 },
+    "luxury": { "name": "Gilded Crown Inn", "pricePerPerson": 30, "drinksPerPerson": 12, "drinksMorale": 15 }
   },
   "_inns": "pricePerPerson: a night's lodging for one member assigned to the inn (Manage Party). drinksPerPerson / drinksMorale: a round of drinks for the whole party (once a day) costs drinksPerPerson per member and raises everyone's Morale by drinksMorale.",
   "lodging": {
@@ -71,8 +71,8 @@
     "sellShare": 0.7,
     "capacity": 6,
     "outer": { "name": "Outer City House", "price": 4000 },
-    "middle": { "name": "Inner City Townhouse", "price": 12000 },
-    "inner": { "name": "Inner City Mansion", "price": 36000 }
+    "middle": { "name": "Inner City Townhouse", "price": 10000 },
+    "inner": { "name": "Inner City Mansion", "price": 25000 }
   },
   "condition": {
     "_comment": "Health (0-100, not battle HP) and Morale (0-100) of party members. After a battle, Health drops by maxHealthLoss x the share of HP the unit lost at its lowest point (falling = the full amount). Below 100 Health a member is injured and can't go on quests; everyone recovers healthPerDay each night. A member whose Health reaches 0 dies (the main character is left at 1 instead). Morale changes: moralePerTurn for each battle turn (round) of a quest, for each member who went, moraleFailedQuest more if it fails, moralePerHealthLost per Health point lost to injuries, moraleMemberDied for everyone when a member dies. New members start at startingMorale. Below lowMorale, companions lose lowMoraleRelationshipPerDay relationship each day; a member at 0 Morale leaves the party (not the main character).",
