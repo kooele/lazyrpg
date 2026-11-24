@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { GUILD } from '../src/data/guild';
 import { STAT_CONFIG, parseStatConfig } from '../src/data/stats';
 import { TALENT_GRADES, type Talent } from '../src/data/types';
 import { createCharacter, deriveStats, levelStats, makeRng } from '../src/game/character';
@@ -81,12 +82,12 @@ describe('talent', () => {
     expect(mercenaryRates(3, 1, s).fee).toBeGreaterThan(mercenaryRates(3, 1).fee);
     expect(companionDemand(3, 1, 4, 0, s)).toBeGreaterThan(companionDemand(3, 1, 4));
     expect(slavePrice(3, () => 0.5, s)).toBeGreaterThan(slavePrice(3, () => 0.5));
-    // Slave value 500 + 100 x level x talent; companion wage 100 + 20 x level x talent; the slave tax (10%) is half the wage.
+    // Slave value 500 + 100 x level x talent; companion wage 100 + 20 x level x talent; slave tax weeklyTaxShare of the slave's value.
     expect(slaveValue({ level: 10 })).toBe(1500);
     expect(slaveValue({ level: 10, talents: all('S') })).toBeCloseTo(2100);
     expect(companionDemand(10, 1, 4)).toBe(300);
     expect(companionDemand(10, 1, 4, 0, 1.6)).toBeCloseTo(420);
-    for (const level of [1, 5, 10, 20]) expect(slaveTax({ level })).toBe(Math.round(companionDemand(level, 1, 4) / 2));
+    for (const level of [1, 5, 10, 20]) expect(slaveTax({ level })).toBe(Math.round(slaveValue({ level }) * GUILD.slave.weeklyTaxShare));
   });
 
   it('older saves with Accuracy / Evasion talents and Body points still load (those are dropped)', () => {
