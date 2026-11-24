@@ -6,7 +6,7 @@ import { boarders, dailyUpkeep, foodCost, isPayday, lodgingCost, weeklyTaxes, we
 import { daysLeft, isCompanion, slaveTax, slaveValue } from '../game/contracts';
 import { nextRank, rankThreshold } from '../game/guild';
 import { session } from '../game/session';
-import { COLORS, WIDTH, panel, text } from './widgets';
+import { COLORS, WIDTH, button, panel, text } from './widgets';
 
 export const RANK_COLORS: Record<Rank, number> = { S: 0xb87fe0, A: 0xe0b44c, B: 0x9fb7d8, C: 0xc08a5a, D: 0x7a8296 };
 
@@ -33,12 +33,14 @@ export function memberStatus(state: GameState, c: Character): string {
   return 'Leader · permanent';
 }
 
-/** The status bar along the top of every city screen. */
-export function cityHeader(scene: Phaser.Scene, state: GameState, title: string): void {
+/** The status bar along the top of every city screen. With `onMenu`, a ☰ menu button sits at its left. */
+export function cityHeader(scene: Phaser.Scene, state: GameState, title: string, onMenu?: () => void): void {
   panel(scene, 0, 0, WIDTH, 64, 0x131726);
-  text(scene, 20, title.length > 18 ? 14 : 10, title, { fontSize: title.length > 18 ? '22px' : '28px', color: COLORS.gold });
+  const left = onMenu ? 64 : 20;
+  if (onMenu) button(scene, 12, 12, 40, 40, '☰', onMenu, { fontSize: 22 });
+  text(scene, left, title.length > 18 ? 14 : 10, title, { fontSize: title.length > 18 ? '22px' : '28px', color: COLORS.gold });
   const sub = `${GUILD.city}  ·  Day ${state.day} (week ${Math.ceil(state.day / 7)})`;
-  text(scene, 22, 42, sub, { fontSize: '13px', color: COLORS.dim });
+  text(scene, left + 2, 42, sub, { fontSize: '13px', color: COLORS.dim });
   const toPay = (7 - (state.day % 7)) % 7;
   // Right: gold, then upkeep on two short lines (so they stay clear of the party's renown in the middle).
   text(scene, WIDTH - 20, 6, `${state.gold} gold`, { fontSize: '20px', color: COLORS.gold }).setOrigin(1, 0);

@@ -84,7 +84,7 @@ export class CityScene extends Phaser.Scene {
   private render(): void {
     this.children.removeAll(true);
     const state = requireState();
-    cityHeader(this, state, GUILD.city);
+    cityHeader(this, state, GUILD.city, () => this.menu());
 
     // ---- district tabs and the map -------------------------------------------------------------
     DISTRICTS.forEach(([id, label], i) => button(this, 16 + i * 294, 72, 286, 30, label, () => {
@@ -144,11 +144,8 @@ export class CityScene extends Phaser.Scene {
     }), 'top');
 
     // ---- bottom ---------------------------------------------------------------------------------
-    button(this, 16, HEIGHT - 60, 104, 46, 'Main Menu', () => this.scene.start('MainMenu'), { fontSize: 14 });
-    button(this, 126, HEIGHT - 60, 104, 46, 'Save Game', () => this.scene.start('SaveLoad', { mode: 'save', returnTo: 'City' }), { fontSize: 14 });
-    button(this, 236, HEIGHT - 60, 82, 46, 'Guide', () => this.scene.start('Glossary', { returnTo: 'City' }), { fontSize: 14 });
-    button(this, 324, HEIGHT - 60, 136, 46, 'Manage Party', () => this.scene.start('Party'), { fontSize: 14 });
-    button(this, 466, HEIGHT - 60, 154, 46, `End Day\n(${dailyUpkeep(requireState(), 'city')} gold)`, () => this.endDay(), { fontSize: 13, fill: 0x2a3348 });
+    button(this, 16, HEIGHT - 60, 296, 46, 'Manage Party', () => this.scene.start('Party'), { fontSize: 16 });
+    button(this, 324, HEIGHT - 60, 296, 46, `End Day (${dailyUpkeep(requireState(), 'city')} gold)`, () => this.endDay(), { fontSize: 16, fill: 0x2a3348 });
 
     if (prisonersAtGate(state)) this.gate();
   }
@@ -205,6 +202,24 @@ export class CityScene extends Phaser.Scene {
       this.render();
       toast(this, `Bounties: ${gold} gold.`);
     }, { fontSize: 14 }));
+  }
+
+  /** The ☰ menu under the header's menu button: save, the guide, settings, or back to the title screen. Click outside to close. */
+  private menu(): void {
+    const items: [string, () => void][] = [
+      ['Save Game', () => this.scene.start('SaveLoad', { mode: 'save', returnTo: 'City' })],
+      ['Guide', () => this.scene.start('Glossary', { returnTo: 'City' })],
+      ['Settings', () => this.scene.start('Settings', { returnTo: 'City' })],
+      ['Main Menu', () => this.scene.start('MainMenu')],
+    ];
+    const layer = this.add.container(0, 0).setDepth(900);
+    const shade = this.add.rectangle(0, 0, WIDTH, HEIGHT, 0x000000, 0.35).setOrigin(0).setInteractive();
+    shade.on('pointerup', () => layer.destroy());
+    layer.add([shade, panel(this, 12, 58, 200, items.length * 44 + 12)]);
+    items.forEach(([label, go], i) => layer.add(button(this, 18, 64 + i * 44, 188, 38, label, () => {
+      layer.destroy();
+      go();
+    }, { fontSize: 15 })));
   }
 
   /** End the day: everyone the party houses sleeps where they lodge (set in Manage Party), and the next day begins. */
