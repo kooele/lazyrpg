@@ -347,9 +347,8 @@ export class PartyScene extends Phaser.Scene {
     text(this, X + 16, sy, 'Schedule', { fontSize: '13px', color: COLORS.gold });
     text(this, X + 16, sy + 16, busy ? 'starts tomorrow' : 'off-quest days', { fontSize: '10px', color: COLORS.dim });
     const now = activityOf(state, c);
-    const auto = !state.schedule[c.id];
     const scheduleOption = (a: Activity): MenuOption => ({
-      label: `${ACTIVITY_INFO[a].name}${auto && a === now ? ' (default)' : ''}`,
+      label: ACTIVITY_INFO[a].name,
       effect: activityEffect(c, a),
       color: COLORS.dim,
       selected: a === now,

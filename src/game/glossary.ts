@@ -60,7 +60,7 @@ export function glossaryEntries(): GlossaryEntry[] {
   add('City life', 'Schedule',
     `Members who aren't on a quest follow their schedule when the day ends (set in Manage Party):\n\n`
     + `• Recover: ${G.schedule.recoverMultiplier}× Health recovery.\n• Training: ${G.schedule.trainingXp.perLevel} XP per level + ${G.schedule.trainingXp.flat} (${trainingXp(1)} at level 1, ${trainingXp(20)} at level 20).\n• Odd Jobs: +${G.schedule.oddJobsGold} gold.\n• Day Off: +${G.schedule.dayOffMorale} Morale.\n\n`
-    + `Unscheduled members take a Day Off, unless their Health would take longer to heal than their Morale takes to fill on Day Off: then they Recover. Benched members (not in the lineup) follow it too.`);
+    + `A schedule you set stays until you change it, except Recover: once Health is full they go back to Day Off. Unscheduled members take a Day Off, unless their Health would take longer to heal than their Morale takes to fill on Day Off: then they Recover. Benched members (not in the lineup) follow it too.`);
   add('City life', 'Food and lodging expectations',
     `Each member you house eats at a food tier and sleeps at a lodging you pick in Manage Party. Each has a quality from 0 to 3.\n\n`
     + `Adventurers of every rank expect quality ${adventurerQ}: ${FOOD_TIERS[adventurerQ]} food (${food(adventurerQ)} gold a day) and an inn (${night(adventurerQ)} gold a night). Slaves expect quality ${L.slaveExpectedQuality}: ${FOOD_TIERS[L.slaveExpectedQuality]} food and the stables.\n\n`

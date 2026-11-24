@@ -1168,6 +1168,23 @@ describe('contracts', () => {
     expect(activityOf(s, c)).toBe('training');
   });
 
+  it('a set schedule stays, except Recover goes back to Day Off once Health is full', () => {
+    const s = start();
+    const c = companion(s);
+    s.gold = 10000;
+    c.health = 100 - GUILD.condition.healthPerDay * GUILD.schedule.recoverMultiplier;
+    c.morale = 100;
+    s.schedule[c.id] = 'recover';
+    advanceDay(s, makeRng(1));
+    expect(healthOf(c)).toBe(100);
+    expect(s.schedule[c.id]).toBe('dayOff');
+    // Other choices are kept whatever Health and Morale do.
+    s.schedule[c.id] = 'training';
+    c.health = 10;
+    advanceDay(s, makeRng(1));
+    expect(s.schedule[c.id]).toBe('training');
+  });
+
   it('moving a member reorders the party but not the lineup', () => {
     const s = start();
     const a = companion(s);

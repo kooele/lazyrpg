@@ -513,6 +513,11 @@ function runSchedule(state: GameState, away: string[]): string[] {
     const was = healthOf(c);
     changeHealth(c, GUILD.condition.healthPerDay * (act === 'recover' ? S.recoverMultiplier : 1));
     if (was < 100 && healthOf(c) === 100) out.push(`${c.name} has fully recovered.`);
+    // The schedule stays as the player set it, except Recover once Health is full: back to Day Off.
+    if (state.schedule[c.id] === 'recover' && healthOf(c) === 100) {
+      state.schedule[c.id] = 'dayOff';
+      out.push(`${c.name} is at full Health: back to Day Off.`);
+    }
     if (!act) continue;
     if (act === 'training') {
       const levels = grantXp(c, trainingXp(c.level));
