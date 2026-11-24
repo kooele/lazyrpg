@@ -17,7 +17,7 @@ export interface ThreatConfig {
   goldPerThreat: number;
   renownPerThreat: number;
   standardCount: number;
-  /** Difficulty shown as half a skull (from) and five skulls (to); evenly in between. */
+  /** Difficulty shown as half a skull (from) and ten skulls (to); evenly in between. */
   skulls: { from: number; to: number };
 }
 

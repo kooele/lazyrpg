@@ -135,13 +135,25 @@ export function acceptQuest(state: GameState, questId: string): string | null {
 export const xpLevelFactor = (stage: number, level: number) => Math.max(0, 1 + GUILD.xp.levelStep * (stage - level));
 
 /**
- * XP each member who comes back from a won quest gets: a day of training's worth (schedule.trainingXp), plus an
- * equal share of the xp.pool split among all of them, then x their level modifier (xpLevelFactor). Same order as `members`.
+ * XP each member who comes back from a quest gets: a day of training's worth (schedule.trainingXp), plus an equal
+ * share of the xp.pool split among all of them, times `defeated` (the share of the enemies killed or captured: 1 for a
+ * won quest), then x their level modifier (xpLevelFactor). Same order as `members`.
  */
-export function questXpShares(q: Pick<Quest, 'stage'>, members: Pick<Character, 'level'>[]): number[] {
+export function questXpShares(q: Pick<Quest, 'stage'>, members: Pick<Character, 'level'>[], defeated = 1): number[] {
   if (members.length === 0) return [];
-  const each = GUILD.schedule.trainingXp + GUILD.xp.pool / members.length;
+  const each = GUILD.schedule.trainingXp + (GUILD.xp.pool * Math.max(0, Math.min(1, defeated))) / members.length;
   return members.map((c) => Math.round(each * xpLevelFactor(q.stage, c.level)));
+}
+
+/** Grant quest XP to the members who came back (see questXpShares) and report it. */
+function questXpLines(q: Quest, members: Character[], defeated: number): string[] {
+  const xp = questXpShares(q, members, defeated);
+  const out = [`XP${defeated < 1 ? ` (${Math.round(defeated * 100)}% of the enemies defeated)` : ''}: ${members.map((c, i) => `${c.name} +${xp[i]}`).join(', ')}.`];
+  for (const [i, c] of members.entries()) {
+    const levels = grantXp(c, xp[i]);
+    if (levels > 0) out.push(`${c.name} reached level ${c.level}! +${levels} skill point${levels > 1 ? 's' : ''}.`);
+  }
+  return out;
 }
 
 /**
@@ -164,8 +176,18 @@ export function rewardShares(members: Character[], reward: number): { name: stri
  * Morale, rewards. Nights on the road pass for multi-day trips; the party gets back in the evening and still needs
  * somewhere to sleep (an inn, or outside). Enemies who `surrendered` are taken prisoner on a win. Returns report lines.
  */
+/** How the enemies fared in a quest's battle: those killed (each worth a bounty) and how many there were in all. */
+export interface FoeTally {
+  killed: Character[];
+  total: number;
+}
+
+/** The bounty for an enemy killed on a quest: as much as turning in a prisoner of its level. */
+export const killBounty = (level: number) => bounty(level);
+
 export function resolveQuest(
   state: GameState, outcome: 'victory' | 'defeat', rng: Rng, conditions: BattleCondition[] = [], surrendered: Character[] = [],
+  foes?: FoeTally,
 ): string[] {
   const q = state.quest;
   if (!q) return [];
@@ -223,13 +245,8 @@ export function resolveQuest(
       state.belowRankSince = 0;
       lines.push(note(state, `Your party passed the promotion quest and is now ${q.rank} rank!`));
     }
-    const xp = questXpShares(q, members);
-    lines.push(`XP: ${members.map((c, i) => `${c.name} +${xp[i]}`).join(', ')}.`);
-    for (const [i, c] of members.entries()) {
-      const levels = grantXp(c, xp[i]);
-      if (levels > 0) lines.push(`${c.name} reached level ${c.level}! +${levels} skill point${levels > 1 ? 's' : ''}.`);
-      changeRelationship(c, GUILD.companion.relationshipPerQuest);
-    }
+    lines.push(...questXpLines(q, members, 1));
+    for (const c of members) changeRelationship(c, GUILD.companion.relationshipPerQuest);
     // Enemies who surrendered (only humans do) are taken prisoner, to be registered at the city gate.
     for (const foe of surrendered) {
       const p = randomAdventurer(foe.level, rng, { avoidNames: new Set(state.party.map((m) => m.name)) });
@@ -240,7 +257,16 @@ export function resolveQuest(
   } else {
     state.progress.defeats += 1;
     lines.push('No reward. The party limps home to recover.');
+    // XP still counts: a day of training's worth, and the quest's pool for the share of enemies defeated.
+    const defeated = foes && foes.total > 0 ? (foes.killed.length + surrendered.length) / foes.total : 0;
+    lines.push(...questXpLines(q, members, defeated));
     for (const c of members) changeRelationship(c, -2);
+  }
+  // Bounties for every enemy killed, claimed back in the city, win or lose.
+  if (foes?.killed.length) {
+    const gold = foes.killed.reduce((sum, f) => sum + killBounty(f.level), 0);
+    state.gold += gold;
+    lines.push(`Bounties: ${gold} gold for ${foes.killed.length} enem${foes.killed.length > 1 ? 'ies' : 'y'} slain.`);
   }
   lines.push(`Morale: ${members.map((c) => `${c.name} ${c.morale}`).join(', ')}.`);
   lines.push(...moraleDepartures(state));

@@ -33,7 +33,7 @@
     "A": { "stages": [16, 20], "count": [5, 8], "days": [2, 4] }
   },
   "threat": {
-    "_comment": "A quest's total threat is its enemy count (threat points) x the strength of one enemy at its level: strengthAtLevel1 x strengthGrowth^(level - 1), so each level makes an enemy about 16.5% stronger (a level-20 enemy is about 18x a level-1 one). The usual gold for a quest is total threat x goldPerThreat (then x the board's pay roll), and its renown total threat x renownPerThreat. For rival parties, a quest is as hard as a group of standardCount enemies whose strength matches its total threat: that level - 1 is the average party level it calls for. Quest cards show it as skulls: half a skull at difficulty skulls.from up to five at skulls.to, rising evenly in half steps.",
+    "_comment": "A quest's total threat is its enemy count (threat points) x the strength of one enemy at its level: strengthAtLevel1 x strengthGrowth^(level - 1), so each level makes an enemy about 16.5% stronger (a level-20 enemy is about 18x a level-1 one). The usual gold for a quest is total threat x goldPerThreat (then x the board's pay roll), and its renown total threat x renownPerThreat. For rival parties, a quest is as hard as a group of standardCount enemies whose strength matches its total threat: that level - 1 is the average party level it calls for. Quest cards show it as skulls: half a skull at difficulty skulls.from up to ten at skulls.to, rising evenly in half steps (five white skulls, then red skulls over them).",
     "strengthAtLevel1": 10,
     "strengthGrowth": 1.165,
     "goldPerThreat": 1.75,

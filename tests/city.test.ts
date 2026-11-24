@@ -6,7 +6,7 @@ import { createCharacter, deriveStats, makeRng } from '../src/game/character';
 import { makeEnemy, makeUnit } from '../src/game/battle';
 import {
   acceptQuest, advanceDay, advanceDays, askingPrice, buyDrinks, isShipmentDay, marketBuyPrice, marketDay, sellSlave, turnInPrisoner, buyResidence, buySlave, makeQuest, sellResidence, stayAtHome, stayAtInn, canTakeQuest, dailyUpkeep, foodCost, departBlock, lineupMembers, mainCharacter,
-  newCampaign, questXpShares, registerPrisoner, resolveQuest, rewardShares, sleepOutside, toggleLineup, weeklyTaxes, xpLevelFactor,
+  killBounty, newCampaign, questXpShares, registerPrisoner, resolveQuest, rewardShares, sleepOutside, toggleLineup, weeklyTaxes, xpLevelFactor,
 } from '../src/game/city';
 import { activityOf, combatPenalty, expectedQuality, foodRelationship, healthOf, isInjured, moraleOf, moralePenalty, obediencePenalty } from '../src/game/condition';
 import { parseSave, serializeSave } from '../src/game/save';
@@ -204,20 +204,45 @@ describe('ranks and the leaderboard', () => {
     expect(questXpShares(q, [])).toEqual([]);
   });
 
-  it('quest cards: about how many foes to expect, and skulls (0.5-5 in halves) on one scale for the whole game', () => {
+  it('a failed quest: no pay, but training XP plus quest XP for the share of enemies defeated, and bounties for kills', () => {
+    const s = start();
+    const q = { ...makeQuest('D', s.day, makeRng(5)), days: 1 }; // back the same day: no upkeep on the road
+    s.guild.board.push(q);
+    expect(acceptQuest(s, q.id)).toBeNull();
+    const main = s.party[0];
+    main.level = q.stage; // no level modifier
+    main.xp = 0;
+    const gold = s.gold;
+    const foe = (level: number) => makeEnemy('bandit', level, makeRng(level));
+    const killed = [foe(q.stage), foe(q.stage)];
+    // 2 of 4 enemies killed, 1 surrendered (counts as defeated, not captured on a loss): 75% of the pool.
+    const lines = resolveQuest(s, 'defeat', makeRng(1), [{ id: main.id, lowestHp: 0.5, fell: false }], [foe(q.stage)], { killed, total: 4 });
+    const xp = Math.round(GUILD.schedule.trainingXp + GUILD.xp.pool * 0.75);
+    expect(lines.join(' ')).toContain(`75% of the enemies defeated`);
+    expect(main.level * 1000 + main.xp).toBeGreaterThan(q.stage * 1000); // gained XP
+    const bounties = killed.reduce((sum, f) => sum + killBounty(f.level), 0);
+    expect(killBounty(5)).toBe(bounty(5)); // the same as turning in a prisoner
+    expect(lines.join(' ')).toContain(`Bounties: ${bounties} gold for 2 enemies slain`);
+    expect(s.gold).toBe(gold + bounties); // bounties paid, no quest pay
+    expect(s.prisoners).toHaveLength(0);
+    expect(questXpShares(q, [{ level: q.stage }], 0.75)).toEqual([xp]);
+    expect(questXpShares(q, [{ level: q.stage }], 0)).toEqual([GUILD.schedule.trainingXp]); // nothing defeated: training only
+  });
+
+  it('quest cards: about how many foes to expect, and skulls (0.5-10 in halves) on one scale for the whole game', () => {
     // A group of 4 threat points: 4 bandits (threat 1), 8 rats (0.5), 7 goblins (0.6).
     expect(expectedEnemies({ count: 4, foes: ['bandit'] })).toBe(4);
     expect(expectedEnemies({ count: 4, foes: ['rat'] })).toBe(8);
     expect(expectedEnemies({ count: 4, foes: ['goblin'] })).toBe(7);
     expect(expectedEnemies({ count: 20, foes: ['rat'] })).toBe(12); // at most the field's cap
-    // Skulls follow actual difficulty, not rank: half a skull at skulls.from, five at skulls.to, evenly between.
+    // Skulls follow actual difficulty, not rank: half a skull at skulls.from, ten at skulls.to, evenly between.
     const { from, to } = GUILD.threat.skulls;
     // A level-1 group sized so its difficulty is exactly `d` (questDifficulty = log(count / standardCount) / log(growth)).
     const at = (d: number) => dangerRating({ stage: 1, count: GUILD.threat.standardCount * GUILD.threat.strengthGrowth ** d });
     expect(at(from)).toBe(0.5);
-    expect(at(to)).toBe(5);
-    expect(at((from + to) / 2)).toBe(3); // 0.5 + 4.5 / 2 = 2.75, rounded to the nearest half
-    expect(at(from + (to - from) / 9)).toBe(1); // each ninth of the scale is another half skull
+    expect(at(to)).toBe(10);
+    expect(at((from + to) / 2)).toBe(5.5); // 0.5 + 9.5 / 2 = 5.25, rounded to the nearest half
+    expect(at(from + (to - from) / 19)).toBe(1); // each nineteenth of the scale is another half skull
     for (const q of Array.from({ length: 200 }, (_, i) => makeQuest((['D', 'C', 'B', 'A'] as const)[i % 4], 1, makeRng(i)))) {
       expect((dangerRating(q) * 2) % 1).toBe(0); // whole or half skulls
     }

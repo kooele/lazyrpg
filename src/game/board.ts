@@ -57,14 +57,18 @@ export function questDifficulty(q: Pick<Quest, 'stage' | 'count'>): number {
   return Math.log(totalThreat(q) / t.standardCount / strength(1)) / Math.log(t.strengthGrowth);
 }
 
+/** The top of the skull scale: five white skulls, then five red ones over them. */
+export const MAX_SKULLS = 10;
+
 /**
- * Danger, shown as skulls: 0.5 to 5 in half steps, rising evenly with the quest's difficulty (questDifficulty)
- * on one fixed scale for the whole game, from threat.skulls.from (half a skull) to threat.skulls.to (five).
+ * Danger, shown as skulls: 0.5 to 10 in half steps, rising evenly with the quest's difficulty (questDifficulty)
+ * on one fixed scale for the whole game, from threat.skulls.from (half a skull) to threat.skulls.to (ten).
+ * Cards show 0.5-5 as white skulls and 5.5-10 as red skulls laid over them.
  */
 export function dangerRating(q: Pick<Quest, 'stage' | 'count'>): number {
   const { from, to } = GUILD.threat.skulls;
   const f = (questDifficulty(q) - from) / (to - from);
-  return Math.max(0.5, Math.min(5, Math.round((0.5 + 4.5 * f) * 2) / 2));
+  return Math.max(0.5, Math.min(MAX_SKULLS, Math.round((0.5 + (MAX_SKULLS - 0.5) * f) * 2) / 2));
 }
 
 const roll = ([lo, hi]: [number, number], rng: Rng) => lo + rng() * (hi - lo);

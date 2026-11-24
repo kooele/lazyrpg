@@ -101,7 +101,7 @@ export class GuildScene extends Phaser.Scene {
     const kind = ENEMIES[type]?.art.kind ?? 'human';
     const key = monsterKey(kind);
     if (kind !== 'human' && this.textures.exists(key)) {
-      const h = 26;
+      const h = 22; // small enough that big creatures (trolls, wyverns) stay clear of the title above
       const img = this.add.image(cx, y + 8, key).setOrigin(0.5, 76 / ART_H).setDisplaySize(MONSTER_W * (h / ART_H), h).setFlipX(true);
       if (!allowed) img.setTint(0x6d7286);
       box.add(img);
@@ -158,34 +158,43 @@ export class GuildScene extends Phaser.Scene {
   }
 
   /**
-   * A quest's foes at a glance: an icon per enemy expected, cycling through its enemy types (left), and five
-   * skulls lit up to `danger` (0.5-5 in halves, orange from 4) for how hard it is on one scale for the whole game (right).
+   * A quest's foes at a glance: an icon per enemy expected, cycling through its enemy types (left), and skulls for how
+   * hard it is on one scale for the whole game (right): `danger` 0.5-5 as white skulls, 5.5-10 as red ones over them.
    * Hovering says the same in words.
    */
   private questIcons(x: number, y: number, enemies: number, danger: number, cardW: number, allowed: boolean, types: string[]): Phaser.GameObjects.Container {
     const box = this.add.container(0, 0);
     const g = this.add.graphics();
     box.add(g);
-    for (let i = 0; i < enemies; i++) this.foeIcon(box, g, x + 7 + i * 16, y, allowed, types[i % types.length]);
-    // Skulls: lit (orange from 4) up to `danger`, in halves; the rest dark.
+    for (let i = 0; i < enemies; i++) this.foeIcon(box, g, x + 9 + i * 16, y, allowed, types[i % types.length]);
+    // Skulls: white up to `danger` (in halves) for 0.5-5, then red laid over them for 5.5-10; the rest dark.
     const fromX = cardW - 12 - 5 * 18;
-    const lit = !allowed ? 0x9aa3bd : danger >= 4 ? 0xff8a6b : 0xe8dcc0;
+    const white = !allowed ? 0x9aa3bd : 0xe8dcc0;
+    const red = !allowed ? 0x7a6470 : 0xe0503c;
     const dark = !allowed ? 0x4a5066 : 0x3a4158;
+    const skull = (cx: number, color: number, half: boolean) => {
+      if (half) {
+        g.fillStyle(color, 1).slice(cx, y - 1, 6, Math.PI / 2, (3 * Math.PI) / 2).fillPath();
+        g.fillRect(cx - 3.5, y + 2, 3.5, 5);
+      } else {
+        g.fillStyle(color, 1).fillCircle(cx, y - 1, 6);
+        g.fillRect(cx - 3.5, y + 2, 7, 5);
+      }
+    };
     for (let i = 0; i < 5; i++) {
       const cx = fromX + 8 + i * 18;
-      const fill = danger - i; // 1+ = whole skull, 0.5 = left half
-      g.fillStyle(fill >= 1 ? lit : dark, 1).fillCircle(cx, y - 1, 6);
-      g.fillRect(cx - 3.5, y + 2, 7, 5);
-      if (fill === 0.5) {
-        g.fillStyle(lit, 1).slice(cx, y - 1, 6, Math.PI / 2, (3 * Math.PI) / 2).fillPath();
-        g.fillRect(cx - 3.5, y + 2, 3.5, 5);
-      }
+      const w = danger - i; // white: 1+ whole, 0.5 left half
+      const r = danger - 5 - i; // red over it: 1+ whole, 0.5 left half
+      skull(cx, w >= 1 ? white : dark, false);
+      if (w === 0.5) skull(cx, white, true);
+      if (r >= 1) skull(cx, red, false);
+      else if (r === 0.5) skull(cx, red, true);
       g.fillStyle(0x181c2b, 1).fillCircle(cx - 2.3, y - 1.5, 1.7).fillCircle(cx + 2.3, y - 1.5, 1.7);
       g.fillRect(cx - 2, y + 4.5, 1, 2.5).fillRect(cx + 1, y + 4.5, 1, 2.5);
     }
     const crowd = enemies <= 2 ? 'A couple of foes' : enemies <= 4 ? 'A handful of foes' : enemies <= 7 ? 'A sizeable band' : 'A horde';
-    const peril = danger <= 1 ? 'Work for beginners' : danger <= 2 ? 'Work for seasoned hands' : danger <= 3 ? 'A job for veterans'
-      : danger <= 4 ? 'A job for elites' : 'Only for the very best';
+    const peril = danger <= 2 ? 'Work for beginners' : danger <= 4 ? 'Work for seasoned hands' : danger <= 6 ? 'A job for veterans'
+      : danger <= 8 ? 'A job for elites' : 'Only for the very best';
     const hit = this.add.rectangle(x - 4, y - 10, cardW - x - 4, 20, 0xffffff, 0).setOrigin(0).setInteractive();
     const tip = text(this, x, y + 10, `${crowd} (about ${enemies}). ${peril}.`, {
       fontSize: '11px', color: COLORS.text, backgroundColor: '#000000d0', padding: { x: 6, y: 3 },
@@ -205,7 +214,7 @@ export class GuildScene extends Phaser.Scene {
     if (q.promotion) c.add(this.add.rectangle(0, 0, W, CARD_H).setOrigin(0).setStrokeStyle(2, COLORS.accent));
     c.add(rankBadge(this, 10, 10, q.rank, 26));
     c.add(text(this, 44, 10, q.title, { fontSize: '16px', color: allowed ? COLORS.text : COLORS.dim, wordWrap: { width: W - 54 } }));
-    // The foes at a glance: an icon per enemy expected, and up to five skulls (in halves) for how hard the quest is.
+    // The foes at a glance: an icon per enemy expected, and up to ten skulls (white, then red) for how hard the quest is.
     const enemies = expectedEnemies(q);
     const danger = dangerRating(q);
     c.add(this.questIcons(44, 40, enemies, danger, W, allowed, q.foes?.length ? q.foes : ['bandit']));
