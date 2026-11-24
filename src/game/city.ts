@@ -186,7 +186,7 @@ export function rewardShares(members: Character[], reward: number): { name: stri
 /**
  * Settle the accepted quest after its battle: injuries and deaths (from `conditions`, one per member who fought),
  * Morale, rewards. Nights on the road pass for multi-day trips; the party gets back in the evening and still needs
- * somewhere to sleep (an inn, or outside). Enemies who `surrendered` are taken prisoner on a win. Returns report lines.
+ * somewhere to sleep (an inn, or outside). Enemies who `surrendered` are taken prisoner on a win. `turns` is how many turns (rounds) the battle lasted: each costs Morale. Returns report lines.
  */
 /** How the enemies fared in a quest's battle: those killed (each worth a bounty) and how many there were in all. */
 export interface FoeTally {
@@ -194,12 +194,16 @@ export interface FoeTally {
   total: number;
 }
 
+/** Morale each member who went loses for a quest (before injuries): moralePerTurn per battle turn, and moraleFailedQuest more if it failed. */
+export const questMoraleLoss = (turns: number, outcome: 'victory' | 'defeat') =>
+  Math.round(Math.max(0, turns) * GUILD.condition.moralePerTurn) + (outcome === 'defeat' ? GUILD.condition.moraleFailedQuest : 0);
+
 /** The bounty for an enemy killed on a quest: as much as turning in a prisoner of its level. */
 export const killBounty = (level: number) => bounty(level);
 
 export function resolveQuest(
   state: GameState, outcome: 'victory' | 'defeat', rng: Rng, conditions: BattleCondition[] = [], surrendered: Character[] = [],
-  foes?: FoeTally,
+  foes?: FoeTally, turns = 0,
 ): string[] {
   const q = state.quest;
   if (!q) return [];
@@ -210,7 +214,7 @@ export function resolveQuest(
   // Injuries, deaths (Health 0) and Morale.
   const dead: Character[] = [];
   for (const c of went) {
-    changeMorale(c, -C.moralePerQuest - (outcome === 'defeat' ? C.moraleFailedQuest : 0));
+    changeMorale(c, -questMoraleLoss(turns, outcome));
     const r = conditions.find((x) => x.id === c.id);
     if (!r) continue;
     const loss = r.fell ? C.maxHealthLoss : healthLoss(r.lowestHp);
@@ -280,7 +284,7 @@ export function resolveQuest(
     state.gold += gold;
     lines.push(`Bounties: ${gold} gold for ${foes.killed.length} enem${foes.killed.length > 1 ? 'ies' : 'y'} slain.`);
   }
-  lines.push(`Morale: ${members.map((c) => `${c.name} ${c.morale}`).join(', ')}.`);
+  lines.push(`Morale -${questMoraleLoss(turns, outcome)} (${turns} turn${turns === 1 ? '' : 's'} of battle${outcome === 'defeat' ? ', a failed quest' : ''}): ${members.map((c) => `${c.name} ${c.morale}`).join(', ')}.`);
   lines.push(...moraleDepartures(state));
   // Mercenaries were hired for this quest only.
   for (const c of members.filter((m) => m.contract?.type === 'mercenary')) {

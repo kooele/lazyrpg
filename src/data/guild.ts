@@ -75,7 +75,7 @@ export interface GuildConfig {
     lowMorale: number;
     lowMoraleRelationshipPerDay: number;
     startingMorale: number;
-    moralePerQuest: number;
+    moralePerTurn: number;
     moraleFailedQuest: number;
     moralePerHealthLost: number;
     moraleMemberDied: number;
@@ -289,7 +289,7 @@ export function parseGuildConfig(data: unknown): GuildConfig {
       expectedQuality: numbers(obj(d.lodging, 'lodging').expectedQuality, 'lodging.expectedQuality', ['S', ...RANKS], 3),
     },
     residences: parseResidences(d.residences),
-    condition: numbers<GuildConfig['condition']>(d.condition, 'condition', ['maxHealthLoss', 'healthPerDay', 'startingMorale', 'moralePerQuest',
+    condition: numbers<GuildConfig['condition']>(d.condition, 'condition', ['maxHealthLoss', 'healthPerDay', 'startingMorale', 'moralePerTurn',
       'moraleFailedQuest', 'moralePerHealthLost', 'moraleMemberDied', 'lowMorale', 'lowMoraleRelationshipPerDay'], 100),
     xp: numbers(d.xp, 'xp', ['pool', 'levelStep']),
     schedule: numbers(d.schedule, 'schedule', ['recoverMultiplier', 'trainingXp', 'oddJobsGold', 'dayOffMorale']),

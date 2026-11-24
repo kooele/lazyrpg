@@ -73,11 +73,11 @@
     "inner": { "name": "Inner City Mansion", "price": 50000 }
   },
   "condition": {
-    "_comment": "Health (0-100, not battle HP) and Morale (0-100) of party members. After a battle, Health drops by maxHealthLoss x the share of HP the unit lost at its lowest point (falling = the full amount). Below 100 Health a member is injured and can't go on quests; everyone recovers healthPerDay each night. A member whose Health reaches 0 dies (the main character is left at 1 instead). Morale changes: moralePerQuest for each member who goes on a quest, moraleFailedQuest more if it fails, moralePerHealthLost per Health point lost to injuries, moraleMemberDied for everyone when a member dies. New members start at startingMorale. Below lowMorale, companions lose lowMoraleRelationshipPerDay relationship each day; a member at 0 Morale leaves the party (not the main character).",
+    "_comment": "Health (0-100, not battle HP) and Morale (0-100) of party members. After a battle, Health drops by maxHealthLoss x the share of HP the unit lost at its lowest point (falling = the full amount). Below 100 Health a member is injured and can't go on quests; everyone recovers healthPerDay each night. A member whose Health reaches 0 dies (the main character is left at 1 instead). Morale changes: moralePerTurn for each battle turn (round) of a quest, for each member who went, moraleFailedQuest more if it fails, moralePerHealthLost per Health point lost to injuries, moraleMemberDied for everyone when a member dies. New members start at startingMorale. Below lowMorale, companions lose lowMoraleRelationshipPerDay relationship each day; a member at 0 Morale leaves the party (not the main character).",
     "maxHealthLoss": 60,
     "healthPerDay": 10,
     "startingMorale": 75,
-    "moralePerQuest": 5,
+    "moralePerTurn": 1,
     "moraleFailedQuest": 10,
     "moralePerHealthLost": 0.2,
     "moraleMemberDied": 15,

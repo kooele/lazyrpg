@@ -6,7 +6,7 @@ import { createCharacter, deriveStats, makeRng } from '../src/game/character';
 import { makeEnemy, makeUnit } from '../src/game/battle';
 import {
   acceptQuest, advanceDay, advanceDays, askingPrice, buyDrinks, isShipmentDay, marketBuyPrice, marketDay, sellSlave, turnInPrisoner, buyResidence, buySlave, makeQuest, sellResidence, stayAtHome, stayAtInn, canTakeQuest, dailyUpkeep, foodCost, departBlock, lineupMembers, mainCharacter, moveMember,
-  killBounty, newCampaign, questXpShares, registerPrisoner, resolveQuest, rewardShares, sleepOutside, toggleLineup, weeklyTaxes, xpLevelFactor,
+  killBounty, newCampaign, questMoraleLoss, questXpShares, registerPrisoner, resolveQuest, rewardShares, sleepOutside, toggleLineup, weeklyTaxes, xpLevelFactor,
 } from '../src/game/city';
 import { activityOf, combatPenalty, expectedQuality, foodRelationship, healthOf, isInjured, moraleOf, moralePenalty, obediencePenalty } from '../src/game/condition';
 import { parseSave, serializeSave } from '../src/game/save';
@@ -566,6 +566,19 @@ describe('contracts', () => {
     expect(s.renown).toBeCloseTo(renown + q.renown - q.renown * GUILD.ranks.deathRenown);
   });
 
+  it('a quest costs Morale per turn of battle, not a flat amount', () => {
+    const C = GUILD.condition;
+    expect(questMoraleLoss(0, 'victory')).toBe(0);
+    expect(questMoraleLoss(9, 'victory')).toBe(9 * C.moralePerTurn);
+    expect(questMoraleLoss(3, 'defeat')).toBe(3 * C.moralePerTurn + C.moraleFailedQuest);
+    const s = start();
+    acceptQuest(s, s.guild.board.find((x) => canTakeQuest(s, x))!.id);
+    s.quest!.days = 1;
+    const lines = resolveQuest(s, 'victory', makeRng(3), [], [], undefined, 12);
+    expect(moraleOf(mainCharacter(s))).toBe(C.startingMorale - 12 * C.moralePerTurn);
+    expect(lines.join('\n')).toMatch(/Morale -12 \(12 turns of battle\)/);
+  });
+
   it('morale: quests, failures, injuries and deaths lower it; drinks and days off raise it', () => {
     const s = start();
     const C = GUILD.condition;
@@ -578,10 +591,11 @@ describe('contracts', () => {
     toggleLineup(s, c.id);
     acceptQuest(s, s.guild.board.find((x) => canTakeQuest(s, x))!.id);
     s.quest!.days = 1;
-    resolveQuest(s, 'defeat', makeRng(3), [{ id: main.id, lowestHp: 0.5, fell: false }, { id: c.id, lowestHp: 1, fell: false }]);
+    // A 6-turn battle: 6 x moralePerTurn each, plus the failed quest and injuries.
+    resolveQuest(s, 'defeat', makeRng(3), [{ id: main.id, lowestHp: 0.5, fell: false }, { id: c.id, lowestHp: 1, fell: false }], [], undefined, 6);
     const loss = C.maxHealthLoss / 2;
-    expect(moraleOf(c)).toBe(C.startingMorale - C.moralePerQuest - C.moraleFailedQuest);
-    expect(moraleOf(main)).toBe(C.startingMorale - C.moralePerQuest - C.moraleFailedQuest - Math.round(loss * C.moralePerHealthLost));
+    expect(moraleOf(c)).toBe(C.startingMorale - 6 * C.moralePerTurn - C.moraleFailedQuest);
+    expect(moraleOf(main)).toBe(C.startingMorale - 6 * C.moralePerTurn - C.moraleFailedQuest - Math.round(loss * C.moralePerHealthLost));
     const before = moraleOf(main);
     const cBefore = moraleOf(c);
     expect(buyDrinks(s, 'standard')).toBeNull();
@@ -975,8 +989,8 @@ describe('contracts', () => {
     const before = main.morale!;
     acceptQuest(s, s.guild.board.find((x) => canTakeQuest(s, x))!.id);
     s.quest!.days = 1;
-    resolveQuest(s, 'victory', makeRng(3));
-    expect(main.morale).toBe(before - GUILD.condition.moralePerQuest);
+    resolveQuest(s, 'victory', makeRng(3), [], [], undefined, 4);
+    expect(main.morale).toBe(before - 4 * GUILD.condition.moralePerTurn);
     // Saves keep it, and older saves give it to the main character.
     delete main.traits;
     const r = parseSave(serializeSave(s));

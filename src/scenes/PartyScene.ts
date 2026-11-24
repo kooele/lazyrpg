@@ -338,7 +338,7 @@ export class PartyScene extends Phaser.Scene {
     const main = c.contract?.type === 'main';
     return [
       `Morale ${moraleOf(c)}/100.`,
-      `Falls ${C.moralePerQuest} for each quest (${C.moraleFailedQuest} more if it fails), 1 per ${Math.round(1 / C.moralePerHealthLost)} Health lost to injuries, and ${C.moraleMemberDied} for everyone when a member dies.`,
+      `Falls ${C.moralePerTurn} for each turn of a quest's battle (${C.moraleFailedQuest} more if it fails), 1 per ${Math.round(1 / C.moralePerHealthLost)} Health lost to injuries, and ${C.moraleMemberDied} for everyone when a member dies.`,
       `Rises with a round of drinks at an inn and with Day Off (+${GUILD.schedule.dayOffMorale * k} a day)${k !== 1 ? `: gains x${k} (${(c.traits ?? []).map((t) => TRAITS[t].name).join(', ')})` : ''}.`,
       `In battle: -${GUILD.combat.percentPer5}% to all stats per 5 below 100${moralePenalty(c) ? ` (now -${Math.round(moralePenalty(c) * 100)}%)` : ''}.`,
       main ? 'Your main character never leaves, however low it gets.'

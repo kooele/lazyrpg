@@ -1328,7 +1328,7 @@ export class BattleScene extends Phaser.Scene {
       // Killed: fell in battle (not fled, not surrendered). Each is worth a bounty, and on a failed quest the share of
       // enemies killed or captured sets the XP.
       const killed = enemies.filter((u) => !u.alive && !u.escaped && !u.surrendered).map((u) => u.character);
-      lines = resolveQuest(requireState(), outcome, makeRng(Date.now() & 0xffffffff), conditions, captives, { killed, total: enemies.length });
+      lines = resolveQuest(requireState(), outcome, makeRng(Date.now() & 0xffffffff), conditions, captives, { killed, total: enemies.length }, this.battle.round);
       markDirty();
     }
     const title = this.demo ? (outcome === 'victory' ? 'Victory!' : 'Defeat') : (outcome === 'victory' ? 'Quest complete!' : 'Quest failed');
