@@ -153,8 +153,8 @@ Tooltips show a formula line generated from the numbers (e.g. "80% P.Atk, then 4
 | Mana | 200 (+20) | Spent by skills; doesn't come back during a battle |
 | P.Atk | 100 (+10) | Physical power; skills deal a % of it |
 | M.Atk | 100 (+10) | Magic power and healing |
-| Defense | 0 (+10) | Damage taken × 100 / (100 + Defense) |
-| Resist | 0 (+10) | Chance to shrug off a debuff: Resist ÷ (100 + Resist) |
+| Defense | 20 (+10) | Damage taken × 100 / (100 + Defense) |
+| Resist | 20 (+10) | Chance to shrug off a debuff: Resist ÷ (100 + Resist) |
 | Movement | 16 | Movement points per turn: grass costs 4, forest 6, river 8 (so 16 = 4 grass tiles) |
 
 Every attack hits. **Resist** gives a chance to shrug off debuffs (Burn, Slow, Corrode...): Resist ÷ (100 + Resist), the same curve as Defense, so 50 Resist = 33% and 100 = 50%. A resisted debuff shows "Resisted" and doesn't apply; the attack's damage still lands. Targeting shows the chance, and the enemy AI weighs it. Enemies' Resist matches their Defense.

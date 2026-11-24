@@ -7,8 +7,8 @@
     "mana": 200,
     "pAtk": 100,
     "mAtk": 100,
-    "defense": 0,
-    "resist": 0,
+    "defense": 20,
+    "resist": 20,
     "movement": 16,
     "vision": 8
   },

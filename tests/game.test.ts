@@ -4,6 +4,7 @@ import weaponsJson from '../src/data/weapons.json';
 import { SKILLS, STATUSES, TREE_SKILLS, WEAPONS, maxBodyRank, modeWithTag, parseContent, resolveWeaponSkill, skillEffect, skillPointsForLevel, skillStatText, skillStats, xpToNext } from '../src/data/content';
 import enemiesJson from '../src/data/enemies.json';
 import { ENEMIES, parseEnemies } from '../src/data/enemies';
+import statsJson from '../src/data/stats.json';
 import { STAT_CONFIG, parseStatConfig } from '../src/data/stats';
 import type { Character, SkillDef } from '../src/data/types';
 import { HOLD_FIRM_ODDS, bestAction, caution, holdsFirm, planTurn, preferredMode, runAiTurn, shouldDisengage, shouldSurrender, sideStrength, threatAt, tribeRouted, wantsToFlee } from '../src/game/ai';
@@ -43,13 +44,18 @@ function setup(map: BattleMap, specs: { c: Character; team: Team; at: Point }[])
 
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v));
 
-// Level-1 numbers used below: base Health 500, P.Atk 100, M.Atk 100, Defense 0 and Resist 0 (both +10 a level), so level-1
-// Adventurers take full damage. Sword & Shield: P.Atk 100, M.Atk 80. Where a test needs Defense, it uses a level-6
+// The battle tests below pin base Defense and Resist to 0 so their damage numbers don't move whenever armor is
+// rebalanced in stats.json (the real values are checked in the first test). Level-1 numbers used below: base Health
+// 500, P.Atk 100, M.Atk 100, Defense 0 and Resist 0 (both +10 a level), so level-1 Adventurers take full damage. Sword & Shield: P.Atk 100, M.Atk 80. Where a test needs Defense, it uses a level-6
 // Sword & Shield user (tank()): Health 750, Defense 50 x 1.25 = 63 (x0.613 damage), Resist 50.
+
+STAT_CONFIG.base.defense = 0;
+STAT_CONFIG.base.resist = 0;
 
 describe('stats and content files', () => {
   it('loads the base stats from stats.json', () => {
-    expect(STAT_CONFIG.base).toMatchObject({ health: 500, pAtk: 100, mAtk: 100, defense: 0, resist: 0, movement: 16 });
+    expect(parseStatConfig(statsJson).base).toMatchObject({ health: 500, pAtk: 100, mAtk: 100, defense: 20, resist: 20, movement: 16 });
+    expect(STAT_CONFIG.base).toMatchObject({ health: 500, pAtk: 100, mAtk: 100, defense: 0, resist: 0, movement: 16 }); // pinned above
     expect(STAT_CONFIG.growthPerLevel).toMatchObject({ health: 50, defense: 10, resist: 10 });
   });
 
