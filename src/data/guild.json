@@ -4,8 +4,8 @@
   "startingGold": 500,
   "startingRenown": 0,
   "maxRoster": 12,
-  "startingRankShares": { "A": 0.05, "B": 0.2, "C": 0.6, "D": 0.15 },
-  "_startingRankShares": "How the rival parties are spread over the ranks when a new game starts. After that, ranks follow renown (see ranks).",
+  "rankShares": { "A": 0.05, "B": 0.2, "C": 0.6, "D": 0.15 },
+  "_rankShares": "The share of parties at each rank: how the rival parties are spread over the ranks when a new game starts (after that, ranks follow renown: see ranks), and how often the guild posts a quest of each rank (see board).",
   "ranks": {
     "_comment": "Party ranks. renown: the renown a party needs for each rank (D needs none). Reaching the next rank's renown puts a promotion quest of that rank on the board; completing it promotes the party. A party whose renown stays below its own rank's threshold for demotionDays days in a row drops a rank. Renown doesn't fade: a failed quest loses failedQuestRenown x that quest's renown, and each member who dies loses deathRenown x the quest's renown.",
     "renown": { "C": 100, "B": 400, "A": 1600 },
@@ -19,10 +19,8 @@
   },
   "boardSize": 24,
   "board": {
-    "_comment": "The guild's quest board is shared with the rival parties, who take quests from it (see simulation). Each day up to maxPostsPerDay new quests are posted until it holds boardSize; postWeights is how often each rank is posted, and there are always at least minAtPartyRank quests at the player's rank. Quests vary: each rolls its enemy level and group size (see quests and threat), and pay is extra luck on the reward, so some quests are much better deals than others.",
+    "_comment": "The guild's quest board is shared with the rival parties, who take quests from it (see simulation). Each day up to maxPostsPerDay new quests are posted until it holds boardSize; each quest's rank is picked by rankShares (5% A, 20% B, 60% C, 15% D), with nothing set aside for the player: in a slow week the rivals may take every quest at the player's rank. Quests vary: each rolls its enemy level and group size (see quests and threat), and pay is extra luck on the reward, so some quests are much better deals than others.",
     "maxPostsPerDay": 8,
-    "minAtPartyRank": 6,
-    "postWeights": { "A": 0.15, "B": 0.25, "C": 0.35, "D": 0.25 },
     "pay": [0.75, 1.35]
   },
   "quests": {

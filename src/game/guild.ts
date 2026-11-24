@@ -56,9 +56,9 @@ export function demotionCheck(rank: Rank, renown: number, belowSince: number, da
   return { rank: down, belowSince: renown >= rankThreshold(down) ? 0 : day };
 }
 
-/** How many of `n` parties start at each rank (startingRankShares: 5% A, 20% B, 60% C, 15% D by default). */
+/** How many of `n` parties start at each rank (rankShares: 5% A, 20% B, 60% C, 15% D by default). */
 export function rankCounts(n: number): Record<Rank, number> {
-  const s = GUILD.startingRankShares;
+  const s = GUILD.rankShares;
   const A = n > 0 ? Math.max(1, Math.round(n * s.A)) : 0;
   const B = Math.min(n - A, Math.round(n * s.B));
   const D = Math.min(n - A - B, Math.round(n * s.D));

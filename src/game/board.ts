@@ -122,9 +122,9 @@ export function makeQuest(rank: Rank, day: number, rng: Rng, promotion = false):
   };
 }
 
-/** A rank picked by the board's posting weights. */
+/** A rank picked in proportion to the share of parties at each rank (rankShares: 5% A, 20% B, 60% C, 15% D). */
 function postedRank(rng: Rng): Rank {
-  const w = GUILD.board.postWeights;
+  const w = GUILD.rankShares;
   const total = RANKS.reduce((s, r) => s + w[r], 0);
   let x = rng() * total;
   for (const r of RANKS) {
@@ -136,15 +136,12 @@ function postedRank(rng: Rng): Rank {
 
 /**
  * The day's postings: expired quests come down, up to board.maxPostsPerDay new ones go up (until the board holds
- * boardSize; `maxPosts` overrides that, e.g. to fill a new game's board), and there are always at least
- * board.minAtPartyRank quests at the player's rank.
+ * boardSize; `maxPosts` overrides that, e.g. to fill a new game's board). Nothing is kept back for the player:
+ * rivals can take every quest at the player's rank.
  */
 export function postQuests(state: GameState, rng: Rng, maxPosts = GUILD.board.maxPostsPerDay): void {
   const g = state.guild;
   g.board = g.board.filter((q) => q.expires >= state.day);
   const regular = () => g.board.filter((q) => !q.promotion).length;
   for (let i = 0; i < maxPosts && regular() < GUILD.boardSize; i++) g.board.push(makeQuest(postedRank(rng), state.day, rng));
-  while (g.board.filter((q) => !q.promotion && q.rank === state.rank).length < GUILD.board.minAtPartyRank) {
-    g.board.push(makeQuest(state.rank, state.day, rng));
-  }
 }

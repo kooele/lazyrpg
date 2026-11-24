@@ -39,8 +39,8 @@ describe('guild.json', () => {
     bad.quests.C.count = [6, 3];
     expect(() => parseGuildConfig(bad)).toThrow(/quests\.C\.count\[1\]/);
     const shares = JSON.parse(JSON.stringify(guildJson));
-    shares.startingRankShares.A = 0.5;
-    expect(() => parseGuildConfig(shares)).toThrow(/startingRankShares.*add up to 1/);
+    shares.rankShares.A = 0.5;
+    expect(() => parseGuildConfig(shares)).toThrow(/rankShares.*add up to 1/);
   });
 });
 
@@ -86,17 +86,19 @@ describe('ranks and the leaderboard', () => {
     const s = start(4);
     const rng = makeRng(9);
     let promoQuests = 0;
-    for (let i = 0; i < 30 && s.rank === 'D'; i++) {
+    for (let i = 0; i < 90 && s.rank === 'D'; i++) {
       const promo = s.guild.board.find((x) => x.promotion);
       if (promo) {
         expect(promo.rank).toBe('C');
         expect(s.renown).toBeGreaterThanOrEqual(GUILD.ranks.renown.C);
         promoQuests += 1;
       }
-      const q = promo ?? s.guild.board.find((x) => canTakeQuest(s, x))!;
-      expect(acceptQuest(s, q.id)).toBeNull();
-      resolveQuest(s, 'victory', rng);
-      nightsAt(s, 'standard', 1, rng);
+      const q = promo ?? s.guild.board.find((x) => canTakeQuest(s, x));
+      if (q) {
+        expect(acceptQuest(s, q.id)).toBeNull();
+        resolveQuest(s, 'victory', rng);
+      }
+      nightsAt(s, 'standard', 1, rng); // a slow day: rivals took every quest the party could do
     }
     expect(promoQuests).toBe(1);
     expect(s.rank).toBe('C');
@@ -264,10 +266,9 @@ describe('ranks and the leaderboard', () => {
     expect(dangerRating({ stage: 8, count: 6 })).toBeGreaterThanOrEqual(dangerRating({ stage: 8, count: 3 }));
   });
 
-  it('the board is shared and busy: plenty of quests across the ranks, always some at the party\'s rank', () => {
+  it('the board is shared and busy: plenty of quests across the ranks', () => {
     const s = start();
     expect(s.guild.board.length).toBeGreaterThanOrEqual(GUILD.boardSize);
-    expect(s.guild.board.filter((q) => q.rank === s.rank).length).toBeGreaterThanOrEqual(GUILD.board.minAtPartyRank);
     expect(new Set(s.guild.board.map((q) => q.rank)).size).toBeGreaterThan(2);
     for (const q of s.guild.board) {
       expect(q.count).toBeGreaterThanOrEqual(GUILD.quests[q.rank].count[0]);
@@ -285,7 +286,6 @@ describe('ranks and the leaderboard', () => {
       taken += before.filter((q) => !s.guild.board.includes(q)).length;
     }
     expect(taken).toBeGreaterThan(20);
-    expect(s.guild.board.filter((q) => q.rank === s.rank).length).toBeGreaterThanOrEqual(GUILD.board.minAtPartyRank);
     expect(s.guild.news.some((n) => /completed "|failed "/.test(n.text)) || s.guild.rivals.some((p) => /completed "|failed "/.test(p.last))).toBe(true);
   });
 
