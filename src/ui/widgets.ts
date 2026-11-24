@@ -51,6 +51,25 @@ export function text(
   return scene.add.text(x, y, value, { fontFamily: FONT, fontSize: '16px', color: COLORS.text, resolution: UI_SCALE, ...style });
 }
 
+/**
+ * A list of names (e.g. skills) in at most `maxLines` lines: when they don't all fit, the last ones are dropped
+ * for "+N more". `format` builds the text from the names shown and how many were dropped (default: comma list).
+ * Set `wordWrap` in the style for comma lists.
+ */
+export function fittedList(
+  scene: Phaser.Scene, x: number, y: number, names: string[], maxLines: number,
+  style: Partial<Phaser.Types.GameObjects.Text.TextStyle> = {},
+  format: (shown: string[], hidden: number) => string = (shown, hidden) => `${shown.join(', ')}${hidden ? ` +${hidden} more` : ''}`,
+  empty = '—',
+): Phaser.GameObjects.Text {
+  const t = text(scene, x, y, Array(maxLines).fill('Ag').join('\n'), style);
+  const maxH = t.height + 1;
+  const render = (n: number) => t.setText(names.length ? format(names.slice(0, n), names.length - n) : empty);
+  render(names.length);
+  for (let n = names.length - 1; n >= 0 && t.height > maxH; n--) render(n);
+  return t;
+}
+
 export function panel(scene: Phaser.Scene, x: number, y: number, w: number, h: number, fill = COLORS.panel) {
   return scene.add.rectangle(x, y, w, h, fill).setOrigin(0).setStrokeStyle(2, COLORS.border);
 }

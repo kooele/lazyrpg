@@ -6,7 +6,7 @@ const DEMO_PARTY_SIZE = 4;
 import type { Character } from '../data/types';
 import { bodyPoints, deriveStats, freePoints, skillPoints } from '../game/character';
 import { DEMO_STAGES, MOB_MULTIPLIER, newDemo, requireDemo } from '../game/demo';
-import { COLORS, HEIGHT, WIDTH, button, confirmDialog, figure, panel, talentTag, text, setupCamera } from '../ui/widgets';
+import { COLORS, HEIGHT, WIDTH, button, confirmDialog, figure, fittedList, panel, talentTag, text, setupCamera } from '../ui/widgets';
 
 /** Quick Battle (demo) camp: recruit, customize and dismiss up to 4 Adventurers, then fight stages 1 to 5. */
 export class DemoCampScene extends Phaser.Scene {
@@ -130,7 +130,9 @@ export class DemoCampScene extends Phaser.Scene {
     text(this, x + 14, y + 207, weapon.name, { fontSize: '15px' });
     text(this, x + 14, y + 226, weapon.skills.map((s) => SKILLS[s].name).join(', '), { fontSize: '12px', color: COLORS.dim, wordWrap: { width: 188 } });
     text(this, x + 14, y + 266, `Skill points ${skillPoints(c) - freeSlots}/${skillPoints(c)}${bodyPoints(c) ? ` (${bodyPoints(c)} in Body)` : ''}`, { color: COLORS.dim, fontSize: '12px' });
-    text(this, x + 14, y + 282, c.skillIds.map((s) => `• ${SKILLS[s].name}`).join('\n') || '—', { fontSize: '14px', lineSpacing: 2 });
+    // Bullets down to the "points to spend" line: at most 3 lines (4 when there's nothing to spend), then "+N more".
+    fittedList(this, x + 14, y + 282, c.skillIds.map((s) => SKILLS[s].name), freeSlots > 0 ? 3 : 4, { fontSize: '14px', lineSpacing: 2, wordWrap: { width: 188 } },
+      (shown, hidden) => [...shown.map((n) => `• ${n}`), ...(hidden ? [`+${hidden} more`] : [])].join('\n'));
 
     if (freeSlots > 0) {
       text(this, x + 108, y + 356, `${freeSlots} skill point${freeSlots > 1 ? 's' : ''} to spend`, { color: COLORS.gold, fontSize: '13px' }).setOrigin(0.5);

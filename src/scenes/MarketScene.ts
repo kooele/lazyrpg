@@ -8,7 +8,7 @@ import { adventurerRank } from '../game/guild';
 import { markDirty, requireState, session } from '../game/session';
 import { PEOPLE_SORTS, nextSort, sortPeople, type PeopleSort, type SortDir } from '../game/sorting';
 import { cityHeader } from '../ui/hud';
-import { COLORS, HEIGHT, ScrollList, WIDTH, button, confirmDialog, figure, panel, setupCamera, sortBar, talentTag, text, toast, type ScrollItem } from '../ui/widgets';
+import { COLORS, HEIGHT, ScrollList, WIDTH, button, confirmDialog, figure, fittedList, panel, setupCamera, sortBar, talentTag, text, toast, type ScrollItem } from '../ui/widgets';
 
 /** The slave market: buy slaves, and sell your own back. It doesn't take prisoners (they're registered at the city gate). */
 export class MarketScene extends Phaser.Scene {
@@ -79,11 +79,9 @@ export class MarketScene extends Phaser.Scene {
     row.add(talentTag(this, 64 + name.width + 12, 9, c, { fontSize: 12, detail: false }));
     row.add(text(this, 64, 26, `Level ${c.level} (${adventurerRank(c.level)}-rank) · ${WEAPONS[c.weaponId].name}`, { fontSize: '13px', color: COLORS.gold }));
     if (!compact) row.add(talentTag(this, 64, 45, c, { fontSize: 11, overall: false, sep: '   ' }));
-    const skills = c.skillIds.map((s) => SKILLS[s].name);
-    const shown = compact && skills.length > 3 ? `${skills.slice(0, 3).join(', ')} +${skills.length - 3} more` : skills.join(', ');
-    row.add(text(this, 64, compact ? 46 : 62, shown || 'No tree skills yet', {
-      fontSize: '12px', color: COLORS.dim, wordWrap: { width: compact ? 260 : 270 },
-    }));
+    row.add(fittedList(this, 64, compact ? 46 : 62, c.skillIds.map((s) => SKILLS[s].name), 1, {
+      fontSize: '12px', color: COLORS.dim, wordWrap: { width: compact ? 260 : w - 240 },
+    }, undefined, 'No tree skills yet'));
     actions.forEach((a, i) => {
       const bx = compact ? 64 + i * 88 : w - 150;
       const by = compact ? 66 : 26;

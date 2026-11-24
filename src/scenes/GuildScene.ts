@@ -10,7 +10,7 @@ import { adventurerCount, adventurerRank, leaderboard, nextRank, rankThreshold }
 import { markDirty, requireState, session } from '../game/session';
 import { PEOPLE_SORTS, QUEST_SORTS, nextSort, sortPeople, sortQuests, type PeopleSort, type QuestSort, type SortDir } from '../game/sorting';
 import { cityHeader, rankBadge } from '../ui/hud';
-import { ART_H, COLORS, HEIGHT, MONSTER_W, ScrollList, WIDTH, button, monsterKey, confirmDialog, figure, panel, setupCamera, sortBar, talentTag, text, toast, type ScrollItem } from '../ui/widgets';
+import { ART_H, COLORS, HEIGHT, MONSTER_W, ScrollList, WIDTH, button, monsterKey, confirmDialog, figure, fittedList, panel, setupCamera, sortBar, talentTag, text, toast, type ScrollItem } from '../ui/widgets';
 
 type Tab = 'board' | 'hall' | 'ranks' | 'news';
 const CARD_H = 132;
@@ -280,7 +280,7 @@ export class GuildScene extends Phaser.Scene {
     row.add(talentTag(this, 64 + name.width + 12, 10, c, { fontSize: 12, detail: false }));
     row.add(text(this, 64, 28, `Level ${c.level} (${adventurerRank(c.level)}-rank) · ${WEAPONS[c.weaponId].name}`, { fontSize: '13px', color: COLORS.gold }));
     row.add(talentTag(this, 64, 47, c, { fontSize: 11, overall: false, sep: '   ' }));
-    row.add(text(this, 64, 64, c.skillIds.map((s) => SKILLS[s].name).join(', ') || 'No tree skills yet', { fontSize: '12px', color: COLORS.dim, wordWrap: { width: 300 } }));
+    row.add(fittedList(this, 64, 64, c.skillIds.map((s) => SKILLS[s].name), 1, { fontSize: '12px', color: COLORS.dim, wordWrap: { width: 316 } }, undefined, 'No tree skills yet'));
     const rates = mercenaryRates(c.level, a.greed, talentPriceFactor(c));
     row.add(text(this, 392, 8, 'Mercenary (next quest only)', { fontSize: '12px', color: COLORS.dim }));
     row.add(button(this, 392, 28, 248, 32, `Hire: ${rates.fee}g or ${rates.cutPct}%, whichever is more`, () => this.hireMerc(a, rates.fee, rates.cutPct), {

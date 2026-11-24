@@ -11,7 +11,7 @@ import {
 import { adventurerRank } from '../game/guild';
 import { markDirty, requireState, session } from '../game/session';
 import { cityHeader } from '../ui/hud';
-import { COLORS, ScrollList, WIDTH, button, figure, panel, setupCamera, talentTag, text, toast } from '../ui/widgets';
+import { COLORS, ScrollList, WIDTH, button, figure, fittedList, panel, setupCamera, talentTag, text, toast } from '../ui/widgets';
 
 interface NegotiateData {
   /** hire: a free adventurer from the guild hall. renew: a companion whose contract is ending. */
@@ -115,13 +115,14 @@ export class NegotiateScene extends Phaser.Scene {
       text(this, 170, 212 + i * 16, STAT_INFO[k].short, { fontSize: '12px', color: COLORS.dim });
       text(this, 220, 212 + i * 16, g, { fontSize: '12px', color: TALENT_COLORS[g], fontStyle: 'bold' });
     });
-    text(this, 30, 290, `Skills: ${c.skillIds.map((s) => SKILLS[s].name).join(', ') || 'none yet'}`, { fontSize: '12px', color: COLORS.dim, wordWrap: { width: 272 } });
+    fittedList(this, 30, 314, c.skillIds.map((s) => SKILLS[s].name), 2, { fontSize: '12px', color: COLORS.dim, wordWrap: { width: 272 } },
+      (shown, hidden) => `Skills: ${shown.join(', ')}${hidden ? ` +${hidden} more` : ''}`, 'Skills: none yet');
     if (this.mode === 'renew') {
-      text(this, 30, 330, `Relationship ${Math.round(who.relationship)}/100`, { fontSize: '14px' });
+      text(this, 30, 350, `Relationship ${Math.round(who.relationship)}/100`, { fontSize: '14px' });
       const g = this.add.graphics();
-      g.fillStyle(0x0b0d14).fillRect(30, 352, 272, 10);
-      g.fillStyle(0xe05a9b).fillRect(30, 352, 2.72 * who.relationship, 10);
-      text(this, 30, 368, 'Quests together raise it. A good relationship lowers what they ask on renewal.', { fontSize: '11px', color: COLORS.dim, wordWrap: { width: 272 } });
+      g.fillStyle(0x0b0d14).fillRect(30, 372, 272, 10);
+      g.fillStyle(0xe05a9b).fillRect(30, 372, 2.72 * who.relationship, 10);
+      text(this, 30, 386, 'Quests together raise it. A good relationship lowers what they ask on renewal.', { fontSize: '11px', color: COLORS.dim, wordWrap: { width: 272 } });
     }
     text(this, 30, 420, 'How they value things', { fontSize: '13px', color: COLORS.dim });
     text(this, 30, 440, [
