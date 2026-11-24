@@ -62,7 +62,7 @@ The **schedule** (Manage Party) sets what each member does on days they aren't o
 | Activity | Effect per day |
 |---|---|
 | Recover | 2× Health recovery (20 instead of 10) |
-| Training | +25 XP |
+| Training | +2 XP per level +20 (22 at level 1, 70 at level 25) |
 | Odd Jobs | +10 gold |
 | Day Off | +10 Morale |
 
@@ -94,19 +94,20 @@ The **Quest Board** is shared with every rival party. It holds up to **40 quests
 
 Promotion quests use the easier half of the rank's levels, its middle group size and usual pay.
 
-**XP** from a quest: every member who comes back gets **25 XP** (the same as a day of Training) plus an **equal share of 200 XP**, so smaller parties learn faster. Each member's total is then adjusted by the level difference: **+25% per level the enemies are above them, −25% per level below**, and **nothing at 4 or more levels above** (veterans can still escort newcomers on easy quests for the pay, but learn nothing). A **failed quest** pays no reward, but still gives the 25 XP plus the pool's share for the fraction of enemies defeated (killed or surrendered): beating 3 of 4 before falling back is worth 75% of it. (`xp` in `guild.json`.)
+**XP** from a quest: every member who comes back gets a day of Training's XP (2 x their level + 20) plus an **equal share of the quest's XP pool**, so smaller parties learn faster. The pool grows with the quest's danger in skulls (D, 0.5 to 10): **50 x D² + 75 x D + 250**. The members' levels don't change it: there is no bonus or penalty for the level gap, because the level-up cost curve already makes easy quests worth little to veterans. A **failed quest** pays no reward, but still gives the training XP plus the pool's share for the fraction of enemies defeated (killed or surrendered): beating 3 of 4 before falling back is worth 75% of it. (`xp` in `guild.json`.)
 
 **Bounties**: every enemy the party kills is worth a bounty of 9 gold per level (the same as turning in a prisoner), claimed when the party gets back to the city, whether the quest succeeded or not.
 
-| Party size | XP each at the enemies' level |
-|---|---|
-| 1 | 225 |
-| 2 | 125 |
-| 3 | 92 |
-| 4 | 75 |
-| 5 | 65 |
+| Skulls | XP pool | Each of 4 members (pool share, before training XP) |
+|---|---|---|
+| 0.5 | 300 | 75 |
+| 1 | 375 | 94 |
+| 2.5 | 750 | 188 |
+| 5 | 1,875 | 469 |
+| 7.5 | 3,625 | 906 |
+| 10 | 6,000 | 1,500 |
 
-Each level needs **25 XP more than the last**: 100 from level 1 to 2, 125 to 3, 325 from 10 to 11, 575 from 20 to 21 (`xpPerLevel` in `stats.json`). Early levels come after a win or two; later ones take several, or harder quests.
+XP from level L to L + 1 is **5 x L² + 15 x L + 60**: 80 from level 1 to 2, 110 to 3, 710 from 10 to 11, 2,360 from 20 to 21, 3,560 from 25 to 26 (`xpPerLevel` in `stats.json`). Early levels come after a win or two; later ones take several, or harder quests.
 
 ### The other parties
 
@@ -159,7 +160,7 @@ Tooltips show a formula line generated from the numbers (e.g. "80% P.Atk, then 4
 
 Every attack hits. **Resist** gives a chance to shrug off debuffs (Burn, Slow, Corrode...): Resist ÷ (100 + Resist), the same curve as Defense, so 50 Resist = 33% and 100 = 50%. A resisted debuff shows "Resisted" and doesn't apply; the attack's damage still lands. Targeting shows the chance, and the enemy AI weighs it. Enemies' Resist matches their Defense.
 
-Stats grow automatically on level up (100 XP for the first level, 25 more for each one after), at a speed set by the Adventurer's **talent**. Every growing stat (Health, Mana, P.Atk, M.Atk, Defense, Resist) has its own talent grade, rolled when the Adventurer is created; the grade multiplies that stat's growth per level (the numbers in brackets above):
+Stats grow automatically on level up (80 XP for the first level, then 5 x L² + 15 x L + 60 for level L), at a speed set by the Adventurer's **talent**. Every growing stat (Health, Mana, P.Atk, M.Atk, Defense, Resist) has its own talent grade, rolled when the Adventurer is created; the grade multiplies that stat's growth per level (the numbers in brackets above):
 
 | Talent | S | A | B | C | D | F |
 |---|---|---|---|---|---|---|
