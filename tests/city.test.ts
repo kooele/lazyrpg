@@ -8,7 +8,7 @@ import {
   acceptQuest, advanceDay, advanceDays, askingPrice, buyDrinks, isShipmentDay, marketBuyPrice, marketDay, sellSlave, turnInPrisoner, buyResidence, buySlave, makeQuest, sellResidence, endDay, setLodging, boarders, lodgingCost, residents, canTakeQuest, dailyUpkeep, foodCost, departBlock, lineupMembers, mainCharacter, moveMember,
   killBounty, newCampaign, questMoraleLoss, questXpPool, questXpShares, registerPrisoner, resolveQuest, rewardShares, toggleLineup, weeklyTaxes, setLineupSlot, benchMember, releaseCompanion, moraleDepartures, quitRenown, renewContract, weeklyWages,
 } from '../src/game/city';
-import { activityOf, lodgingOf, combatPenalty, expectedQuality, foodRelationship, healthOf, isInjured, moraleOf, moralePenalty, obediencePenalty } from '../src/game/condition';
+import { activityOf, defaultActivity, lodgingOf, combatPenalty, expectedQuality, foodRelationship, healthOf, isInjured, moraleOf, moralePenalty, obediencePenalty } from '../src/game/condition';
 import { parseSave, serializeSave } from '../src/game/save';
 import {
   companionContract, companionDemand, evaluateOffer, foodLodgingWeekly, joinParty, mercenaryRates, offerValue, openingTerms, punishSlave, slaveContract, bounty, registrationFee, slaveTax, slaveValue, leaveParty, isCompanion, releaseCost, proratedWages, wagesBetween,
@@ -1146,6 +1146,26 @@ describe('contracts', () => {
     expect(departBlock(s)).toMatch(/No adventurers in the lineup/);
     expect(toggleLineup(s, s.mainId)).toBeNull();
     expect(departBlock(s)).toBeNull();
+  });
+
+  it('unscheduled members take a Day Off unless Health would take longer to heal than Morale to fill', () => {
+    const s = start();
+    const c = companion(s);
+    const H = GUILD.condition.healthPerDay;
+    const M = GUILD.schedule.dayOffMorale;
+    c.health = 100;
+    c.morale = 50;
+    expect(defaultActivity(c)).toBe('dayOff');
+    expect(activityOf(s, c)).toBe('dayOff');
+    // Health 3 days from full, Morale 2 days: Recover.
+    c.health = 100 - 3 * H;
+    c.morale = 100 - 2 * M;
+    expect(defaultActivity(c)).toBe('recover');
+    // Morale further off than Health: Day Off, even though they're injured.
+    c.morale = 100 - 4 * M;
+    expect(defaultActivity(c)).toBe('dayOff');
+    s.schedule[c.id] = 'training';
+    expect(activityOf(s, c)).toBe('training');
   });
 
   it('moving a member reorders the party but not the lineup', () => {

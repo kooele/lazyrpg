@@ -115,7 +115,17 @@ export const ACTIVITY_INFO: Record<Activity, { name: string; describe: () => str
   dayOff: { name: 'Day Off', describe: () => `Take it easy: +${GUILD.schedule.dayOffMorale} Morale a day.` },
 };
 
-/** What a member does on days they aren't on a quest: as scheduled, else Recover when injured and Day Off otherwise. */
+/**
+ * What an unscheduled member does: Day Off, unless their Health would take longer to heal (at the normal rate) than
+ * their Morale takes to fill on Day Off; then Recover, since Health is what holds them back.
+ */
+export function defaultActivity(c: Character): Activity {
+  const healthDays = (100 - healthOf(c)) / (GUILD.condition.healthPerDay * traitFactor(c, 'healthRecovery'));
+  const moraleDays = (100 - moraleOf(c)) / (GUILD.schedule.dayOffMorale * traitFactor(c, 'moraleGain'));
+  return healthDays > moraleDays ? 'recover' : 'dayOff';
+}
+
+/** What a member does on days they aren't on a quest: as scheduled, else the default (defaultActivity). */
 export function activityOf(state: GameState, c: Character): Activity {
-  return state.schedule[c.id] ?? (isInjured(c) ? 'recover' : 'dayOff');
+  return state.schedule[c.id] ?? defaultActivity(c);
 }

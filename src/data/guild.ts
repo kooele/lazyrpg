@@ -51,7 +51,7 @@ export const FOOD_TIERS: readonly FoodTier[] = ['poor', 'common', 'fine', 'luxur
 export const foodQuality = (t: FoodTier) => FOOD_TIERS.indexOf(t);
 
 export type Activity = 'recover' | 'training' | 'oddJobs' | 'dayOff';
-export const ACTIVITIES: readonly Activity[] = ['recover', 'training', 'oddJobs', 'dayOff'];
+export const ACTIVITIES: readonly Activity[] = ['dayOff', 'recover', 'training', 'oddJobs'];
 
 export interface GuildConfig {
   city: string;

@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { MAX_PARTY_SIZE, SKILLS, WEAPONS, xpToNext } from '../data/content';
-import { ACTIVITIES, FOOD_TIERS, GUILD, INN_TIERS, LODGING_QUALITY, RINGS, foodQuality, isResidence, type CityLodging, type FoodTier } from '../data/guild';
+import { ACTIVITIES, FOOD_TIERS, GUILD, INN_TIERS, LODGING_QUALITY, RINGS, foodQuality, isResidence, type Activity, type CityLodging, type FoodTier, trainingXp } from '../data/guild';
 import { TRAITS } from '../data/traits';
 import type { Character, GameState } from '../data/types';
 import { bodyPoints, deriveStats, freePoints, skillPoints } from '../game/character';
@@ -342,19 +342,27 @@ export class PartyScene extends Phaser.Scene {
     }
 
     // ---- schedule: what they do on days they aren't on a quest ----
-    const sy = 410;
+    const sy = 418;
     const busy = !scheduledMembers(state).some((m) => m.id === c.id);
-    text(this, X + 16, sy, `Schedule${busy ? ' (back from a quest today: starts tomorrow)' : ' (days not on a quest)'}`, { fontSize: '13px', color: COLORS.gold });
+    text(this, X + 16, sy, 'Schedule', { fontSize: '13px', color: COLORS.gold });
+    text(this, X + 16, sy + 16, busy ? 'starts tomorrow' : 'off-quest days', { fontSize: '10px', color: COLORS.dim });
     const now = activityOf(state, c);
-    ACTIVITIES.forEach((a, i) => button(this, X + 16 + i * 140, sy + 20, 132, 30, ACTIVITY_INFO[a].name, () => {
-      state.schedule[c.id] = a;
-      markDirty();
-      this.render();
-    }, { fontSize: 13, selected: a === now }));
-    text(this, X + 16, sy + 54, ACTIVITY_INFO[now].describe(), { fontSize: '11px', color: COLORS.dim, wordWrap: { width: W - 32 } });
+    const auto = !state.schedule[c.id];
+    const scheduleOption = (a: Activity): MenuOption => ({
+      label: `${ACTIVITY_INFO[a].name}${auto && a === now ? ' (default)' : ''}`,
+      effect: activityEffect(c, a),
+      color: COLORS.dim,
+      selected: a === now,
+      pick: () => {
+        state.schedule[c.id] = a;
+        markDirty();
+        this.render();
+      },
+    });
+    this.dropdown(X + 110, sy - 2, DROP_W, scheduleOption(now), () => ACTIVITIES.map(scheduleOption));
 
     // ---- food and lodging: dropdowns for members the party houses; others find their own (greyed out) ----
-    const fy = sy + 68;
+    const fy = sy + 32;
     const fed = isHoused(c);
     const main = c.id === state.mainId;
     const food = foodOf(state, c);
@@ -569,6 +577,15 @@ interface MenuOption {
   selected?: boolean;
   enabled?: boolean;
   pick: () => void;
+}
+
+/** What a schedule activity does for `c` each day, for the dropdown. */
+function activityEffect(c: Character, a: Activity): string {
+  const S = GUILD.schedule;
+  if (a === 'recover') return `+${S.recoverMultiplier * GUILD.condition.healthPerDay * traitFactor(c, 'healthRecovery')} Health a day (instead of +${GUILD.condition.healthPerDay * traitFactor(c, 'healthRecovery')})`;
+  if (a === 'training') return `+${trainingXp(c.level)} XP a day`;
+  if (a === 'oddJobs') return `+${S.oddJobsGold} gold a day`;
+  return `+${S.dayOffMorale * traitFactor(c, 'moraleGain')} Morale a day`;
 }
 
 /** What a food or lodging choice means for `c`: its quality and, for companions and slaves, the relationship it moves. */
