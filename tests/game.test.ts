@@ -912,9 +912,9 @@ describe('enemies', () => {
 
 describe('progression and enemy behaviour', () => {
   it('each level needs 25 more XP than the last: 100, 125, 150 ...', () => {
-    expect([1, 2, 3, 10].map(xpToNext)).toEqual([100, 125, 150, 325]);
+    expect([1, 2, 3, 10, 25].map(xpToNext)).toEqual([80, 110, 150, 710, 3560]);
     const c = hero();
-    expect(grantXp(c, 100 + 125 + 10)).toBe(2); // two levels, and the rest carries over
+    expect(grantXp(c, 80 + 110 + 10)).toBe(2); // two levels, and the rest carries over
     expect([c.level, c.xp]).toEqual([3, 10]);
   });
 

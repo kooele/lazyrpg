@@ -6,7 +6,7 @@ import { createCharacter, deriveStats, makeRng } from '../src/game/character';
 import { makeEnemy, makeUnit } from '../src/game/battle';
 import {
   acceptQuest, advanceDay, advanceDays, askingPrice, buyDrinks, isShipmentDay, marketBuyPrice, marketDay, sellSlave, turnInPrisoner, buyResidence, buySlave, makeQuest, sellResidence, endDay, setLodging, boarders, lodgingCost, residents, canTakeQuest, dailyUpkeep, foodCost, departBlock, lineupMembers, mainCharacter, moveMember,
-  killBounty, newCampaign, questMoraleLoss, questXpShares, registerPrisoner, resolveQuest, rewardShares, toggleLineup, weeklyTaxes, xpLevelFactor,
+  killBounty, newCampaign, questMoraleLoss, questXpPool, questXpShares, registerPrisoner, resolveQuest, rewardShares, toggleLineup, weeklyTaxes, xpLevelFactor,
 } from '../src/game/city';
 import { activityOf, lodgingOf, combatPenalty, expectedQuality, foodRelationship, healthOf, isInjured, moraleOf, moralePenalty, obediencePenalty } from '../src/game/condition';
 import { parseSave, serializeSave } from '../src/game/save';
@@ -224,11 +224,11 @@ describe('ranks and the leaderboard', () => {
 
   it('quest XP: a day of training each, plus an equal share of the pool, then +-25% per level of difference', () => {
     const train = GUILD.schedule.trainingXp;
-    const pool = GUILD.xp.pool;
-    const q = { stage: 8 };
+    const q = { stage: 8, count: 4 };
+    const pool = questXpPool(q);
     // At the enemies' level: training + pool / party size.
-    expect(questXpShares(q, [{ level: 8 }])).toEqual([train + pool]);
-    expect(questXpShares(q, [{ level: 8 }, { level: 8 }, { level: 8 }, { level: 8 }])).toEqual(Array(4).fill(train + pool / 4));
+    expect(questXpShares(q, [{ level: 8 }])).toEqual([Math.round(train + pool)]);
+    expect(questXpShares(q, [{ level: 8 }, { level: 8 }, { level: 8 }, { level: 8 }])).toEqual(Array(4).fill(Math.round(train + pool / 4)));
     // Level difference: +25% per level below the enemies, -25% per level above, nothing at 4 or more above.
     expect(xpLevelFactor(8, 6)).toBe(1.5);
     expect(xpLevelFactor(8, 9)).toBe(0.75);
@@ -253,7 +253,7 @@ describe('ranks and the leaderboard', () => {
     const killed = [foe(q.stage), foe(q.stage)];
     // 2 of 4 enemies killed, 1 surrendered (counts as defeated, not captured on a loss): 75% of the pool.
     const lines = resolveQuest(s, 'defeat', makeRng(1), [{ id: main.id, lowestHp: 0.5, fell: false }], [foe(q.stage)], { killed, total: 4 });
-    const xp = Math.round(GUILD.schedule.trainingXp + GUILD.xp.pool * 0.75);
+    const xp = Math.round(GUILD.schedule.trainingXp + questXpPool(q) * 0.75);
     expect(lines.join(' ')).toContain(`75% of the enemies defeated`);
     expect(main.level * 1000 + main.xp).toBeGreaterThan(q.stage * 1000); // gained XP
     const bounties = killed.reduce((sum, f) => sum + killBounty(f.level), 0);
@@ -263,6 +263,18 @@ describe('ranks and the leaderboard', () => {
     expect(s.prisoners).toHaveLength(0);
     expect(questXpShares(q, [{ level: q.stage }], 0.75)).toEqual([xp]);
     expect(questXpShares(q, [{ level: q.stage }], 0)).toEqual([GUILD.schedule.trainingXp]); // nothing defeated: training only
+  });
+
+  it('quest XP pool: 50 x skulls^2 + 75 x skulls + 250, from half a skull (300) to ten (6000)', () => {
+    const at = (skulls: number) => {
+      const { from, to } = GUILD.threat.skulls;
+      // A level-1 quest whose difficulty sits exactly on this skull step, sized by its threat count.
+      const difficulty = from + ((skulls - 0.5) / 9.5) * (to - from);
+      return { stage: 1, count: GUILD.threat.standardCount * GUILD.threat.strengthGrowth ** difficulty };
+    };
+    expect(dangerRating(at(0.5))).toBe(0.5);
+    expect(dangerRating(at(10))).toBe(10);
+    expect([0.5, 1, 4, 10].map((s) => questXpPool(at(s)))).toEqual([300, 375, 1350, 6000]);
   });
 
   it('quest cards: about how many foes to expect, and skulls (0.5-10 in halves) on one scale for the whole game', () => {

@@ -3,7 +3,7 @@
 import { MAX_PARTY_SIZE } from '../data/content';
 import { GUILD, isResidence, type CityLodging, type InnTier, type Ring } from '../data/guild';
 import { RANKS, type Character, type GameState, type Offer, type Quest, type Rank } from '../data/types';
-import { makeQuest, postQuests } from './board';
+import { dangerRating, makeQuest, postQuests } from './board';
 import { grantXp, type Rng } from './character';
 import {
   bondOf, bounty, canFight, registrationFee, slaveTax, changeRelationship, isCompanion, isExpired, isHoused, isSlave, leaveParty, slaveContract, slavePrice, talentPriceFactor,
@@ -147,14 +147,21 @@ export function acceptQuest(state: GameState, questId: string): string | null {
 /** The level modifier on a member's quest XP: +levelStep per level the enemies are above them, -levelStep per level below (never under 0). */
 export const xpLevelFactor = (stage: number, level: number) => Math.max(0, 1 + GUILD.xp.levelStep * (stage - level));
 
+/** A quest's XP pool from its danger D in skulls (dangerRating, 0.5-10): xp.pool a x D^2 + b x D + c (300 at half a skull, 6000 at ten). */
+export function questXpPool(q: Pick<Quest, 'stage' | 'count'>): number {
+  const { a, b, c } = GUILD.xp.pool;
+  const d = dangerRating(q);
+  return Math.round(a * d * d + b * d + c);
+}
+
 /**
  * XP each member who comes back from a quest gets: a day of training's worth (schedule.trainingXp), plus an equal
- * share of the xp.pool split among all of them, times `defeated` (the share of the enemies killed or captured: 1 for a
+ * share of the quest's XP pool (questXpPool) split among all of them, times `defeated` (the share of the enemies killed or captured: 1 for a
  * won quest), then x their level modifier (xpLevelFactor). Same order as `members`.
  */
-export function questXpShares(q: Pick<Quest, 'stage'>, members: Pick<Character, 'level'>[], defeated = 1): number[] {
+export function questXpShares(q: Pick<Quest, 'stage' | 'count'>, members: Pick<Character, 'level'>[], defeated = 1): number[] {
   if (members.length === 0) return [];
-  const each = GUILD.schedule.trainingXp + (GUILD.xp.pool * Math.max(0, Math.min(1, defeated))) / members.length;
+  const each = GUILD.schedule.trainingXp + (questXpPool(q) * Math.max(0, Math.min(1, defeated))) / members.length;
   return members.map((c) => Math.round(each * xpLevelFactor(q.stage, c.level)));
 }
 

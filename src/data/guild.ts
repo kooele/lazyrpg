@@ -88,8 +88,8 @@ export interface GuildConfig {
     drift: number;
     stockReference: number;
   };
-  /** Quest XP: each member gets schedule.trainingXp plus an equal share of pool, then x the level modifier (levelStep per level). */
-  xp: { pool: number; levelStep: number };
+  /** Quest XP: each member gets schedule.trainingXp plus an equal share of the pool (a x skulls^2 + b x skulls + c), then x the level modifier (levelStep per level). */
+  xp: { pool: { a: number; b: number; c: number }; levelStep: number };
   schedule: { recoverMultiplier: number; trainingXp: number; oddJobsGold: number; dayOffMorale: number };
   /** Price multiplier from talent: max(min, 1 + weight x (average growth rate - 1)). */
   talentPrice: { weight: number; min: number };
@@ -290,7 +290,10 @@ export function parseGuildConfig(data: unknown): GuildConfig {
     residences: parseResidences(d.residences),
     condition: numbers<GuildConfig['condition']>(d.condition, 'condition', ['maxHealthLoss', 'healthPerDay', 'startingMorale', 'moralePerTurn',
       'moraleFailedQuest', 'moralePerHealthLost', 'moraleMemberDied', 'lowMorale', 'lowMoraleRelationshipPerDay'], 100),
-    xp: numbers(d.xp, 'xp', ['pool', 'levelStep']),
+    xp: {
+      pool: numbers(obj(d.xp, 'xp').pool, 'xp.pool', ['a', 'b', 'c']),
+      levelStep: numbers<{ levelStep: number }>(d.xp, 'xp', ['levelStep']).levelStep,
+    },
     schedule: numbers(d.schedule, 'schedule', ['recoverMultiplier', 'trainingXp', 'oddJobsGold', 'dayOffMorale']),
     talentPrice: numbers(d.talentPrice ?? { weight: 2, min: 0.4 }, 'talentPrice', ['weight', 'min']),
     mercenary: numbers(d.mercenary, 'mercenary', ['feePerLevel', 'cutBase', 'cutPerLevel']),
