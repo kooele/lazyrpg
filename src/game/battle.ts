@@ -135,11 +135,6 @@ export interface ReachInfo {
   hazards?: number;
 }
 
-/** XP for winning a battle (stats.json xpPerVictory; the same at every stage). */
-export function victoryXp(_stage: number): number {
-  return STAT_CONFIG.xpPerVictory;
-}
-
 export function makeUnit(character: Character, team: Team, pos: Point): Unit {
   const stats = deriveStats(character);
   // Party members fight with every stat lowered by injuries, low Morale and (slaves) low Obedience.
@@ -977,6 +972,8 @@ export class Battle {
       case 'unit': {
         const t = this.occupantFrom(caster, from, tile);
         if (t && this.hiddenFrom(caster, t)) return [];
+        // Engage (engaging without attacking) does nothing once either side is already engaged.
+        if (t && hasTag(skill, 'engage') && !skill.hits?.length && !skill.basicAttack && (caster.engagedWith || t.engagedWith)) return [];
         return t && (this.matches(caster, skill, t) || this.aimedHit(caster, skill, t)) ? [t] : [];
       }
     }
@@ -1186,6 +1183,23 @@ export class Battle {
     const sc = STATUSES[statusId]?.casterScaled;
     if (!sc) return 0;
     return Math.round(this.stat(source, 'pAtk') * (sc.pAtk ?? 0) + this.stat(source, 'mAtk') * (sc.mAtk ?? 0));
+  }
+
+  /**
+   * Run `fn` as if `target` had status `id` from `source` (one stack, caster-scaled amounts included),
+   * then put its statuses back. For previews: what a buff or debuff would change.
+   */
+  withStatus<T>(source: Unit, target: Unit, id: string, fn: () => T): T {
+    const def = STATUSES[id];
+    const saved = target.statuses;
+    target.statuses = [...saved.filter((s) => s.id !== id), {
+      id, name: def.name, debuff: def.debuff, stacks: 1, amount: this.scaledStatusAmount(source, id), turns: 1, tick: def.tick,
+    }];
+    try {
+      return fn();
+    } finally {
+      target.statuses = saved;
+    }
   }
 
   /** Shield points `skill` gives `target` when `caster` uses it. */
@@ -1596,11 +1610,6 @@ export function makeEnemy(type: string, level: number, rng: Rng): Character {
 }
 
 /**
- * An encounter for `stage`: random picks from the types that fit the stage until the
- * threat budget (threatPerAdventurer x party size) is spent. Weak types come in bigger packs.
- * Past the last level range, the budget keeps growing by 25% of a party per stage.
- */
-/**
  * The foes of an encounter at `stage`: one main type whose level range fits, plus the other fitting types
  * that fight the same way (so wolves come with wolves and beasts, bandits with other humans). Main type first.
  */
@@ -1610,19 +1619,21 @@ export function pickFoes(stage: number, rng: Rng): string[] {
   return [main, ...fit.filter((t) => t !== main && ENEMIES[t].ai === ENEMIES[main].ai)];
 }
 
-export function generateEnemies(stage: number, partySize: number, rng: Rng, mobMultiplier = 1, foes?: string[]): Character[] {
+/**
+ * An encounter for `stage`: random picks from the foes (see pickFoes) until `budget` threat is spent
+ * (see encounterBudget: it comes from the quest, never the party). Weak types come in bigger packs.
+ * Past the last level range, the budget keeps growing by 25% per stage. At most `cap` enemies.
+ */
+export function generateEnemies(stage: number, rng: Rng, budget: number, foes?: string[], cap = ENCOUNTER.maxEnemies): Character[] {
   const fitting = enemyTypesForStage(stage);
   const want = foes?.length ? foes : pickFoes(stage, rng);
   const themed = fitting.filter((t) => want.includes(t.type));
   const options = themed.length ? themed : fitting;
   const top = Math.max(...Object.values(ENEMIES).map((d) => d.levels[1]));
-  const party = Math.max(1, partySize);
-  // Quick Battle's difficulty slider multiplies the budget (and the cap on how many come).
-  const budget = party * ENCOUNTER.threatPerAdventurer * (1 + Math.max(0, stage - top) * 0.25) * mobMultiplier;
-  const cap = Math.round(ENCOUNTER.maxEnemies * mobMultiplier);
+  const total = budget * (1 + Math.max(0, stage - top) * 0.25);
   const out: Character[] = [];
   let spent = 0;
-  while (spent < budget - 1e-9 && out.length < cap) {
+  while (spent < total - 1e-9 && out.length < cap) {
     const pick = options[Math.floor(rng() * options.length)];
     out.push(makeEnemy(pick.type, pick.level, rng));
     spent += ENEMIES[pick.type].threat;

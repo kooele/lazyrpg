@@ -2,12 +2,11 @@
 // Pure logic (no Phaser): scenes call these and show the messages they return.
 import { MAX_PARTY_SIZE } from '../data/content';
 import { GUILD, isResidence, type InnTier, type Lodging, type Ring } from '../data/guild';
-import { STAT_CONFIG } from '../data/stats';
 import { RANKS, type Character, type GameState, type Offer, type Quest, type Rank } from '../data/types';
 import { makeQuest, postQuests } from './board';
 import { grantXp, type Rng } from './character';
 import {
-  bondOf, bounty, canFight, changeRelationship, isCompanion, isExpired, isHoused, isSlave, leaveParty, slaveContract, slavePrice, talentPriceFactor,
+  bondOf, bounty, canFight, registrationFee, slaveTax, changeRelationship, isCompanion, isExpired, isHoused, isSlave, leaveParty, slaveContract, slavePrice, talentPriceFactor,
 } from './contracts';
 import {
   ACTIVITY_INFO, FOOD_EXPECT_TEXT, QUALITY_TEXT, activityOf, changeHealth, changeMorale, expectedQuality, foodOf, foodRelationship, healthLoss, healthOf,
@@ -132,9 +131,29 @@ export function acceptQuest(state: GameState, questId: string): string | null {
   return null;
 }
 
-/** XP for a won battle: full at the quest's level, more for punching up, less for easy work. */
-export function questXp(stage: number, level: number): number {
-  return Math.round(STAT_CONFIG.xpPerVictory * Math.max(0.15, Math.min(2, 1 + (stage - level) * 0.5)));
+/** The level modifier on a member's quest XP: +levelStep per level the enemies are above them, -levelStep per level below (never under 0). */
+export const xpLevelFactor = (stage: number, level: number) => Math.max(0, 1 + GUILD.xp.levelStep * (stage - level));
+
+/**
+ * XP each member who comes back from a quest gets: a day of training's worth (schedule.trainingXp), plus an equal
+ * share of the xp.pool split among all of them, times `defeated` (the share of the enemies killed or captured: 1 for a
+ * won quest), then x their level modifier (xpLevelFactor). Same order as `members`.
+ */
+export function questXpShares(q: Pick<Quest, 'stage'>, members: Pick<Character, 'level'>[], defeated = 1): number[] {
+  if (members.length === 0) return [];
+  const each = GUILD.schedule.trainingXp + (GUILD.xp.pool * Math.max(0, Math.min(1, defeated))) / members.length;
+  return members.map((c) => Math.round(each * xpLevelFactor(q.stage, c.level)));
+}
+
+/** Grant quest XP to the members who came back (see questXpShares) and report it. */
+function questXpLines(q: Quest, members: Character[], defeated: number): string[] {
+  const xp = questXpShares(q, members, defeated);
+  const out = [`XP${defeated < 1 ? ` (${Math.round(defeated * 100)}% of the enemies defeated)` : ''}: ${members.map((c, i) => `${c.name} +${xp[i]}`).join(', ')}.`];
+  for (const [i, c] of members.entries()) {
+    const levels = grantXp(c, xp[i]);
+    if (levels > 0) out.push(`${c.name} reached level ${c.level}! +${levels} skill point${levels > 1 ? 's' : ''}.`);
+  }
+  return out;
 }
 
 /**
@@ -157,8 +176,18 @@ export function rewardShares(members: Character[], reward: number): { name: stri
  * Morale, rewards. Nights on the road pass for multi-day trips; the party gets back in the evening and still needs
  * somewhere to sleep (an inn, or outside). Enemies who `surrendered` are taken prisoner on a win. Returns report lines.
  */
+/** How the enemies fared in a quest's battle: those killed (each worth a bounty) and how many there were in all. */
+export interface FoeTally {
+  killed: Character[];
+  total: number;
+}
+
+/** The bounty for an enemy killed on a quest: as much as turning in a prisoner of its level. */
+export const killBounty = (level: number) => bounty(level);
+
 export function resolveQuest(
   state: GameState, outcome: 'victory' | 'defeat', rng: Rng, conditions: BattleCondition[] = [], surrendered: Character[] = [],
+  foes?: FoeTally,
 ): string[] {
   const q = state.quest;
   if (!q) return [];
@@ -216,13 +245,8 @@ export function resolveQuest(
       state.belowRankSince = 0;
       lines.push(note(state, `Your party passed the promotion quest and is now ${q.rank} rank!`));
     }
-    const gains = members.map((c) => `${c.name} +${questXp(q.stage, c.level)}`);
-    lines.push(`XP: ${gains.join(', ')}.`);
-    for (const c of members) {
-      const levels = grantXp(c, questXp(q.stage, c.level));
-      if (levels > 0) lines.push(`${c.name} reached level ${c.level}! +${levels} skill point${levels > 1 ? 's' : ''}.`);
-      changeRelationship(c, GUILD.companion.relationshipPerQuest);
-    }
+    lines.push(...questXpLines(q, members, 1));
+    for (const c of members) changeRelationship(c, GUILD.companion.relationshipPerQuest);
     // Enemies who surrendered (only humans do) are taken prisoner, to be registered at the city gate.
     for (const foe of surrendered) {
       const p = randomAdventurer(foe.level, rng, { avoidNames: new Set(state.party.map((m) => m.name)) });
@@ -233,7 +257,16 @@ export function resolveQuest(
   } else {
     state.progress.defeats += 1;
     lines.push('No reward. The party limps home to recover.');
+    // XP still counts: a day of training's worth, and the quest's pool for the share of enemies defeated.
+    const defeated = foes && foes.total > 0 ? (foes.killed.length + surrendered.length) / foes.total : 0;
+    lines.push(...questXpLines(q, members, defeated));
     for (const c of members) changeRelationship(c, -2);
+  }
+  // Bounties for every enemy killed, claimed back in the city, win or lose.
+  if (foes?.killed.length) {
+    const gold = foes.killed.reduce((sum, f) => sum + killBounty(f.level), 0);
+    state.gold += gold;
+    lines.push(`Bounties: ${gold} gold for ${foes.killed.length} enem${foes.killed.length > 1 ? 'ies' : 'y'} slain.`);
   }
   lines.push(`Morale: ${members.map((c) => `${c.name} ${c.morale}`).join(', ')}.`);
   lines.push(...moraleDepartures(state));
@@ -301,7 +334,8 @@ export function boarders(state: GameState): Character[] {
 
 /** Lodging for one night: on the road (quests), at an inn, a residence (free), or outside. */
 export function lodgingCost(state: GameState, lodging: Lodging = 'road'): number {
-  const per = lodging === 'road' ? GUILD.upkeep.roadPerPerson
+  // Nights on the road cost nothing (food is still paid).
+  const per = lodging === 'road' ? 0
     : lodging === 'outside' ? GUILD.lodging.outsidePerPerson
       : isResidence(lodging) ? 0 : GUILD.inns[lodging].pricePerPerson;
   return boarders(state).length * per;
@@ -407,6 +441,11 @@ export function weeklyWages(state: GameState): number {
   return state.party.reduce((s, c) => s + (isCompanion(c) && !isExpired(c, state.day) ? c.contract.basePay : 0), 0);
 }
 
+/** Property tax on the party's slaves, due each payday (see slaveTax). */
+export function weeklyTaxes(state: GameState): number {
+  return state.party.reduce((s, c) => s + (isSlave(c) ? slaveTax(c) : 0), 0);
+}
+
 export const isPayday = (day: number) => day % 7 === 0;
 
 /** Pass `days` days (nights on the road). Returns the messages for the player. */
@@ -488,6 +527,19 @@ export function advanceDay(state: GameState, rng: Rng, lodging: Lodging = 'road'
       }
     }
     if (paid) say(`Payday: ${paid} gold in wages.`);
+    // Property tax on slaves: one the party can't pay for is seized and sold at the slave market.
+    let taxed = 0;
+    for (const c of state.party.filter(isSlave)) {
+      const tax = slaveTax(c);
+      if (state.gold >= tax) {
+        state.gold -= tax;
+        taxed += tax;
+      } else {
+        seizeSlave(state, c, rng);
+        say(`You couldn't pay the property tax on ${c.name} (${tax} gold): the city seized them for the slave market.`);
+      }
+    }
+    if (taxed) say(`Slave property tax: ${taxed} gold.`);
   }
 
   // Contracts running out.
@@ -599,6 +651,16 @@ export function sellSlave(state: GameState, id: string, rng: Rng): number {
   return gold;
 }
 
+/** The city takes a slave whose property tax went unpaid; it goes up for sale at the slave market. */
+function seizeSlave(state: GameState, c: Character, rng: Rng): void {
+  state.party = state.party.filter((m) => m !== c);
+  state.lineup = state.lineup.filter((x) => x !== c.id);
+  delete state.schedule[c.id];
+  delete state.food[c.id];
+  const { contract: _k, ...character } = c;
+  state.market.slaves.push({ character, price: slavePrice(c.level, rng, talentPriceFactor(c)) });
+}
+
 // ---- prisoners: registered at the city gate --------------------------------------------------------
 
 /** Prisoners waiting at the city gate: the party can't do anything else in the city until each one is registered. */
@@ -613,14 +675,15 @@ export function turnInPrisoner(state: GameState, id: string): number {
   return p.price;
 }
 
-/** Register a prisoner as the party's slave for the registration fee. Returns an error message, or null. */
+/** Register a prisoner as the party's slave for its registration fee (see registrationFee). Returns an error message, or null. */
 export function registerPrisoner(state: GameState, id: string, rng: Rng = Math.random): string | null {
   const p = state.prisoners.find((o) => o.character.id === id);
   if (!p) return 'No such prisoner.';
   if (state.party.length >= GUILD.maxRoster) return `Your party is full (${GUILD.maxRoster}).`;
-  if (state.gold < GUILD.slave.registrationFee) return `The registration fee is ${GUILD.slave.registrationFee} gold.`;
-  state.gold -= GUILD.slave.registrationFee;
+  const fee = registrationFee(p);
+  if (state.gold < fee) return `The registration fee is ${fee} gold.`;
+  state.gold -= fee;
   state.prisoners = state.prisoners.filter((o) => o !== p);
-  state.party.push({ ...p.character, contract: slaveContract('prisoner', GUILD.slave.registrationFee, rng) });
+  state.party.push({ ...p.character, contract: slaveContract('prisoner', fee, rng) });
   return null;
 }

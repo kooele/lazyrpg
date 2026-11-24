@@ -1,19 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import skillsJson from '../src/data/skills.json';
 import weaponsJson from '../src/data/weapons.json';
-import { SKILLS, STATUSES, TREE_SKILLS, WEAPONS, maxBodyRank, modeWithTag, parseContent, resolveWeaponSkill, skillEffect, skillPointsForLevel, skillStatText, skillStats } from '../src/data/content';
+import { SKILLS, STATUSES, TREE_SKILLS, WEAPONS, maxBodyRank, modeWithTag, parseContent, resolveWeaponSkill, skillEffect, skillPointsForLevel, skillStatText, skillStats, xpToNext } from '../src/data/content';
 import enemiesJson from '../src/data/enemies.json';
 import { ENEMIES, parseEnemies } from '../src/data/enemies';
 import { STAT_CONFIG, parseStatConfig } from '../src/data/stats';
 import type { Character, SkillDef } from '../src/data/types';
-import { caution, planTurn, preferredMode, runAiTurn, shouldDisengage, shouldSurrender, threatAt, tribeRouted, wantsToFlee } from '../src/game/ai';
-import { Battle, defenseMultiplier, resistChance, deploymentTiles, enemyTypesForStage, generateEnemies, makeEnemy, pickFoes, makeUnit, victoryXp, type Team } from '../src/game/battle';
+import { bestAction, caution, planTurn, preferredMode, runAiTurn, shouldDisengage, shouldSurrender, threatAt, tribeRouted, wantsToFlee } from '../src/game/ai';
+import { Battle, defenseMultiplier, resistChance, deploymentTiles, enemyTypesForStage, generateEnemies, makeEnemy, pickFoes, makeUnit, type Team } from '../src/game/battle';
 import { allSkills, bodyGain, skillBarLayout, swapBarSlots, bodyPoints as bodyPointsOf, bodyStats, createCharacter, deriveStats, freePoints, grantXp, isUnlocked, makeRng, pointsUsed, sanitizeLoadout } from '../src/game/character';
 import { randomAdventurer } from '../src/game/people';
 import { dist, generateMap, hasLineOfSight, passable, withinRange, type BattleMap, type Point, type Terrain } from '../src/game/grid';
 import { parseSave, serializeSave } from '../src/game/save';
 import { skillShape } from '../src/game/reach';
 import { advanceDays, newCampaign } from '../src/game/city';
+import { newDemo, resolveDemoBattle } from '../src/game/demo';
+import { makeQuest, rankForStage, usualCount } from '../src/game/board';
+import { GUILD } from '../src/data/guild';
 
 function openMap(w = 10, h = 7): BattleMap {
   return { width: w, height: h, tiles: Array.from({ length: h }, () => Array<Terrain>(w).fill('grass')) };
@@ -564,6 +567,18 @@ describe('engagement', () => {
     expect(e.engagedWith).toBe(a.uid);
   });
 
+  it('Engage is a free action, and does nothing once either side is engaged', () => {
+    const { battle, units: [a, e] } = duel();
+    a.character.skillIds = ['engage'];
+    expect(battle.usableFreeActions(a)).toContain('engage');
+    battle.perform(a, 'engage', { x: 4, y: 3 });
+    expect(a.engagedWith).toBe(e.uid);
+    expect(a.ap).toBe(2); // 0 AP
+    expect(a.moved).toBe(false);
+    expect(battle.usableFreeActions(a)).not.toContain('engage'); // already engaged
+    expect(battle.targetsOf(a, SKILLS.engage, { x: 4, y: 3 })).toEqual([]);
+  });
+
   it('engagement does not change Defense or damage', () => {
     const { battle, units: [a, e] } = duel();
     battle.perform(a, 'sword_slash', { x: 4, y: 3 });
@@ -770,7 +785,7 @@ describe('enemies', () => {
       const foes = pickFoes(10, makeRng(seed));
       const ai = ENEMIES[foes[0]].ai;
       expect(foes.every((f) => ENEMIES[f].ai === ai)).toBe(true);
-      const enemies = generateEnemies(10, 5, makeRng(seed), 1, foes);
+      const enemies = generateEnemies(10, makeRng(seed), 4, foes);
       expect(enemies.every((e) => foes.includes(e.enemyType!))).toBe(true);
     }
   });
@@ -826,13 +841,31 @@ describe('enemies', () => {
   });
 
   it('weak types come in bigger packs (threat budget)', () => {
-    const rats = generateEnemies(1, 4, makeRng(3));
+    const rats = generateEnemies(1, makeRng(3), 4);
     expect(rats).toHaveLength(8); // 0.5 threat each, budget 4
     expect(rats.every((e) => e.enemyType === 'rat' && e.level === 1)).toBe(true);
-    const wolves = generateEnemies(4, 4, makeRng(3), 1, ['wolf']);
+    const wolves = generateEnemies(4, makeRng(3), 4, ['wolf']);
     expect(wolves).toHaveLength(4);
-    expect(generateEnemies(4, 4, makeRng(3), 1, ['goblin'])).toHaveLength(7); // 0.6 threat each
-    expect(generateEnemies(1, 1, makeRng(3))).toHaveLength(2);
+    expect(generateEnemies(4, makeRng(3), 4, ['goblin'])).toHaveLength(7); // 0.6 threat each
+  });
+
+  it("the encounter comes from the quest's difficulty, not the party: an easy bandit quest still brings a gang", () => {
+    // A party-sized budget used to mean a single bandit for a solo adventurer. Now the quest's group size decides.
+    const small = makeQuest('D', 1, makeRng(1));
+    const bandits = generateEnemies(5, makeRng(3), small.count, ['bandit']);
+    expect(bandits.length).toBe(Math.ceil(small.count)); // threat 1 each
+    expect(bandits.length).toBeGreaterThanOrEqual(GUILD.quests.D.count[0]);
+    // Rats (0.5 threat each) come twice as many for the same group size.
+    expect(generateEnemies(1, makeRng(3), 3)).toHaveLength(6);
+    // Harder ranks bring bigger groups.
+    expect(usualCount('A')).toBeGreaterThan(usualCount('B'));
+    expect(usualCount('B')).toBeGreaterThan(usualCount('C'));
+    expect(usualCount('C')).toBeGreaterThan(usualCount('D'));
+    // Quick Battle stages use the rank they fall in.
+    expect(rankForStage(1)).toBe('D');
+    expect(rankForStage(5)).toBe('D');
+    expect(rankForStage(6)).toBe('C');
+    expect(rankForStage(30)).toBe('A');
   });
 
   it('enemies.json is validated with precise errors', () => {
@@ -854,10 +887,20 @@ describe('enemies', () => {
 });
 
 describe('progression and enemy behaviour', () => {
-  it('each victory is worth a level, so a winning party is level 3 at stage 3', () => {
+  it('each level needs 25 more XP than the last: 100, 125, 150 ...', () => {
+    expect([1, 2, 3, 10].map(xpToNext)).toEqual([100, 125, 150, 325]);
     const c = hero();
-    for (let stage = 1; stage <= 2; stage++) grantXp(c, victoryXp(stage));
-    expect(c.level).toBe(3);
+    expect(grantXp(c, 100 + 125 + 10)).toBe(2); // two levels, and the rest carries over
+    expect([c.level, c.xp]).toEqual([3, 10]);
+  });
+
+  it('Quick Battle: each victory is worth exactly a level, so a winning party is level 3 at stage 3', () => {
+    const d = newDemo();
+    d.party.push(hero(), hero());
+    d.party[1].xp = 60; // part-way through a level: still exactly one level per win
+    resolveDemoBattle(d, 'victory');
+    resolveDemoBattle(d, 'victory');
+    expect(d.party.map((c) => [c.level, c.xp])).toEqual([[3, 0], [3, 60]]);
   });
 
   it('badly hurt enemies retreat instead of trading blows; healthy ones attack', () => {
@@ -1068,6 +1111,26 @@ describe('progression and enemy behaviour', () => {
     expect(battle.opponentOf(slime)).toBe(a);
   });
 
+  it("doesn't break away when its best turn would stay next to its opponent anyway", () => {
+    // A healthy bandit archer would rather shoot point-blank (then Kick, re-engaging) than walk off:
+    // breaking away first would only hand the hero a free attack.
+    for (let seed = 1; seed < 60; seed++) {
+      const b = makeUnit(makeEnemy('bandit', 6, makeRng(seed)), 'enemy', { x: 5, y: 3 });
+      if (b.character.weaponId !== 'bow' && b.character.weaponId !== 'spear') continue;
+      const a = makeUnit(hero(), 'player', { x: 4, y: 3 });
+      const battle = new Battle(openMap(), [a, b], makeRng(1));
+      battle.perform(a, 'sword_slash', { x: 5, y: 3 });
+      battle.endPhase();
+      const hp = b.hp;
+      const wants = shouldDisengage(battle, b);
+      runAiTurn(battle, b);
+      // Either it never broke away (no free hit taken), or it really got away.
+      if (wants) expect(dist(a, b)).toBeGreaterThan(1.5);
+      else expect(b.hp).toBe(hp);
+      expect(battle.opponentOf(b) === a).toBe(!wants);
+    }
+  });
+
   it("doesn't break away when every tile it could reach is still next to its opponent", () => {
     // Heroes on every side: the slime can't walk anywhere.
     const slime = makeUnit(makeEnemy('slime', 3, makeRng(2)), 'enemy', { x: 5, y: 3 });
@@ -1079,6 +1142,36 @@ describe('progression and enemy behaviour', () => {
     slime.hp = Math.round(slime.stats.health * 0.3);
     expect(wantsToFlee(battle, slime)).toBe(true);
     expect(shouldDisengage(battle, slime)).toBe(false);
+  });
+});
+
+describe('buffs (War Cry, Howl)', () => {
+  const goblin = (weapon: string, at: Point) => {
+    for (let seed = 1; seed < 300; seed++) {
+      const g = makeEnemy('goblin', 6, makeRng(seed));
+      if (g.weaponId === weapon) return makeUnit(g, 'enemy', at);
+    }
+    throw new Error(`no goblin with a ${weapon}`);
+  };
+  const map = () => openMap(12, 8);
+
+  it('a goblin archer shoots rather than War Cry when the cry would only rouse itself and one far-off ally', () => {
+    // War Cry ends its turn, so its own Frenzy only covers its next turn: worth less than a shot now.
+    const a = makeUnit(hero(), 'player', { x: 4, y: 3 });
+    const archer = goblin('bow', { x: 8, y: 3 });
+    const bandit = makeUnit(makeEnemy('bandit', 6, makeRng(8)), 'enemy', { x: 9, y: 0 });
+    const battle = new Battle(map(), [a, archer, bandit], makeRng(1));
+    battle.endPhase();
+    expect(bestAction(battle, archer)?.id).toBe('bow_attack');
+  });
+
+  it('War Cry is worth it when a pack is about to charge', () => {
+    const heroes = [3, 4, 5].map((y) => makeUnit(hero(), 'player', { x: 2, y }));
+    const archer = goblin('bow', { x: 8, y: 4 });
+    const pack = [3, 4, 5, 6].map((y, i) => goblin(i % 2 ? 'spear' : 'staff', { x: 7, y }));
+    const battle = new Battle(map(), [...heroes, archer, ...pack], makeRng(1));
+    battle.endPhase();
+    expect(bestAction(battle, archer)?.id).toBe('war_cry');
   });
 });
 
@@ -1107,7 +1200,7 @@ describe('battles', () => {
       const rng = makeRng(seed);
       const map = generateMap(rng);
       const party = randomParty(4, 1 + (seed % 3), rng);
-      const foes = generateEnemies(1 + (seed % 3), 4, rng);
+      const foes = generateEnemies(1 + (seed % 3), rng, 4);
       const pd = deploymentTiles(map, 'player', party.length);
       const ed = deploymentTiles(map, 'enemy', foes.length);
       const battle = new Battle(map, [
@@ -1841,8 +1934,8 @@ describe('bow mode memory, engagement and enemy archers', () => {
 
 describe('quick battle difficulty', () => {
   it('the enemy count multiplier scales the encounter, and big ones deploy further in', () => {
-    const base = generateEnemies(1, 4, makeRng(3));
-    const five = generateEnemies(1, 4, makeRng(3), 5);
+    const base = generateEnemies(1, makeRng(3), 4);
+    const five = generateEnemies(1, makeRng(3), 4 * 5, undefined, 8 * 5);
     expect(five.length).toBeGreaterThanOrEqual(base.length * 4);
     expect(five.length).toBeLessThanOrEqual(Math.round(8 * 5));
     const map = generateMap(makeRng(3));

@@ -3,14 +3,16 @@ import { GUILD } from '../data/guild';
 import { WEAPONS } from '../data/content';
 import { departBlock, lineupMembers, prisonersAtGate, registerPrisoner, sleepOutside, turnInPrisoner } from '../game/city';
 import { adventurerRank } from '../game/guild';
+import { registrationFee, slaveTax } from '../game/contracts';
 import { markDirty, requireState, session } from '../game/session';
 import { cityHeader, rankBadge } from '../ui/hud';
 import { COLORS, HEIGHT, ScrollList, WIDTH, button, confirmDialog, figure, panel, setupCamera, talentTag, text, toast } from '../ui/widgets';
 
 export const CITY_MAP_KEY = 'city-map';
 
-type Ring = 'outer' | 'middle' | 'inner';
-const RINGS: [Ring, string][] = [['outer', 'Outer Ring'], ['middle', 'Middle Ring'], ['inner', 'Inner Ring']];
+/** The two parts of the city, split by the inner wall (each is a map tab). */
+type District = 'outer' | 'inner';
+const DISTRICTS: [District, string][] = [['outer', 'Outer City'], ['inner', 'Inner City']];
 
 interface Place {
   name: string;
@@ -22,46 +24,48 @@ interface Place {
   data?: object;
 }
 
-const PLACES: Record<Ring, Place[]> = {
+/**
+ * Locations by district. Outer City: between the outer and inner walls, plus the harbour to the east
+ * (the Adventurer Guild is the domed hall on the plaza in the south-west). Inner City: inside the inner wall,
+ * with the cathedral, the manor and a triumphal arch (a monument, not a location) at its centre.
+ */
+const PLACES: Record<District, Place[]> = {
   outer: [
-    { name: 'Adventurer Guild', blurb: 'Quest board, hire mercenaries and companions, the party leaderboard.', at: [1162, 378], scene: 'Guild' },
-    { name: 'Docks', blurb: 'Ships from across the sea.', at: [1330, 760] },
-    { name: 'Marketplace', blurb: 'Stalls and traders.', at: [1250, 270] },
-    { name: 'Slave Market', blurb: 'Buy slaves, or sell your own.', at: [1266, 585], scene: 'Market' },
-    { name: 'Slums', blurb: 'The poorest quarter, inside the outer wall.', at: [330, 650] },
-    { name: 'Customs Office', blurb: 'Duties on everything that comes through the harbour.', at: [1352, 455] },
-    { name: GUILD.inns.standard.name, blurb: `Inn: lodging at ${GUILD.inns.standard.pricePerPerson} gold per person a night, and drinks. What C-rank adventurers expect.`, at: [330, 330], scene: 'Inn', data: { tier: 'standard' } },
-    { name: GUILD.residences.outer.name, blurb: `A home of your own (${GUILD.residences.outer.price} gold at the Estate Office): free nights, as good as an inn.`, at: [560, 860], scene: 'Inn', data: { ring: 'outer' } },
-  ],
-  middle: [
-    { name: 'Tailor', blurb: 'Clothes and fittings.', at: [520, 380] },
-    { name: 'Auction House', blurb: 'Rare goods to the highest bidder.', at: [1010, 420] },
-    { name: 'Library', blurb: 'Books, maps and old records.', at: [640, 650] },
-    { name: 'Church', blurb: 'Prayer and healing.', at: [905, 640] },
-    { name: 'Estate Office', blurb: 'Buy and sell residences in every ring.', at: [1110, 300], scene: 'Estate' },
-    { name: GUILD.inns.highEnd.name, blurb: `High-end inn: ${GUILD.inns.highEnd.pricePerPerson} gold per person a night, and drinks. What B-rank adventurers expect.`, at: [1060, 560], scene: 'Inn', data: { tier: 'highEnd' } },
-    { name: GUILD.residences.middle.name, blurb: `A Middle Ring home (${GUILD.residences.middle.price} gold at the Estate Office): free nights, as good as a high-end inn.`, at: [470, 560], scene: 'Inn', data: { ring: 'middle' } },
+    { name: 'Adventurer Guild', blurb: 'Quest board, hire mercenaries and companions, the party leaderboard.', at: [350, 628], scene: 'Guild' },
+    { name: 'Docks', blurb: 'Ships from across the sea.', at: [1360, 660] },
+    { name: 'Marketplace', blurb: 'Stalls and traders by the harbour warehouses.', at: [1240, 235] },
+    { name: 'Slave Market', blurb: 'Buy slaves, or sell your own.', at: [1160, 613], scene: 'Market' },
+    { name: 'Slums', blurb: 'The poorest quarter, crowded against the outer wall.', at: [470, 765] },
+    { name: 'Customs Office', blurb: 'Duties on everything that comes through the harbour.', at: [1335, 525] },
+    { name: 'Tailor', blurb: 'Clothes and fittings.', at: [497, 167] },
+    { name: 'Auction House', blurb: 'Rare goods to the highest bidder.', at: [1010, 173] },
+    { name: 'Church', blurb: 'Prayer and healing.', at: [277, 343] },
+    { name: GUILD.inns.standard.name, blurb: `Inn: lodging at ${GUILD.inns.standard.pricePerPerson} gold per person a night, and drinks. What C-rank adventurers expect.`, at: [255, 480], scene: 'Inn', data: { tier: 'standard' } },
+    { name: GUILD.residences.outer.name, blurb: `A home of your own (${GUILD.residences.outer.price} gold at the Estate Office): free nights, as good as an inn.`, at: [900, 805], scene: 'Inn', data: { ring: 'outer' } },
   ],
   inner: [
-    { name: "Lord's Manor", blurb: 'Seat of the Lord of Arch City.', at: [765, 392] },
-    { name: 'Central Government Office', blurb: 'Permits, taxes and the city\'s business.', at: [650, 470] },
-    { name: 'Central Church', blurb: 'The great church at the heart of the city.', at: [885, 470] },
-    { name: GUILD.inns.luxury.name, blurb: `Luxury inn: ${GUILD.inns.luxury.pricePerPerson} gold per person a night, and drinks. What A and S-rank adventurers expect.`, at: [765, 548], scene: 'Inn', data: { tier: 'luxury' } },
-    { name: GUILD.residences.inner.name, blurb: `An Inner Ring mansion (${GUILD.residences.inner.price} gold at the Estate Office): free nights, as good as a luxury inn.`, at: [600, 560], scene: 'Inn', data: { ring: 'inner' } },
+    { name: "Lord's Manor", blurb: 'Seat of the Lord of Arch City.', at: [860, 378] },
+    { name: 'Central Church', blurb: 'The great cathedral at the heart of the city.', at: [655, 375] },
+    { name: 'Central Government Office', blurb: 'Permits, taxes and the city\'s business, in the long hall beside the Lord\'s Manor.', at: [890, 425] },
+    { name: 'Library', blurb: 'Books, maps and old records.', at: [530, 300] },
+    { name: 'Estate Office', blurb: 'Buy and sell residences across the city.', at: [990, 330], scene: 'Estate' },
+    { name: GUILD.inns.highEnd.name, blurb: `High-end inn: ${GUILD.inns.highEnd.pricePerPerson} gold per person a night, and drinks. What B-rank adventurers expect.`, at: [995, 570], scene: 'Inn', data: { tier: 'highEnd' } },
+    { name: GUILD.inns.luxury.name, blurb: `Luxury inn: ${GUILD.inns.luxury.pricePerPerson} gold per person a night, and drinks. What A and S-rank adventurers expect.`, at: [880, 500], scene: 'Inn', data: { tier: 'luxury' } },
+    { name: GUILD.residences.middle.name, blurb: `A townhouse inside the inner wall (${GUILD.residences.middle.price} gold at the Estate Office): free nights, as good as a high-end inn.`, at: [520, 585], scene: 'Inn', data: { ring: 'middle' } },
+    { name: GUILD.residences.inner.name, blurb: `A mansion by the cathedral (${GUILD.residences.inner.price} gold at the Estate Office): free nights, as good as a luxury inn.`, at: [640, 505], scene: 'Inn', data: { ring: 'inner' } },
   ],
 };
 
 /** Part of the map image each tab shows (x, y, width; height follows the frame). */
-const VIEWS: Record<Ring, { x: number; y: number; w: number }> = {
+const VIEWS: Record<District, { x: number; y: number; w: number }> = {
   outer: { x: 0, y: 0, w: 1536 },
-  middle: { x: 280, y: 150, w: 960 },
-  inner: { x: 495, y: 252, w: 540 },
+  inner: { x: 380, y: 190, w: 760 },
 };
 
-/** Arch City: the hub. Pick a ring and a location (inns to rest), or set out on an accepted quest. */
+/** Arch City: the hub. Pick a district and a location (inns to rest), or set out on an accepted quest. */
 export class CityScene extends Phaser.Scene {
   private tip!: Phaser.GameObjects.Text;
-  private ring: Ring = 'outer';
+  private district: District = 'outer';
 
   constructor() {
     super('City');
@@ -82,16 +86,16 @@ export class CityScene extends Phaser.Scene {
     const state = requireState();
     cityHeader(this, state, GUILD.city);
 
-    // ---- ring tabs and the map -------------------------------------------------------------
-    RINGS.forEach(([id, label], i) => button(this, 16 + i * 204, 72, 196, 30, label, () => {
-      this.ring = id;
+    // ---- district tabs and the map -------------------------------------------------------------
+    DISTRICTS.forEach(([id, label], i) => button(this, 16 + i * 294, 72, 286, 30, label, () => {
+      this.district = id;
       this.render();
-    }, { selected: this.ring === id, fontSize: 15 }));
+    }, { selected: this.district === id, fontSize: 15 }));
     const MX = 16;
     const MY = 108;
-    const MW = 604;
+    const MW = 580;
     const MH = Math.round((MW * 1024) / 1536);
-    const view = VIEWS[this.ring];
+    const view = VIEWS[this.district];
     const k = MW / view.w;
     const toMap = (x: number, y: number): [number, number] => [MX + (x - view.x) * k, MY + (y - view.y) * k];
     if (this.textures.exists(CITY_MAP_KEY)) {
@@ -100,14 +104,14 @@ export class CityScene extends Phaser.Scene {
     }
     this.add.rectangle(MX, MY, MW, MH).setOrigin(0).setStrokeStyle(2, COLORS.border);
 
-    const places = PLACES[this.ring];
+    const places = PLACES[this.district];
     for (const p of places) this.pin(p, ...toMap(...p.at));
     this.tip = text(this, MX + 8, MY + MH - 30, 'Click a location.', {
       fontSize: '13px', color: COLORS.text, backgroundColor: '#000000b0', padding: { x: 8, y: 4 }, wordWrap: { width: MW - 40 },
     }).setDepth(10);
 
-    // Every location in the ring as a button too (greyed out until it opens).
-    places.forEach((p, i) => button(this, MX + (i % 4) * 152, MY + MH + 6 + Math.floor(i / 4) * 28, 146, 24, p.name,
+    // Every location in the district as a button too (greyed out until it opens).
+    places.forEach((p, i) => button(this, MX + (i % 4) * 145, MY + MH + 6 + Math.floor(i / 4) * 25, 140, 23, p.name,
       () => this.visit(p), { fontSize: p.name.length > 20 ? 10 : 12, enabled: !!p.scene }));
 
     // ---- right: the quest at hand, and recent events -----------------------------------------
@@ -126,7 +130,7 @@ export class CityScene extends Phaser.Scene {
       });
     } else {
       const done = state.lastQuestDay === state.day;
-      text(this, RX + 12, 106, done ? 'Back from a quest today. Accept the next one any time; you can set out tomorrow.' : 'None. Visit the Adventurer Guild\'s quest board (Outer Ring).', { fontSize: '14px', wordWrap: { width: 284 } });
+      text(this, RX + 12, 106, done ? 'Back from a quest today. Accept the next one any time; you can set out tomorrow.' : 'None. Visit the Adventurer Guild\'s quest board (Outer City).', { fontSize: '14px', wordWrap: { width: 284 } });
       button(this, RX + 12, 196, 284, 32, 'Go to the Adventurer Guild', () => this.scene.start('Guild'), { fontSize: 14 });
     }
 
@@ -150,18 +154,17 @@ export class CityScene extends Phaser.Scene {
 
   /**
    * The city gate: prisoners brought back from a quest must each be registered before the party goes on,
-   * turned in for the bounty or registered as the party's slave for a fixed fee. The party never keeps prisoners.
+   * turned in for the bounty or registered as the party's slave for a fee (its market value minus its bounty). The party never keeps prisoners.
    */
   private gate(): void {
     const state = requireState();
-    const fee = GUILD.slave.registrationFee;
     const full = state.party.length >= GUILD.maxRoster;
     const layer = this.add.container(0, 0).setDepth(1000);
     layer.add(this.add.rectangle(0, 0, WIDTH, HEIGHT, 0x000000, 0.7).setOrigin(0).setInteractive());
     const X = WIDTH / 2 - 330;
     layer.add(panel(this, X, 40, 660, HEIGHT - 80));
     layer.add(text(this, WIDTH / 2, 54, 'City gate: register your prisoners', { fontSize: '22px', color: COLORS.gold }).setOrigin(0.5, 0));
-    layer.add(text(this, X + 20, 88, `The guards won't let prisoners into ${GUILD.city} unregistered. Turn each one in for the bounty, or register them as your slave (${fee} gold).${full ? ` Your party is full (${GUILD.maxRoster}), so you can only turn them in.` : ''}  Gold: ${state.gold}.`, {
+    layer.add(text(this, X + 20, 88, `The guards won't let prisoners into ${GUILD.city} unregistered. Turn each one in for the bounty, or register them as your slave: the fee is their market value minus the bounty, and slaves are taxed weekly.${full ? ` Your party is full (${GUILD.maxRoster}), so you can only turn them in.` : ''}  Gold: ${state.gold}.`, {
       fontSize: '13px', wordWrap: { width: 620 }, lineSpacing: 2,
     }));
     const list = new ScrollList(this, X + 14, 140, 632, HEIGHT - 252, 4);
@@ -182,13 +185,14 @@ export class CityScene extends Phaser.Scene {
         this.render();
         toast(this, `${c.name} is taken away. Bounty: ${gold} gold.`);
       }, { fontSize: 13 }));
-      row.add(button(this, 488, 22, 120, 36, `Slave: ${fee}g`, () => {
+      const fee = registrationFee(o);
+      row.add(button(this, 488, 22, 120, 36, `Slave: ${fee}g\n(tax ${slaveTax(c)}g/wk)`, () => {
         const err = registerPrisoner(state, c.id);
         if (err) return toast(this, err, COLORS.bad);
         markDirty();
         this.render();
         toast(this, `${c.name} is registered as your slave. Set their food and loadout in Manage Party.`);
-      }, { fontSize: 13, enabled: !full && state.gold >= fee }));
+      }, { fontSize: 12, enabled: !full && state.gold >= fee }));
       return { obj: row, height: 80 };
     }), 'top');
     const total = state.prisoners.reduce((sum, o) => sum + o.price, 0);
@@ -205,7 +209,7 @@ export class CityScene extends Phaser.Scene {
   /** End the day without an inn: free, but housed companions resent it. */
   private sleepOut(): void {
     const state = requireState();
-    confirmDialog(this, `Sleep outside tonight?\nIt's free, but companions you house lose relationship (more if they expect a high-end inn). Or find an inn (Outer and Inner Ring).`, () => {
+    confirmDialog(this, `Sleep outside tonight?\nIt's free, but companions you house lose relationship (more if they expect a high-end inn). Or find an inn (Outer and Inner City).`, () => {
       const msgs = sleepOutside(state, Math.random);
       markDirty();
       this.render();

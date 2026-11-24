@@ -66,7 +66,7 @@ export function expectedQuality(c: Character): number {
 }
 
 /** What a night quality means, for the UI. */
-export const QUALITY_TEXT = ['sleeping outside', 'an inn or Outer Ring residence', 'a high-end inn or Middle Ring residence', 'a luxury inn or Inner Ring residence'];
+export const QUALITY_TEXT = ['sleeping outside', 'an inn or the Outer City House', 'a high-end inn or the Inner City Townhouse', 'a luxury inn or the Inner City Mansion'];
 
 /** Name of a place to spend the night. */
 export function lodgingName(l: Lodging): string {

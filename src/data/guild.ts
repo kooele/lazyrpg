@@ -3,15 +3,27 @@ import raw from './guild.json';
 import { RANKS, type Rank } from './types';
 
 export interface QuestTier {
+  /** Enemy level range. */
   stages: [number, number];
-  reward: [number, number];
-  renown: number;
+  /** Enemy group size range, in threat points (enemies.json threat per unit). */
+  count: [number, number];
   days: [number, number];
+}
+
+/** How a quest's total threat (count x strength at its level) turns into gold, renown and difficulty. */
+export interface ThreatConfig {
+  strengthAtLevel1: number;
+  strengthGrowth: number;
+  goldPerThreat: number;
+  renownPerThreat: number;
+  standardCount: number;
+  /** Difficulty shown as half a skull (from) and ten skulls (to); evenly in between. */
+  skulls: { from: number; to: number };
 }
 
 export type InnTier = 'standard' | 'highEnd' | 'luxury';
 export const INN_TIERS: readonly InnTier[] = ['standard', 'highEnd', 'luxury'];
-/** City rings (where residences are). */
+/** Residences, cheapest first (ids kept from when the city had three rings: 'outer' is in the Outer City, 'middle' and 'inner' in the Inner City). */
 export type Ring = 'outer' | 'middle' | 'inner';
 export const RINGS: readonly Ring[] = ['outer', 'middle', 'inner'];
 export interface InnConfig {
@@ -26,7 +38,7 @@ export interface InnConfig {
 export type Lodging = InnTier | Ring | 'outside' | 'road';
 /** A night in the city (not on the road). */
 export type CityLodging = Exclude<Lodging, 'road'>;
-/** Night quality (for adventurers' expectations): outside 0, then each ring's inn or residence 1-3. */
+/** Night quality (for adventurers' expectations): outside 0, then each inn or residence 1-3. */
 export const LODGING_QUALITY: Record<CityLodging, number> = { outside: 0, standard: 1, outer: 1, highEnd: 2, middle: 2, luxury: 3, inner: 3 };
 export const isResidence = (l: Lodging): l is Ring => (RINGS as readonly string[]).includes(l);
 
@@ -48,10 +60,11 @@ export interface GuildConfig {
   /** First level of each adventurer rank above D. */
   adventurerRanks: Record<'C' | 'B' | 'A' | 'S', number>;
   boardSize: number;
-  board: { maxPostsPerDay: number; minAtPartyRank: number; postWeights: Record<Rank, number>; threat: [number, number]; pay: [number, number] };
+  board: { maxPostsPerDay: number; minAtPartyRank: number; postWeights: Record<Rank, number>; pay: [number, number] };
   quests: Record<Rank, QuestTier>;
-  /** foodLodgingPerDay: what food and lodging are worth to a companion (negotiations); roadPerPerson: a night on the road. */
-  upkeep: { foodLodgingPerDay: number; roadPerPerson: number };
+  threat: ThreatConfig;
+  /** foodLodgingPerDay: what food and lodging are worth to a companion (negotiations). Nights on the road are free (food is still paid). */
+  upkeep: { foodLodgingPerDay: number };
   food: Record<FoodTier, { name: string; pricePerPerson: number }> & { default: FoodTier; relationshipAbove: number; relationshipBelowPerStep: number };
   inns: Record<InnTier, InnConfig>;
   lodging: { expectedQuality: Record<'S' | Rank, number>; relationshipAbove: number; relationshipBelowPerStep: number; outsidePerPerson: number };
@@ -77,6 +90,8 @@ export interface GuildConfig {
     drift: number;
     stockReference: number;
   };
+  /** Quest XP: each member gets schedule.trainingXp plus an equal share of pool, then x the level modifier (levelStep per level). */
+  xp: { pool: number; levelStep: number };
   schedule: { recoverMultiplier: number; trainingXp: number; oddJobsGold: number; dayOffMorale: number };
   /** Price multiplier from talent: max(min, 1 + weight x (average growth rate - 1)). */
   talentPrice: { weight: number; min: number };
@@ -98,8 +113,9 @@ export interface GuildConfig {
     priceBase: number;
     pricePerLevel: number;
     sellBackShare: number;
-    registrationFee: number;
     bountyPerLevel: number;
+    /** Weekly property tax per slave: this share of its normal market value. */
+    weeklyTaxShare: number;
     obedienceMarket: [number, number];
     obedienceCaptive: [number, number];
     startingRelationship: number;
@@ -115,7 +131,6 @@ export interface GuildConfig {
     poolTarget: number;
     partySize: [number, number];
     questChancePerDay: number;
-    rankDifficulty: Record<Rank, number>;
     successPerLevel: number;
     lossChanceOnSuccess: number;
     lossChanceOnFailure: number;
@@ -215,8 +230,7 @@ export function parseGuildConfig(data: unknown): GuildConfig {
     const t = obj(q[r], `quests.${r}`);
     quests[r] = {
       stages: range(t.stages, `quests.${r}.stages`, 1),
-      reward: range(t.reward, `quests.${r}.reward`),
-      renown: num(t.renown, `quests.${r}.renown`),
+      count: range(t.count, `quests.${r}.count`, 0.5),
       days: range(t.days, `quests.${r}.days`, 1),
     };
   }
@@ -246,12 +260,28 @@ export function parseGuildConfig(data: unknown): GuildConfig {
         maxPostsPerDay: num(b.maxPostsPerDay, 'board.maxPostsPerDay', 1, 60),
         minAtPartyRank: num(b.minAtPartyRank, 'board.minAtPartyRank', 0, 60),
         postWeights: perRank(b.postWeights, 'board.postWeights'),
-        threat: range(b.threat, 'board.threat', 0.1),
         pay: range(b.pay, 'board.pay', 0.1),
       };
     })(),
     quests,
-    upkeep: numbers(d.upkeep, 'upkeep', ['foodLodgingPerDay', 'roadPerPerson']),
+    threat: (() => {
+      const t = obj(d.threat, 'threat');
+      return {
+        strengthAtLevel1: num(t.strengthAtLevel1, 'threat.strengthAtLevel1', 0.01),
+        strengthGrowth: num(t.strengthGrowth, 'threat.strengthGrowth', 1, 3),
+        goldPerThreat: num(t.goldPerThreat, 'threat.goldPerThreat', 0),
+        renownPerThreat: num(t.renownPerThreat, 'threat.renownPerThreat', 0),
+        standardCount: num(t.standardCount, 'threat.standardCount', 0.5),
+        skulls: (() => {
+          const k = obj(t.skulls, 'threat.skulls');
+          const from = num(k.from, 'threat.skulls.from', -100);
+          const to = num(k.to, 'threat.skulls.to', -100);
+          if (!(to > from)) fail('threat.skulls.to', 'must be above threat.skulls.from');
+          return { from, to };
+        })(),
+      };
+    })(),
+    upkeep: numbers(d.upkeep, 'upkeep', ['foodLodgingPerDay']),
     food: parseFood(d.food),
     inns: parseInns(d.inns),
     lodging: {
@@ -261,6 +291,7 @@ export function parseGuildConfig(data: unknown): GuildConfig {
     residences: parseResidences(d.residences),
     condition: numbers<GuildConfig['condition']>(d.condition, 'condition', ['maxHealthLoss', 'healthPerDay', 'startingMorale', 'moralePerQuest',
       'moraleFailedQuest', 'moralePerHealthLost', 'moraleMemberDied', 'lowMorale', 'lowMoraleRelationshipPerDay'], 100),
+    xp: numbers(d.xp, 'xp', ['pool', 'levelStep']),
     schedule: numbers(d.schedule, 'schedule', ['recoverMultiplier', 'trainingXp', 'oddJobsGold', 'dayOffMorale']),
     talentPrice: numbers(d.talentPrice ?? { weight: 2, min: 0.4 }, 'talentPrice', ['weight', 'min']),
     mercenary: numbers(d.mercenary, 'mercenary', ['feePerLevel', 'cutBase', 'cutPerLevel']),
@@ -274,7 +305,7 @@ export function parseGuildConfig(data: unknown): GuildConfig {
     },
     slave: {
       ...numbers<Omit<GuildConfig['slave'], 'obedienceMarket' | 'obedienceCaptive'>>(d.slave, 'slave', ['priceBase', 'pricePerLevel',
-        'sellBackShare', 'registrationFee', 'bountyPerLevel', 'startingRelationship', 'obedienceRiseFrom', 'obedienceFallBelow',
+        'sellBackShare', 'bountyPerLevel', 'weeklyTaxShare', 'startingRelationship', 'obedienceRiseFrom', 'obedienceFallBelow',
         'obedienceChangePerDay', 'punishObedience', 'punishRelationship']),
       obedienceMarket: range(obj(d.slave, 'slave').obedienceMarket, 'slave.obedienceMarket'),
       obedienceCaptive: range(obj(d.slave, 'slave').obedienceCaptive, 'slave.obedienceCaptive'),
@@ -295,11 +326,10 @@ export function parseGuildConfig(data: unknown): GuildConfig {
       };
     })(),
     simulation: {
-      ...numbers<Omit<GuildConfig['simulation'], 'partySize' | 'rankDifficulty'>>(s, 'simulation',
+      ...numbers<Omit<GuildConfig['simulation'], 'partySize'>>(s, 'simulation',
         ['targetAdventurers', 'targetParties', 'poolTarget', 'questChancePerDay', 'successPerLevel', 'lossChanceOnSuccess',
           'lossChanceOnFailure', 'wipeChanceOnFailure', 'levelUpChanceOnSuccess', 'levelUpFalloff', 'deathLevelFalloff', 'minDeathFactor', 'recruitLevelGap', 'retireChancePerDay', 'maxLevel']),
       partySize: range(s.partySize, 'simulation.partySize', 1),
-      rankDifficulty: perRank(s.rankDifficulty, 'simulation.rankDifficulty'),
     },
   };
 }

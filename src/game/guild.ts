@@ -3,7 +3,9 @@
 import { WEAPONS } from '../data/content';
 import { GUILD } from '../data/guild';
 import { RANKS, type AdventurerRank, type FreeAdventurer, type GameState, type GuildState, type Quest, type Rank, type RivalMember, type RivalParty } from '../data/types';
-import { postQuests } from './board';
+import { postQuests, questDifficulty, questRenown, usualCount } from './board';
+
+export { questDifficulty };
 import { newId, type Rng } from './character';
 import { randInt, randomAdventurer, randomName, randomPartyName } from './people';
 
@@ -184,12 +186,18 @@ export function deathFactor(level: number): number {
 /** A rival party's chance to complete a quest of a rank. */
 export function rivalSuccessChance(p: RivalParty, rank: Rank): number {
   const power = avg(p.members.map((m) => m.level)) + 0.25 * (p.members.length - 4);
-  return Math.max(0.1, Math.min(0.95, 0.55 + SIM.successPerLevel * (power - SIM.rankDifficulty[rank])));
+  return Math.max(0.1, Math.min(0.95, 0.55 + SIM.successPerLevel * (power - rankDifficulty(rank))));
 }
 
-/** How hard a board quest is, as the party level it calls for: its enemy level, more for a big group. */
-export function questDifficulty(q: Quest): number {
-  return q.stage - 1 + ((q.threat ?? 1) - 1) * 4;
+/** A usual quest of `rank`: mid-rank enemy level and group size. */
+function usualQuest(rank: Rank): Pick<Quest, 'stage' | 'count'> {
+  const [lo, hi] = GUILD.quests[rank].stages;
+  return { stage: Math.round((lo + hi) / 2), count: usualCount(rank) };
+}
+
+/** How hard a usual quest of `rank` is: what rival parties weigh when picking a rank. */
+export function rankDifficulty(rank: Rank): number {
+  return questDifficulty(usualQuest(rank));
 }
 
 /** A rival party's chance to complete a board quest. */
@@ -290,9 +298,9 @@ export function simulateGuildDay(state: GameState, rng: Rng): void {
         if (q) g.board = g.board.filter((x) => x !== q);
         const rank = q ? q.rank : up!;
         const chance = q ? rivalQuestChance(p, q) : rivalSuccessChance(p, rank);
-        const renown = q ? q.renown : GUILD.quests[rank].renown;
+        const renown = q ? q.renown : questRenown(usualQuest(rank));
         const what = q ? `"${q.title}"` : `${QUEST_WORDS[rank]} promotion quest`;
-        const difficulty = q ? questDifficulty(q) : SIM.rankDifficulty[rank];
+        const difficulty = q ? questDifficulty(q) : rankDifficulty(rank);
         p.lastDay = day;
         if (rng() < chance) {
           p.renown += renown * (0.8 + rng() * 0.4);

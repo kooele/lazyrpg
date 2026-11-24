@@ -465,8 +465,8 @@ export interface Quest {
   promotion?: boolean;
   /** Enemy types it sends against the party (enemies.json ids, main foe first). Missing = picked when the battle starts. */
   foes?: string[];
-  /** Size of the enemy group (multiplies the encounter budget; 1 = usual). The reward scales with it. */
-  threat?: number;
+  /** Size of the enemy group in threat points (enemies.json threat per unit), rolled from its rank's count range. */
+  count: number;
 }
 
 export interface NewsItem {

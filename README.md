@@ -4,9 +4,9 @@ A small turn-based tactical RPG that runs in the browser, built with [Phaser 4](
 
 ## How the game works
 
-1. **Main menu**: New Game, Continue, Save Game, Load Game, and **Quick Battle (Demo)**: the original game on its own. Recruit up to 4 Adventurers for free at a camp (any look, weapon and skills), then fight stages 1 to 5; every victory is worth a level, and clearing stage 5 completes the demo. The **Enemies** slider at camp raises the difficulty: it multiplies the encounter's size from 1x to 5x in 0.5 steps (5x at stage 1 with 4 heroes is 40 rats). Big encounters deploy further toward the middle of the map. The demo is separate from your Arch City campaign and isn't saved.
+1. **Main menu**: New Game, Continue, Save Game, Load Game, and **Quick Battle (Demo)**: the original game on its own. Recruit up to 4 Adventurers for free at a camp (any look, weapon and skills), then fight stages 1 to 5; every victory is worth exactly one level, and clearing stage 5 completes the demo. The **Enemies** slider at camp raises the difficulty: it multiplies the encounter's size from 1x to 5x in 0.5 steps (5x at stage 1 is 30 rats, whatever the size of your party). Big encounters deploy further toward the middle of the map. The demo is separate from your Arch City campaign and isn't saved.
 2. **Your character**: a new game starts by creating your main character (name, sex, skin, face, hair, hair colour, clothes colour, weapon, skills) and naming your party. The main character is permanent: they can't be dismissed and always lead the party on quests.
-3. **Arch City**: the hub is a map of the walled city (`public/art/city/arch-city.webp`) with three tabs: **Outer Ring** (Adventurer Guild, Docks, Marketplace, Slave Market, Slums, Customs Office, Sleeping Griffin Inn, Outer Ring Residence), **Middle Ring** (Tailor, Auction House, Library, Church, Estate Office, Silver Lantern Inn, Middle Ring Residence) and **Inner Ring** (Lord's Manor, Central Government Office, Central Church, Gilded Crown Inn, Inner Ring Residence). Click a pin on the map or a button below it. Open so far: the **Adventurer Guild**, the **Slave Market**, the **Estate Office**, the three **inns** and the three **residences**; the rest are greyed out. **Manage Party** (bottom bar) handles your members and their schedule, **Sleep outside** ends the day for free, and the side panel sets out on an accepted quest. See [Arch City and the guild](#arch-city-and-the-adventurer-guild).
+3. **Arch City**: the hub is a map of the walled city (`public/art/city/arch-city.webp`) with two tabs: the **Outer City**, between the outer and inner walls and out to the harbour (Adventurer Guild, the domed hall in the south-west; Docks, Marketplace, Slave Market, Slums, Customs Office, Tailor, Auction House, Church, Sleeping Griffin Inn, Outer City House), and the **Inner City**, inside the inner wall (Lord's Manor, Central Church, Central Government Office, Library, Estate Office, Silver Lantern Inn, Gilded Crown Inn, Inner City Townhouse, Inner City Mansion). Click a pin on the map or a button below it. Open so far: the **Adventurer Guild**, the **Slave Market**, the **Estate Office**, the three **inns** and the three **residences**; the rest are greyed out. **Manage Party** (bottom bar) handles your members and their schedule, **Sleep outside** ends the day for free, and the side panel sets out on an accepted quest. See [Arch City and the guild](#arch-city-and-the-adventurer-guild).
 4. **Adventurers**: There are no fixed classes. Every party member is an Adventurer, and you build them by mixing a weapon with picks from the skill trees. Up to 4 go on each quest (the lineup); the party can have up to 8 members.
 5. **Tactical battle**: XCOM-style alternating turns. On your turn, every Adventurer has **2 AP** (action points), a movement AP and an action AP, and can spend them in any order (click a unit or press Tab). See [Action points and mana](#action-points-and-mana). Skills sit on the **skill bar** under the map: press **1–0** (or click a slot) to use one. Each slot shows its AP cost along the bottom (**Ends Turn**, **1AP**, **2AP** or **free**) and its mana cost at the top. By default slot 1 is the basic attack, 2 Overwatch, 3 Dash, and the rest follow; newly learned skills go after the last used slot. **Drag a slot onto another** to swap them (the layout is saved per character). With more than 10 skills the bar gets more pages: flip with ▲ ▼ or **[ ]**, and while dragging, hover ▲ ▼ to carry a skill to another page (or to a new empty one). The battle log is in the sidebar. Hover a skill to see its range box; any tile in range can be targeted. The map is 18×13 tiles (set in `stats.json`). Terrain: grass costs 4 Movement, forest 6 (and gives +20 Defense), river 8. Rock and deep water block movement, and rock blocks line of sight.
 
@@ -19,33 +19,33 @@ Time passes in days, and **every day ends with a night somewhere**: an **inn** (
 | Where | Per person per night | Quality |
 |---|---|---|
 | Sleeping outside | free | 0 |
-| Sleeping Griffin Inn (Outer Ring) | 4 gold | 1 |
-| Silver Lantern Inn (Middle Ring, high-end) | 8 gold | 2 |
-| Gilded Crown Inn (Inner Ring, luxury) | 15 gold | 3 |
-| Your residence (Outer / Middle / Inner Ring) | free | 1 / 2 / 3 |
-| On the road (multi-day quests) | 2 gold | doesn't count |
+| Sleeping Griffin Inn (Outer City) | 8 gold | 1 |
+| Silver Lantern Inn (Inner City, high-end) | 16 gold | 2 |
+| Gilded Crown Inn (Inner City, luxury) | 30 gold | 3 |
+| Your residence (Outer City House / Inner City Townhouse / Mansion) | free | 1 / 2 / 3 |
+| On the road (multi-day quests) | free (food is still paid) | doesn't count |
 
 **Food** is paid every day (in the city and on the road) and set per member in **Manage Party** (`food` in `guild.json`):
 
 | Food | Per person per day | Quality |
 |---|---|---|
-| Poor | 1 gold | 0 |
-| Common (default) | 2 gold | 1 |
-| Fine | 4 gold | 2 |
-| Luxury | 8 gold | 3 |
+| Poor | 2 gold | 0 |
+| Common (default) | 4 gold | 1 |
+| Fine | 8 gold | 2 |
+| Luxury | 16 gold | 3 |
 
 Companions whose contract doesn't include food and lodging find their own (their food buttons are greyed out), as do mercenaries.
 
-**Residences** are bought and sold at the **Estate Office** (Middle Ring): **Outer Ring 2,000 gold**, **Middle Ring 10,000**, **Inner Ring 50,000**; the office buys one back for 70% of its price. Nights there are free and count as good as that ring's inn. Each residence has its own pin on the map, where the party can stay once it owns it.
+**Residences** are bought and sold at the **Estate Office** (Inner City): the **Outer City House 2,000 gold**, the **Inner City Townhouse 10,000** and the **Inner City Mansion 50,000**; the office buys one back for 70% of its price. Nights there are free and count as good as the Sleeping Griffin, the Silver Lantern and the Gilded Crown respectively. Each residence has its own pin on the map, where the party can stay once it owns it.
 
-**Expectations** follow each adventurer's rank (see below): **D**-rank adventurers are fine sleeping outside, **C** expect an inn or Outer Ring residence, **B** a high-end inn or Middle Ring residence, **A** and **S** the luxury inn or Inner Ring residence. Each night, every companion the party houses gains **+2 relationship** if they slept better than they expect, and loses **3 per quality step** worse: an A-rank companion loses 9 for a night outside. Food works the same way against the same expectations (D poor, C common, B fine, A and S luxury), at **+1** for better food and **−2 per step** worse; slaves count too. (`lodging`, `food` and `residences` in `guild.json`.)
+**Expectations** follow each adventurer's rank (see below): **D**-rank adventurers are fine sleeping outside, **C** expect an inn or the Outer City House, **B** a high-end inn or the Townhouse, **A** and **S** the luxury inn or the Mansion. Each night, every companion the party houses gains **+2 relationship** if they slept better than they expect, and loses **3 per quality step** worse: an A-rank companion loses 9 for a night outside. Food works the same way against the same expectations (D poor, C common, B fine, A and S luxury), at **+1** for better food and **−2 per step** worse; slaves count too. (`lodging`, `food` and `residences` in `guild.json`.)
 
 ### Health, Morale and the schedule
 
 Party members have two Strategic Layer stats, both out of 100 (`condition` and `schedule` in `guild.json`):
 
 - **Health** is not battle HP. After a battle, each member loses up to **60 Health** depending on the lowest HP they were taken down to (at half HP: −30; falling: the full 60). Below 100 Health a member is **injured**: they can still go on quests, but **every stat drops by 1/3 of their missing Health** in battle (Health 70 = −10%). Everyone recovers **10 Health a night**. A member whose Health reaches **0 dies** (so an injured member who falls again can die); the main character pulls through at 1 Health instead.
-- **Morale** drops for each member who goes on a quest (−5), more if it fails (−10), with injuries (−1 per 5 Health lost), and for everyone when a party member dies (−15). It comes back with **drinks** (a round for the whole party at an inn, once a day: Sleeping Griffin 2 gold a head for +8, Silver Lantern 4 for +12, Gilded Crown 6 for +15) and **days off**. Below **50 Morale**, a companion or slave loses **2 relationship every day**. At **0 Morale** a member **leaves the party** (companions and slaves go to the guild hall; the main character stays).
+- **Morale** drops for each member who goes on a quest (−5), more if it fails (−10), with injuries (−1 per 5 Health lost), and for everyone when a party member dies (−15). It comes back with **drinks** (a round for the whole party at an inn, once a day: Sleeping Griffin 4 gold a head for +8, Silver Lantern 8 for +12, Gilded Crown 12 for +15) and **days off**. Below **50 Morale**, a companion or slave loses **2 relationship every day**. At **0 Morale** a member **leaves the party** (companions and slaves go to the guild hall; the main character stays).
 
 **In battle**, every stat of a party member drops by **1% per 5 Morale below 100** (Morale 50 = −10%), on top of the injury penalty. Slaves also lose **1% per 5 Obedience below 100**. The penalties multiply: Health 70, Morale 50 and Obedience 60 give 0.9 × 0.9 × 0.92 = −25.5%. New members start at 75 Morale (−5%), so keeping spirits up matters. Manage Party shows each member's total (`combat` in `guild.json`).
 
@@ -74,23 +74,38 @@ Every 7th day is **payday** for companions.
 
 The **Quest Board** is shared with every rival party. It holds about **24 quests** across all ranks: up to 8 new ones are posted each day (35% C, 25% D, 25% B, 15% A), each stays up 4–8 days, and there are always at least 6 at your rank. **Rival parties take quests from it every day**, and they go for the best deals first, so a generous quest may not last. You can take quests at your rank or below (the board shows those by default; **All quests** shows the rest, locked). Quests vary in risk and reward:
 
-- **Group size**: the enemy group is 0.8–1.35× the usual size ("Small group", "Large band"). Pay and renown scale with it.
+- **Enemy level and group size** are rolled independently within the quest's rank ("Small group" and "Large band" mark the bottom and top third of its size range). Together they make the quest's **total threat**, which sets its pay, renown and how hard rival parties find it.
+- **Quest cards** show the foes as pictures rather than numbers: an icon per enemy to expect (a small copy of the monster's battle art; goblins, bandits, skeletons, orcs, sellswords and renegades get their own head badges), and **skulls from ½ to 10, in halves**, for how hard the quest is on one fixed scale for the whole game: ½–5 fill five white skulls, and 5½–10 lay red skulls over them. Skulls rise evenly with the quest's difficulty (the average party level it calls for, from its total threat): half a skull at difficulty −4, ten at 24 (`threat.skulls` in `guild.json`). D quests show about ½–3, C 3–6, B 5½–8, A 7½–10. Hover them for the same in words. The enemy level is in the description, and the card says how long the journey is and the day the notice comes down.
 - **Pay**: on top of that, the reward is 0.75–1.35× the usual for the quest's level and group size. Cards flag **Generous pay** and **Poor pay**.
 
-Quests of a rank have enemies of that rank's levels (usual pay shown):
+**Total threat** = group size × strength. Group size is in threat points (each enemy type's `threat` in `enemies.json`: a bandit is 1, a rat 0.5, so weak types come in bigger packs). Strength is how strong one enemy is at the quest's level: 10 at level 1, about 16.5% more per level (a level-20 enemy is about 18× a level-1 one). Usual gold is total threat × 1.75 and renown total threat × 0.26; the pay roll then adds luck to the gold. (`quests` and `threat` in `guild.json`.)
 
-| Rank | Enemy levels | Reward | Renown |
-|---|---|---|---|
-| D | 1–5 | 70–110 | 14 |
-| C | 6–10 | 170–280 | 32 |
-| B | 11–15 | 380–600 | 75 |
-| A | 16–20 | 850–1300 | 170 |
+| Rank | Enemy levels | Group size | Total threat | Usual gold | Renown |
+|---|---|---|---|---|---|
+| D | 1–5 | 2–4 | 20–74 | 35–130 | 5–19 |
+| C | 6–10 | 3–6 | 64–237 | 110–415 | 17–62 |
+| B | 11–15 | 4–7 | 184–594 | 320–1040 | 48–154 |
+| A | 16–20 | 5–8 | 494–1456 | 865–2550 | 128–379 |
 
-XP from a won quest depends on the enemy level against each member's level: 100 XP at an equal level, up to 200 for punching above it, and as little as 15 for easy work.
+Promotion quests use the easier half of the rank's levels, its middle group size and usual pay.
+
+**XP** from a quest: every member who comes back gets **25 XP** (the same as a day of Training) plus an **equal share of 200 XP**, so smaller parties learn faster. Each member's total is then adjusted by the level difference: **+25% per level the enemies are above them, −25% per level below**, and **nothing at 4 or more levels above** (veterans can still escort newcomers on easy quests for the pay, but learn nothing). A **failed quest** pays no reward, but still gives the 25 XP plus the pool's share for the fraction of enemies defeated (killed or surrendered): beating 3 of 4 before falling back is worth 75% of it. (`xp` in `guild.json`.)
+
+**Bounties**: every enemy the party kills is worth a bounty of 9 gold per level (the same as turning in a prisoner), claimed when the party gets back to the city, whether the quest succeeded or not.
+
+| Party size | XP each at the enemies' level |
+|---|---|
+| 1 | 225 |
+| 2 | 125 |
+| 3 | 92 |
+| 4 | 75 |
+| 5 | 65 |
+
+Each level needs **25 XP more than the last**: 100 from level 1 to 2, 125 to 3, 325 from 10 to 11, 575 from 20 to 21 (`xpPerLevel` in `stats.json`). Early levels come after a win or two; later ones take several, or harder quests.
 
 ### The other parties
 
-The rival parties are simulated day by day. A new game starts them spread over the ranks (5% A, 20% B, 60% C, 15% D), each made of adventurers of about its rank. Each day a party has a 25% chance of going on a quest. It takes the board quest (at its rank or below) with the best reward for the risk: its chance of success (its level and size against the quest's enemy level and group size; it won't take anything under 55%) times the gold and renown, minus what a failure would cost. A different party gets first pick each day; if nothing suits it, it rests. Success earns renown and sometimes a level (less often at high levels). With enough renown, a party takes its promotion quest once it has at least an even chance. Failure costs renown and can cost members (they die or quit), and a badly outmatched party can be **wiped out** and removed. Experience keeps adventurers alive: a member's chance of being lost is ×0.88 per level above 1 (at least ×0.1, so a level-18 veteran is about 10× less likely to die than a recruit), and wipes scale the same way with the party's average level. Parties only recruit adventurers within 4 levels of their average (anyone once they're down to 2), so A-rank parties stay A-rank strength. Parties of one break up, and the survivor goes back to the guild hall. New adventurers (mostly fresh recruits, now and then a veteran) arrive at about the rate adventurers are lost, nudged toward 100. When the hall gets crowded (or there are fewer than usual parties), they band together as a **new D-rank party**. **Guild News** reports all of this.
+The rival parties are simulated day by day. A new game starts them spread over the ranks (5% A, 20% B, 60% C, 15% D), each made of adventurers of about its rank. Each day a party has a 25% chance of going on a quest. It takes the board quest (at its rank or below) with the best reward for the risk: its chance of success (its level and size against the quest's difficulty: the level at which a group of 4 would have the quest's total threat, minus 1, so a large band or a higher level both make it harder; it won't take anything under 55%) times the gold and renown, minus what a failure would cost. A different party gets first pick each day; if nothing suits it, it rests. Success earns renown and sometimes a level (less often at high levels). With enough renown, a party takes its promotion quest once it has at least an even chance. Failure costs renown and can cost members (they die or quit), and a badly outmatched party can be **wiped out** and removed. Experience keeps adventurers alive: a member's chance of being lost is ×0.88 per level above 1 (at least ×0.1, so a level-18 veteran is about 10× less likely to die than a recruit), and wipes scale the same way with the party's average level. Parties only recruit adventurers within 4 levels of their average (anyone once they're down to 2), so A-rank parties stay A-rank strength. Parties of one break up, and the survivor goes back to the guild hall. New adventurers (mostly fresh recruits, now and then a veteran) arrive at about the rate adventurers are lost, nudged toward 100. When the hall gets crowded (or there are fewer than usual parties), they band together as a **new D-rank party**. **Guild News** reports all of this.
 
 ### Party members
 
@@ -99,13 +114,13 @@ The rival parties are simulated day by day. A new game starts them spread over t
 | **Main character** | Created at the start | Food & lodging | Permanent; always goes on quests |
 | **Mercenary** | Guild Hall | The **larger** of a fixed fee and a % of the next quest's reward: the fee up front, and if their cut of a won quest is worth more, they take the difference from the reward | Leaves after the next quest, win or lose |
 | **Companion** | Guild Hall, after negotiating a contract | Base pay every 7th day, a % of each reward, food & lodging if included | Permanent while the contract runs |
-| **Slave** | Slave Market, or a prisoner registered at the city gate | Food & lodging only | Permanent; can be sold to the market |
+| **Slave** | Slave Market, or a prisoner registered at the city gate | Food & lodging, plus a weekly property tax (5% of their market value) | Permanent; can be sold to the market; seized by the city if the tax goes unpaid |
 
-**Companion contracts** have four terms: **base pay**, **loot cut** (% of each quest reward), **food and lodging included** (worth 28 gold a week to them), and **term length** (2, 4, 8 or 12 weeks). Candidates ask more the higher their level and the greedier they are, a little more for short terms and less for long ones. They value a loot cut by what a party of your rank usually earns (150 gold a week at D, 2000 at A). An offer close to what they want gets a counter-offer; a low one offends them. Each rejected offer uses up patience, and once it runs out they won't talk to you for a week.
+**Companion contracts** have four terms: **base pay**, **loot cut** (% of each quest reward), **food and lodging included** (worth 56 gold a week to them), and **term length** (2, 4, 8 or 12 weeks). Candidates ask more the higher their level and the greedier they are, a little more for short terms and less for long ones. They value a loot cut by what a party of your rank usually earns (150 gold a week at D, 2000 at A). An offer close to what they want gets a counter-offer; a low one offends them. Each rejected offer uses up patience, and once it runs out they won't talk to you for a week.
 
 Companions (and slaves, see above) have a **relationship** score (0–100). It goes up by 6 for every quest completed together, drops if you can't pay them, and lowers their demands when you renew: by up to 30% at 100. When a contract ends, they sit out of quests and you have 3 days to **renew** it (Manage Party) before they leave. Walking out of a renewal ends the contract on the spot. Unpaid companions lose 20 relationship each payday, and quit when it reaches 0.
 
-**Prisoners**: human enemies who surrender in battle are taken prisoner when you win, as many as surrender. The party doesn't keep prisoners: when it comes back, the **city gate** won't let them in until each one is registered, either **turned in for a bounty** (35 gold per level) or **registered as your slave** for a fixed 60 gold fee (only while the party has room). **Turn them all in** settles them at once.
+**Prisoners**: human enemies who surrender in battle are taken prisoner when you win, as many as surrender. The party doesn't keep prisoners: when it comes back, the **city gate** won't let them in until each one is registered, either **turned in for a bounty** (9 gold per level) or **registered as your slave** (only while the party has room) for a fee of its normal market value minus its bounty, so at an average market both come to the same: a level-6 prisoner with average talent is worth 470 gold, so its bounty is 54 and its fee 415. **Slaves are taxed** every payday (every 7th day, with companion wages) 5% of their normal market value (24 gold a week for that level-6 slave; `slave.weeklyTaxShare` in `guild.json`). If you can't pay a slave's tax, the city **seizes** them and sells them at the slave market. **Turn them all in** settles them at once.
 
 **The Slave Market** is a living market (`market` in `guild.json`). It holds **10–30 slaves**: a few (1–4) are sold to other buyers every day, and a **shipment of 5–12 arrives twice a week** (days 1 and 4 of each week; the screen shows the next one). Slaves are of about your party's rank. **Prices follow supply and demand**: each slave's value (120 gold + 70 per level above 1, × talent) times a price index that drifts a little every day and rises when stock is short (falls when there's a glut), between 70% and 150% of usual. The market buys your slaves for **80%** of the current price (Slave Market or Manage Party). It doesn't buy prisoners.
 
@@ -139,7 +154,7 @@ Tooltips show a formula line generated from the numbers (e.g. "80% P.Atk, then 4
 
 Every attack hits. **Resist** gives a chance to shrug off debuffs (Burn, Slow, Corrode...): Resist ÷ (100 + Resist), the same curve as Defense, so 50 Resist = 33% and 100 = 50%. A resisted debuff shows "Resisted" and doesn't apply; the attack's damage still lands. Targeting shows the chance, and the enemy AI weighs it. Enemies' Resist matches their Defense.
 
-Stats grow automatically on level up (100 XP per level), at a speed set by the Adventurer's **talent**. Every growing stat (Health, Mana, P.Atk, M.Atk, Defense, Resist) has its own talent grade, rolled when the Adventurer is created; the grade multiplies that stat's growth per level (the numbers in brackets above):
+Stats grow automatically on level up (100 XP for the first level, 25 more for each one after), at a speed set by the Adventurer's **talent**. Every growing stat (Health, Mana, P.Atk, M.Atk, Defense, Resist) has its own talent grade, rolled when the Adventurer is created; the grade multiplies that stat's growth per level (the numbers in brackets above):
 
 | Talent | S | A | B | C | D | F |
 |---|---|---|---|---|---|---|
@@ -165,14 +180,14 @@ Every unit gets **2 AP** each turn: a **movement AP** (the regular move) and an 
 
 | Cost | Effect |
 |---|---|
-| 0 (free) | No AP. Usable until the unit's turn ends (Kick). |
+| 0 (free) | No AP. Usable until the unit's turn ends (Kick, Engage). |
 | 1 AP | Uses the movement AP if it's still unspent, otherwise the action AP. The turn goes on while AP remain. |
 | 2 AP | Uses both AP (so it can't follow a move). The turn goes on: free actions are still allowed. |
 | Ends turn | Uses all remaining AP and ends the unit's turn. The default: every weapon and tree skill, and Overwatch. |
 
 Moving after a skill isn't possible once the movement AP is gone. **Undo move** takes back a regular move as long as nothing else happened since.
 
-Skills can cost **mana** (`mana` in `skills.json`), which doesn't come back during a battle: Engage 10, Kick 10, Arcane Weapon 10 (toggle), Charge 20, Cleanse 20, Dash 20, Double Strike 20, Execute 20, Pocket Sand 20, Arcane Bolt 30, Freeze 30, Ignite 30, Arcane Shift 40, Barrier 40, Fireball 40, Flicker Strike 40, Heal 40, Iceblast 40, Life-Risking Strike 40, Protection 40, Shadow Step 40, Circle Swing 50, Arcane Pulse 60, Firestorm 100, Blizzard 100. Skill buttons show the cost; without enough mana a skill is greyed out.
+Skills can cost **mana** (`mana` in `skills.json`), which doesn't come back during a battle: Engage 10, Kick 10, Arcane Weapon 10 (toggle), Charge 20, Cleanse 20, Dash 20, Double Strike 20, Execute 20, Pocket Sand 20, Arcane Bolt 30, Freeze 30, Ignite 30, Arcane Shift 40, Barrier 40, Fireball 40, Flicker Strike 40, Heal 40, Iceblast 40, Life-Risking Strike 40, Protection 40, Shadow Step 40, Circle Swing 50, Arcane Pulse 60, Firestorm 100, Blizzard 100. Skill buttons show the cost; without enough mana a skill is greyed out. In battle, units with mana have a blue **mana bar** under their HP bar.
 
 **Bow modes**: the bow's basic attack depends on its mode. **Switch Mode** (a free action) cycles Direct → Indirect → Melee → Direct. The bow keeps the selected mode between battles (saved as `weaponMode` on the character). Overwatch, opportunity attacks and Weapon skills (Execute, Double Strike) use the current mode. Circle Swing always swings in Melee mode without changing the selection. Bow Strike (Melee) engages, and a bow user that is engaged always fights in Melee mode; its selected mode comes back once it breaks free. Enemy archers fight at range: each turn they pick Direct or Indirect, whichever gives the better attack (Indirect when cover is in the way), and only fight in Melee when engaged. Modes are set in `skills.json` (`bow_attack.modes`), with ranges relative to the weapon's `range` in `weapons.json`.
 
@@ -211,7 +226,7 @@ Every skill has tags that explain how it behaves. These five change the rules:
 - **Weapon**: uses your weapon's basic-attack range and line rules (Execute with a Bow reaches 5 tiles). Double Strike hits with the basic attack twice (the second hit at 50% damage), and Circle Swing hits every unit within the weapon's range with it, allies included (a bow uses its Melee mode for both the reach and the hit). Unusable while the weapon is disabled (nothing disables weapons yet).
 - **Engage**: see below. Sword Slash, Bow Strike (bow in Melee mode), Empowered Strike, Engage, Kick, Charge, Flicker Strike, Life-Risking Strike.
 - **Disengage**: usable while engaged, on anyone, and it ends your engagement with no free attack for your opponent. Arcane Shift, Shadow Step.
-- **Free Action**: costs 0 AP (Kick). Usable any time until the unit's turn ends, so after a move or a 1/2-AP skill, but not after a turn-ending one. The turn doesn't end automatically while a unit still has a free action with a target in reach; press **End Turn** when done.
+- **Free Action**: costs 0 AP (Kick, Engage). Usable any time until the unit's turn ends, so after a move or a 1/2-AP skill, but not after a turn-ending one. The turn doesn't end automatically while a unit still has a free action with a target in reach; press **End Turn** when done.
 
 Descriptive tags: Melee, Physical, Magical, Projectile, Indirect, Area, Knockback, Reaction, Teleport, Stealth, Debuff, Support.
 
@@ -244,9 +259,9 @@ Each enemy type has a fixed level range and its own stats and skills (`src/data/
 - **Human**: fights tactically: cover, danger, picking off the weak, falling back to regroup with healthy allies. It **flees** when badly hurt (below 35%) or hurt and in reach of a killing blow. If it can't reach the edge this turn and every tile it could get to is in reach of enough damage to kill it, it **surrenders**. Surrendered enemies are taken **prisoner** if you win (only humans can be): register them at the city gate for a bounty or as slaves.
 - **Evil** (spirits and demons): no self-preservation. It **never flees or disengages**, ignores danger and barely cares about hitting its own side, and goes for **kills**: hurt targets are worth more to it, finishing one off most of all.
 
-Fleeing enemies run for the nearest map edge and escape once they reach it. An engaged enemy only breaks away (and takes the opportunity attack) if it can then get out of its opponent's reach: not while Frozen, and not when every tile it could reach is still next to its opponent. Healthy beasts, tribals and humans take small risks freely, and danger they can't avoid anyway doesn't hold them back; wounded humans and tribals may hold back from walking into a deadly spot, but never for more than two turns in a row.
+Fleeing enemies run for the nearest map edge and escape once they reach it. An engaged enemy only breaks away (and takes the opportunity attack) if the turn it would then play ends out of its opponent's reach: not while Frozen, not when every tile it could reach is still next to its opponent, and not when it would rather stay and fight from where it stands anyway. Ranged enemies (bows and spears) step back before they shoot rather than end their turn next to a foe that could engage them. Buffs such as Howl and War Cry are weighed by the extra damage they let allies deal (or save them from) on the turns they actually last, counting only allies with a foe in reach, so an enemy only stops attacking to rouse its pack when the pack is about to fight. Healthy beasts, tribals and humans take small risks freely, and danger they can't avoid anyway doesn't hold them back; wounded humans and tribals may hold back from walking into a deadly spot, but never for more than two turns in a row.
 
-Encounter size is a threat budget: 1 per Adventurer (rats cost 0.5, goblins 0.6, demons 2...). Past level 25, the toughest types keep coming at level 25 and the budget grows 25% per level. Hover an enemy in battle to see its skills. **Click an enemy** to see its reach on its next turn: the tiles it can move to (orange) and, around them, every tile its longest-ranged attack that will be off cooldown can hit (red). Click it again, or anywhere else, to hide it.
+Encounter size comes from the quest, never from your party: its rolled group size (**D 2–4, C 3–6, B 4–7, A 5–8** threat points; `quests.<rank>.count` in `guild.json`). Each enemy uses its type's threat: rats 0.5, goblins 0.6, bandits 1, demons 2... so a group of 4 is 4 bandits or 8 rats (at most 12 enemies on the field). A lone adventurer meets as many enemies as a full lineup. Quick Battle stages use the middle D group (3). Past level 25, the toughest types keep coming at level 25 and the group grows 25% per level. Hover an enemy in battle to see its skills. **Click an enemy** to see its reach on its next turn: the tiles it can move to (orange) and, around them, every tile its longest-ranged attack that will be off cooldown can hit (red). Click it again, or anywhere else, to hide it.
 
 ### Engagement
 

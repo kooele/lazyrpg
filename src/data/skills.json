@@ -230,8 +230,8 @@
     },
     "engage": {
       "name": "Engage", "description": "Engage an adjacent enemy without attacking it.",
-      "tags": ["engage"],
-      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 0, "ap": 1, "mana": 10
+      "tags": ["free", "engage"],
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 0, "ap": 0, "mana": 10
     },
     "charge": {
       "name": "Charge", "description": "Dash next to an enemy and strike it.",

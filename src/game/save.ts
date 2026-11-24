@@ -6,6 +6,7 @@ import {
   BODY_MODELS, ENEMY_MODELS, FACE_COUNT, HAIR_COLORS, HAIR_STYLES, RANKS, SEXES, SKIN_TONES, STAT_KEYS, TALENT_GRADES, TRAIT_IDS,
   type BodyInvestment, type Character, type StatKey, type Talents, type Contract, type GameState, type Look, type NewsItem, type Offer, type Quest, type Rank, type RivalParty,
 } from '../data/types';
+import { usualCount } from './board';
 import { bodyStats, makeRng, modelFor } from './character';
 import { newCampaign, tidyLineup } from './city';
 import { companionContract, companionDemand, foodLodgingWeekly } from './contracts';
@@ -230,7 +231,9 @@ function validateQuest(raw: unknown, path: string): Quest {
     expires: int(o.expires, `${path}.expires`),
     description: typeof o.description === 'string' ? o.description : '',
     ...(o.promotion === true ? { promotion: true } : {}),
-    ...(o.threat !== undefined ? { threat: num(o.threat, `${path}.threat`, 0.1, 5) } : {}),
+    // Group size in threat points. Older saves had a threat multiplier on the rank's usual group instead.
+    count: o.count !== undefined ? num(o.count, `${path}.count`, 0.5, 100)
+      : Math.max(1, Math.round(usualCount(oneOf(o.rank, RANKS, `${path}.rank`)) * (o.threat !== undefined ? num(o.threat, `${path}.threat`, 0.1, 5) : 1))),
     // Enemy types that no longer exist are dropped; the battle picks new ones if none are left.
     ...(Array.isArray(o.foes) && o.foes.some((f) => typeof f === 'string' && ENEMIES[f]) ? { foes: o.foes.filter((f): f is string => typeof f === 'string' && !!ENEMIES[f]) } : {}),
   };

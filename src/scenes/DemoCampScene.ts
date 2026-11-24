@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { SKILLS, WEAPONS, XP_PER_LEVEL } from '../data/content';
+import { SKILLS, WEAPONS, xpToNext } from '../data/content';
 
 /** Quick Battle keeps 4 recruits (one card each across the camp). */
 const DEMO_PARTY_SIZE = 4;
@@ -115,8 +115,8 @@ export class DemoCampScene extends Phaser.Scene {
 
     // XP bar
     g.fillStyle(0x0b0d14).fillRect(x + 14, y + 80, 188, 8);
-    g.fillStyle(0x7d6bd8).fillRect(x + 14, y + 80, 188 * (c.xp / XP_PER_LEVEL), 8);
-    text(this, x + 202, y + 90, `${c.xp}/${XP_PER_LEVEL} XP`, { color: COLORS.dim, fontSize: '11px' }).setOrigin(1, 0);
+    g.fillStyle(0x7d6bd8).fillRect(x + 14, y + 80, 188 * Math.min(1, c.xp / xpToNext(c.level)), 8);
+    text(this, x + 202, y + 90, `${c.xp}/${xpToNext(c.level)} XP`, { color: COLORS.dim, fontSize: '11px' }).setOrigin(1, 0);
 
     const lines = [
       `HP ${stats.health}   MP ${stats.mana}`,

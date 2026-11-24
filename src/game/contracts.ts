@@ -129,7 +129,22 @@ export function slavePrice(level: number, rng: () => number, talent = 1): number
   return round5((s.priceBase + s.pricePerLevel * (level - 1)) * talent * (0.85 + rng() * 0.3));
 }
 
+/** A slave's normal market value: what the market asks on average (price index 1, no haggling luck). */
+export function slaveValue(c: Pick<Character, 'level' | 'talents'>): number {
+  const s = GUILD.slave;
+  return (s.priceBase + s.pricePerLevel * (c.level - 1)) * talentPriceFactor(c);
+}
+
 export const bounty = (level: number) => GUILD.slave.bountyPerLevel * level;
+
+/**
+ * Registering a prisoner as the party's slave costs its normal market value minus its bounty: at a normal
+ * market, enslaving it (and selling at full value) and turning it in come to the same.
+ */
+export const registrationFee = (p: { character: Pick<Character, 'level' | 'talents'>; price: number }) => Math.max(0, round5(slaveValue(p.character) - p.price));
+
+/** Weekly property tax on a slave the party owns (paid on payday with the wages). */
+export const slaveTax = (c: Pick<Character, 'level' | 'talents'>) => Math.max(1, Math.round(slaveValue(c) * GUILD.slave.weeklyTaxShare));
 
 /** A new slave's contract: market slaves start fairly obedient, registered captives much less so. */
 export function slaveContract(origin: SlaveContract['origin'], price: number, rng: () => number): SlaveContract {

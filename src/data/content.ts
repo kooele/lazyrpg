@@ -4,6 +4,7 @@
 // Everything is validated on load; a mistake fails with a message naming the field.
 import skillsRaw from './skills.json';
 import weaponsRaw from './weapons.json';
+import { STAT_CONFIG } from './stats';
 import {
   AP_COSTS, STAT_KEYS, STAT_INFO,
   type ApCost,
@@ -448,7 +449,8 @@ export const PALETTE = ['#3d7be0', '#36b37e', '#e0b44c', '#9b59d0', '#e07b3d', '
 export const ENEMY_COLOR = '#c0392b';
 
 export const MAX_PARTY_SIZE = 5;
-export const XP_PER_LEVEL = 100;
+/** XP to go from `level` to the next: stats.json xpPerLevel (100 at level 1, then +25 a level). */
+export const xpToNext = (level: number) => STAT_CONFIG.xpPerLevel.base + STAT_CONFIG.xpPerLevel.step * (Math.max(1, level) - 1);
 export const NAME_MAX_LENGTH = 16;
 
 /** Skill points: 2 at level 1 and 1 more every level. Each one learns a tree skill or buys a Body investment. */

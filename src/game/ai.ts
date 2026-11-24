@@ -120,9 +120,8 @@ function scoreSkill(battle: Battle, u: Unit, skill: SkillDef, from: Point, aim: 
         score += lands * t.stats.health * (def.damagePctMaxHpPerStack ?? 0) * stackTurns;
         if (def.statMods || def.statPct) score += lands * 15 * lasts;
       } else if (friendly && !def.debuff && !t.statuses.some((x) => x.id === a.status)) {
-        // Buffs (e.g. Howl's Frenzy) are worth it when a fight is close.
-        const fightNear = battle.living().some((f) => f.team !== u.team && dist(f, t) <= 6);
-        if (fightNear) score += 25 * a.turns;
+        // Buffs (Howl's and War Cry's Frenzy, Protection): the damage they add or prevent while they last.
+        score += buffValue(battle, u, skill, from, t, a.status, a.turns);
       }
     }
     if (skill.heal) {
@@ -151,6 +150,46 @@ function scoreSkill(battle: Battle, u: Unit, skill: SkillDef, from: Point, aim: 
     }
   }
   return score;
+}
+
+/**
+ * What a buff on ally `t` is worth: the extra damage it lets `t` deal, plus the damage it saves `t` from,
+ * over the turns it really covers, counting only foes that could be in reach on those turns.
+ * A status lasting N turns covers N - 1 later turns of each side, plus the rest of this turn for a unit
+ * that can still act in it (not the caster of a turn-ending skill such as War Cry).
+ */
+function buffValue(battle: Battle, u: Unit, skill: SkillDef, from: Point, t: Unit, status: string, turns: number): number {
+  const pos = t === u ? from : { x: t.x, y: t.y };
+  const actsNow = t.team === battle.phase && battle.canAct(t) && !(t === u && skill.ap === 'end');
+  const later = Math.max(0, turns - 1);
+  const tiles = (x: Unit) => battle.stat(x, 'movement') / MOVEMENT_PER_TILE;
+  const damage = (from: Unit, to: Unit) => battle.previewHits(from, battle.basicAttack(from), to).reduce((a, b) => a + b, 0);
+  const foes = battle.living().filter((f) => f.team !== t.team);
+  const before = {
+    dealt: new Map(foes.map((f) => [f, damage(t, f)])),
+    taken: new Map(foes.map((f) => [f, damage(f, t)])),
+  };
+  return battle.withStatus(u, t, status, () => {
+    let value = 0;
+    // Offence: each covered turn of t's, its best extra hit on a foe it could reach by then.
+    const ownTurns = [...(actsNow ? [1] : []), ...Array.from({ length: later }, (_, i) => (actsNow ? 2 : 1) + i)];
+    for (const moves of ownTurns) {
+      let best = 0;
+      for (const f of foes) {
+        if (dist(pos, f) > moves * tiles(t) + battle.basicAttack(t).range + 0.5) continue;
+        best = Math.max(best, damage(t, f) - before.dealt.get(f)!);
+      }
+      value += best;
+    }
+    // Defence: each covered foe turn, the damage each foe that could reach t no longer deals.
+    for (let i = 1; i <= later; i++) {
+      for (const f of foes) {
+        if (dist(pos, f) > i * tiles(f) + battle.basicAttack(f).range + 0.5) continue;
+        value += Math.max(0, before.taken.get(f)! - damage(f, t));
+      }
+    }
+    return value;
+  });
 }
 
 function bestFrom(
@@ -332,19 +371,63 @@ function canGetAway(battle: Battle, u: Unit, opp: Unit): boolean {
 /**
  * Should an engaged unit break away? Ranged fighters do, and so does anyone badly
  * hurt, as long as the opponent's free opportunity attack won't finish them off
- * and they can actually get away (see canGetAway).
+ * and they can actually get away (see canGetAway). It also has to mean it: the turn
+ * it would play once free must end out of the opponent's reach (see leavesOpponent).
  */
 export function shouldDisengage(battle: Battle, u: Unit): boolean {
   const opp = battle.opponentOf(u);
   if (!opp || !battle.canAct(u) || aiTypeOf(u) === 'evil') return false;
   if (!canGetAway(battle, u, opp)) return false;
-  // A bow counts as ranged even while engaged forces it into Melee mode.
-  const raw = SKILLS[battle.skillIds(u)[0]];
-  const ranged = !!raw?.modes?.some((m) => !hasTag(SKILLS[m], 'melee')) || battle.basicAttack(u).range > 1.5 || battle.basicAttack(u).los !== undefined;
+  const ranged = isRanged(battle, u);
   const hit = battle.previewHits(opp, battle.basicAttack(opp), u).reduce((a, b) => a + b, 0);
-  if (wantsToFlee(battle, u)) return u.hp - hit > 0;
-  if (ranged) return u.hp - hit > u.stats.health * 0.3;
-  return wantsToRetreat(battle, u) && u.hp - hit > u.stats.health * 0.1;
+  let wants: boolean;
+  if (wantsToFlee(battle, u)) wants = u.hp - hit > 0;
+  else if (ranged) wants = u.hp - hit > u.stats.health * 0.3;
+  else wants = wantsToRetreat(battle, u) && u.hp - hit > u.stats.health * 0.1;
+  return wants && leavesOpponent(battle, u, opp, hit);
+}
+
+/** Fights at range (a bow, even while engagement forces it into Melee mode; reach weapons like the spear; line-of-sight attacks). */
+function isRanged(battle: Battle, u: Unit): boolean {
+  const raw = SKILLS[battle.skillIds(u)[0]];
+  return !!raw?.modes?.some((m) => !hasTag(SKILLS[m], 'melee')) || battle.basicAttack(u).range > 1.5 || battle.basicAttack(u).los !== undefined;
+}
+
+/**
+ * What it costs a free ranged unit to end its turn on `tile`: every adjacent foe can engage it next turn,
+ * and breaking away again hands that foe a free basic attack. So ranged units step back before they shoot.
+ */
+function pinCost(battle: Battle, u: Unit, tile: Point): number {
+  if (u.engagedWith || !isRanged(battle, u)) return 0;
+  let cost = 0;
+  for (const f of battle.living()) {
+    if (f.team === u.team || dist(f, tile) > 1.5 + 1e-9) continue;
+    cost += battle.previewHits(f, battle.basicAttack(f), u).reduce((a, b) => a + b, 0);
+  }
+  return cost;
+}
+
+/**
+ * Would `u`, once broken away from `opp` (and hurt by its opportunity attack), plan a turn that ends
+ * out of the opponent's reach? If its best plan is to stay next to it (say, a point-blank shot or a
+ * spear thrust from where it stands), breaking away only hands over a free attack, and the unit ends
+ * up engaged again (by an Engage skill such as Kick or Spear Thrust) or right back in melee range.
+ * Plans with the engagement lifted for a moment and puts everything back afterwards.
+ */
+function leavesOpponent(battle: Battle, u: Unit, opp: Unit, hit: number): boolean {
+  const saved = { mine: u.engagedWith, theirs: opp.engagedWith, hp: u.hp, held: holdTurns.get(u) };
+  u.engagedWith = null;
+  if (opp.engagedWith === u.uid) opp.engagedWith = null;
+  u.hp = Math.max(1, u.hp - hit);
+  try {
+    return dist(planTurn(battle, u).moveTo, opp) > 1.5 + 1e-9;
+  } finally {
+    u.engagedWith = saved.mine;
+    opp.engagedWith = saved.theirs;
+    u.hp = saved.hp;
+    if (saved.held === undefined) holdTurns.delete(u);
+    else holdTurns.set(u, saved.held);
+  }
 }
 
 /**
@@ -439,7 +522,7 @@ function attackPlan(
     const risk = care * (danger.get(key(tile.x, tile.y))! - leastDanger);
     // Zone damage on the way and at the end is certain, so it counts in full.
     const score = found.score + free * 0.5 + terrain - risk - zoneHazard(battle, u, reach, tile) - reach.get(key(tile.x, tile.y))!.cost * 0.1
-      - formation(battle, u, tile);
+      - formation(battle, u, tile) - pinCost(battle, u, tile);
     if (score > (best?.score ?? 0)) best = { plan: { moveTo: tile, action: found.action }, score };
   }
   return best;

@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { MAX_PARTY_SIZE, SKILLS, WEAPONS, XP_PER_LEVEL } from '../data/content';
+import { MAX_PARTY_SIZE, SKILLS, WEAPONS, xpToNext } from '../data/content';
 import { ACTIVITIES, FOOD_TIERS, GUILD } from '../data/guild';
 import { TRAITS } from '../data/traits';
 import type { Character } from '../data/types';
@@ -90,8 +90,8 @@ export class PartyScene extends Phaser.Scene {
     text(this, X + 150, 124, `Level ${c.level} · ${adventurerRank(c.level)}-rank · ${MEMBER_LABEL[type]}`, { fontSize: '15px', color: MEMBER_COLOR[type] });
     const g = this.add.graphics();
     g.fillStyle(0x0b0d14).fillRect(X + 150, 150, 200, 8);
-    g.fillStyle(0x7d6bd8).fillRect(X + 150, 150, 200 * (c.xp / XP_PER_LEVEL), 8);
-    text(this, X + 356, 146, `${c.xp}/${XP_PER_LEVEL} XP`, { fontSize: '11px', color: COLORS.dim });
+    g.fillStyle(0x7d6bd8).fillRect(X + 150, 150, 200 * Math.min(1, c.xp / xpToNext(c.level)), 8);
+    text(this, X + 356, 146, `${c.xp}/${xpToNext(c.level)} XP`, { fontSize: '11px', color: COLORS.dim });
     // Strategic Layer condition: Health (not battle HP) and Morale.
     const bar = (y: number, label: string, v: number, color: number, note: string, tip: () => string) => {
       const warn = label === 'Health' ? v < 100 : v < GUILD.condition.lowMorale;

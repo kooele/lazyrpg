@@ -1,4 +1,4 @@
-import { BASIC_SKILLS, DEFAULT_WEAPON, PALETTE, SKILLS, TREE_SKILLS, WEAPONS, XP_PER_LEVEL, skillPointsForLevel, maxBodyRank } from '../data/content';
+import { BASIC_SKILLS, DEFAULT_WEAPON, PALETTE, SKILLS, TREE_SKILLS, WEAPONS, xpToNext, skillPointsForLevel, maxBodyRank } from '../data/content';
 import { ENEMIES } from '../data/enemies';
 import { STAT_CONFIG } from '../data/stats';
 import { BODY_MODELS, STAT_KEYS, type BodyModel, type BodyInvestment, type Character, type Look, type StatKey, type Stats, type Talents, type UnitModel } from '../data/types';
@@ -157,8 +157,8 @@ export function createCharacter(name: string, color = PALETTE[0], weaponId = DEF
 export function grantXp(c: Character, amount: number): number {
   c.xp += amount;
   let gained = 0;
-  while (c.xp >= XP_PER_LEVEL) {
-    c.xp -= XP_PER_LEVEL;
+  while (c.xp >= xpToNext(c.level)) {
+    c.xp -= xpToNext(c.level);
     c.level += 1;
     gained += 1;
   }

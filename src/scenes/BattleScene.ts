@@ -11,10 +11,11 @@ import { BAR_PAGE, makeRng, skillBarLayout, swapBarSlots } from '../game/charact
 import { TERRAIN, generateMap, key, type Point } from '../game/grid';
 import { GUILD } from '../data/guild';
 import { lineupMembers, resolveQuest } from '../game/city';
+import { rankForStage, usualCount } from '../game/board';
 import { DEMO_STAGES, requireDemo, resolveDemoBattle } from '../game/demo';
 import { markDirty, requireState } from '../game/session';
 import { COLORS, HEIGHT, ScrollList, UI_SCALE, WIDTH, button, confirmDialog, figure, monsterFigure, panel, setupCamera, text } from '../ui/widgets';
-import { ENEMIES } from '../data/enemies';
+import { ENCOUNTER, ENEMIES } from '../data/enemies';
 
 /** Tile size in layout pixels; set per battle so the map fits the 672x500 board area. */
 let TILE = 56;
@@ -40,7 +41,7 @@ const INFO_H = 150;
 const HOTKEYS = ['ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE', 'ZERO'];
 /** Where a unit's feet are, relative to its tile center; the HP bar sits just below. */
 let FEET_Y = 14;
-let HP_Y = 21;
+let HP_Y = 18;
 
 /**
  * busy   – animating or enemy turn, no input
@@ -130,10 +131,14 @@ export class BattleScene extends Phaser.Scene {
     TILE = Math.floor(Math.min(BOARD_W / map.width, BOARD_H / map.height));
     K = TILE / 56;
     FEET_Y = Math.round(14 * K);
-    HP_Y = Math.round(21 * K);
+    HP_Y = Math.round(18 * K);
     const party = d ? d.party : lineupMembers(requireState());
     const pSpots = deploymentTiles(map, 'player', party.length);
-    const generated = generateEnemies(stage, party.length, rng, d ? d.mobMultiplier : (quest?.threat ?? 1), quest?.foes);
+    // Encounter size comes from the quest (its rolled group size), never from the party. Quick Battle uses the usual
+    // group of the rank its stage falls in, and its Enemies slider multiplies it and the cap on how many come.
+    const generated = d
+      ? generateEnemies(stage, rng, usualCount(rankForStage(stage)) * d.mobMultiplier, undefined, Math.round(ENCOUNTER.maxEnemies * d.mobMultiplier))
+      : generateEnemies(stage, rng, quest!.count, quest!.foes);
     const eSpots = deploymentTiles(map, 'enemy', generated.length);
     const foes = generated.slice(0, eSpots.length); // never more than there is room for
     const units = [
@@ -267,7 +272,7 @@ export class BattleScene extends Phaser.Scene {
     this.drawHp(u);
   }
 
-  /** HP bar (green/yellow/red) with the shield as a light-blue extension, plus status tags. */
+  /** HP bar (green/yellow/red) with the shield as a light-blue extension, a mana bar under it (units with mana), plus status tags. */
   private drawHp(u: Unit): void {
     const view = this.views.get(u.uid);
     if (!view) return;
@@ -281,6 +286,10 @@ export class BattleScene extends Phaser.Scene {
     if (this.battle.shieldOf(u) > 0) {
       view.hpBar.fillStyle(0x8ecbff).fillRect(-w / 2 + w * pct, HP_Y + 1, Math.max(2, w * shield), 4);
       view.hpBar.lineStyle(1, 0x8ecbff).strokeRect(-w / 2 - 1, HP_Y, w + 2, 6);
+    }
+    if (u.stats.mana > 0) {
+      view.hpBar.fillStyle(0x000000, 0.7).fillRect(-w / 2 - 1, HP_Y + 6, w + 2, 4);
+      view.hpBar.fillStyle(0x4d7cff).fillRect(-w / 2, HP_Y + 6, w * Math.max(0, u.mp / u.stats.mana), 3);
     }
     const tags: string[] = [];
     for (const st of u.statuses) {
@@ -1314,8 +1323,12 @@ export class BattleScene extends Phaser.Scene {
     } else {
       const conditions = this.battle.units.filter((u) => u.team === 'player')
         .map((u) => ({ id: u.character.id, lowestHp: u.lowestHp / u.stats.health, fell: !u.alive }));
-      const captives = this.battle.units.filter((u) => u.team === 'enemy' && u.surrendered).map((u) => u.character);
-      lines = resolveQuest(requireState(), outcome, makeRng(Date.now() & 0xffffffff), conditions, captives);
+      const enemies = this.battle.units.filter((u) => u.team === 'enemy');
+      const captives = enemies.filter((u) => u.surrendered).map((u) => u.character);
+      // Killed: fell in battle (not fled, not surrendered). Each is worth a bounty, and on a failed quest the share of
+      // enemies killed or captured sets the XP.
+      const killed = enemies.filter((u) => !u.alive && !u.escaped && !u.surrendered).map((u) => u.character);
+      lines = resolveQuest(requireState(), outcome, makeRng(Date.now() & 0xffffffff), conditions, captives, { killed, total: enemies.length });
       markDirty();
     }
     const title = this.demo ? (outcome === 'victory' ? 'Victory!' : 'Defeat') : (outcome === 'victory' ? 'Quest complete!' : 'Quest failed');

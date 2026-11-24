@@ -39,8 +39,8 @@ export interface StatConfig {
   talent: TalentRules;
   defenseScale: number;
   forestDefense: number;
-  /** XP per Adventurer for winning a battle. */
-  xpPerVictory: number;
+  /** XP to go from level L to L + 1: base + step x (L - 1). */
+  xpPerLevel: { base: number; step: number };
   map: MapRules;
   movementCosts: MovementCosts;
   rangeRounding: RangeRoundingRules;
@@ -98,7 +98,10 @@ export function parseStatConfig(data: unknown): StatConfig {
     growthPerLevel: readStats(rec.growthPerLevel, 'growthPerLevel'),
     talent: readTalent(rec.talent),
     defenseScale: num(rec.defenseScale, 'defenseScale'),
-    xpPerVictory: num(rec.xpPerVictory ?? 100, 'xpPerVictory'),
+    xpPerLevel: (() => {
+      const x = obj(rec.xpPerLevel ?? { base: 100, step: 25 }, 'xpPerLevel');
+      return { base: num(x.base, 'xpPerLevel.base'), step: num(x.step, 'xpPerLevel.step') };
+    })(),
     forestDefense: num(rec.forestDefense ?? 0, 'forestDefense'),
     map: { width: Math.round(num(map.width, 'map.width')), height: Math.round(num(map.height, 'map.height')) },
     movementCosts: {
