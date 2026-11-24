@@ -9,7 +9,7 @@ import {
   ACTIVITY_INFO, QUALITY_TEXT, activityOf, lodgingOf, lodgingRelationship, combatPenalty, expectedQuality, foodOf, foodRelationship, healthOf, injuryPenalty, isInjured, moraleOf, moralePenalty,
   obediencePenalty, traitFactor,
 } from '../game/condition';
-import { bondOf, canFight, daysLeft, isCompanion, isHoused, isSlave, leaveParty, punishSlave, releaseCost, slaveTax, slaveValue } from '../game/contracts';
+import { bondOf, canFight, daysLeft, isCompanion, isHoused, isSlave, leaveParty, proratedWages, punishSlave, releaseCost, slaveTax, slaveValue } from '../game/contracts';
 import { adventurerRank } from '../game/guild';
 import { markDirty, requireState, session } from '../game/session';
 import { MEMBER_COLOR, MEMBER_LABEL, cityHeader, memberStatus } from '../ui/hud';
@@ -408,8 +408,13 @@ export class PartyScene extends Phaser.Scene {
       button(this, X + 156, by, 120, 44, 'Renew', () => this.scene.start('Negotiate', { mode: 'renew', id: c.id }), {
         enabled: left <= 7, fontSize: 14, selected: left <= 0,
       });
-      const cost = releaseCost(c, state.day, state.rank);
-      const why = cost ? `Breaking the contract early costs ${cost} gold\n(half the rest of the term, at most a week's pay).` : 'Their term is over: no payout.';
+      const wages = proratedWages(c, state.day);
+      const buyout = releaseCost(c, state.day, state.rank);
+      const cost = wages + buyout;
+      const why = [
+        wages ? `Wages since payday: ${wages} gold.` : '',
+        buyout ? `Breaking the contract early: ${buyout} gold\n(half the rest of the term, at most a week's pay).` : 'Their term is over: no buyout.',
+      ].filter(Boolean).join('\n');
       button(this, X + 286, by, 128, 44, cost ? `Release\n(${cost}g)` : 'Release', () => confirmDialog(this, `Release ${c.name} from their contract?\n${why}\nThey go back to the guild hall.`, () => {
         const err = releaseCompanion(state, c.id);
         if (err) return toast(this, err, COLORS.bad);

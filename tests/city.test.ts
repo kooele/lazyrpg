@@ -11,7 +11,7 @@ import {
 import { activityOf, lodgingOf, combatPenalty, expectedQuality, foodRelationship, healthOf, isInjured, moraleOf, moralePenalty, obediencePenalty } from '../src/game/condition';
 import { parseSave, serializeSave } from '../src/game/save';
 import {
-  companionContract, companionDemand, evaluateOffer, foodLodgingWeekly, joinParty, mercenaryRates, offerValue, openingTerms, punishSlave, slaveContract, bounty, registrationFee, slaveTax, slaveValue, leaveParty, isCompanion, releaseCost,
+  companionContract, companionDemand, evaluateOffer, foodLodgingWeekly, joinParty, mercenaryRates, offerValue, openingTerms, punishSlave, slaveContract, bounty, registrationFee, slaveTax, slaveValue, leaveParty, isCompanion, releaseCost, proratedWages,
 } from '../src/game/contracts';
 import { DEMO_STAGES, newDemo, resolveDemoBattle } from '../src/game/demo';
 import { dangerRating, expectedEnemies, fairReward, payRatio, questRenown, strength, totalThreat, usualCount } from '../src/game/board';
@@ -1203,6 +1203,26 @@ describe('contracts', () => {
     expect(s.gold).toBe(0);
     expect(s.renown).toBe(renown);
     expect(s.party.some((m) => m.id === c.id)).toBe(false);
+  });
+
+  it('releasing a companion also pays the wages earned since payday, by the day', () => {
+    const s = start();
+    const c = companion(s);
+    if (!isCompanion(c)) throw new Error('not a companion');
+    c.contract.basePay = 70;
+    c.contract.startDay = 0;
+    c.contract.endDay = 60;
+    s.day = 10; // payday was day 7
+    expect(proratedWages(c, s.day)).toBe(30);
+    s.day = 14; // paid today
+    expect(proratedWages(c, s.day)).toBe(0);
+    c.contract.endDay = 16;
+    s.day = 19; // term ended on day 16: only days 14-16 are owed
+    expect(proratedWages(c, s.day)).toBe(20);
+    expect(releaseCost(c, s.day, s.rank)).toBe(0);
+    s.gold = 25;
+    expect(releaseCompanion(s, c.id)).toBeNull();
+    expect(s.gold).toBe(5);
   });
 
   it('members who quit cost no gold but lose renown by their level', () => {

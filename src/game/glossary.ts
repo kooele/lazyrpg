@@ -147,7 +147,8 @@ export function glossaryEntries(): GlossaryEntry[] {
   add('Party members', 'Contracts and renewal',
     `Contracts run ${K.terms.join(', ')} weeks. Base pay is due every payday. When a contract ends, the companion sits out of quests and you have ${K.graceDays} days to renew it in Manage Party before they leave.\n\n`
     + `A good relationship lowers their demands on renewal, by up to ${pct(K.renewalDiscountAtMax)} at 100. Walking out of a renewal ends the contract on the spot.\n\n`
-    + `Releasing a companion before their term ends breaks the contract: you pay them ${pct(K.releaseShareOfRemaining)} of what the rest of the term is worth (base pay, loot cut and food & lodging), but never more than ${K.releaseMinWeeks} week${K.releaseMinWeeks === 1 ? '' : 's'} of it. Once the term has ended, it's free.`);
+    + `Releasing a companion before their term ends breaks the contract: you pay them ${pct(K.releaseShareOfRemaining)} of what the rest of the term is worth (base pay, loot cut and food & lodging), but never more than ${K.releaseMinWeeks} week${K.releaseMinWeeks === 1 ? '' : 's'} of it. Once the term has ended, there's no buyout.\n\n`
+    + `Either way, you also pay the base pay they've earned since the last payday, by the day (3 days in: 3/7 of a week's pay).`);
   add('Party members', 'Relationship',
     `Companions and slaves have a relationship from 0 to 100. It rises by ${K.relationshipPerQuest} for every quest completed together, and moves with food and lodging, low Morale and missed pay.\n\n`
     + `Unpaid companions lose ${-K.relationshipUnpaid} relationship each payday. They quit at 0, which costs the party renown (see Failure and deaths). Slaves' relationship drives their Obedience.`);

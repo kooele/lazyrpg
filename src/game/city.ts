@@ -6,7 +6,7 @@ import { RANKS, type Character, type GameState, type Offer, type Quest, type Ran
 import { dangerRating, makeQuest, postQuests } from './board';
 import { grantXp, type Rng } from './character';
 import {
-  bondOf, bounty, canFight, registrationFee, slaveTax, changeRelationship, isCompanion, isExpired, isHoused, isSlave, leaveParty, releaseCost, slaveContract, slavePrice, talentPriceFactor,
+  bondOf, bounty, canFight, registrationFee, slaveTax, changeRelationship, isCompanion, isExpired, isHoused, isSlave, leaveParty, releaseTotal, slaveContract, slavePrice, talentPriceFactor,
 } from './contracts';
 import {
   ACTIVITY_INFO, FOOD_EXPECT_TEXT, QUALITY_TEXT, activityOf, changeHealth, changeMorale, expectedQuality, foodOf, foodRelationship, healthLoss, healthOf,
@@ -137,15 +137,15 @@ function quit(state: GameState, c: Character): number {
   return lost;
 }
 
-/** Release a companion from their contract early, paying them releaseCost. Returns an error message, or null. */
+/** Release a companion, paying their wages since payday and, before their term ends, the buyout (releaseTotal). Returns an error message, or null. */
 export function releaseCompanion(state: GameState, id: string): string | null {
   const c = state.party.find((m) => m.id === id);
   if (!c || !isCompanion(c)) return 'Only companions can be released.';
-  const cost = releaseCost(c, state.day, state.rank);
-  if (state.gold < cost) return `Not enough gold to buy out ${c.name}'s contract (${cost} needed).`;
+  const cost = releaseTotal(c, state.day, state.rank);
+  if (state.gold < cost) return `Not enough gold to release ${c.name} (${cost} needed).`;
   state.gold -= cost;
   leaveParty(state, c, c.contract.greed);
-  note(state, cost ? `Released ${c.name} from their contract early: paid ${cost} gold.` : `${c.name} was released and went back to the guild hall.`);
+  note(state, cost ? `Released ${c.name} from their contract: paid ${cost} gold.` : `${c.name} was released and went back to the guild hall.`);
   return null;
 }
 

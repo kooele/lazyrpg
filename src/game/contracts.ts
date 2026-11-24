@@ -137,7 +137,20 @@ export const daysLeft = (c: CompanionContract, day: number) => c.endDay - day;
 export const isExpired = (c: Character, day: number) => isCompanion(c) && c.contract.endDay <= day;
 
 /**
- * What releasing a companion before their term ends costs: the smaller of releaseMinWeeks weeks of their compensation
+ * Base pay a companion has earned since the last payday (paydays are every 7th day), prorated by the day: what
+ * they're owed if they leave before the next one. Days after their term ended don't count (they aren't paid then).
+ */
+export function proratedWages(c: Character & { contract: CompanionContract }, day: number): number {
+  const lastPayday = day - (day % 7);
+  const worked = Math.max(0, Math.min(day, c.contract.endDay) - Math.max(lastPayday, c.contract.startDay));
+  return Math.round((c.contract.basePay * worked) / 7);
+}
+
+/** Everything releasing a companion costs: the wages they've earned since payday, plus the buyout (releaseCost). */
+export const releaseTotal = (c: Character & { contract: CompanionContract }, day: number, rank: Rank) => proratedWages(c, day) + releaseCost(c, day, rank);
+
+/**
+ * The buyout for releasing a companion before their term ends: the smaller of releaseMinWeeks weeks of their compensation
  * and releaseShareOfRemaining of the compensation for the days left. Compensation is their total weekly worth: base
  * pay + expected loot cut at the party's rank + food & lodging (see offerValue). Free once the term has ended.
  */

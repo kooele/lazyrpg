@@ -204,10 +204,11 @@ export class CityScene extends Phaser.Scene {
     }, { fontSize: 14 }));
   }
 
-  /** The ☰ menu under the header's menu button: save, the guide, settings, or back to the title screen. Click outside to close. */
+  /** The ☰ menu under the header's menu button: save, load, the guide, settings, or back to the title screen. Click outside to close. */
   private menu(): void {
     const items: [string, () => void][] = [
       ['Save Game', () => this.scene.start('SaveLoad', { mode: 'save', returnTo: 'City' })],
+      ['Load Game', () => this.scene.start('SaveLoad', { mode: 'load', returnTo: 'City' })],
       ['Guide', () => this.scene.start('Glossary', { returnTo: 'City' })],
       ['Settings', () => this.scene.start('Settings', { returnTo: 'City' })],
       ['Main Menu', () => this.scene.start('MainMenu')],
