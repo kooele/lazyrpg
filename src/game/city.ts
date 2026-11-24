@@ -2,11 +2,11 @@
 // Pure logic (no Phaser): scenes call these and show the messages they return.
 import { MAX_PARTY_SIZE } from '../data/content';
 import { GUILD, isResidence, trainingXp, type CityLodging, type InnTier, type Ring } from '../data/guild';
-import { RANKS, type Character, type GameState, type Offer, type Quest, type Rank } from '../data/types';
+import { RANKS, type Character, type CompanionTerms, type GameState, type Offer, type Quest, type Rank } from '../data/types';
 import { dangerRating, makeQuest, postQuests } from './board';
 import { grantXp, type Rng } from './character';
 import {
-  bondOf, bounty, canFight, registrationFee, slaveTax, changeRelationship, isCompanion, isExpired, isHoused, isSlave, leaveParty, releaseTotal, slaveContract, slavePrice, talentPriceFactor,
+  bondOf, bounty, canFight, registrationFee, slaveTax, changeRelationship, isCompanion, isHoused, isSlave, leaveParty, releaseTotal, proratedWages, wagesBetween, lastPayday, slaveContract, slavePrice, talentPriceFactor,
 } from './contracts';
 import {
   ACTIVITY_INFO, FOOD_EXPECT_TEXT, QUALITY_TEXT, activityOf, changeHealth, changeMorale, expectedQuality, foodOf, foodRelationship, healthLoss, healthOf,
@@ -526,8 +526,30 @@ function runSchedule(state: GameState, away: string[]): string[] {
   return out;
 }
 
+/** What the next payday's wages come to (the week ending on it, prorated for companions who joined or leave midweek). */
 export function weeklyWages(state: GameState): number {
-  return state.party.reduce((s, c) => s + (isCompanion(c) && !isExpired(c, state.day) ? c.contract.basePay : 0), 0);
+  const next = lastPayday(state.day) + 7;
+  return state.party.reduce((s, c) => s + (isCompanion(c) ? wagesBetween(c, next - 7, next) : 0), 0);
+}
+
+/**
+ * Renew a companion's contract on new terms. The wages they've earned under the old terms since payday are settled
+ * first; if the party can't pay them, it's like a missed payday (relationship falls).
+ */
+export function renewContract(state: GameState, id: string, terms: CompanionTerms): string[] {
+  const c = state.party.find((m) => m.id === id);
+  if (!c || !isCompanion(c)) return [];
+  const out: string[] = [];
+  const owed = proratedWages(c, state.day);
+  if (owed && state.gold >= owed) {
+    state.gold -= owed;
+    out.push(note(state, `Settled ${c.name}'s wages under the old contract: ${owed} gold.`));
+  } else if (owed) {
+    changeRelationship(c, GUILD.companion.relationshipUnpaid);
+    out.push(note(state, `You couldn't settle ${c.name}'s wages under the old contract (${owed} gold).`));
+  }
+  Object.assign(c.contract, { ...terms, startDay: state.day, endDay: state.day + terms.termWeeks * 7 });
+  return out;
 }
 
 /** Property tax on the party's slaves, due each payday (see slaveTax). */
@@ -604,13 +626,15 @@ export function advanceDay(state: GameState, rng: Rng, night: 'road' | 'city' = 
   if (isPayday(state.day)) {
     let paid = 0;
     for (const c of state.party.filter(isCompanion)) {
-      if (isExpired(c, state.day)) continue;
-      if (state.gold >= c.contract.basePay) {
-        state.gold -= c.contract.basePay;
-        paid += c.contract.basePay;
+      // The week just ended, prorated: companions who joined midweek, or whose term ended in it, get their days' worth.
+      const due = wagesBetween(c, state.day - 7, state.day);
+      if (!due) continue;
+      if (state.gold >= due) {
+        state.gold -= due;
+        paid += due;
       } else {
         c.contract.relationship = Math.max(0, c.contract.relationship + GUILD.companion.relationshipUnpaid);
-        say(`You couldn't pay ${c.name} (${c.contract.basePay} gold).`);
+        say(`You couldn't pay ${c.name} (${due} gold).`);
         if (c.contract.relationship <= 0) {
           const lost = quit(state, c);
           say(`${c.name} quits over unpaid wages.${lost ? ` Renown -${Math.round(lost)}.` : ''}`);
@@ -638,8 +662,11 @@ export function advanceDay(state: GameState, rng: Rng, night: 'road' | 'city' = 
     const k = c.contract;
     if (k.endDay === state.day) say(`${c.name}'s contract has ended. Renew it within ${GUILD.companion.graceDays} days (Party screen) or they will leave.`);
     if (state.day > k.endDay + GUILD.companion.graceDays) {
+      // Settle the days of their term since the last payday.
+      const owed = Math.min(state.gold, proratedWages(c, state.day));
+      state.gold -= owed;
       leaveParty(state, c, k.greed);
-      say(`${c.name} left the party: their contract was not renewed.`);
+      say(`${c.name} left the party: their contract was not renewed.${owed ? ` Final wages: ${owed} gold.` : ''}`);
     }
   }
   tidyLineup(state);

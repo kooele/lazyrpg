@@ -6,12 +6,12 @@ import { createCharacter, deriveStats, makeRng } from '../src/game/character';
 import { makeEnemy, makeUnit } from '../src/game/battle';
 import {
   acceptQuest, advanceDay, advanceDays, askingPrice, buyDrinks, isShipmentDay, marketBuyPrice, marketDay, sellSlave, turnInPrisoner, buyResidence, buySlave, makeQuest, sellResidence, endDay, setLodging, boarders, lodgingCost, residents, canTakeQuest, dailyUpkeep, foodCost, departBlock, lineupMembers, mainCharacter, moveMember,
-  killBounty, newCampaign, questMoraleLoss, questXpPool, questXpShares, registerPrisoner, resolveQuest, rewardShares, toggleLineup, weeklyTaxes, setLineupSlot, benchMember, releaseCompanion, moraleDepartures, quitRenown,
+  killBounty, newCampaign, questMoraleLoss, questXpPool, questXpShares, registerPrisoner, resolveQuest, rewardShares, toggleLineup, weeklyTaxes, setLineupSlot, benchMember, releaseCompanion, moraleDepartures, quitRenown, renewContract, weeklyWages,
 } from '../src/game/city';
 import { activityOf, lodgingOf, combatPenalty, expectedQuality, foodRelationship, healthOf, isInjured, moraleOf, moralePenalty, obediencePenalty } from '../src/game/condition';
 import { parseSave, serializeSave } from '../src/game/save';
 import {
-  companionContract, companionDemand, evaluateOffer, foodLodgingWeekly, joinParty, mercenaryRates, offerValue, openingTerms, punishSlave, slaveContract, bounty, registrationFee, slaveTax, slaveValue, leaveParty, isCompanion, releaseCost, proratedWages,
+  companionContract, companionDemand, evaluateOffer, foodLodgingWeekly, joinParty, mercenaryRates, offerValue, openingTerms, punishSlave, slaveContract, bounty, registrationFee, slaveTax, slaveValue, leaveParty, isCompanion, releaseCost, proratedWages, wagesBetween,
 } from '../src/game/contracts';
 import { DEMO_STAGES, newDemo, resolveDemoBattle } from '../src/game/demo';
 import { dangerRating, expectedEnemies, fairReward, payRatio, questRenown, strength, totalThreat, usualCount } from '../src/game/board';
@@ -396,6 +396,9 @@ describe('contracts', () => {
     s.gold = 1000;
     advanceDays(s, 6 - s.day + 1, makeRng(1)); // to day 7
     expect(s.day).toBe(7);
+    // Hired on day 1: the first payday pays 6 of the week's 7 days.
+    expect(s.log.some((n) => n.text.includes(`Payday: ${Math.round((50 * 6) / 7)} gold`))).toBe(true);
+    advanceDays(s, 7, makeRng(1)); // a full week
     expect(s.log.some((n) => /Payday: 50 gold/.test(n.text))).toBe(true);
     c.contract.relationship = 15;
     c.contract.endDay = 100;
@@ -1203,6 +1206,22 @@ describe('contracts', () => {
     expect(s.gold).toBe(0);
     expect(s.renown).toBe(renown);
     expect(s.party.some((m) => m.id === c.id)).toBe(false);
+  });
+
+  it('renewing midweek settles the old wages; the next payday pays the new pay from the renewal day', () => {
+    const s = start();
+    const c = companion(s);
+    if (!isCompanion(c)) throw new Error('not a companion');
+    Object.assign(c.contract, { basePay: 70, startDay: 0, endDay: 12 });
+    s.day = 10;
+    s.gold = 1000;
+    const rel = c.contract.relationship;
+    renewContract(s, c.id, { basePay: 140, lootPct: 5, foodLodging: false, termWeeks: 4 });
+    expect(s.gold).toBe(970); // days 8-10 at 70 a week
+    expect(c.contract).toMatchObject({ basePay: 140, startDay: 10, endDay: 38 });
+    expect(wagesBetween(c, 7, 14)).toBe(80); // days 11-14 at 140 a week
+    expect(c.contract.relationship).toBe(rel);
+    expect(weeklyWages(s)).toBe(80);
   });
 
   it('releasing a companion also pays the wages earned since payday, by the day', () => {

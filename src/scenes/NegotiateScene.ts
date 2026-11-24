@@ -3,7 +3,7 @@ import { SKILLS, WEAPONS } from '../data/content';
 import { GUILD } from '../data/guild';
 import { STAT_INFO, type Character, type CompanionTerms, type FreeAdventurer } from '../data/types';
 import { TALENT_COLORS, talentOf, talentStats } from '../game/talent';
-import { toggleLineup } from '../game/city';
+import { renewContract, toggleLineup } from '../game/city';
 import {
   companionContract, evaluateOffer, talentPriceFactor, foodLodgingWeekly, isCompanion, joinParty, leaveParty, lootValue, openingTerms, patienceCost, rosterFull,
   type CompanionContract,
@@ -199,7 +199,7 @@ export class NegotiateScene extends Phaser.Scene {
         const err = toggleLineup(state, c.id);
         this.talk.push(err ? `${c.name} joins the party. (The lineup is full; ${c.name} waits in reserve.)` : `${c.name} joins the party and the lineup.`);
       } else if (who.contract) {
-        Object.assign(who.contract, { ...t, startDay: state.day, endDay: state.day + t.termWeeks * 7 });
+        this.talk.push(...renewContract(state, who.character.id, { ...t }));
         this.talk.push(`The new contract runs until day ${who.contract.endDay}.`);
       }
       markDirty();

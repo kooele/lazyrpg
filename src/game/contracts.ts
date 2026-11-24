@@ -137,14 +137,22 @@ export const daysLeft = (c: CompanionContract, day: number) => c.endDay - day;
 export const isExpired = (c: Character, day: number) => isCompanion(c) && c.contract.endDay <= day;
 
 /**
- * Base pay a companion has earned since the last payday (paydays are every 7th day), prorated by the day: what
- * they're owed if they leave before the next one. Days after their term ended don't count (they aren't paid then).
+ * Base pay a companion earns for the days from `from` to `to` (each day after `from`, up to `to`), prorated by the day:
+ * only days under contract count (after startDay, up to endDay).
  */
-export function proratedWages(c: Character & { contract: CompanionContract }, day: number): number {
-  const lastPayday = day - (day % 7);
-  const worked = Math.max(0, Math.min(day, c.contract.endDay) - Math.max(lastPayday, c.contract.startDay));
+export function wagesBetween(c: Character & { contract: CompanionContract }, from: number, to: number): number {
+  const worked = Math.max(0, Math.min(to, c.contract.endDay) - Math.max(from, c.contract.startDay));
   return Math.round((c.contract.basePay * worked) / 7);
 }
+
+/** The last payday on or before `day` (paydays are every 7th day). */
+export const lastPayday = (day: number) => day - (day % 7);
+
+/**
+ * Base pay a companion has earned since the last payday, prorated by the day: what they're owed if they leave (or
+ * renew) before the next one. Days after their term ended don't count.
+ */
+export const proratedWages = (c: Character & { contract: CompanionContract }, day: number) => wagesBetween(c, lastPayday(day), day);
 
 /** Everything releasing a companion costs: the wages they've earned since payday, plus the buyout (releaseCost). */
 export const releaseTotal = (c: Character & { contract: CompanionContract }, day: number, rank: Rank) => proratedWages(c, day) + releaseCost(c, day, rank);
