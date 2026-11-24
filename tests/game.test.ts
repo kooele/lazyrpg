@@ -445,14 +445,21 @@ describe('skills', () => {
     expect(battle.commandableUnits()).toEqual([]);
   });
 
-  it('heal and cleanse work on enemies (and on yourself)', () => {
-    const { battle, units: [h, e] } = setup(openMap(), [
+  it('cleric skills work on allies and yourself, never on enemies', () => {
+    const { battle, units: [h, , a] } = setup(openMap(), [
       { c: hero('staff', ['heal', 'cleanse']), team: 'player', at: { x: 1, y: 1 } },
       { c: hero('bow'), team: 'enemy', at: { x: 4, y: 1 } },
+      { c: hero('sword_shield', [], 'Ally'), team: 'player', at: { x: 1, y: 3 } },
     ]);
-    e.hp = 300;
-    battle.perform(h, 'heal', { x: 4, y: 1 });
-    expect(e.hp).toBe(300 + 96); // 80% of 120 M.Atk
+    for (const id of ['heal', 'cleanse', 'protection', 'barrier']) {
+      expect(SKILLS[id].affects).toBe('ally');
+      expect(battle.targetsOf(h, SKILLS[id], { x: 4, y: 1 })).toEqual([]);
+      expect(battle.targetsOf(h, SKILLS[id], { x: 1, y: 3 })).toEqual([a]);
+      expect(battle.targetsOf(h, SKILLS[id], { x: 1, y: 1 })).toEqual([h]);
+    }
+    a.hp = 300;
+    battle.perform(h, 'heal', { x: 1, y: 3 });
+    expect(a.hp).toBe(300 + 96); // 80% of 120 M.Atk
     battle.endPhase();
     battle.endPhase();
     h.statuses.push({ id: 'burn', name: 'Burn', debuff: true, stacks: 1, amount: 0, turns: Infinity, tick: 'end' });
@@ -712,10 +719,10 @@ describe('engagement', () => {
     battle.endPhase();
     expect(a.engagedWith).toBe(e.uid);
     expect(battle.canTarget(a, SKILLS.heal, { x: ally.x, y: ally.y })).toBe(false);
-    expect(battle.engagementBlock(a, SKILLS.heal, { x: 4, y: 3 })).toMatch(/can't target anyone else/);
+    expect(battle.engagementBlock(a, SKILLS.heal, { x: ally.x, y: ally.y })).toMatch(/can't target anyone else/);
     expect(battle.canTarget(a, SKILLS.heal, { x: 3, y: 3 })).toBe(true);
     expect(battle.canTarget(a, SKILLS.cleanse, { x: ally.x, y: ally.y })).toBe(false);
-    expect(battle.engagementBlock(a, SKILLS.cleanse, { x: 4, y: 3 })).toMatch(/can't target anyone else/);
+    expect(battle.engagementBlock(a, SKILLS.cleanse, { x: ally.x, y: ally.y })).toMatch(/can't target anyone else/);
     expect(battle.canTarget(a, SKILLS.cleanse, { x: 3, y: 3 })).toBe(true);
   });
 
