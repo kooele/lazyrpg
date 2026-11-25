@@ -201,7 +201,7 @@ function bestFrom(
     if (!battle.isUsable(u, id) || !battle.canPay(u, skill) || isFree(skill) !== wantFree || skill.cone || (skill.teleport && !skill.charge) || skill.target === 'move') continue;
     if (!includeDefensive && skill.shield) continue;
     for (const aim of aimPoints(battle, skill, from)) {
-      if (!battle.canTarget(u, skill, aim, from)) continue;
+      if (!battle.canAim(u, skill, aim, from)) continue;
       const score = scoreSkill(battle, u, skill, from, aim);
       if (score > 0 && (!best || score > best.score)) best = { action: { id, target: aim }, score };
     }

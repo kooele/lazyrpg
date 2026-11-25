@@ -116,8 +116,8 @@ describe('stats and content files', () => {
     expect(skillStatText(SKILLS.sword_slash)).toBe('Effect: 100% P.Atk\nTags: Melee, Engage, Physical\nAP: Ends turn\nCooldown: 1 turn');
     expect(skillStats(SKILLS.engage)[0].value).toBe(SKILLS.engage.description);
     expect(skillStats(SKILLS.bow_attack)[0].value).toBe("Attacks based on the bow's mode.");
-    expect(skillStats(SKILLS.protection)[0].value).toBe('Defense +25% M.Atk (2 turns)');
-    expect(skillStats(SKILLS.barrier)[0].value).toBe('Shield 100% M.Atk (1 turn)');
+    expect(skillStats(SKILLS.protection)[0].value).toBe('Defense +25% M.Atk (3 turns)');
+    expect(skillStats(SKILLS.barrier)[0].value).toBe('Shield 80% M.Atk (1 turn)');
     expect(skillStats(SKILLS.shield_up)[0].value).toBe('Shield 10% of max HP (1 turn)');
   });
 });
@@ -271,13 +271,40 @@ describe('ranges, lines and tags', () => {
     expect(battle.isUsable(archer, 'execute')).toBe(false);
   });
 
-  it('empty tiles can be targeted; the action is still spent', () => {
-    const { battle, units: [m] } = setup(openMap(), [
-      { c: hero('staff'), team: 'player', at: { x: 0, y: 0 } },
-      { c: hero(), team: 'enemy', at: { x: 9, y: 6 } },
+  it('single-target skills need a unit: empty tiles and Stealthed enemies are in range but not aimable', () => {
+    const { battle, units: [m, e] } = setup(openMap(), [
+      { c: hero('staff', ['charge']), team: 'player', at: { x: 0, y: 0 } },
+      { c: hero(), team: 'enemy', at: { x: 3, y: 1 } },
     ]);
-    expect(battle.perform(m, 'magic_bolt', { x: 3, y: 0 })).toEqual([]);
-    expect(m.acted).toBe(true);
+    // Still part of the range box...
+    expect(battle.canTarget(m, SKILLS.magic_bolt, { x: 3, y: 0 })).toBe(true);
+    // ...but can't be aimed at.
+    expect(battle.canAim(m, SKILLS.magic_bolt, { x: 3, y: 0 })).toBe(false);
+    expect(battle.targetError(m, SKILLS.magic_bolt, { x: 3, y: 0 })).toBe('Magic Bolt needs a unit to target.');
+    expect(() => battle.perform(m, 'magic_bolt', { x: 3, y: 0 })).toThrow('needs a unit');
+    expect(battle.canAim(m, SKILLS.charge, { x: 2, y: 0 })).toBe(false); // no charging at empty ground
+    expect(battle.canAim(m, SKILLS.magic_bolt, { x: 3, y: 1 })).toBe(true);
+    e.statuses.push({ id: 'stealth', name: 'Stealthed', debuff: false, stacks: 1, amount: 0, turns: 1, tick: 'start' });
+    expect(battle.canAim(m, SKILLS.magic_bolt, { x: 3, y: 1 })).toBe(false);
+    expect(m.acted).toBe(false);
+    // Area and line skills can still be aimed at empty ground.
+    expect(battle.canAim(m, SKILLS.spear_thrust, { x: 2, y: 0 })).toBe(true);
+  });
+
+  it('cleric skills only work on your own side', () => {
+    const { battle, units: [c, ally, e] } = setup(openMap(), [
+      { c: hero('staff', ['heal', 'cleanse', 'protection', 'barrier']), team: 'player', at: { x: 1, y: 1 } },
+      { c: hero('sword_shield', [], 'Ally'), team: 'player', at: { x: 2, y: 1 } },
+      { c: hero(), team: 'enemy', at: { x: 3, y: 1 } },
+    ]);
+    for (const id of ['heal', 'cleanse', 'protection', 'barrier']) {
+      expect(battle.canAim(c, SKILLS[id], { x: 3, y: 1 }), id).toBe(false);
+      expect(battle.canAim(c, SKILLS[id], { x: 2, y: 1 }), id).toBe(true);
+      expect(battle.canAim(c, SKILLS[id], { x: 1, y: 1 }), id).toBe(true); // yourself
+    }
+    expect(battle.targetError(c, SKILLS.heal, { x: 3, y: 1 })).toBe('Heal only works on your own side.');
+    expect(() => battle.perform(c, 'heal', { x: 3, y: 1 })).toThrow('own side');
+    expect([ally.hp, e.hp]).toEqual([ally.stats.health, e.stats.health]);
   });
 });
 
@@ -473,7 +500,7 @@ describe('skills', () => {
     expect(h.statuses).toEqual([]);
   });
 
-  it("Protection adds Defense from the caster's M.Atk; Barrier shields for 100% M.Atk; both are ready again next turn", () => {
+  it("Protection adds Defense from the caster's M.Atk; Barrier shields for 80% M.Atk with a 2-turn cooldown; Protection lasts 3 turns", () => {
     const { battle, units: [c, ally] } = setup(openMap(), [
       { c: hero('staff', ['protection', 'barrier']), team: 'player', at: { x: 1, y: 1 } },
       { c: hero('sword_shield', [], 'Ally'), team: 'player', at: { x: 3, y: 1 } },
@@ -486,12 +513,17 @@ describe('skills', () => {
     battle.endPhase();
     expect(battle.isReady(c, 'protection')).toBe(true);
     battle.perform(c, 'barrier', { x: 3, y: 1 });
-    expect(battle.shieldOf(ally)).toBe(120);
+    expect(battle.shieldOf(ally)).toBe(96); // 80% of 120 M.Atk
     expect(battle.isReady(c, 'barrier')).toBe(false);
-    // Protected lasts 2 of the ally's turns.
     battle.endPhase();
     battle.endPhase();
-    expect(battle.stat(ally, 'defense')).toBe(def);
+    expect(battle.isReady(c, 'barrier')).toBe(false); // cooldown 2: skips the next turn
+    // Protected lasts 3 of the ally's turns: still on after 2...
+    expect(battle.stat(ally, 'defense')).toBe(def + 30);
+    battle.endPhase();
+    battle.endPhase();
+    expect(battle.isReady(c, 'barrier')).toBe(true);
+    expect(battle.stat(ally, 'defense')).toBe(def); // ...gone after the 3rd
     expect(SKILLS.heal.cooldown).toBe(1);
   });
 
@@ -540,14 +572,15 @@ describe('skills', () => {
     expect(moveOnEnemyTurns).toEqual([12, 16, 16]);
   });
 
-  it('charge dashes next to an enemy within Movement and strikes', () => {
+  it('charge dashes next to an enemy within Movement and strikes for 60% P.Atk, 30 mana', () => {
     const { battle, units: [v, e] } = setup(openMap(), [
       { c: hero('sword_shield', ['charge']), team: 'player', at: { x: 1, y: 3 } },
       { c: hero('bow'), team: 'enemy', at: { x: 5, y: 3 } },
     ]);
     battle.perform(v, 'charge', { x: 5, y: 3 });
     expect(Math.hypot(v.x - 5, v.y - 3)).toBeLessThanOrEqual(1.5);
-    expect(e.hp).toBe(500 - 100); // 100% P.Atk on Def 0
+    expect(e.hp).toBe(500 - 60); // 60% P.Atk on Def 0
+    expect(v.mp).toBe(v.stats.mana - 30);
     expect(v.acted).toBe(false); // 1 AP: the action AP is still there
   });
 
@@ -673,6 +706,8 @@ describe('engagement', () => {
     expect(a.engagedWith).toBeNull();
     expect(e.engagedWith).toBeNull();
     expect(a).toMatchObject({ x: 1, y: 3 });
+    // 1 AP: the turn goes on, so the escapee can still act.
+    expect(a).toMatchObject({ ap: 1, acted: false });
   });
 
   it('engaged spears can Spear Thrust and Circle Swing their opponent, incl. diagonally', () => {

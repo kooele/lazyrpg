@@ -156,7 +156,7 @@
     "arcane_shift": {
       "name": "Arcane Shift", "description": "Teleport to an empty tile.",
       "tags": ["disengage", "teleport"],
-      "target": "emptyTile", "affects": "ally", "range": 2, "minRange": 1, "cooldown": 3, "mana": 40, "level": 3,
+      "target": "emptyTile", "affects": "ally", "range": 2, "minRange": 1, "cooldown": 3, "ap": 1, "mana": 40, "level": 3,
       "teleport": true
     },
     "arcane_weapon": {
@@ -218,16 +218,16 @@
       "cleanse": true
     },
     "protection": {
-      "name": "Protection", "description": "Grant a unit Defense equal to 25% of your M.Atk for 2 turns.",
+      "name": "Protection", "description": "Grant a unit Defense equal to 25% of your M.Atk for 3 turns.",
       "tags": ["support"],
       "target": "unit", "affects": "ally", "range": 5, "minRange": 0, "cooldown": 1, "mana": 40, "level": 3,
-      "applyStatus": [{ "status": "protected", "turns": 2 }]
+      "applyStatus": [{ "status": "protected", "turns": 3 }]
     },
     "barrier": {
-      "name": "Barrier", "description": "Grant a unit a shield equal to 100% of your M.Atk for 1 turn.",
+      "name": "Barrier", "description": "Grant a unit a shield equal to 80% of your M.Atk for 1 turn.",
       "tags": ["support"],
-      "target": "unit", "affects": "ally", "range": 5, "minRange": 0, "cooldown": 1, "mana": 40, "level": 3,
-      "shield": { "mAtk": 1, "turns": 1 }
+      "target": "unit", "affects": "ally", "range": 5, "minRange": 0, "cooldown": 2, "mana": 40, "level": 3,
+      "shield": { "mAtk": 0.8, "turns": 1 }
     },
     "engage": {
       "name": "Engage", "description": "Engage an adjacent enemy without attacking it.",
@@ -237,8 +237,8 @@
     "charge": {
       "name": "Charge", "description": "Dash next to an enemy and strike it.",
       "tags": ["movement", "physical", "engage"],
-      "target": "unit", "affects": "enemy", "range": 4, "rangeScale": 1, "minRange": 1, "cooldown": 3, "ap": 1, "mana": 20, "level": 3,
-      "hits": [{ "pAtk": 1 }], "charge": true
+      "target": "unit", "affects": "enemy", "range": 4, "rangeScale": 1, "minRange": 1, "cooldown": 3, "ap": 1, "mana": 30, "level": 3,
+      "hits": [{ "pAtk": 0.6 }], "charge": true
     },
     "kick": {
       "name": "Kick", "description": "Kick an adjacent enemy.",

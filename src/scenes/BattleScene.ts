@@ -411,7 +411,7 @@ export class BattleScene extends Phaser.Scene {
         g.lineStyle(2, 0x9aa3bd, 0.6).lineBetween(px + 18 * K, py + 18 * K, px + TILE - 18 * K, py + TILE - 18 * K).lineBetween(px + TILE - 18 * K, py + 18 * K, px + 18 * K, py + TILE - 18 * K);
       }
       const h = this.hoverTile;
-      if (this.mode === 'target' && h && b.canTarget(caster, shown, h)) {
+      if (this.mode === 'target' && h && b.canAim(caster, shown, h)) {
         for (const p of b.areaTiles(caster, shown, h)) fill(p, 0xffd166, 0.5);
         if (shown.charge) {
           const land = b.chargeDestination(caster, h, caster, shown);
@@ -868,7 +868,7 @@ export class BattleScene extends Phaser.Scene {
     const clicked = b.unitAt(tile.x, tile.y);
 
     if (this.mode === 'target' && u && this.action) {
-      if (!b.canTarget(u, this.action, tile)) return this.cancel();
+      if (!b.canAim(u, this.action, tile)) return this.cancel();
       const action = this.action;
       const warning = this.targetWarning(u, action, tile);
       if (warning) {
@@ -909,7 +909,7 @@ export class BattleScene extends Phaser.Scene {
       if (allies.length) return `${s.name} will ${also}hit your own ${allies.length > 1 ? 'allies' : 'ally'} ${allies.map((a) => a.character.name).join(', ')}.\nUse it anyway?`;
       if (targets.length === 0) {
         if (occupant && occupant.team === u.team && occupant !== u) return `${occupant.character.name} is your ally: ${s.name} won't affect them and will be wasted.\nUse it anyway?`;
-        return `No enemy there: ${s.name} will hit nothing${s.charge && !s.teleport ? ' (you will only dash)' : ''}.\nUse it anyway?`;
+        return `No enemy there: ${s.name} will hit nothing.\nUse it anyway?`;
       }
     }
     return null;
@@ -998,10 +998,11 @@ export class BattleScene extends Phaser.Scene {
       const blocked = b.blockedTiles(u, this.action).some((p) => p.x === tile.x && p.y === tile.y);
       const los = b.skillLos(u, this.action);
       const engaged = b.engagementBlock(u, this.action, tile);
+      const inReach = b.canTarget(u, this.action, tile);
       const why = engaged ?? (blocked
         ? los === 'fire' ? 'No line of fire: a rock or unit is in the way.' : 'No line of sight: a rock is in the way.'
-        : "Can't aim there — click to cancel.");
-      info = b.canTarget(u, this.action, tile) ? `${this.preview(u, this.action, tile)}\n${info}` : `${why}\n${info}`;
+        : inReach ? `${b.targetError(u, this.action, tile)} Click to cancel.` : "Can't aim there — click to cancel.");
+      info = b.canAim(u, this.action, tile) ? `${this.preview(u, this.action, tile)}\n${info}` : `${why}\n${info}`;
     }
     for (const z of b.zonesAt(tile)) info = `${z.name} (${z.turnsLeft} turn${z.turnsLeft === 1 ? '' : 's'} left): hits anyone entering; ${z.def.endTurnHits}x if a turn ends here\n${info}`;
     // Walking through zones: warn before the move.

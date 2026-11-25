@@ -821,6 +821,25 @@ export class Battle {
     return this.inReach(caster, skill, tile, from) && !this.engagementBlock(caster, skill, tile, from);
   }
 
+  /**
+   * Why a single-target skill can't be aimed at `tile` even though it's in reach: nobody there (or only a
+   * Stealthed enemy), or a support skill aimed at the other side. Null when the target is fine.
+   * Kept out of canTarget so the range box still shows every tile in reach.
+   */
+  targetError(caster: Unit, skill: SkillDef, tile: Point, from: Point = caster): string | null {
+    skill = this.skillFor(caster, skill);
+    if (skill.target !== 'unit') return null;
+    const t = this.occupantFrom(caster, from, tile);
+    if (!t || this.hiddenFrom(caster, t)) return `${skill.name} needs a unit to target.`;
+    if (skill.affects === 'ally' && t.team !== caster.team) return `${skill.name} only works on your own side.`;
+    return null;
+  }
+
+  /** In reach and a valid target: what the player can click and the AI can pick. */
+  canAim(caster: Unit, skill: SkillDef, tile: Point, from: Point = caster): boolean {
+    return this.canTarget(caster, skill, tile, from) && !this.targetError(caster, skill, tile, from);
+  }
+
   /** Range / line / landing checks only (ignores engagement). */
   private inReach(caster: Unit, skill: SkillDef, tile: Point, from: Point): boolean {
     if (!this.inMap(tile)) return false;
@@ -1276,6 +1295,8 @@ export class Battle {
     const block = this.engagementBlock(u, skill, tile);
     if (block) throw new Error(block);
     if (!this.canTarget(u, skill, tile)) throw new Error('Target out of range');
+    const bad = this.targetError(u, skill, tile);
+    if (bad) throw new Error(bad);
 
     const events: BattleEvent[] = [];
     // The skill's own mana comes first, so per-hit costs during it (Arcane Weapon) only spend what's left.
