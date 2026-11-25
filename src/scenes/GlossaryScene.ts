@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { GLOSSARY_TOPICS, glossaryEntries, type GlossaryEntry, type GlossaryTopic } from '../game/glossary';
-import { COLORS, HEIGHT, WIDTH, ScrollList, button, panel, setupCamera, text } from '../ui/widgets';
+import { COLORS, HEIGHT, WIDTH, ScrollList, button, panel, setupCamera, text, clearScene } from '../ui/widgets';
 
 /**
  * The Guide: explanations of the game's less obvious rules, by topic. Opened from the main menu and the city;
@@ -29,7 +29,7 @@ export class GlossaryScene extends Phaser.Scene {
   }
 
   private render(): void {
-    this.children.removeAll(true);
+    clearScene(this);
     text(this, 24, 14, 'Guide', { fontSize: '30px', color: COLORS.gold });
     text(this, 128, 26, 'How the less obvious rules work. Numbers are the game\'s current settings.', { fontSize: '14px', color: COLORS.dim });
 

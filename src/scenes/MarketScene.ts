@@ -8,7 +8,7 @@ import { adventurerRank } from '../game/guild';
 import { markDirty, requireState, session } from '../game/session';
 import { PEOPLE_SORTS, nextSort, sortPeople, type PeopleSort, type SortDir } from '../game/sorting';
 import { cityHeader } from '../ui/hud';
-import { COLORS, HEIGHT, ScrollList, WIDTH, button, confirmDialog, figure, fittedList, panel, setupCamera, sortBar, talentTag, text, toast, type ScrollItem } from '../ui/widgets';
+import { COLORS, HEIGHT, ScrollList, WIDTH, button, confirmDialog, figure, fittedList, panel, setupCamera, sortBar, talentTag, text, toast, type ScrollItem, clearScene } from '../ui/widgets';
 
 /** The slave market: buy slaves, and sell your own back. It doesn't take prisoners (they're registered at the city gate). */
 export class MarketScene extends Phaser.Scene {
@@ -30,7 +30,7 @@ export class MarketScene extends Phaser.Scene {
   }
 
   private render(): void {
-    this.children.removeAll(true);
+    clearScene(this);
     const state = requireState();
     cityHeader(this, state, 'Slave Market');
     button(this, WIDTH - 176, 74, 160, 34, `Back to ${GUILD.city}`, () => this.scene.start('City'), { fontSize: 14 });
@@ -68,10 +68,15 @@ export class MarketScene extends Phaser.Scene {
     if (mine.length === 0) text(this, 766, 300, 'You have no slaves to sell.', { color: COLORS.dim, align: 'center' }).setOrigin(0.5);
   }
 
+  /** A row for a slave; built only when it scrolls into view (the market can hold 30 slaves, each row ~20 texts). */
   private row(o: Offer, w: number, actions: { label: string; enabled: boolean; act: () => void }[], compact = false): ScrollItem {
+    const h = compact ? 104 : 86;
+    return { height: h, make: () => this.buildRow(o, w, h, actions, compact) };
+  }
+
+  private buildRow(o: Offer, w: number, h: number, actions: { label: string; enabled: boolean; act: () => void }[], compact: boolean): Phaser.GameObjects.Container {
     const c = o.character;
     const row = this.add.container(0, 0);
-    const h = compact ? 104 : 86;
     row.add(this.add.rectangle(0, 0, w - 10, h, COLORS.panelLight, 0.5).setOrigin(0));
     row.add(figure(this, 30, compact ? 66 : 74, 60, c.appearance, c.weaponId, { base: false }));
     const name = text(this, 64, 6, c.name, { fontSize: '16px' });
@@ -87,7 +92,7 @@ export class MarketScene extends Phaser.Scene {
       const by = compact ? 66 : 26;
       row.add(button(this, bx, by, compact ? 84 : 130, 32, a.label, a.act, { fontSize: compact ? 11 : 13, enabled: a.enabled }));
     });
-    return { obj: row, height: h };
+    return row;
   }
 
   private buy(o: Offer): void {

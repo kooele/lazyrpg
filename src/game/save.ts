@@ -400,7 +400,7 @@ function migrateLegacy(raw: Record<string, unknown>): GameState {
   state.renown = (stage - 1) * 15;
   for (const c of rest) {
     const want = companionDemand(c.level, 1, 4);
-    c.contract = companionContract({ basePay: Math.max(0, Math.round((want - foodLodgingWeekly(c.level)) / 5) * 5), lootPct: 0, foodLodging: true, termWeeks: 4 }, state.day, 1, 30);
+    c.contract = companionContract({ basePay: Math.max(0, Math.round((want - foodLodgingWeekly()) / 5) * 5), lootPct: 0, foodLodging: true, termWeeks: 4 }, state.day, 1, 30);
     state.party.push(c);
     state.lineup.push(c.id);
   }

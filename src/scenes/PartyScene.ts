@@ -6,14 +6,14 @@ import type { Character, GameState } from '../data/types';
 import { bodyPoints, deriveStats, freePoints, skillPoints } from '../game/character';
 import { benchMember, quitRenown, lineupMembers, lodgingPrice, marketBuyPrice, moveMember, releaseCompanion, residents, scheduledMembers, sellSlave, setLineupSlot, setLodging } from '../game/city';
 import {
-  ACTIVITY_INFO, QUALITY_TEXT, activityOf, lodgingOf, lodgingRelationship, combatPenalty, expectedQuality, foodOf, foodRelationship, healthOf, injuryPenalty, isInjured, moraleOf, moralePenalty,
+  ACTIVITY_INFO, QUALITY_TEXT, activityOf, lodgingOf, lodgingMorale, combatPenalty, expectedQuality, foodOf, foodMorale, healthOf, injuryPenalty, isInjured, moraleGainOf, moraleOf, moralePenalty,
   obediencePenalty, traitFactor,
 } from '../game/condition';
-import { bondOf, canFight, daysLeft, isCompanion, isHoused, isSlave, leaveParty, proratedWages, punishSlave, releaseCost, slaveTax, slaveValue } from '../game/contracts';
+import { canFight, daysLeft, isCompanion, isHoused, isSlave, leaveParty, proratedWages, punishSlave, releaseCost, slaveTax, slaveValue } from '../game/contracts';
 import { adventurerRank } from '../game/guild';
 import { markDirty, requireState, session } from '../game/session';
 import { MEMBER_COLOR, MEMBER_LABEL, cityHeader, memberStatus } from '../ui/hud';
-import { COLORS, HEIGHT, ScrollList, Tooltip, WIDTH, button, confirmDialog, figure, panel, setupCamera, talentTag, text, toast } from '../ui/widgets';
+import { COLORS, HEIGHT, ScrollList, Tooltip, WIDTH, button, confirmDialog, figure, panel, setupCamera, talentTag, text, toast, clearScene } from '../ui/widgets';
 
 const ROW_H = 58;
 const ROW_GAP = 4;
@@ -193,7 +193,7 @@ export class PartyScene extends Phaser.Scene {
   }
 
   private render(): void {
-    this.children.removeAll(true);
+    clearScene(this);
     const state = requireState();
     cityHeader(this, state, 'Manage Party');
     this.tip = new Tooltip(this, 320);
@@ -363,15 +363,14 @@ export class PartyScene extends Phaser.Scene {
     // ---- food and lodging: dropdowns for members the party houses; others find their own (greyed out) ----
     const fy = sy + 32;
     const fed = isHoused(c);
-    const main = c.id === state.mainId;
     const food = foodOf(state, c);
     text(this, X + 16, fy, 'Food', { fontSize: '13px', color: fed ? COLORS.gold : COLORS.dim });
-    text(this, X + 16, fy + 16, fed ? (main ? 'no complaints' : `expects ${GUILD.food[FOOD_TIERS[expectedQuality(c)]].name}`) : 'finds their own', {
+    text(this, X + 16, fy + 16, fed ? `expects ${GUILD.food[FOOD_TIERS[expectedQuality(c)]].name}` : 'finds their own', {
       fontSize: '10px', color: COLORS.dim,
     });
     const foodOption = (t: FoodTier): MenuOption => ({
       label: `${GUILD.food[t].name} · ${GUILD.food[t].pricePerPerson}g`,
-      ...effectOf(c, foodQuality(t), main ? 0 : foodRelationship(c, t), 'day'),
+      ...effectOf(c, foodQuality(t), foodMorale(c, t), 'day'),
       selected: t === food,
       pick: () => {
         state.food[c.id] = t;
@@ -384,14 +383,14 @@ export class PartyScene extends Phaser.Scene {
     const ly = fy + 32;
     const where = lodgingOf(state, c);
     text(this, X + 16, ly, 'Lodging', { fontSize: '13px', color: fed ? COLORS.gold : COLORS.dim });
-    text(this, X + 16, ly + 16, fed ? (main ? 'no complaints' : `expects ${['the stables', 'an inn', 'high-end', 'luxury'][expectedQuality(c)]}`) : 'finds their own', {
+    text(this, X + 16, ly + 16, fed ? `expects ${['the stables', 'an inn', 'high-end', 'luxury'][expectedQuality(c)]}` : 'finds their own', {
       fontSize: '10px', color: COLORS.dim,
     });
     const lodgingOption = (o: CityLodging): MenuOption => {
       const full = isResidence(o) && o !== where && residents(state, o).length >= GUILD.residences.capacity;
       return {
         label: `${lodgingLabel(state, o)}${full ? ' (full)' : ''}`,
-        ...effectOf(c, LODGING_QUALITY[o], main ? 0 : lodgingRelationship(c, o), 'night'),
+        ...effectOf(c, LODGING_QUALITY[o], lodgingMorale(c, o), 'night'),
         selected: o === where,
         enabled: !full,
         pick: () => {
@@ -517,31 +516,26 @@ export class PartyScene extends Phaser.Scene {
       `Morale ${moraleOf(c)}/100.`,
       `Falls ${C.moralePerTurn} for each turn of a quest's battle (${C.moraleFailedQuest} more if it fails), 1 per ${Math.round(1 / C.moralePerHealthLost)} Health lost to injuries, and ${C.moraleMemberDied} for everyone when a member dies.`,
       `Rises with a round of drinks at an inn and with Day Off (+${GUILD.schedule.dayOffMorale * k} a day)${k !== 1 ? `: gains x${k} (${(c.traits ?? []).map((t) => TRAITS[t].name).join(', ')})` : ''}.`,
+      isHoused(c)
+        ? `Food and lodging: every day, +${GUILD.food.moraleAbovePerStep * k} per step of food better than they expect (-${GUILD.food.moraleBelowPerStep} worse), and every night in the city, +${GUILD.lodging.moraleAbovePerStep * k} per step of lodging better (-${GUILD.lodging.moraleBelowPerStep} worse). They expect ${GUILD.food[FOOD_TIERS[expectedQuality(c)]].name.toLowerCase()} food and ${QUALITY_TEXT[expectedQuality(c)]}.`
+        : 'They find their own food and lodging, so the party\'s choices don\'t affect their Morale.',
       `In battle: -${GUILD.combat.percentPer5}% to all stats per 5 below 100${moralePenalty(c) ? ` (now -${Math.round(moralePenalty(c) * 100)}%)` : ''}.`,
       main ? 'Your main character never leaves, however low it gets.'
-        : `${c.contract?.type === 'mercenary' ? '' : `Below ${C.lowMorale} they lose ${C.lowMoraleRelationshipPerDay} relationship a day. `}At 0 they leave the party (renown -${quitRenown(c)}).`,
+        : `${c.contract?.type === 'mercenary' ? '' : `Above ${C.highMorale} they gain ${C.highMoraleRelationshipPerDay} relationship a day; below ${C.lowMorale} they lose ${C.lowMoraleRelationshipPerDay}. `}At 0 they leave the party (renown -${quitRenown(c)}).`,
     ].join('\n');
   }
 
   private relationshipTip(c: Character): string {
-    const state = requireState();
     const k = c.contract;
     if (k?.type !== 'companion' && k?.type !== 'slave') return '';
-    const L = GUILD.lodging;
-    const F = GUILD.food;
-    const q = expectedQuality(c);
     const lines = [
       `Relationship ${Math.round(k.relationship)}/100.`,
       `+${GUILD.companion.relationshipPerQuest} for each quest completed together, -2 for a failed one.`,
     ];
-    if (isHoused(c)) {
-      lines.push(
-        `Every night: +${L.relationshipAbovePerStep} per step of lodging better than they expect, -${L.relationshipBelowPerStep} per step worse. Every day, food: +${F.relationshipAbovePerStep} / -${F.relationshipBelowPerStep} per step.`,
-        `As ${adventurerRank(c.level)}-rank, they expect ${QUALITY_TEXT[q]} and ${F[FOOD_TIERS[q]].name.toLowerCase()} food (now: ${F[foodOf(state, c)].name.toLowerCase()}).`,
-        'If the party can\'t pay food and lodging: -5.',
-      );
-    } else lines.push('They find their own food and lodging, so where the party sleeps and eats doesn\'t matter to them.');
-    lines.push(`-${GUILD.condition.lowMoraleRelationshipPerDay} a day while Morale is below ${GUILD.condition.lowMorale}.`);
+    lines.push(
+      `+${GUILD.condition.highMoraleRelationshipPerDay} a day while Morale is above ${GUILD.condition.highMorale}, -${GUILD.condition.lowMoraleRelationshipPerDay} a day while it's below ${GUILD.condition.lowMorale} (now ${moraleOf(c)}). Good food and lodging keep Morale up.`,
+    );
+    if (isHoused(c)) lines.push('If the party can\'t pay food and lodging: -5.');
     if (k.type === 'companion') {
       lines.push(
         `Unpaid wages: ${GUILD.companion.relationshipUnpaid} each payday; they quit at 0 (renown -${quitRenown(c)}).`,
@@ -570,7 +564,7 @@ const DROP_W = 460;
 
 interface MenuOption {
   label: string;
-  /** "quality 2 · +2 rel/night" */
+  /** "quality 2 · +2 morale/night" */
   effect: string;
   color: string;
   selected?: boolean;
@@ -587,13 +581,12 @@ function activityEffect(c: Character, a: Activity): string {
   return `+${S.dayOffMorale * traitFactor(c, 'moraleGain')} Morale a day`;
 }
 
-/** What a food or lodging choice means for `c`: its quality and, for companions and slaves, the relationship it moves. */
-function effectOf(c: Character, quality: number, rel: number, per: 'day' | 'night'): { effect: string; color: string } {
-  const bond = !!bondOf(c) && c.contract?.type !== 'main';
-  if (!bond) return { effect: `quality ${quality}`, color: COLORS.dim };
+/** What a food or lodging choice means for `c`: its quality and the Morale it moves (after traits). */
+function effectOf(c: Character, quality: number, morale: number, per: 'day' | 'night'): { effect: string; color: string } {
+  const d = moraleGainOf(c, morale);
   return {
-    effect: `quality ${quality} · ${rel ? `${rel > 0 ? '+' : ''}${rel} rel/${per}` : 'as expected'}`,
-    color: rel > 0 ? COLORS.good : rel < 0 ? COLORS.bad : COLORS.dim,
+    effect: `quality ${quality} · ${d ? `${d > 0 ? '+' : ''}${d} morale/${per}` : 'meets expectations'}`,
+    color: d > 0 ? COLORS.good : d < 0 ? COLORS.bad : COLORS.dim,
   };
 }
 

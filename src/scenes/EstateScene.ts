@@ -1,10 +1,10 @@
 import Phaser from 'phaser';
 import { GUILD, LODGING_QUALITY, RINGS, type Ring } from '../data/guild';
 import { buyResidence, residenceSellPrice, residents, sellResidence } from '../game/city';
-import { QUALITY_TEXT } from '../game/condition';
+import { QUALITY_TEXT, lodgingName } from '../game/condition';
 import { markDirty, requireState, session } from '../game/session';
 import { cityHeader } from '../ui/hud';
-import { COLORS, HEIGHT, WIDTH, button, confirmDialog, panel, setupCamera, text, toast } from '../ui/widgets';
+import { COLORS, HEIGHT, WIDTH, button, confirmDialog, panel, setupCamera, text, toast, clearScene } from '../ui/widgets';
 
 /** Which part of the city each residence is in (the townhouse and the mansion are both in the Inner City). */
 const DISTRICT: Record<Ring, string> = { outer: 'Outer City', middle: 'Inner City', inner: 'Inner City' };
@@ -31,7 +31,7 @@ export class EstateScene extends Phaser.Scene {
   }
 
   private render(): void {
-    this.children.removeAll(true);
+    clearScene(this);
     const state = requireState();
     cityHeader(this, state, 'Estate Office');
     button(this, WIDTH - 176, 74, 160, 34, `Back to ${GUILD.city}`, () => this.scene.start('City'), { fontSize: 14 });
@@ -61,7 +61,7 @@ export class EstateScene extends Phaser.Scene {
         });
         button(this, x + 14, HEIGHT - 120, w - 28, 40, 'Go there', () => this.scene.start('Inn', { ring }), { fontSize: 14, fill: 0x2c4a2f });
         button(this, x + 14, HEIGHT - 72, w - 28, 40, `Sell for ${residenceSellPrice(ring)} gold`, () => confirmDialog(this,
-          `Sell the ${home.name} for ${residenceSellPrice(ring)} gold?${residents(state, ring).length ? '\nIts residents will sleep in the stables until you move them.' : ''}`, () => {
+          `Sell the ${home.name} for ${residenceSellPrice(ring)} gold?${residents(state, ring).length ? `\nIts residents go back to their default lodging (adventurers: ${lodgingName(GUILD.lodging.adventurerDefault)}, slaves: ${lodgingName(GUILD.lodging.slaveDefault)}) until you move them.` : ''}`, () => {
             const gold = sellResidence(state, ring);
             markDirty();
             this.render();

@@ -1,5 +1,5 @@
 {
-  "_readme": "Management and simulation numbers for Arch City and its Adventurer Guild. Gold amounts are whole numbers. Every day the party pays for food (see food: each fed member eats at the quality set for them in Manage Party) and for each housed member's night where they lodge (set per member in Manage Party): an inn (priced per person by inns), a residence the party owns (free), outside (see lodging), or on the road during quests (free: only food is paid). When negotiating, a companion values food & lodging at what the party would pay for the food and night their rank expects (lodging.expectedQuality). Party ranks come from renown (see ranks). Quests: stages is the enemy level range (an adventurer rank's levels; see adventurerRanks), count the enemy group size range, days how long the trip takes; gold and renown come from total threat (see threat). companion.expectedWeeklyLoot is how much gold a candidate thinks a party of that rank earns per week; they use it to value a loot cut. simulation tunes the rival parties: the chance a party goes on a quest each day, its chance of success (0.55 + successPerLevel x (average level - the quest's difficulty, from its total threat: see threat), clamped), and what can go wrong. Each member levels up after a success with levelUpChanceOnSuccess x levelUpFalloff^(level - 1), so high levels come slowly. A party tries its promotion quest once it has the renown and at least a 50% chance. Experienced adventurers die less: each member's chance to be lost on a quest is multiplied by deathLevelFalloff^(level - 1) (at least minDeathFactor), and a party's wipe chance by the same factor for its average level. Parties recruit from the guild hall only adventurers within recruitLevelGap levels of their average (or anyone, when down to 2 members). New adventurers arrive at about the rate adventurers are lost, nudged toward targetAdventurers.",
+  "_readme": "Management and simulation numbers for Arch City and its Adventurer Guild. Gold amounts are whole numbers. Every day the party pays for food (see food: each fed member eats at the quality set for them in Manage Party) and for each housed member's night where they lodge (set per member in Manage Party): an inn (priced per person by inns), a residence the party owns (free), outside (see lodging), or on the road during quests (free: only food is paid). When negotiating, a companion values food & lodging at what the party would pay for the food and night an adventurer expects (lodging.expectedQuality). Party ranks come from renown (see ranks). Quests: stages is the enemy level range (an adventurer rank's levels; see adventurerRanks), count the enemy group size range, days how long the trip takes; gold and renown come from total threat (see threat). companion.expectedWeeklyLoot is how much gold a candidate thinks a party of that rank earns per week; they use it to value a loot cut. simulation tunes the rival parties: the chance a party goes on a quest each day, its chance of success (0.55 + successPerLevel x (average level - the quest's difficulty, from its total threat: see threat), clamped), and what can go wrong. Each member levels up after a success with levelUpChanceOnSuccess x levelUpFalloff^(level - 1), so high levels come slowly. A party tries its promotion quest once it has the renown and at least a 50% chance. Experienced adventurers die less: each member's chance to be lost on a quest is multiplied by deathLevelFalloff^(level - 1) (at least minDeathFactor), and a party's wipe chance by the same factor for its average level. Parties recruit from the guild hall only adventurers within recruitLevelGap levels of their average (or anyone, when down to 2 members). New adventurers arrive at about the rate adventurers are lost, nudged toward targetAdventurers.",
   "city": "Arch City",
   "startingGold": 500,
   "startingRenown": 0,
@@ -45,14 +45,14 @@
     "skulls": { "from": -4, "to": 24 }
   },
   "food": {
-    "_comment": "Food for every member the party feeds (the main character, slaves, and companions with food & lodging in their contract), set per member in Manage Party. Each day, a fed member costs that tier's pricePerPerson. Quality: poor 0, common 1, fine 2, luxury 3, compared with lodging.expectedQuality for their rank like a night's lodging: companions and slaves gain relationshipAbovePerStep for each step better than they expect and lose relationshipBelowPerStep for each step worse. default is the tier for members nobody has set.",
+    "_comment": "Food for every member the party feeds (the main character, slaves, and companions with food & lodging in their contract), set per member in Manage Party. Each day, a fed member costs that tier's pricePerPerson. Quality: poor 0, common 1, fine 2, luxury 3, compared with what they expect (lodging.expectedQuality, or lodging.slaveExpectedQuality for slaves) like a night's lodging: every fed member gains moraleAbovePerStep Morale for each step better than they expect and loses moraleBelowPerStep for each step worse. default is the tier for members nobody has set.",
     "poor": { "name": "Poor", "pricePerPerson": 3 },
     "common": { "name": "Common", "pricePerPerson": 6 },
     "fine": { "name": "Fine", "pricePerPerson": 12 },
     "luxury": { "name": "Luxury", "pricePerPerson": 24 },
     "default": "common",
-    "relationshipAbovePerStep": 1,
-    "relationshipBelowPerStep": 2
+    "moraleAbovePerStep": 1,
+    "moraleBelowPerStep": 1
   },
   "inns": {
     "standard": { "name": "Sleeping Griffin Inn", "pricePerPerson": 12, "drinksPerPerson": 4, "drinksMorale": 8 },
@@ -61,11 +61,13 @@
   },
   "_inns": "pricePerPerson: a night's lodging for one member assigned to the inn (Manage Party). drinksPerPerson / drinksMorale: a round of drinks for the whole party (once a day) costs drinksPerPerson per member and raises everyone's Morale by drinksMorale.",
   "lodging": {
-    "_comment": "Every day ends (End Day on the city screen) with a night for each housed member where they lodge, set per member in Manage Party: an inn, a residence the party owns (free; at most residences.capacity residents each), or the stables (stablesPerPerson). Night quality: the stables 0; the Sleeping Griffin or the Outer City House 1; the Silver Lantern or the Inner City Townhouse 2; the Gilded Crown or the Inner City Mansion 3. expectedQuality is what an adventurer of each rank (from their level) expects (common food and an inn at every rank for now); slaves expect slaveExpectedQuality instead, whatever their rank (poor food, the stables). Each night, housed companions (food & lodging in their contract) and slaves gain relationshipAbovePerStep for each step better than they expect, and lose relationshipBelowPerStep for each step worse. Nights on the road during multi-day quests are free (food is still paid) and don't count.",
-    "expectedQuality": { "D": 1, "C": 1, "B": 1, "A": 1, "S": 1 },
+    "_comment": "Every day ends (End Day on the city screen) with a night for each housed member where they lodge, set per member in Manage Party: an inn, a residence the party owns (free; at most residences.capacity residents each), or the stables (stablesPerPerson). Members nobody has placed lodge at adventurerDefault (slaves: slaveDefault): 'outside' (the stables) or an inn (standard, highEnd, luxury); so do the residents of a residence that is sold. Night quality: the stables 0; the Sleeping Griffin or the Outer City House 1; the Silver Lantern or the Inner City Townhouse 2; the Gilded Crown or the Inner City Mansion 3. expectedQuality is the food and night quality adventurers expect (1: common food and an inn); slaves expect slaveExpectedQuality instead (0: poor food, the stables). Each night, every housed member (the main character, slaves, and companions with food & lodging in their contract) gains moraleAbovePerStep Morale for each step better than they expect, and loses moraleBelowPerStep for each step worse. Nights on the road during multi-day quests are free (food is still paid) and don't count.",
+    "expectedQuality": 1,
     "slaveExpectedQuality": 0,
-    "relationshipAbovePerStep": 2,
-    "relationshipBelowPerStep": 3,
+    "adventurerDefault": "standard",
+    "slaveDefault": "outside",
+    "moraleAbovePerStep": 2,
+    "moraleBelowPerStep": 2,
     "stablesPerPerson": 6
   },
   "residences": {
@@ -77,7 +79,7 @@
     "inner": { "name": "Inner City Mansion", "price": 25000 }
   },
   "condition": {
-    "_comment": "Health (0-100, not battle HP) and Morale (0-100) of party members. After a battle, Health drops by maxHealthLoss x the share of HP the unit lost at its lowest point (falling = the full amount). Below 100 Health a member is injured and can't go on quests; everyone recovers healthPerDay each night. A member whose Health reaches 0 dies (the main character is left at 1 instead). Morale changes: moralePerTurn for each battle turn (round) of a quest, for each member who went, moraleFailedQuest more if it fails, moralePerHealthLost per Health point lost to injuries, moraleMemberDied for everyone when a member dies. New members start at startingMorale. Below lowMorale, companions lose lowMoraleRelationshipPerDay relationship each day; a member at 0 Morale leaves the party (not the main character).",
+    "_comment": "Health (0-100, not battle HP) and Morale (0-100) of party members. After a battle, Health drops by maxHealthLoss x the share of HP the unit lost at its lowest point (falling = the full amount). Below 100 Health a member is injured and can't go on quests; everyone recovers healthPerDay each night. A member whose Health reaches 0 dies (the main character is left at 1 instead). Morale changes: moralePerTurn for each battle turn (round) of a quest, for each member who went, moraleFailedQuest more if it fails, moralePerHealthLost per Health point lost to injuries, moraleMemberDied for everyone when a member dies. Food and lodging also move Morale every day (see food and lodging). New members start at startingMorale. Below lowMorale, companions and slaves lose lowMoraleRelationshipPerDay relationship each day; above highMorale they gain highMoraleRelationshipPerDay; a member at 0 Morale leaves the party (not the main character).",
     "maxHealthLoss": 60,
     "healthPerDay": 10,
     "startingMorale": 75,
@@ -86,7 +88,9 @@
     "moralePerHealthLost": 0.2,
     "moraleMemberDied": 15,
     "lowMorale": 50,
-    "lowMoraleRelationshipPerDay": 2
+    "lowMoraleRelationshipPerDay": 1,
+    "highMorale": 75,
+    "highMoraleRelationshipPerDay": 1
   },
   "xp": {
     "_comment": "XP for a won quest. Every member who comes back gets the same as a day of training (schedule.trainingXp), plus an equal share of the quest's pool XP split among all of them (so smaller parties learn faster). The pool is pool.a x D^2 + pool.b x D + pool.c, where D is the quest's danger in skulls (0.5 to 10): 105 at half a skull, 560 at 4 skulls, 2480 at 10. The members' levels don't change it: the level-up cost curve (stats.json xpPerLevel) already makes easy quests worth little to veterans. Failed quests give no XP.",

@@ -4,6 +4,7 @@ import { MAX_PARTY_SIZE, STATUSES, xpToNext } from '../data/content';
 import { FOOD_TIERS, GUILD, INN_TIERS, trainingXp } from '../data/guild';
 import { STAT_CONFIG } from '../data/stats';
 import { RANKS, type Rank } from '../data/types';
+import { lodgingName } from './condition';
 
 export const GLOSSARY_TOPICS = ['City life', 'Quests & ranks', 'Experience', 'Party members', 'Slaves', 'Battle'] as const;
 export type GlossaryTopic = (typeof GLOSSARY_TOPICS)[number];
@@ -29,7 +30,7 @@ export function glossaryEntries(): GlossaryEntry[] {
   const T = G.threat;
   const food = (q: number) => G.food[FOOD_TIERS[q]].pricePerPerson;
   const night = (q: number) => (q === 0 ? L.stablesPerPerson : G.inns[INN_TIERS[q - 1]].pricePerPerson);
-  const adventurerQ = L.expectedQuality.D;
+  const adventurerQ = L.expectedQuality;
   const promoRanks = RANKS.filter((r) => r !== 'D' && RANKS.indexOf(r) >= RANKS.indexOf(G.ranks.highestPromotion)).reverse() as Exclude<Rank, 'D'>[];
   const thresholds = promoRanks.map((r) => `${r} ${n(G.ranks.renown[r])}`).join(', ');
   const [payLo, payHi] = G.board.pay;
@@ -51,8 +52,8 @@ export function glossaryEntries(): GlossaryEntry[] {
     + `Everyone recovers ${C.healthPerDay} Health a night (${C.healthPerDay * G.schedule.recoverMultiplier} on Recover). At 0 Health a member dies, so an injured member who falls again can die. The main character pulls through at 1 instead.`);
   add('City life', 'Morale',
     `Morale (out of 100) drops by ${C.moralePerTurn} per battle turn for everyone who fought, by ${C.moraleFailedQuest} more for a failed quest, with injuries, and by ${C.moraleMemberDied} for everyone when a member dies. New members start at ${C.startingMorale}.\n\n`
-    + `It comes back with a round of drinks at an inn (once a day) and with days off.\n\n`
-    + `Below ${C.lowMorale}, companions and slaves lose ${C.lowMoraleRelationshipPerDay} relationship a day. At 0 a member leaves the party (the main character stays).`);
+    + `It comes back with a round of drinks at an inn (once a day), with days off, and with food and lodging better than a member expects (worse food and lodging lower it; see Food and lodging expectations). The main character's gains count double (Protagonist).\n\n`
+    + `Above ${C.highMorale}, companions and slaves gain ${C.highMoraleRelationshipPerDay} relationship a day; below ${C.lowMorale}, they lose ${C.lowMoraleRelationshipPerDay}. At 0 a member leaves the party (the main character stays).`);
   add('City life', 'Battle penalties',
     `Injury, Morale and Obedience all weaken a member in battle, and the penalties multiply:\n\n`
     + `• Injury: −1/3 of missing Health.\n• Morale: −${G.combat.percentPer5}% per 5 Morale below 100.\n• Obedience (slaves): −${G.combat.percentPer5}% per 5 Obedience below 100.\n\n`
@@ -62,12 +63,12 @@ export function glossaryEntries(): GlossaryEntry[] {
     + `• Recover: ${G.schedule.recoverMultiplier}× Health recovery.\n• Training: ${G.schedule.trainingXp.perLevel} XP per level + ${G.schedule.trainingXp.flat} (${trainingXp(1)} at level 1, ${trainingXp(20)} at level 20).\n• Odd Jobs: +${G.schedule.oddJobsGold} gold.\n• Day Off: +${G.schedule.dayOffMorale} Morale.\n\n`
     + `A schedule you set stays until you change it, except Recover: once Health is full they go back to Day Off. Unscheduled members take a Day Off, unless their Health would take longer to heal than their Morale takes to fill on Day Off: then they Recover. Benched members (not in the lineup) follow it too.`);
   add('City life', 'Food and lodging expectations',
-    `Each member you house eats at a food tier and sleeps at a lodging you pick in Manage Party. Each has a quality from 0 to 3.\n\n`
-    + `Adventurers of every rank expect quality ${adventurerQ}: ${FOOD_TIERS[adventurerQ]} food (${food(adventurerQ)} gold a day) and an inn (${night(adventurerQ)} gold a night). Slaves expect quality ${L.slaveExpectedQuality}: ${FOOD_TIERS[L.slaveExpectedQuality]} food and the stables.\n\n`
-    + `Each night, companions and slaves gain ${L.relationshipAbovePerStep} relationship per step of lodging better than they expect and lose ${L.relationshipBelowPerStep} per step worse. Food works the same way: +${G.food.relationshipAbovePerStep} per step better, −${G.food.relationshipBelowPerStep} per step worse. Food is paid on the road too.`);
+    `Each member you house eats at a food tier and sleeps at a lodging you pick in Manage Party. Each has a quality from 0 to 3. Until you pick, adventurers lodge at ${lodgingName(L.adventurerDefault)} and slaves at ${lodgingName(L.slaveDefault)}.\n\n`
+    + `Adventurers expect quality ${adventurerQ}: ${FOOD_TIERS[adventurerQ]} food (${food(adventurerQ)} gold a day) and an inn (${night(adventurerQ)} gold a night). Slaves expect quality ${L.slaveExpectedQuality}: ${FOOD_TIERS[L.slaveExpectedQuality]} food and the stables.\n\n`
+    + `Each night in the city, everyone you house (the main character included) gains ${L.moraleAbovePerStep} Morale per step of lodging better than they expect and loses ${L.moraleBelowPerStep} per step worse. Food works the same way every day: +${G.food.moraleAbovePerStep} per step better, −${G.food.moraleBelowPerStep} per step worse. Food is paid on the road too.`);
   add('City life', 'Stables',
-    `Everyone's default lodging: ${L.stablesPerPerson} gold a night per person, quality 0. Slaves are content there; adventurers lose ${L.relationshipBelowPerStep} relationship per night in it.\n\n`
-    + `Members also end up in the stables when you sell the residence they live in.`);
+    `The cheapest lodging: ${L.stablesPerPerson} gold a night per person, quality 0. Slaves are content there, and sleep there until you move them; adventurers, the main character included, lose ${L.moraleBelowPerStep} Morale per night in it.\n\n`
+    + `When you sell a residence, the members living there go back to their default lodging until you move them.`);
   add('City life', 'Residences',
     `Bought at the Estate Office: the ${G.residences.outer.name} (${n(G.residences.outer.price)} gold), the ${G.residences.middle.name} (${n(G.residences.middle.price)}) and the ${G.residences.inner.name} (${n(G.residences.inner.price)}).\n\n`
     + `Nights there are free and count as quality 1, 2 and 3, as good as the matching inn. Each houses at most ${G.residences.capacity} residents, whatever its tier. Food still costs.\n\n`
@@ -150,7 +151,7 @@ export function glossaryEntries(): GlossaryEntry[] {
     + `Releasing a companion before their term ends breaks the contract: you pay them ${pct(K.releaseShareOfRemaining)} of what the rest of the term is worth (base pay, loot cut and food & lodging), but never more than ${K.releaseMinWeeks} week${K.releaseMinWeeks === 1 ? '' : 's'} of it. Once the term has ended, there's no buyout.\n\n`
     + `Either way, you also pay the base pay they've earned since the last payday, by the day (3 days in: 3/7 of a week's pay).`);
   add('Party members', 'Relationship',
-    `Companions and slaves have a relationship from 0 to 100. It rises by ${K.relationshipPerQuest} for every quest completed together, and moves with food and lodging, low Morale and missed pay.\n\n`
+    `Companions and slaves have a relationship from 0 to 100. It rises by ${K.relationshipPerQuest} for every quest completed together, and moves with Morale (+${G.condition.highMoraleRelationshipPerDay} a day above ${G.condition.highMorale}, −${G.condition.lowMoraleRelationshipPerDay} below ${G.condition.lowMorale}) and missed pay. Good food and lodging help through Morale.\n\n`
     + `Unpaid companions lose ${-K.relationshipUnpaid} relationship each payday. They quit at 0, which costs the party renown (see Failure and deaths). Slaves' relationship drives their Obedience.`);
   add('Party members', 'Protagonist',
     `Your main character's trait: they recover Health twice as fast and gain Morale twice as fast (drinks, days off). Morale losses aren't doubled.\n\n`
