@@ -6,7 +6,7 @@ import { createCharacter, deriveStats, makeRng } from '../src/game/character';
 import { makeEnemy, makeUnit } from '../src/game/battle';
 import {
   acceptQuest, advanceDay, advanceDays, askingPrice, buyDrinks, isShipmentDay, marketBuyPrice, marketDay, sellSlave, turnInPrisoner, buyResidence, buySlave, makeQuest, sellResidence, endDay, setLodging, boarders, lodgingCost, residents, canTakeQuest, dailyUpkeep, foodCost, departBlock, lineupMembers, mainCharacter, moveMember,
-  killBounty, newCampaign, questMoraleLoss, questXpPool, questXpShares, registerPrisoner, resolveQuest, rewardShares, toggleLineup, weeklyTaxes, setLineupSlot, benchMember, releaseCompanion, moraleDepartures, quitRenown, renewContract, weeklyWages,
+  killBounty, newCampaign, questMoraleLoss, questXpPool, questXpShares, registerPrisoner, resolveQuest, rewardShares, toggleLineup, weeklyTaxes, setLineupSlot, benchMember, releaseCompanion, moraleDepartures, relationshipDepartures, quitRenown, renewContract, weeklyWages,
 } from '../src/game/city';
 import { activityOf, defaultActivity, lodgingOf, combatPenalty, expectedQuality, foodMorale, healthOf, isInjured, moraleOf, moralePenalty, obediencePenalty } from '../src/game/condition';
 import { parseSave, serializeSave } from '../src/game/save';
@@ -1363,6 +1363,21 @@ describe('contracts', () => {
     expect(s.renown).toBe(100 - quitRenown(c));
     expect(quitRenown(c)).toBe(GUILD.ranks.quitRenownPerLevel * 4);
     expect(msgs[0]).toMatch(/Renown -/);
+  });
+
+  it('companions at 0 relationship quit at the end of the day, whatever brought them there', () => {
+    const s = start();
+    const c = companion(s, 4);
+    s.renown = 100;
+    if (c.contract?.type !== 'companion') throw new Error('expected a companion');
+    c.contract.relationship = 0;
+    c.morale = 60; // no overnight relationship gain from high Morale
+    expect(s.party.some((m) => m.id === c.id)).toBe(true); // nothing happens until the day ends
+    advanceDays(s, 1, makeRng(1));
+    expect(s.party.some((m) => m.id === c.id)).toBe(false);
+    expect(s.renown).toBe(100 - quitRenown(c));
+    expect(s.log.some((n) => n.text.includes(`${c.name} has had enough of the party (relationship 0)`))).toBe(true);
+    expect(relationshipDepartures(s)).toEqual([]);
   });
 });
 

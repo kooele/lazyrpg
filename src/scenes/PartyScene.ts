@@ -196,7 +196,7 @@ export class PartyScene extends Phaser.Scene {
     clearScene(this);
     const state = requireState();
     cityHeader(this, state, 'Manage Party');
-    this.tip = new Tooltip(this, 320);
+    this.tip = new Tooltip(this, 420);
     if (!state.party.some((c) => c.id === this.selected)) this.selected = state.mainId;
     const members = lineupMembers(state);
     const lineup = new Set(members.map((c) => c.id));
@@ -256,24 +256,32 @@ export class PartyScene extends Phaser.Scene {
     g.fillStyle(0x7d6bd8).fillRect(X + 150, 150, 200 * Math.min(1, c.xp / xpToNext(c.level)), 8);
     text(this, X + 356, 146, `${c.xp}/${xpToNext(c.level)} XP`, { fontSize: '11px', color: COLORS.dim });
     // Strategic Layer condition: Health (not battle HP) and Morale.
-    const bar = (y: number, label: string, v: number, color: number, note: string, tip: () => string) => {
-      const warn = label === 'Health' ? v < 100 : v < GUILD.condition.lowMorale;
-      text(this, X + 420, y, `${label} ${v}/100${warn && note ? ` · ${note}` : ''} ⓘ`, { fontSize: '11px', color: warn ? COLORS.bad : COLORS.text });
+    const bar = (y: number, label: string, v: number, color: number, warn: boolean, note: string, tip: () => string) => {
+      text(this, X + 420, y, `${label} ${Math.round(v)}/100${note ? ` · ${note}` : ''} ⓘ`, { fontSize: '11px', color: warn ? COLORS.bad : COLORS.text });
       g.fillStyle(0x0b0d14).fillRect(X + 420, y + 17, 150, 6);
       g.fillStyle(color).fillRect(X + 420, y + 17, 1.5 * v, 6);
       this.hoverTip(X + 416, y - 2, 158, 28, tip);
     };
-    bar(88, 'Health', healthOf(c), 0x6fdc8c, isInjured(c) ? `-${Math.round(injuryPenalty(c) * 100)}% stats` : '', () => this.healthTip(c));
-    bar(116, 'Morale', moraleOf(c), 0xe0b44c, c.id !== state.mainId ? 'unhappy' : '', () => this.moraleTip(c));
+    // Each bar names its state; the battle penalty they add up to is shown once, below them.
+    bar(88, 'Health', healthOf(c), 0x6fdc8c, isInjured(c), isInjured(c) ? 'injured' : '', () => this.healthTip(c));
+    const unhappy = c.id !== state.mainId && moraleOf(c) < GUILD.condition.lowMorale;
+    bar(116, 'Morale', moraleOf(c), 0xe0b44c, unhappy, unhappy ? 'unhappy' : '', () => this.moraleTip(c));
+    let penY = 144;
+    if (isSlave(c)) {
+      const ob = c.contract.obedience;
+      const trend = obedienceTrend(c.contract.relationship);
+      bar(144, 'Obedience', ob, 0x9fb7d8, ob < 50 || trend.startsWith('falling'), trend, () => this.obedienceTip(c));
+      penY = 172;
+    }
     const pen = combatPenalty(c);
     if (pen > 0) {
       const parts = [
         injuryPenalty(c) ? `injury ${Math.round(injuryPenalty(c) * 100)}` : '',
         moralePenalty(c) ? `morale ${Math.round(moralePenalty(c) * 100)}` : '',
-        obediencePenalty(c) ? `obey ${Math.round(obediencePenalty(c) * 100)}` : '',
+        obediencePenalty(c) ? `obedience ${Math.round(obediencePenalty(c) * 100)}` : '',
       ].filter(Boolean);
-      text(this, X + 570, 140, `In battle: -${Math.round(pen * 100)}% all stats`, { fontSize: '11px', color: COLORS.bad }).setOrigin(1, 0);
-      text(this, X + 570, 153, parts.join(' × '), { fontSize: '10px', color: COLORS.dim }).setOrigin(1, 0);
+      text(this, X + 570, penY - 4, `In battle: -${Math.round(pen * 100)}% all stats`, { fontSize: '11px', color: COLORS.bad }).setOrigin(1, 0);
+      text(this, X + 570, penY + 9, parts.join(' × '), { fontSize: '10px', color: COLORS.dim }).setOrigin(1, 0);
     }
 
     const st = deriveStats(c);
@@ -328,17 +336,11 @@ export class PartyScene extends Phaser.Scene {
       g.fillStyle(0xe05a9b).fillRect(X + 170, y0 + 96, 2.2 * rel, 10);
       this.hoverTip(X + 12, y0 + 88, 382, 22, () => this.relationshipTip(c));
     } else if (isSlave(c)) {
-      const { relationship: rel, obedience: ob } = c.contract;
+      const rel = c.contract.relationship;
       text(this, X + 16, y0 + 70, `Relationship ${Math.round(rel)}/100 ⓘ`, { fontSize: '13px' });
       g.fillStyle(0x0b0d14).fillRect(X + 170, y0 + 74, 220, 10);
       g.fillStyle(0xe05a9b).fillRect(X + 170, y0 + 74, 2.2 * rel, 10);
       this.hoverTip(X + 12, y0 + 66, 382, 22, () => this.relationshipTip(c));
-      text(this, X + 16, y0 + 92, `Obedience ${Math.round(ob)}/100 ⓘ`, { fontSize: '13px', color: ob < 50 ? COLORS.bad : COLORS.text });
-      g.fillStyle(0x0b0d14).fillRect(X + 170, y0 + 96, 220, 10);
-      g.fillStyle(0x9fb7d8).fillRect(X + 170, y0 + 96, 2.2 * ob, 10);
-      this.hoverTip(X + 12, y0 + 88, 382, 22, () => this.obedienceTip(c));
-      const trend = obedienceTrend(rel);
-      text(this, X + 400, y0 + 92, trend, { fontSize: '11px', color: trend.startsWith('falling') ? COLORS.bad : COLORS.dim });
     }
 
     // ---- schedule: what they do on days they aren't on a quest ----
@@ -530,21 +532,21 @@ export class PartyScene extends Phaser.Scene {
     );
     if (housed) {
       lines.push(
-        `• +${GUILD.food.moraleAbovePerStep * k} a day per step of food better than expected`,
-        `• +${GUILD.lodging.moraleAbovePerStep * k} a night per step of lodging better than expected`,
+        `• +${GUILD.food.moraleAbovePerStep * k} a day per level of quality above expected food`,
+        `• +${GUILD.lodging.moraleAbovePerStep * k} a night per level of quality above expected lodging`,
       );
     }
     lines.push(
       'Falls:',
-      `• -${C.moralePerTurn} per battle turn on a quest`,
+      `• -${C.moralePerTurn} per turn in battle`,
       `• -${C.moraleFailedQuest} per failed quest`,
       `• -1 per ${Math.round(1 / C.moralePerHealthLost)} Health lost`,
       `• -${C.moraleMemberDied} when a party member dies`,
     );
     if (housed) {
       lines.push(
-        `• -${GUILD.food.moraleBelowPerStep} a day per step of food worse than expected`,
-        `• -${GUILD.lodging.moraleBelowPerStep} a night per step of lodging worse than expected`,
+        `• -${GUILD.food.moraleBelowPerStep} a day per level of quality below expected food`,
+        `• -${GUILD.lodging.moraleBelowPerStep} a night per level of quality below expected lodging`,
         `Expects ${GUILD.food[FOOD_TIERS[expectedQuality(c)]].name.toLowerCase()} food and ${QUALITY_TEXT[expectedQuality(c)]}.`,
       );
     } else {
@@ -562,7 +564,7 @@ export class PartyScene extends Phaser.Scene {
     if (k.type === 'companion') {
       lines.push(
         `Lowers their demands when you renew: up to -${Math.round(GUILD.companion.renewalDiscountAtMax * 100)}% at 100.`,
-        `At 0 after a missed payday: they quit (renown -${quitRenown(c)}).`,
+        `At 0: they quit at the end of the day (renown -${quitRenown(c)}).`,
       );
     } else {
       lines.push(`Drives Obedience: ${S.obedienceRiseFrom}+ raises it, below ${S.obedienceFallBelow} lowers it.`);

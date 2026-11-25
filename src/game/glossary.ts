@@ -54,8 +54,8 @@ export function glossaryEntries(): GlossaryEntry[] {
     + `Falls:\n• Up to −${C.maxHealthLoss} after each battle, the lower their HP fell (−${C.maxHealthLoss} if they fell)`);
   add('City life', 'Morale',
     `A member's spirits, out of 100. Below 100: all battle stats −${G.combat.percentPer5}% per 5 missing. Above ${C.highMorale}: companions and slaves gain ${C.highMoraleRelationshipPerDay} relationship a day; below ${C.lowMorale}: they lose ${C.lowMoraleRelationshipPerDay}. At 0: the member leaves the party (the main character stays). New members start at ${C.startingMorale}.\n\n`
-    + `Rises (×2 for the Protagonist):\n• +${G.schedule.dayOffMorale} each Day Off\n• +${Math.min(...drinks)} to +${Math.max(...drinks)} per round of drinks at an inn (once a day)\n• +${G.food.moraleAbovePerStep} a day per step of food better than expected\n• +${L.moraleAbovePerStep} a night per step of lodging better than expected\n\n`
-    + `Falls:\n• −${C.moralePerTurn} per battle turn on a quest\n• −${C.moraleFailedQuest} per failed quest\n• −1 per ${Math.round(1 / C.moralePerHealthLost)} Health lost\n• −${C.moraleMemberDied} when a party member dies\n• −${G.food.moraleBelowPerStep} a day per step of food worse than expected\n• −${L.moraleBelowPerStep} a night per step of lodging worse than expected`);
+    + `Rises (×2 for the Protagonist):\n• +${G.schedule.dayOffMorale} each Day Off\n• +${Math.min(...drinks)} to +${Math.max(...drinks)} per round of drinks at an inn (once a day)\n• +${G.food.moraleAbovePerStep} a day per level of quality above expected food\n• +${L.moraleAbovePerStep} a night per level of quality above expected lodging\n\n`
+    + `Falls:\n• −${C.moralePerTurn} per turn in battle\n• −${C.moraleFailedQuest} per failed quest\n• −1 per ${Math.round(1 / C.moralePerHealthLost)} Health lost\n• −${C.moraleMemberDied} when a party member dies\n• −${G.food.moraleBelowPerStep} a day per level of quality below expected food\n• −${L.moraleBelowPerStep} a night per level of quality below expected lodging`);
   add('City life', 'Battle penalties',
     `Injury, Morale and Obedience all weaken a member in battle, and the penalties multiply:\n\n`
     + `• Injury: −1/3 of missing Health.\n• Morale: −${G.combat.percentPer5}% per 5 Morale below 100.\n• Obedience (slaves): −${G.combat.percentPer5}% per 5 Obedience below 100.\n\n`
@@ -67,7 +67,7 @@ export function glossaryEntries(): GlossaryEntry[] {
   add('City life', 'Food and lodging expectations',
     `Each member you house eats at a food tier and sleeps at a lodging you pick in Manage Party. Each has a quality from 0 to 3. Until you pick, adventurers lodge at ${lodgingName(L.adventurerDefault)} and slaves at ${lodgingName(L.slaveDefault)}.\n\n`
     + `Adventurers expect quality ${adventurerQ}: ${FOOD_TIERS[adventurerQ]} food (${food(adventurerQ)} gold a day) and an inn (${night(adventurerQ)} gold a night). Slaves expect quality ${L.slaveExpectedQuality}: ${FOOD_TIERS[L.slaveExpectedQuality]} food and the stables.\n\n`
-    + `Each night in the city, everyone you house (the main character included) gains ${L.moraleAbovePerStep} Morale per step of lodging better than they expect and loses ${L.moraleBelowPerStep} per step worse. Food works the same way every day: +${G.food.moraleAbovePerStep} per step better, −${G.food.moraleBelowPerStep} per step worse. Food is paid on the road too.`);
+    + `Each night in the city, everyone you house (the main character included) gains ${L.moraleAbovePerStep} Morale per level of quality their lodging is above what they expect and loses ${L.moraleBelowPerStep} per level below. Food works the same way every day: +${G.food.moraleAbovePerStep} per level of quality above, −${G.food.moraleBelowPerStep} per level below. Food is paid on the road too.`);
   add('City life', 'Stables',
     `The cheapest lodging: ${L.stablesPerPerson} gold a night per person, quality 0. Slaves are content there, and sleep there until you move them; adventurers, the main character included, lose ${L.moraleBelowPerStep} Morale per night in it.\n\n`
     + `When you sell a residence, the members living there go back to their default lodging until you move them.`);
@@ -101,7 +101,7 @@ export function glossaryEntries(): GlossaryEntry[] {
     + `Climbing back above it in time resets the clock.`);
   add('Quests & ranks', 'Failure and deaths',
     `A failed quest pays nothing and loses ${G.ranks.failedQuestRenown === 1 ? 'that quest\'s renown' : `${G.ranks.failedQuestRenown}× that quest's renown`}. Each member who dies loses another ${pct(G.ranks.deathRenown)} of it, whether the quest succeeded or not.\n\n`
-    + `A member who quits on you (unpaid wages, or Morale 0) costs ${G.ranks.quitRenownPerLevel} renown per level. Releasing someone yourself doesn't.\n\n`
+    + `A member who quits on you (Morale 0, or a companion's relationship 0) costs ${G.ranks.quitRenownPerLevel} renown per level. Releasing someone yourself doesn't.\n\n`
     + `A failed quest still gives XP for the share of enemies you defeated, and bounties for every kill.`);
   add('Quests & ranks', 'Shared quest board',
     `The Quest Board is shared with every rival party, and they take quests from it every day, the best deals first. Nothing is held back for you: in a slow week the rivals may take every quest at your rank.\n\n`
@@ -153,7 +153,7 @@ export function glossaryEntries(): GlossaryEntry[] {
     + `Releasing a companion before their term ends breaks the contract: you pay them ${pct(K.releaseShareOfRemaining)} of what the rest of the term is worth (base pay, loot cut and food & lodging), but never more than ${K.releaseMinWeeks} week${K.releaseMinWeeks === 1 ? '' : 's'} of it. Once the term has ended, there's no buyout.\n\n`
     + `Either way, you also pay the base pay they've earned since the last payday, by the day (3 days in: 3/7 of a week's pay).`);
   add('Party members', 'Relationship',
-    `Companions and slaves only, out of 100. Companions: lowers their demands when you renew (up to −${pct(K.renewalDiscountAtMax)} at 100), and at 0 after a missed payday they quit (see Failure and deaths). Slaves: drives Obedience.\n\n`
+    `Companions and slaves only, out of 100. Companions: lowers their demands when you renew (up to −${pct(K.renewalDiscountAtMax)} at 100); at 0 they quit at the end of the day (see Failure and deaths). Slaves: drives Obedience.\n\n`
     + `Rises:\n• +${K.relationshipPerQuest} per quest completed together\n• +${C.highMoraleRelationshipPerDay} a day while Morale is above ${C.highMorale}\n\n`
     + `Falls:\n• −2 per failed quest together\n• −${C.lowMoraleRelationshipPerDay} a day while Morale is below ${C.lowMorale}\n• −5 a day the party can't pay food and lodging\n• −${-K.relationshipUnpaid} per missed payday (companions)\n• −${S.punishRelationship} per Punish (slaves)`);
   add('Party members', 'Protagonist',
