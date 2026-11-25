@@ -13,7 +13,7 @@ import { bondOf, canFight, daysLeft, isCompanion, isHoused, isSlave, leaveParty,
 import { adventurerRank } from '../game/guild';
 import { markDirty, requireState, session } from '../game/session';
 import { MEMBER_COLOR, MEMBER_LABEL, cityHeader, memberStatus } from '../ui/hud';
-import { COLORS, HEIGHT, ScrollList, Tooltip, WIDTH, button, confirmDialog, figure, panel, setupCamera, talentTag, text, toast } from '../ui/widgets';
+import { COLORS, HEIGHT, ScrollList, Tooltip, WIDTH, button, confirmDialog, figure, panel, setupCamera, talentTag, text, toast, clearScene } from '../ui/widgets';
 
 const ROW_H = 58;
 const ROW_GAP = 4;
@@ -193,7 +193,7 @@ export class PartyScene extends Phaser.Scene {
   }
 
   private render(): void {
-    this.children.removeAll(true);
+    clearScene(this);
     const state = requireState();
     cityHeader(this, state, 'Manage Party');
     this.tip = new Tooltip(this, 320);

@@ -4,7 +4,7 @@ import { buyDrinks, drinksCost, residents } from '../game/city';
 import { QUALITY_TEXT, moraleOf } from '../game/condition';
 import { markDirty, requireState, session } from '../game/session';
 import { cityHeader } from '../ui/hud';
-import { COLORS, HEIGHT, WIDTH, button, figure, panel, setupCamera, text } from '../ui/widgets';
+import { COLORS, HEIGHT, WIDTH, button, figure, panel, setupCamera, text, clearScene } from '../ui/widgets';
 
 type Place = InnTier | Ring;
 
@@ -43,7 +43,7 @@ export class InnScene extends Phaser.Scene {
   }
 
   private render(): void {
-    this.children.removeAll(true);
+    clearScene(this);
     const state = requireState();
     const place = this.place;
     cityHeader(this, state, isResidence(place) ? GUILD.residences[place].name : GUILD.inns[place].name);

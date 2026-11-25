@@ -11,7 +11,7 @@ import {
 import { adventurerRank } from '../game/guild';
 import { markDirty, requireState, session } from '../game/session';
 import { cityHeader } from '../ui/hud';
-import { COLORS, ScrollList, WIDTH, button, figure, fittedList, panel, setupCamera, talentTag, text, toast } from '../ui/widgets';
+import { COLORS, ScrollList, WIDTH, button, figure, fittedList, panel, setupCamera, talentTag, text, toast, clearScene } from '../ui/widgets';
 
 interface NegotiateData {
   /** hire: a free adventurer from the guild hall. renew: a companion whose contract is ending. */
@@ -89,7 +89,7 @@ export class NegotiateScene extends Phaser.Scene {
   }
 
   private render(): void {
-    this.children.removeAll(true);
+    clearScene(this);
     const state = requireState();
     cityHeader(this, state, this.mode === 'hire' ? 'Negotiation' : 'Contract Renewal');
     const who = this.who() ?? this.last;

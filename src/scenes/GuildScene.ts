@@ -10,7 +10,7 @@ import { adventurerCount, adventurerRank, leaderboard, nextRank, rankThreshold }
 import { markDirty, requireState, session } from '../game/session';
 import { PEOPLE_SORTS, QUEST_SORTS, nextSort, sortPeople, sortQuests, type PeopleSort, type QuestSort, type SortDir } from '../game/sorting';
 import { cityHeader, rankBadge } from '../ui/hud';
-import { ART_H, COLORS, HEIGHT, MONSTER_W, ScrollList, WIDTH, bakeGraphics, button, monsterKey, confirmDialog, figure, fittedList, panel, setupCamera, sortBar, talentTag, text, toast, type ScrollItem } from '../ui/widgets';
+import { ART_H, COLORS, HEIGHT, MONSTER_W, ScrollList, WIDTH, bakeGraphics, button, monsterKey, confirmDialog, figure, fittedList, panel, setupCamera, sortBar, talentTag, text, toast, type ScrollItem, clearScene } from '../ui/widgets';
 
 type Tab = 'board' | 'hall' | 'ranks' | 'news';
 const CARD_H = 132;
@@ -45,7 +45,7 @@ export class GuildScene extends Phaser.Scene {
   }
 
   private render(): void {
-    this.children.removeAll(true);
+    clearScene(this);
     const state = requireState();
     cityHeader(this, state, 'Adventurer Guild');
     TABS.forEach(([id, label], i) => button(this, 16 + i * 158, 74, 150, 34, label, () => {

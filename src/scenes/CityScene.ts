@@ -6,7 +6,7 @@ import { adventurerRank } from '../game/guild';
 import { bondOf, registrationFee, slaveTax } from '../game/contracts';
 import { markDirty, requireState, session } from '../game/session';
 import { cityHeader, rankBadge } from '../ui/hud';
-import { COLORS, HEIGHT, ScrollList, UI_SCALE, WIDTH, bakeGraphics, button, confirmDialog, figure, panel, setupCamera, talentTag, text, toast } from '../ui/widgets';
+import { COLORS, HEIGHT, ScrollList, UI_SCALE, WIDTH, bakeGraphics, button, confirmDialog, figure, panel, setupCamera, talentTag, text, toast, clearScene } from '../ui/widgets';
 
 export const CITY_MAP_KEY = 'city-map';
 
@@ -82,7 +82,7 @@ export class CityScene extends Phaser.Scene {
   }
 
   private render(): void {
-    this.children.removeAll(true);
+    clearScene(this);
     const state = requireState();
     cityHeader(this, state, GUILD.city, () => this.menu());
 

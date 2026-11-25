@@ -30,6 +30,17 @@ export const UI_SCALE = computeUiScale();
 /** Zoom the scene camera so the 960x640 layout fills the high-resolution canvas. */
 export function setupCamera(scene: Phaser.Scene, background: number = 0x0e1018): void {
   scene.cameras.main.setZoom(UI_SCALE).centerOn(WIDTH / 2, HEIGHT / 2).setBackgroundColor(background);
+  // Every screen calls this when it opens, after the previous screen's figures are gone.
+  pruneLooks(scene);
+}
+
+/**
+ * Destroy everything on the scene's display list, before drawing a screen again in place.
+ * (Phaser's `children.removeAll(true)` only takes objects off the list: its argument skips a callback, it does
+ * not destroy them, so their text textures, figures and listeners were kept alive on every redraw.)
+ */
+export function clearScene(scene: Phaser.Scene): void {
+  for (const o of [...scene.children.list]) o.destroy();
 }
 
 export const COLORS = {
@@ -248,9 +259,11 @@ export function figure(
     const img = scene.add.image(0, 0, key);
     place(img);
     parts.push(img);
+    if (appearance.look) holdLook(img, key);
   } else if (appearance.look) {
     // Custom looks are drawn on first use; show the figure as soon as its texture is ready.
     const img = scene.add.image(0, 0, '__DEFAULT').setVisible(false);
+    holdLook(img, key);
     parts.push(img);
     void lookTexture(scene, key, appearance.look, appearance.color, art).then((ok) => {
       if (!ok || !img.active) return;
@@ -337,6 +350,28 @@ export const lookKey = (l: Look, color: string, art: string) =>
   `look-${l.sex}-${l.skin}-${l.face}-${l.hair}-${l.hairColor}-${color.replace('#', '')}-${art}`;
 
 const lookLoads = new Map<string, Promise<boolean>>();
+
+/**
+ * How many figures show each custom look. Every adventurer and slave has their own look, drawn into a texture of
+ * about half a megabyte at 2x, and the slave market brings new ones every week: looks nobody shows any more are
+ * freed when the next screen opens (see setupCamera).
+ */
+const lookRefs = new Map<string, number>();
+
+function holdLook(img: Phaser.GameObjects.Image, key: string): void {
+  lookRefs.set(key, (lookRefs.get(key) ?? 0) + 1);
+  img.once('destroy', () => lookRefs.set(key, (lookRefs.get(key) ?? 1) - 1));
+}
+
+/** Free the textures of custom looks no figure shows (once they've finished loading). */
+function pruneLooks(scene: Phaser.Scene): void {
+  for (const [key, n] of lookRefs) {
+    if (n > 0 || !scene.textures.exists(key)) continue;
+    scene.textures.remove(key);
+    lookLoads.delete(key);
+    lookRefs.delete(key);
+  }
+}
 
 /** Draw a custom look (src/art/unitArt.js) into a texture, once per look, colour and weapon. */
 export function lookTexture(scene: Phaser.Scene, key: string, look: Look, color: string, art: string): Promise<boolean> {
@@ -456,8 +491,15 @@ export function reachDiagram(
 
 // ---- scroll list ------------------------------------------------------------------
 
-export interface ScrollItem {
-  obj: Phaser.GameObjects.Container;
+/**
+ * An item in a ScrollList: a ready container (`obj`), or `make`, which builds it the first time it scrolls into
+ * view. Use `make` for long lists of heavy rows: only the rows on screen are ever built. `height` is needed up front.
+ */
+export type ScrollItem = { obj: Phaser.GameObjects.Container; height: number } | { make: () => Phaser.GameObjects.Container; height: number };
+
+interface ListEntry {
+  obj?: Phaser.GameObjects.Container;
+  make?: () => Phaser.GameObjects.Container;
   height: number;
 }
 
@@ -465,10 +507,11 @@ export interface ScrollItem {
  * A vertical list that shows as many whole items as fit in (x, y, w, h) and scrolls
  * one item at a time with the mouse wheel or by dragging the scroll bar on the right.
  * Items are containers laid out at their top-left; the list owns and destroys them.
+ * Destroying `root` (e.g. with clearScene) cleans up the whole list, input listeners included.
  */
 export class ScrollList {
   readonly root: Phaser.GameObjects.Container;
-  private items: ScrollItem[] = [];
+  private items: ListEntry[] = [];
   private offset = 0;
   private readonly bar: Phaser.GameObjects.Graphics;
   private readonly track: Phaser.GameObjects.Rectangle;
@@ -480,6 +523,7 @@ export class ScrollList {
   private readonly onWheel: (p: Phaser.Input.Pointer, over: unknown, dx: number, dy: number) => void;
   private readonly onMove: (p: Phaser.Input.Pointer) => void;
   private readonly onUp: () => void;
+  private readonly onShutdown = () => this.destroy();
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -511,7 +555,9 @@ export class ScrollList {
     scene.input.on('wheel', this.onWheel);
     scene.input.on('pointermove', this.onMove);
     scene.input.on('pointerup', this.onUp);
-    scene.events.once('shutdown', () => this.destroy());
+    scene.events.once('shutdown', this.onShutdown);
+    // However the list goes away (destroy(), clearScene, scene shutdown), stop listening to the scene's input.
+    this.root.once('destroy', () => this.release());
   }
 
   private contains(p: Phaser.Input.Pointer): boolean {
@@ -520,9 +566,9 @@ export class ScrollList {
 
   /** Replace the items. `at` = which end to show: keep the current offset, the top, or the end. */
   setItems(items: ScrollItem[], at: 'keep' | 'top' | 'end' = 'keep'): void {
-    for (const it of this.items) it.obj.destroy();
-    this.items = items;
-    for (const it of items) this.root.add(it.obj);
+    for (const it of this.items) it.obj?.destroy();
+    this.items = items.map((it) => ({ ...it }));
+    for (const it of this.items) if (it.obj) this.root.add(it.obj);
     if (at === 'top') this.offset = 0;
     if (at === 'end') this.offset = this.maxOffset();
     this.layout();
@@ -560,15 +606,20 @@ export class ScrollList {
   }
 
   private layout(): void {
+    if (!this.root.active) return;
     this.offset = Math.max(0, Math.min(this.maxOffset(), this.offset));
     let yy = 0;
     let bottom = 0;
     this.items.forEach((it, i) => {
       // Items from the offset down; the last one may be cut off by the mask.
       const visible = i >= this.offset && yy < this.h;
-      it.obj.setVisible(visible);
+      if (visible && !it.obj && it.make) {
+        it.obj = it.make();
+        this.root.add(it.obj);
+      }
+      it.obj?.setVisible(visible);
       if (visible) {
-        it.obj.setPosition(0, yy);
+        it.obj!.setPosition(0, yy);
         bottom = yy + it.height;
         yy += it.height + this.gap;
       }
@@ -589,13 +640,17 @@ export class ScrollList {
     this.onChange?.(this.offset);
   }
 
-  destroy(): void {
-    this.scene.input.off('wheel', this.onWheel);
-    this.scene.input.off('pointermove', this.onMove);
-    this.scene.input.off('pointerup', this.onUp);
-    for (const it of this.items) it.obj.destroy();
+  /** Remove the scene listeners and the mask; the items go with `root`. */
+  private release(): void {
+    this.scene.input?.off('wheel', this.onWheel);
+    this.scene.input?.off('pointermove', this.onMove);
+    this.scene.input?.off('pointerup', this.onUp);
+    this.scene.events.off('shutdown', this.onShutdown);
     this.items = [];
     this.maskShape.destroy();
+  }
+
+  destroy(): void {
     this.root.destroy();
   }
 }

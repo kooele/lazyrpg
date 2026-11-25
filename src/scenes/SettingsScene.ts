@@ -4,7 +4,7 @@ import {
   FRAME_CAP_OPTIONS, GPU_OPTIONS, RESOLUTION_OPTIONS, STARTUP_GRAPHICS, loadGraphics, saveGraphics, uiScaleFor,
   type GraphicsSettings, type ResolutionSetting,
 } from '../game/settings';
-import { COLORS, HEIGHT, UI_SCALE, WIDTH, button, confirmDialog, panel, setupCamera, text } from '../ui/widgets';
+import { COLORS, HEIGHT, UI_SCALE, WIDTH, button, confirmDialog, panel, setupCamera, text, clearScene } from '../ui/widgets';
 
 const fmtScale = (s: number) => `${Number.isInteger(s) ? s : s.toFixed(2).replace(/0$/, '')}x`;
 const pixels = (s: number) => `${Math.round(960 * s)}x${Math.round(640 * s)}`;
@@ -70,7 +70,7 @@ export class SettingsScene extends Phaser.Scene {
   }
 
   private render(): void {
-    this.children.removeAll(true);
+    clearScene(this);
     text(this, 24, 14, 'Settings', { fontSize: '30px', color: COLORS.gold });
     text(this, 160, 26, 'Graphics quality. Lower settings run faster and use less battery.', { fontSize: '14px', color: COLORS.dim });
 

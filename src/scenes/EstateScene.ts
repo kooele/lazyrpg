@@ -4,7 +4,7 @@ import { buyResidence, residenceSellPrice, residents, sellResidence } from '../g
 import { QUALITY_TEXT } from '../game/condition';
 import { markDirty, requireState, session } from '../game/session';
 import { cityHeader } from '../ui/hud';
-import { COLORS, HEIGHT, WIDTH, button, confirmDialog, panel, setupCamera, text, toast } from '../ui/widgets';
+import { COLORS, HEIGHT, WIDTH, button, confirmDialog, panel, setupCamera, text, toast, clearScene } from '../ui/widgets';
 
 /** Which part of the city each residence is in (the townhouse and the mansion are both in the Inner City). */
 const DISTRICT: Record<Ring, string> = { outer: 'Outer City', middle: 'Inner City', inner: 'Inner City' };
@@ -31,7 +31,7 @@ export class EstateScene extends Phaser.Scene {
   }
 
   private render(): void {
-    this.children.removeAll(true);
+    clearScene(this);
     const state = requireState();
     cityHeader(this, state, 'Estate Office');
     button(this, WIDTH - 176, 74, 160, 34, `Back to ${GUILD.city}`, () => this.scene.start('City'), { fontSize: 14 });
