@@ -21,6 +21,7 @@
     "switchMode": "true = cycles the user's weapon to its next mode",
     "damageTypes": "Each hit is split by what it scales with: P.Atk, Def and missing HP are Physical damage, M.Atk is Magical damage. Tag skills 'physical' / 'magical' to match (a test checks it).",
     "basicAttack": "Hit with the user's weapon basic attack this many times (instead of 'hits'). Used by Double Strike and Circle Swing.",
+    "missingHpBonus": "{ max, atHealth }: the skill's hits are multiplied by up to `max`, growing smoothly from 1x at full Health to `max` at `atHealth` of max Health and below (Execute: 2x at 25%). Uses the target's Health before the hit; weapon on-hit effects (Arcane Weapon) aren't multiplied.",
     "basicAttackDamage": "For 'basicAttack' skills: damage multiplier per swing, one per basic attack (Double Strike: [1, 0.5] = full, then half). Omit for full damage.",
     "engageWithin": "Engage the target (as the Engage tag does) only if it is within this many tiles (Spear Thrust: 1.5 = adjacent, diagonals included). Don't combine with the engage tag.",
     "selfStatus": "list of { status, turns } applied to the user before the skill resolves (never resisted)",
@@ -278,10 +279,10 @@
       "basicAttack": 2, "basicAttackDamage": [1, 0.5]
     },
     "execute": {
-      "name": "Execute", "description": "Strike an enemy, dealing more damage the more Health it has lost.",
-      "tags": ["weapon", "physical"],
+      "name": "Execute", "description": "Hit an enemy with your basic attack, dealing more damage the more Health it has lost.",
+      "tags": ["weapon"],
       "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 3, "mana": 20, "level": 3,
-      "hits": [{ "pAtk": 1, "missingHp": 0.15 }]
+      "basicAttack": 1, "missingHpBonus": { "max": 2, "atHealth": 0.25 }
     },
     "circle_swing": {
       "name": "Circle Swing", "description": "Swing at every unit around you, allies included, and knock them back. A bow always swings in Melee mode.",

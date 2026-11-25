@@ -96,7 +96,7 @@ describe('stats and content files', () => {
 
   it('every weapon grants defined skills; formulas are generated from the data', () => {
     for (const w of Object.values(WEAPONS)) for (const s of w.skills) expect(SKILLS[s]).toBeDefined();
-    expect(skillEffect(SKILLS.execute)).toBe("100% P.Atk + 15% of target's missing HP");
+    expect(skillEffect(SKILLS.execute)).toBe("Basic attack, x1 to x2 damage by the target's missing Health (x2 at 25% Health or less)");
     expect(skillEffect(SKILLS.double_strike)).toBe('Basic attack x2 (100%, then 50% damage)');
     expect(skillEffect(SKILLS.life_risking_strike)).toBe('250% P.Atk, You: Exposed (1 turn), 100% P.Atk recoil if the target survives');
   });
@@ -595,14 +595,45 @@ describe('skills', () => {
     expect(k.acted).toBe(true);
   });
 
-  it("execute: 100% P.Atk + 15% of the target's missing health", () => {
-    const { battle, units: [a, e] } = setup(openMap(), [
-      { c: hero('sword_shield', ['execute']), team: 'player', at: { x: 1, y: 1 } },
-      { c: hero('bow'), team: 'enemy', at: { x: 2, y: 1 } },
-    ]);
-    e.hp = 200;
-    battle.perform(a, 'execute', { x: 2, y: 1 });
-    expect(e.hp).toBe(200 - 145); // 100 + 15% of 300 missing, Def 0
+  it('execute: the basic attack x1 at full Health, growing smoothly to x2 at 25% Health (from Health before the hit)', () => {
+    const duelAt = (weapon: string, hp: number) => {
+      const { battle, units: [a, e] } = setup(openMap(), [
+        { c: hero(weapon, ['execute']), team: 'player', at: { x: 1, y: 1 } },
+        { c: hero('bow'), team: 'enemy', at: { x: 2, y: 1 } },
+      ]);
+      e.hp = hp;
+      return { battle, a, e };
+    };
+    // Sword Slash is 100 P.Atk on a Def 0, 500-Health target.
+    for (const [hp, dmg] of [[500, 100], [350, 140], [200, 180], [125, 200], [100, 200]]) {
+      const { battle, a, e } = duelAt('sword_shield', hp);
+      expect(battle.missingHpMultiplier(SKILLS.execute, e)).toBeCloseTo(dmg / 100);
+      expect(battle.previewHits(a, SKILLS.execute, e), `${hp} HP`).toEqual([dmg]);
+      battle.perform(a, 'execute', { x: 2, y: 1 });
+      expect(e.hp).toBe(Math.max(0, hp - dmg));
+    }
+    // It follows the weapon: an Indirect bow shot is 70%, so at most 140%.
+    const bow = duelAt('bow', 100);
+    bow.battle.perform(bow.a, 'switch_mode', { x: 1, y: 1 });
+    expect(bow.battle.previewHits(bow.a, SKILLS.execute, bow.e)).toEqual([Math.round(0.7 * bow.battle.stat(bow.a, 'pAtk') * 2)]);
+    // Staff: both parts of Empowered Strike are doubled.
+    const staff = duelAt('staff', 100);
+    const base = staff.battle.previewHits(staff.a, staff.battle.basicAttack(staff.a), staff.e).reduce((x, y) => x + y, 0);
+    const exec = staff.battle.previewHits(staff.a, SKILLS.execute, staff.e).reduce((x, y) => x + y, 0);
+    expect(Math.abs(exec - 2 * base)).toBeLessThanOrEqual(1); // rounding per damage type
+  });
+
+  it("execute doesn't multiply Arcane Weapon's extra hit", () => {
+    const c = hero('sword_shield', ['execute', 'arcane_weapon']);
+    c.level = 3;
+    const a = makeUnit(c, 'player', { x: 1, y: 1 });
+    const e = makeUnit(hero('bow'), 'enemy', { x: 2, y: 1 });
+    const battle = new Battle(openMap(), [a, e], () => 0.99);
+    battle.perform(a, 'arcane_weapon', a);
+    const plain = battle.previewHits(a, SKILLS.sword_slash, e);
+    e.hp = 100; // 20% Health: x2
+    const exec = battle.previewHits(a, SKILLS.execute, e);
+    expect(exec).toEqual([plain[0] * 2, plain[1]]);
   });
 });
 

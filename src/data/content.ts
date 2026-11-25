@@ -201,6 +201,13 @@ export function parseContent(skillsData: unknown, weaponsData: unknown): GameCon
       level: S.num(r.level ?? 1, `${p}.level`),
       basicAttack: S.optNum(r.basicAttack, `${p}.basicAttack`),
       basicAttackDamage: r.basicAttackDamage === undefined ? undefined : S.arr(r.basicAttackDamage, `${p}.basicAttackDamage`).map((v, i) => S.num(v, `${p}.basicAttackDamage[${i}]`)),
+      missingHpBonus: r.missingHpBonus === undefined ? undefined : (() => {
+        const o = S.obj(r.missingHpBonus, `${p}.missingHpBonus`);
+        const bonus = { max: S.num(o.max, `${p}.missingHpBonus.max`), atHealth: S.num(o.atHealth, `${p}.missingHpBonus.atHealth`) };
+        if (bonus.max < 1) fail('skills.json', `${p}.missingHpBonus.max`, 'must be 1 or more');
+        if (bonus.atHealth < 0 || bonus.atHealth >= 1) fail('skills.json', `${p}.missingHpBonus.atHealth`, 'must be from 0 up to (not including) 1');
+        return bonus;
+      })(),
       engageWithin: S.optNum(r.engageWithin, `${p}.engageWithin`),
       selfStatus: r.selfStatus === undefined ? undefined : statusList(r.selfStatus, `${p}.selfStatus`),
       recoilIfSurvives: r.recoilIfSurvives === undefined ? undefined : part(r.recoilIfSurvives, `${p}.recoilIfSurvives`),
@@ -384,6 +391,7 @@ export function skillEffect(s: SkillDef): string {
     if (dmg && dmg.some((m) => m !== 1)) parts.push(`Basic attack x${s.basicAttack} (${dmg.map(pct).join(', then ')} damage)`);
     else parts.push(s.basicAttack > 1 ? `Basic attack x${s.basicAttack}` : 'Basic attack');
   }
+  if (s.missingHpBonus) parts.push(`x1 to x${s.missingHpBonus.max} damage by the target's missing Health (x${s.missingHpBonus.max} at ${pct(s.missingHpBonus.atHealth)} Health or less)`);
   if (s.heal) parts.push(`Heal ${pct(s.heal.mAtk)} ${STAT_INFO.mAtk.short}`);
   if (s.shield) {
     const sh = s.shield;

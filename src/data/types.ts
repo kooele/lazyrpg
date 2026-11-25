@@ -206,6 +206,11 @@ export interface SkillDef {
   basicAttack?: number;
   /** For `basicAttack` skills: damage multiplier for each swing in order (Double Strike: [1, 0.5]). Missing = 1. */
   basicAttackDamage?: number[];
+  /**
+   * Damage multiplier from the target's missing Health (Execute): 1x at full Health, growing smoothly to `max`
+   * at `atHealth` of max Health and below. Uses Health before the hit; on-hit effects aren't multiplied.
+   */
+  missingHpBonus?: { max: number; atHealth: number };
   /** Engage the target (as the Engage tag does) only when it is within this many tiles (Spear Thrust: adjacent = 1.5). */
   engageWithin?: number;
   /** Statuses put on the user before the skill resolves (never resisted). */

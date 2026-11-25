@@ -1136,10 +1136,24 @@ export class Battle {
     return events;
   }
 
+  /**
+   * Execute's multiplier on `target` (1 without a missingHpBonus): 1x at full Health, growing smoothly to the
+   * skill's max at its `atHealth` share of max Health and below.
+   */
+  missingHpMultiplier(skill: SkillDef, target: Unit): number {
+    const b = skill.missingHpBonus;
+    if (!b) return 1;
+    const missing = 1 - target.hp / target.stats.health;
+    return 1 + (b.max - 1) * Math.min(1, Math.max(0, missing / (1 - b.atHealth)));
+  }
+
   /** Predicted damage of each hit of `skill` on `target` (accounts for missing health growing). */
   previewHits(attacker: Unit, skill: SkillDef, target: Unit): number[] {
     const swings = this.isWeaponAttack(attacker, skill) ? (this.skillFor(attacker, skill).basicAttack ?? 1) : 0;
     skill = this.skillFor(attacker, skill);
+    // Execute: the multiplier comes from Health before the hit, and leaves on-hit effects alone.
+    const mult = this.missingHpMultiplier(skill, target);
+    if (mult !== 1) skill = { ...skill, hits: scaleHits(skill.hits ?? [], mult) };
     // Weapon on-hit effects (Arcane Weapon) the attacker can pay for.
     if (swings) skill = { ...skill, hits: [...(skill.hits ?? []), ...this.procParts(attacker, swings, skill.mana)] };
     let hp = target.hp;
@@ -1364,7 +1378,9 @@ export class Battle {
     // Weapon attacks carry on-hit effects (Arcane Weapon): one per swing (Double Strike swings twice).
     const swings = this.isWeaponAttack(u, skill) ? (used.basicAttack ?? 1) : 0;
     for (const t of targets) {
-      for (const part of used.hits ?? []) {
+      // Execute: scaled by the target's Health before the hit.
+      const mult = this.missingHpMultiplier(used, t);
+      for (const part of scaleHits(used.hits ?? [], mult)) {
         if (!t.alive) break;
         events.push(...this.dealHit(u, t, part, 'skill'));
       }
