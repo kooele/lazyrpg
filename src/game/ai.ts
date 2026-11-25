@@ -87,8 +87,8 @@ function aimPoints(battle: Battle, skill: SkillDef, from: Point): Point[] {
 function scoreSkill(battle: Battle, u: Unit, skill: SkillDef, from: Point, aim: Point): number {
   skill = battle.skillFor(u, skill);
   const kind = aiTypeOf(u);
-  // A beast only goes for whoever is closest.
-  const focus = kind === 'beast' ? nearestFoe(battle, u) : null;
+  // A beast only goes for whoever is closest, or its opponent while engaged (it can't attack anyone else).
+  const focus = kind === 'beast' ? (battle.opponentOf(u) ?? nearestFoe(battle, u)) : null;
   const pack = kind === 'tribal' ? tribe(battle, u) : [];
   let score = 0;
   for (const t of battle.targetsOf(u, skill, aim, from)) {

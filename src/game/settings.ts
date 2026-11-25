@@ -31,13 +31,13 @@ export const RESOLUTION_OPTIONS: { id: ResolutionSetting; label: string; hint: s
 export const FRAME_CAP_OPTIONS: { id: FrameCapSetting; label: string; hint: string }[] = [
   { id: 30, label: '30 FPS', hint: 'Least work for the computer; animations are a little choppier.' },
   { id: 60, label: '60 FPS', hint: 'Smooth, and half the work of a 120 Hz display.' },
-  { id: 0, label: 'Display rate', hint: 'As fast as the display refreshes (up to 120 Hz or more).' },
+  { id: 0, label: 'Display Rate', hint: 'As fast as the display refreshes (up to 120 Hz or more).' },
 ];
 
 export const GPU_OPTIONS: { id: GpuSetting; label: string; hint: string }[] = [
   { id: 'default', label: 'Automatic', hint: 'The browser decides; on laptops with two graphics chips this is usually the slower, built-in one.' },
   { id: 'high-performance', label: 'Fast', hint: 'Asks for the faster graphics chip on laptops that have two (e.g. older MacBook Pros). Runs hotter and uses more battery.' },
-  { id: 'low-power', label: 'Battery saver', hint: 'Asks for the built-in graphics chip, to save battery and heat.' },
+  { id: 'low-power', label: 'Battery Saver', hint: 'Asks for the built-in graphics chip, to save battery and heat.' },
 ];
 
 const FIXED_SCALE: Partial<Record<ResolutionSetting, number>> = { low: 1, medium: 1.5, high: 2 };

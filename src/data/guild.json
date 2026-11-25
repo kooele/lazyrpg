@@ -81,7 +81,7 @@
   "condition": {
     "_comment": "Health (0-100, not battle HP) and Morale (0-100) of party members. After a battle, Health drops by maxHealthLoss x the share of HP the unit lost at its lowest point (falling = the full amount). Below 100 Health a member is injured and can't go on quests; everyone recovers healthPerDay each night. A member whose Health reaches 0 dies (the main character is left at 1 instead). Morale changes: moralePerTurn for each battle turn (round) of a quest, for each member who went, moraleFailedQuest more if it fails, moralePerHealthLost per Health point lost to injuries, moraleMemberDied for everyone when a member dies. Food and lodging also move Morale every day (see food and lodging). New members start at startingMorale. Below lowMorale, companions and slaves lose lowMoraleRelationshipPerDay relationship each day; above highMorale they gain highMoraleRelationshipPerDay; a member at 0 Morale leaves the party (not the main character).",
     "maxHealthLoss": 60,
-    "healthPerDay": 10,
+    "healthPerDay": 5,
     "startingMorale": 75,
     "moralePerTurn": 1,
     "moraleFailedQuest": 10,
@@ -98,7 +98,7 @@
   },
   "schedule": {
     "_comment": "What members who aren't on a quest do each day (Manage Party). recover: recovers recoverMultiplier x healthPerDay. training: trainingXp.perLevel x level + trainingXp.flat XP (22 at level 1, 70 at level 25). oddJobs: oddJobsGold gold. dayOff: dayOffMorale Morale.",
-    "recoverMultiplier": 2,
+    "recoverMultiplier": 3,
     "trainingXp": { "perLevel": 2, "flat": 20 },
     "oddJobsGold": 10,
     "dayOffMorale": 10

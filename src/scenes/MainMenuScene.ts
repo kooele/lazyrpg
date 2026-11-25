@@ -1,5 +1,8 @@
 import Phaser from 'phaser';
 import { session } from '../game/session';
+
+/** Shown on the main menu. */
+const GAME_VERSION = '0.1';
 import { COLORS, HEIGHT, WIDTH, button, confirmDialog, figure, text, setupCamera } from '../ui/widgets';
 
 export class MainMenuScene extends Phaser.Scene {
@@ -32,9 +35,7 @@ export class MainMenuScene extends Phaser.Scene {
     if (inGame && session.dirty) {
       text(this, WIDTH / 2, y + 4, 'You have unsaved progress.', { color: COLORS.dim, fontSize: '14px' }).setOrigin(0.5);
     }
-    text(this, WIDTH / 2, HEIGHT - 24, 'Saves are plain JSON: export one, read it, tweak it, import it back.', {
-      fontSize: '13px', color: COLORS.dim,
-    }).setOrigin(0.5);
+    text(this, WIDTH / 2, HEIGHT - 24, `Version ${GAME_VERSION}`, { fontSize: '13px', color: COLORS.dim }).setOrigin(0.5);
   }
 
   private newGame(): void {

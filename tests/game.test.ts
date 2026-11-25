@@ -109,11 +109,11 @@ describe('stats and content files', () => {
       expect(labels, id).toEqual(want);
     }
     expect(skillStatText(SKILLS.fireball)).toBe(
-      'Effect: 120% M.Atk, a stack of Burn\nTags: Projectile, Debuff, Magical\nAP: Ends turn\nMana: 40\nCooldown: 3 turns');
+      'Effect: 120% M.Atk, a stack of Burn\nTags: Projectile, Debuff, Magical\nAP: Ends Turn\nMana: 40\nCooldown: 3 Turns');
     expect(skillStatText(SKILLS.ignite)).toBe(
-      'Effect: 20% M.Atk, a stack of Burn\nTags: Debuff, Magical\nAP: 1 AP\nMana: 30\nCooldown: 2 turns');
+      'Effect: 20% M.Atk, a stack of Burn\nTags: Debuff, Magical\nAP: 1 AP\nMana: 30\nCooldown: 2 Turns');
     expect(skillStats(SKILLS.arcane_weapon)[0].value).toBe('Toggle: Weapon attacks +50% M.Atk per hit (10 mana each)');
-    expect(skillStatText(SKILLS.sword_slash)).toBe('Effect: 100% P.Atk\nTags: Melee, Engage, Physical\nAP: Ends turn\nCooldown: 1 turn');
+    expect(skillStatText(SKILLS.sword_slash)).toBe('Effect: 100% P.Atk\nTags: Melee, Engage, Physical\nAP: Ends Turn\nCooldown: 1 Turn');
     expect(skillStats(SKILLS.engage)[0].value).toBe(SKILLS.engage.description);
     expect(skillStats(SKILLS.bow_attack)[0].value).toBe("Attacks based on the bow's mode.");
     expect(skillStats(SKILLS.protection)[0].value).toBe('Defense +25% M.Atk (3 turns)');
@@ -638,6 +638,22 @@ describe('skills', () => {
 });
 
 describe('engagement', () => {
+  it('an engaged beast attacks its opponent even when another foe is closer', () => {
+    const bear = makeEnemy('bear', 9, makeRng(1));
+    const { battle, units: [b, opp, near] } = setup(openMap(), [
+      { c: bear, team: 'enemy', at: { x: 4, y: 3 } },
+      { c: tank('Opp'), team: 'player', at: { x: 5, y: 4 } }, // diagonal: 1.41 away
+      { c: tank('Near'), team: 'player', at: { x: 3, y: 3 } }, // orthogonal: 1 away, nearer
+    ]);
+    b.engagedWith = opp.uid;
+    opp.engagedWith = b.uid;
+    battle.endPhase(); // enemy turn
+    const action = bestAction(battle, b);
+    expect(action).not.toBeNull();
+    expect(action!.target).toEqual({ x: opp.x, y: opp.y });
+    expect(near.hp).toBe(near.stats.health);
+  });
+
   function duel() {
     return setup(openMap(), [
       { c: tank('A'), team: 'player', at: { x: 3, y: 3 } }, // Defense 63

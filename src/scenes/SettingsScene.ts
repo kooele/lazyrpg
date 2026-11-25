@@ -94,7 +94,7 @@ export class SettingsScene extends Phaser.Scene {
     // ---- frame cap (at once) ----
     y = 240;
     panel(this, X, y, W, 128);
-    text(this, X + 16, y + 10, 'Frame rate cap', { fontSize: '20px', color: COLORS.gold });
+    text(this, X + 16, y + 10, 'Frame Rate Cap', { fontSize: '20px', color: COLORS.gold });
     this.fpsText = text(this, X + 180, y + 15, 'Measuring FPS…', { fontSize: '14px', color: COLORS.dim });
     this.fpsFrames = 0;
     this.fpsSince = performance.now();
@@ -105,7 +105,7 @@ export class SettingsScene extends Phaser.Scene {
     // ---- graphics chip (on reload) ----
     y = 378;
     panel(this, X, y, W, 148);
-    text(this, X + 16, y + 10, 'Graphics chip', { fontSize: '20px', color: COLORS.gold });
+    text(this, X + 16, y + 10, 'Graphics Chip', { fontSize: '20px', color: COLORS.gold });
     text(this, X + 168, y + 15, 'For laptops with two graphics chips. Applies on reload.', { fontSize: '14px', color: COLORS.dim });
     row(y + 44, 40, GPU_OPTIONS, this.settings.gpu, (o) => o.label, (id) => this.set({ gpu: id }), 16);
     const gpu = GPU_OPTIONS.find((o) => o.id === this.settings.gpu)!;
@@ -117,7 +117,7 @@ export class SettingsScene extends Phaser.Scene {
       text(this, X, 540, 'This browser won\'t store settings, so they last only until the page is closed.', { fontSize: '13px', color: COLORS.bad });
     } else if (pending) {
       text(this, X, 546, 'Reload the game to apply the new resolution or graphics chip.', { fontSize: '14px', color: COLORS.gold });
-      button(this, X + 430, 536, 150, 36, 'Reload now', () => this.reload(), { fontSize: 15 });
+      button(this, X + 430, 536, 150, 36, 'Reload Now', () => this.reload(), { fontSize: 15 });
     }
 
     button(this, 24, HEIGHT - 54, 180, 40, 'Back', () => this.scene.start(this.returnTo), { fontSize: 16 });

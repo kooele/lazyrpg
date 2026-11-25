@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { GUILD, LODGING_QUALITY, isResidence, type InnTier, type Ring } from '../data/guild';
 import { buyDrinks, drinksCost, residents } from '../game/city';
 import { QUALITY_TEXT, moraleOf } from '../game/condition';
+import { titleCase } from '../game/titleCase';
 import { markDirty, requireState, session } from '../game/session';
 import { cityHeader } from '../ui/hud';
 import { COLORS, HEIGHT, WIDTH, button, figure, panel, setupCamera, text, clearScene } from '../ui/widgets';
@@ -61,7 +62,7 @@ export class InnScene extends Phaser.Scene {
     text(this, 30, 140, 'Drinks', { fontSize: '16px', color: COLORS.gold });
     const drinks = drinksCost(state, tier);
     const hadRound = state.drinksDay === state.day;
-    button(this, 30, 166, 280, 44, hadRound ? 'Already had a round today' : `Buy a round of drinks · ${drinks} gold`, () => {
+    button(this, 30, 166, 280, 44, hadRound ? 'Already Had a Round Today' : `Buy a Round of Drinks · ${drinks} Gold`, () => {
       if (buyDrinks(state, tier)) return;
       markDirty();
       this.render();
@@ -78,10 +79,10 @@ export class InnScene extends Phaser.Scene {
     const owned = state.residences.includes(ring);
     const q = LODGING_QUALITY[ring];
     panel(this, 16, 130, WIDTH - 32, HEIGHT - 146);
-    text(this, 30, 140, owned ? 'Yours: nights here are free (food still costs).' : `For sale at the Estate Office: ${home.price} gold.`, {
+    text(this, 30, 140, owned ? 'Yours: nights here are free (food still costs).' : `For Sale at the Estate Office: ${home.price} Gold`, {
       fontSize: '16px', color: owned ? '#6fdc8c' : COLORS.gold,
     });
-    text(this, 30, 164, `Night quality ${q} of 3: counts as ${QUALITY_TEXT[q]}. Room for ${GUILD.residences.capacity} residents.`, { fontSize: '12px', color: COLORS.dim });
+    text(this, 30, 164, titleCase(`Night quality ${q} of 3: counts as ${QUALITY_TEXT[q]} · room for ${GUILD.residences.capacity} residents`), { fontSize: '12px', color: COLORS.dim });
     if (!owned) {
       button(this, 30, 196, 300, 44, 'Go to the Estate Office', () => this.scene.start('Estate'), { fontSize: 14 });
       return;

@@ -150,7 +150,7 @@ export class PartyScene extends Phaser.Scene {
         .setStrokeStyle(2, COLORS.border);
       this.slotFrames.push(frame);
       if (!c) {
-        text(this, x + SLOT_W / 2, SLOT_Y + SLOT_H / 2, `${i + 1}\nempty`, { fontSize: '11px', color: COLORS.dim, align: 'center' }).setOrigin(0.5);
+        text(this, x + SLOT_W / 2, SLOT_Y + SLOT_H / 2, `${i + 1}\nEmpty`, { fontSize: '11px', color: COLORS.dim, align: 'center' }).setOrigin(0.5);
         continue;
       }
       const card = this.add.container(x, SLOT_Y);
@@ -222,8 +222,8 @@ export class PartyScene extends Phaser.Scene {
       row.add(figure(this, 28, 56, 52, c.appearance, c.weaponId, { base: false }));
       row.add(text(this, 58, 6, `${c.name}  Lv ${c.level} (${adventurerRank(c.level)})`, { fontSize: '15px' }));
       row.add(text(this, 58, 26, memberStatus(state, c), { fontSize: '11px', color: MEMBER_COLOR[c.contract?.type ?? 'main'], wordWrap: { width: 200 } }));
-      if (lineup.has(c.id)) row.add(text(this, 284, 6, `⚔ slot ${members.findIndex((m) => m.id === c.id) + 1}`, { fontSize: '11px', color: COLORS.gold }).setOrigin(1, 0));
-      else if (!canFight(state, c)) row.add(text(this, 284, 6, 'can\'t go', { fontSize: '11px', color: COLORS.bad }).setOrigin(1, 0));
+      if (lineup.has(c.id)) row.add(text(this, 284, 6, `⚔ Slot ${members.findIndex((m) => m.id === c.id) + 1}`, { fontSize: '11px', color: COLORS.gold }).setOrigin(1, 0));
+      else if (!canFight(state, c)) row.add(text(this, 284, 6, 'Can\'t Go', { fontSize: '11px', color: COLORS.bad }).setOrigin(1, 0));
       // A grip: rows can be dragged into the lineup slots, or up and down to reorder the roster.
       row.add(text(this, 300, ROW_H / 2, '⋮⋮', { fontSize: '14px', color: COLORS.dim }).setOrigin(1, 0.5));
       const pen = Math.round(combatPenalty(c) * 100);
@@ -250,7 +250,7 @@ export class PartyScene extends Phaser.Scene {
     figure(this, X + 70, 250, 150, c.appearance, c.weaponId);
     text(this, X + 150, 90, c.name, { fontSize: '26px' });
     const type = c.contract?.type ?? 'main';
-    text(this, X + 150, 124, `Level ${c.level} · ${adventurerRank(c.level)}-rank · ${MEMBER_LABEL[type]}`, { fontSize: '15px', color: MEMBER_COLOR[type] });
+    text(this, X + 150, 124, `Level ${c.level} · ${adventurerRank(c.level)}-Rank · ${MEMBER_LABEL[type]}`, { fontSize: '15px', color: MEMBER_COLOR[type] });
     const g = this.add.graphics();
     g.fillStyle(0x0b0d14).fillRect(X + 150, 150, 200, 8);
     g.fillStyle(0x7d6bd8).fillRect(X + 150, 150, 200 * Math.min(1, c.xp / xpToNext(c.level)), 8);
@@ -264,9 +264,9 @@ export class PartyScene extends Phaser.Scene {
       this.hoverTip(X + 416, y - 2, 158, 28, tip);
     };
     // Each bar names its state; the battle penalty they add up to is shown once, below them.
-    bar(88, 'Health', healthOf(c), 0x6fdc8c, isInjured(c), isInjured(c) ? 'injured' : '', () => this.healthTip(c));
+    bar(88, 'Health', healthOf(c), 0x6fdc8c, isInjured(c), isInjured(c) ? 'Injured' : '', () => this.healthTip(c));
     const unhappy = c.id !== state.mainId && moraleOf(c) < GUILD.condition.lowMorale;
-    bar(116, 'Morale', moraleOf(c), 0xe0b44c, unhappy, unhappy ? 'unhappy' : '', () => this.moraleTip(c));
+    bar(116, 'Morale', moraleOf(c), 0xe0b44c, unhappy, unhappy ? 'Unhappy' : '', () => this.moraleTip(c));
     let penY = 144;
     if (isSlave(c)) {
       const ob = c.contract.obedience;
@@ -277,11 +277,11 @@ export class PartyScene extends Phaser.Scene {
     const pen = combatPenalty(c);
     if (pen > 0) {
       const parts = [
-        injuryPenalty(c) ? `injury ${Math.round(injuryPenalty(c) * 100)}` : '',
-        moralePenalty(c) ? `morale ${Math.round(moralePenalty(c) * 100)}` : '',
-        obediencePenalty(c) ? `obedience ${Math.round(obediencePenalty(c) * 100)}` : '',
+        injuryPenalty(c) ? `Injury ${Math.round(injuryPenalty(c) * 100)}` : '',
+        moralePenalty(c) ? `Morale ${Math.round(moralePenalty(c) * 100)}` : '',
+        obediencePenalty(c) ? `Obedience ${Math.round(obediencePenalty(c) * 100)}` : '',
       ].filter(Boolean);
-      text(this, X + 570, penY - 4, `In battle: -${Math.round(pen * 100)}% all stats`, { fontSize: '11px', color: COLORS.bad }).setOrigin(1, 0);
+      text(this, X + 570, penY - 4, `In Battle: -${Math.round(pen * 100)}% All Stats`, { fontSize: '11px', color: COLORS.bad }).setOrigin(1, 0);
       text(this, X + 570, penY + 9, parts.join(' × '), { fontSize: '10px', color: COLORS.dim }).setOrigin(1, 0);
     }
 
@@ -292,7 +292,7 @@ export class PartyScene extends Phaser.Scene {
     text(this, X + 150, 226, `${w.name}: ${w.skills.map((s) => SKILLS[s].name).join(', ')}`, { fontSize: '12px', color: COLORS.dim, wordWrap: { width: W - 170 } });
     const free = freePoints(c);
     const names = c.skillIds.map((s) => SKILLS[s].name);
-    const skillLine = (shown: number) => `Skill points ${skillPoints(c) - free}/${skillPoints(c)}${free > 0 ? ` (${free} to spend)` : ''}: ${names.slice(0, shown).join(', ') || '—'}${shown < names.length ? ` +${names.length - shown} more` : ''}${bodyPoints(c) ? ` · Body ${bodyPoints(c)}` : ''}`;
+    const skillLine = (shown: number) => `Skill Points ${skillPoints(c) - free}/${skillPoints(c)}${free > 0 ? ` (${free} to spend)` : ''}: ${names.slice(0, shown).join(', ') || '—'}${shown < names.length ? ` +${names.length - shown} More` : ''}${bodyPoints(c) ? ` · Body ${bodyPoints(c)}` : ''}`;
     const skillsText = text(this, X + 150, 247, skillLine(names.length), {
       fontSize: '12px', color: free > 0 ? COLORS.gold : COLORS.dim, wordWrap: { width: W - 170 },
     });
@@ -324,9 +324,9 @@ export class PartyScene extends Phaser.Scene {
     } else if (isCompanion(c)) {
       const left = daysLeft(c.contract, state.day);
       lines.push(
-        `Base pay ${k.basePay} gold a week (every 7th day) · ${k.lootPct}% of quest rewards`,
-        k.foodLodging ? 'Food & lodging included: the party pays their food (set below) and lodging' : 'Food & lodging not included: finds their own',
-        `${k.termWeeks}-week term: day ${k.startDay} to day ${k.endDay} · ${left > 0 ? `${left} days left` : `ENDED: renew within ${GUILD.companion.graceDays + left} day(s) or they leave`}`,
+        `Base Pay ${k.basePay} Gold a Week (every 7th day) · ${k.lootPct}% of Quest Rewards`,
+        k.foodLodging ? 'Food & Lodging Included: The Party Pays Their Food (set below) and Lodging' : 'Food & Lodging Not Included: Finds Their Own',
+        `${k.termWeeks}-Week Term: Day ${k.startDay} to Day ${k.endDay} · ${left > 0 ? `${left} Days Left` : `ENDED: Renew within ${GUILD.companion.graceDays + left} Day(s) or They Leave`}`,
       );
     }
     text(this, X + 16, y0 + 24, lines.join('\n'), { fontSize: '13px', lineSpacing: 5, wordWrap: { width: W - 32 } });
@@ -348,7 +348,7 @@ export class PartyScene extends Phaser.Scene {
     const sy = 418;
     const busy = !scheduledMembers(state).some((m) => m.id === c.id);
     text(this, X + 16, sy, 'Schedule', { fontSize: '13px', color: COLORS.gold });
-    text(this, X + 16, sy + 16, busy ? 'starts tomorrow' : 'off-quest days', { fontSize: '10px', color: COLORS.dim });
+    text(this, X + 16, sy + 16, busy ? 'Starts Tomorrow' : 'Off-Quest Days', { fontSize: '10px', color: COLORS.dim });
     const now = activityOf(state, c);
     const scheduleOption = (a: Activity): MenuOption => ({
       label: ACTIVITY_INFO[a].name,
@@ -368,7 +368,7 @@ export class PartyScene extends Phaser.Scene {
     const fed = isHoused(c);
     const food = foodOf(state, c);
     text(this, X + 16, fy, 'Food', { fontSize: '13px', color: fed ? COLORS.gold : COLORS.dim });
-    text(this, X + 16, fy + 16, fed ? `expects ${GUILD.food[FOOD_TIERS[expectedQuality(c)]].name}` : 'finds their own', {
+    text(this, X + 16, fy + 16, fed ? `Expects ${GUILD.food[FOOD_TIERS[expectedQuality(c)]].name}` : 'Finds Their Own', {
       fontSize: '10px', color: COLORS.dim,
     });
     const foodOption = (t: FoodTier): MenuOption => ({
@@ -386,7 +386,7 @@ export class PartyScene extends Phaser.Scene {
     const ly = fy + 32;
     const where = lodgingOf(state, c);
     text(this, X + 16, ly, 'Lodging', { fontSize: '13px', color: fed ? COLORS.gold : COLORS.dim });
-    text(this, X + 16, ly + 16, fed ? `expects ${['the stables', 'an inn', 'high-end', 'luxury'][expectedQuality(c)]}` : 'finds their own', {
+    text(this, X + 16, ly + 16, fed ? `Expects ${['the Stables', 'an Inn', 'High-End', 'Luxury'][expectedQuality(c)]}` : 'Finds Their Own', {
       fontSize: '10px', color: COLORS.dim,
     });
     const lodgingOption = (o: CityLodging): MenuOption => {
@@ -510,7 +510,7 @@ export class PartyScene extends Phaser.Scene {
       c.contract?.type === 'main' ? 'At 0: you pull through at 1 instead of dying.' : 'At 0: they die.',
       `Rises${traitNote(c, k)}:`,
       `• +${night} each night`,
-      `• +${night * GUILD.schedule.recoverMultiplier} each night on Recover`,
+      `• +${night * GUILD.schedule.recoverMultiplier} for a day on Recover (instead of +${night})`,
       'Falls:',
       `• Up to -${C.maxHealthLoss} after each battle, the lower their HP fell (-${C.maxHealthLoss} if they fell)`,
     ].join('\n');
@@ -530,8 +530,8 @@ export class PartyScene extends Phaser.Scene {
     lines.push(c.contract?.type === 'main' ? 'At 0: nothing; you never leave.' : `At 0: they leave the party (renown -${quitRenown(c)}).`);
     lines.push(
       `Rises${traitNote(c, k)}:`,
-      `• +${GUILD.schedule.dayOffMorale * k} each Day Off`,
-      `• +${Math.min(...drinks)} to +${Math.max(...drinks)} per round of drinks at an inn (once a day)`,
+      `• +${GUILD.schedule.dayOffMorale * k} for taking a Day Off`,
+      `• +${Math.min(...drinks)} to +${Math.max(...drinks)} for a round of drinks at an inn (once a day)`,
     );
     if (housed) {
       lines.push(
@@ -542,7 +542,7 @@ export class PartyScene extends Phaser.Scene {
     lines.push(
       'Falls:',
       `• -${C.moralePerTurn} per turn in battle`,
-      `• -${C.moraleFailedQuest} per failed quest`,
+      `• -${C.moraleFailedQuest} for failing a quest`,
       `• -1 per ${Math.round(1 / C.moralePerHealthLost)} Health lost`,
       `• -${C.moraleMemberDied} when a party member dies`,
     );
@@ -622,24 +622,24 @@ interface MenuOption {
 /** What a schedule activity does for `c` each day, for the dropdown. */
 function activityEffect(c: Character, a: Activity): string {
   const S = GUILD.schedule;
-  if (a === 'recover') return `+${S.recoverMultiplier * GUILD.condition.healthPerDay * traitFactor(c, 'healthRecovery')} Health a day (instead of +${GUILD.condition.healthPerDay * traitFactor(c, 'healthRecovery')})`;
-  if (a === 'training') return `+${trainingXp(c.level)} XP a day`;
-  if (a === 'oddJobs') return `+${S.oddJobsGold} gold a day`;
-  return `+${S.dayOffMorale * traitFactor(c, 'moraleGain')} Morale a day`;
+  if (a === 'recover') return `+${S.recoverMultiplier * GUILD.condition.healthPerDay * traitFactor(c, 'healthRecovery')} Health a Day (instead of +${GUILD.condition.healthPerDay * traitFactor(c, 'healthRecovery')})`;
+  if (a === 'training') return `+${trainingXp(c.level)} XP a Day`;
+  if (a === 'oddJobs') return `+${S.oddJobsGold} Gold a Day`;
+  return `+${S.dayOffMorale * traitFactor(c, 'moraleGain')} Morale a Day`;
 }
 
 /** What a food or lodging choice means for `c`: its quality and the Morale it moves (after traits). */
 function effectOf(c: Character, quality: number, morale: number, per: 'day' | 'night'): { effect: string; color: string } {
   const d = moraleGainOf(c, morale);
   return {
-    effect: `quality ${quality} · ${d ? `${d > 0 ? '+' : ''}${d} morale/${per}` : 'meets expectations'}`,
+    effect: `Quality ${quality} · ${d ? `${d > 0 ? '+' : ''}${d} Morale/${per === 'day' ? 'Day' : 'Night'}` : 'Meets Expectations'}`,
     color: d > 0 ? COLORS.good : d < 0 ? COLORS.bad : COLORS.dim,
   };
 }
 
 /** "Silver Lantern Inn · 24g", "Outer City House · 3/6" (residents), "Stables · 6g". */
 function lodgingLabel(state: GameState, where: CityLodging): string {
-  if (where === 'outside') return GUILD.lodging.stablesPerPerson ? `Stables · ${GUILD.lodging.stablesPerPerson}g` : 'Stables · free';
+  if (where === 'outside') return GUILD.lodging.stablesPerPerson ? `Stables · ${GUILD.lodging.stablesPerPerson}g` : 'Stables · Free';
   if (isResidence(where)) return `${GUILD.residences[where].name} · ${residents(state, where).length}/${GUILD.residences.capacity}`;
   return `${GUILD.inns[where].name} · ${lodgingPrice(where)}g`;
 }

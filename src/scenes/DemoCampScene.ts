@@ -75,8 +75,8 @@ export class DemoCampScene extends Phaser.Scene {
     const { party } = d;
 
     text(this, 24, 18, 'Quick Battle: Camp', { fontSize: '32px', color: COLORS.gold });
-    text(this, 24, 58, `${d.complete ? 'Demo complete!' : `Stage ${d.stage} of ${DEMO_STAGES}`}   ·   Victories ${d.victories}   ·   Defeats ${d.defeats}`, { color: d.complete ? COLORS.gold : COLORS.dim });
-    text(this, WIDTH - 24, 14, 'Demo: progress is not saved', { color: COLORS.dim, fontSize: '12px' }).setOrigin(1, 0);
+    text(this, 24, 58, `${d.complete ? 'Demo Complete!' : `Stage ${d.stage} of ${DEMO_STAGES}`}   ·   Victories ${d.victories}   ·   Defeats ${d.defeats}`, { color: d.complete ? COLORS.gold : COLORS.dim });
+    text(this, WIDTH - 24, 14, 'Demo: Progress Is Not Saved', { color: COLORS.dim, fontSize: '12px' }).setOrigin(1, 0);
     this.difficultySlider();
 
     for (let i = 0; i < DEMO_PARTY_SIZE; i++) {
@@ -91,11 +91,11 @@ export class DemoCampScene extends Phaser.Scene {
     }
 
     button(this, 24, HEIGHT - 84, 220, 56, 'Main Menu', () => this.scene.start('MainMenu'));
-    button(this, 260, HEIGHT - 84, 220, 56, 'Restart demo', () => confirmDialog(this, 'Start the demo over?\nThis party will be lost.', () => {
+    button(this, 260, HEIGHT - 84, 220, 56, 'Restart Demo', () => confirmDialog(this, 'Start the demo over?\nThis party will be lost.', () => {
       newDemo();
       this.render();
     }, 'Restart'));
-    button(this, WIDTH - 324, HEIGHT - 84, 300, 56, d.complete ? 'Demo complete' : `Start Battle — Stage ${d.stage}`, () => this.scene.start('Battle', { demo: true }), {
+    button(this, WIDTH - 324, HEIGHT - 84, 300, 56, d.complete ? 'Demo Complete' : `Start Battle — Stage ${d.stage}`, () => this.scene.start('Battle', { demo: true }), {
       enabled: party.length > 0 && !d.complete, fill: 0x4a2a22, fontSize: 18,
     });
     if (party.length === 0) {
@@ -129,13 +129,13 @@ export class DemoCampScene extends Phaser.Scene {
     text(this, x + 14, y + 192, 'Weapon', { color: COLORS.dim, fontSize: '12px' });
     text(this, x + 14, y + 207, weapon.name, { fontSize: '15px' });
     text(this, x + 14, y + 226, weapon.skills.map((s) => SKILLS[s].name).join(', '), { fontSize: '12px', color: COLORS.dim, wordWrap: { width: 188 } });
-    text(this, x + 14, y + 266, `Skill points ${skillPoints(c) - freeSlots}/${skillPoints(c)}${bodyPoints(c) ? ` (${bodyPoints(c)} in Body)` : ''}`, { color: COLORS.dim, fontSize: '12px' });
+    text(this, x + 14, y + 266, `Skill Points ${skillPoints(c) - freeSlots}/${skillPoints(c)}${bodyPoints(c) ? ` (${bodyPoints(c)} in Body)` : ''}`, { color: COLORS.dim, fontSize: '12px' });
     // Bullets down to the "points to spend" line: at most 3 lines (4 when there's nothing to spend), then "+N more".
     fittedList(this, x + 14, y + 282, c.skillIds.map((s) => SKILLS[s].name), freeSlots > 0 ? 3 : 4, { fontSize: '14px', lineSpacing: 2, wordWrap: { width: 188 } },
-      (shown, hidden) => [...shown.map((n) => `• ${n}`), ...(hidden ? [`+${hidden} more`] : [])].join('\n'));
+      (shown, hidden) => [...shown.map((n) => `• ${n}`), ...(hidden ? [`+${hidden} More`] : [])].join('\n'));
 
     if (freeSlots > 0) {
-      text(this, x + 108, y + 356, `${freeSlots} skill point${freeSlots > 1 ? 's' : ''} to spend`, { color: COLORS.gold, fontSize: '13px' }).setOrigin(0.5);
+      text(this, x + 108, y + 356, `${freeSlots} Skill Point${freeSlots > 1 ? 's' : ''} to Spend`, { color: COLORS.gold, fontSize: '13px' }).setOrigin(0.5);
     }
     button(this, x + 14, y + 380, 110, 44, 'Customize', () => this.scene.start('CharacterCreator', { mode: 'demoEdit', characterId: c.id }), {
       selected: freeSlots > 0, fontSize: 14,

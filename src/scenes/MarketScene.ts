@@ -38,12 +38,12 @@ export class MarketScene extends Phaser.Scene {
     const idx = state.market.priceIndex;
     const mood = idx >= 1.15 ? 'high' : idx <= 0.87 ? 'low' : 'usual';
     const next = nextShipmentDay(state.day + 1);
-    text(this, 20, 96, `${state.market.slaves.length} for sale · Prices ${Math.round(idx * 100)}% of usual (${mood}) · Next shipment day ${next} · Party ${state.party.length}/${GUILD.maxRoster}`, {
+    text(this, 20, 96, `${state.market.slaves.length} for Sale · Prices ${Math.round(idx * 100)}% of Usual (${mood}) · Next Shipment Day ${next} · Party ${state.party.length}/${GUILD.maxRoster}`, {
       fontSize: '12px', color: mood === 'high' ? '#e08a5a' : mood === 'low' ? '#6fdc8c' : COLORS.dim,
     });
 
     panel(this, 16, 118, 560, HEIGHT - 134);
-    text(this, 28, 126, 'For sale', { fontSize: '16px', color: COLORS.gold });
+    text(this, 28, 126, 'For Sale', { fontSize: '16px', color: COLORS.gold });
     sortBar(this, 252, 123, PEOPLE_SORTS, this.sort, (key) => {
       this.sort = nextSort(this.sort, key);
       this.render();
@@ -51,12 +51,12 @@ export class MarketScene extends Phaser.Scene {
     const list = new ScrollList(this, 24, 150, 544, HEIGHT - 174, 4);
     const stock = sortPeople(state.market.slaves, (o) => o.character, (o) => askingPrice(state, o), this.sort.key, this.sort.dir);
     list.setItems(stock.map((o) => this.row(o, 544, [
-      { label: `Buy: ${askingPrice(state, o)} gold`, enabled: state.gold >= askingPrice(state, o), act: () => this.buy(o) },
+      { label: `Buy: ${askingPrice(state, o)} Gold`, enabled: state.gold >= askingPrice(state, o), act: () => this.buy(o) },
     ])), 'keep');
     if (state.market.slaves.length === 0) text(this, 296, 300, 'Sold out until the next delivery.', { color: COLORS.dim }).setOrigin(0.5);
 
     panel(this, 588, 118, 356, HEIGHT - 134);
-    text(this, 600, 126, 'Sell your slaves', { fontSize: '16px', color: COLORS.gold });
+    text(this, 600, 126, 'Sell Your Slaves', { fontSize: '16px', color: COLORS.gold });
     text(this, 600, 150, `The market buys slaves for ${Math.round(GUILD.slave.sellBackShare * 100)}% of its current price. It doesn't buy prisoners: register them at the city gate when you come back from a quest.`, {
       fontSize: '12px', color: COLORS.dim, wordWrap: { width: 332 },
     });
@@ -86,7 +86,7 @@ export class MarketScene extends Phaser.Scene {
     if (!compact) row.add(talentTag(this, 64, 45, c, { fontSize: 11, overall: false, sep: '   ' }));
     row.add(fittedList(this, 64, compact ? 46 : 62, c.skillIds.map((s) => SKILLS[s].name), 1, {
       fontSize: '12px', color: COLORS.dim, wordWrap: { width: compact ? 260 : w - 240 },
-    }, undefined, 'No tree skills yet'));
+    }, undefined, 'No Tree Skills Yet'));
     actions.forEach((a, i) => {
       const bx = compact ? 64 + i * 88 : w - 150;
       const by = compact ? 66 : 26;

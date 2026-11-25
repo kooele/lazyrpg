@@ -671,13 +671,13 @@ describe('contracts', () => {
     expect(unit.stats.health).toBe(Math.round(full.health * 0.9));
     expect(unit.stats.pAtk).toBe(Math.round(full.pAtk * 0.9));
     expect(unit.hp).toBe(unit.stats.health);
-    // Everyone recovers each night; Recover doubles it (not on the quest day itself, which they spent on the quest).
+    // Everyone recovers each night; Recover multiplies it (not on the quest day itself, which they spent on the quest).
     s.schedule[c.id] = 'recover';
     const h = healthOf(c);
     nightsAt(s, 'standard', 1, makeRng(1));
     expect(healthOf(c)).toBe(h + GUILD.condition.healthPerDay);
     nightsAt(s, 'standard', 1, makeRng(1));
-    expect(healthOf(c)).toBe(Math.min(100, h + 3 * GUILD.condition.healthPerDay));
+    expect(healthOf(c)).toBe(Math.min(100, h + (1 + GUILD.schedule.recoverMultiplier) * GUILD.condition.healthPerDay));
     // An injured leader can still set out.
     mainCharacter(s).health = 90;
     acceptQuest(s, s.guild.board.find((x) => canTakeQuest(s, x))!.id);

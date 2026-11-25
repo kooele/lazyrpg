@@ -1,13 +1,14 @@
 import Phaser from 'phaser';
 import { GUILD } from '../data/guild';
-import { WEAPONS } from '../data/content';
+import { MAX_PARTY_SIZE, WEAPONS } from '../data/content';
+import type { Character } from '../data/types';
 import { departBlock, endDay, foodCost, forecastNight, lineupMembers, lodgingCost, prisonersAtGate, registerPrisoner, turnInPrisoner, tabLabel, tabParts, TAB_NAMES, type NightForecast } from '../game/city';
 import { adventurerRank } from '../game/guild';
-import { moraleOf } from '../game/condition';
+import { isInjured, moraleOf } from '../game/condition';
 import { bondOf, registrationFee, slaveTax } from '../game/contracts';
 import { markDirty, requireState, session } from '../game/session';
 import { cityHeader, rankBadge } from '../ui/hud';
-import { COLORS, HEIGHT, ScrollList, UI_SCALE, WIDTH, bakeGraphics, button, confirmDialog, figure, panel, setupCamera, talentTag, text, toast, clearScene } from '../ui/widgets';
+import { COLORS, HEIGHT, ScrollList, UI_SCALE, WIDTH, bakeGraphics, button, figure, panel, setupCamera, talentTag, text, toast, clearScene } from '../ui/widgets';
 
 export const CITY_MAP_KEY = 'city-map';
 
@@ -118,15 +119,15 @@ export class CityScene extends Phaser.Scene {
     // ---- right: the quest at hand, and recent events -----------------------------------------
     const RX = 636;
     panel(this, RX, 76, 308, 160);
-    text(this, RX + 12, 84, 'Current quest', { fontSize: '13px', color: COLORS.dim });
+    text(this, RX + 12, 84, 'Current Quest', { fontSize: '13px', color: COLORS.dim });
     if (state.quest) {
       const q = state.quest;
       rankBadge(this, RX + 12, 106, q.rank, 24);
       text(this, RX + 44, 106, q.title, { fontSize: '15px', wordWrap: { width: 252 } });
-      text(this, RX + 12, 150, `${q.reward} gold · ${q.days} day${q.days > 1 ? 's' : ''} · stage ${q.stage}`, { fontSize: '13px', color: COLORS.gold });
+      text(this, RX + 12, 150, `${q.reward} Gold · ${q.days} Day${q.days > 1 ? 's' : ''} · Stage ${q.stage}`, { fontSize: '13px', color: COLORS.gold });
       text(this, RX + 12, 170, `Lineup: ${lineupMembers(state).map((c) => c.name).join(', ')}`, { fontSize: '12px', color: COLORS.dim, wordWrap: { width: 284 } });
       const block = departBlock(state);
-      button(this, RX + 12, 196, 284, 32, !block ? 'Set out from the city gate' : state.lastQuestDay === state.day ? 'Back from a quest today: rest first' : 'No adventurers in the lineup', () => this.depart(), {
+      button(this, RX + 12, 196, 284, 32, !block ? 'Set Out from the City Gate' : state.lastQuestDay === state.day ? 'Back from a Quest Today: Rest First' : 'No Adventurers in the Lineup', () => this.depart(), {
         fill: 0x4a2a22, fontSize: 14, enabled: !block,
       });
     } else {
@@ -136,7 +137,7 @@ export class CityScene extends Phaser.Scene {
     }
 
     panel(this, RX, 246, 308, HEIGHT - 262);
-    text(this, RX + 12, 254, 'Recent events', { fontSize: '13px', color: COLORS.dim });
+    text(this, RX + 12, 254, 'Recent Events', { fontSize: '13px', color: COLORS.dim });
     const list = new ScrollList(this, RX + 10, 276, 292, HEIGHT - 300, 6);
     const entries = [...state.log].reverse();
     list.setItems(entries.map((n) => {
@@ -162,7 +163,7 @@ export class CityScene extends Phaser.Scene {
     layer.add(this.add.rectangle(0, 0, WIDTH, HEIGHT, 0x000000, 0.7).setOrigin(0).setInteractive());
     const X = WIDTH / 2 - 330;
     layer.add(panel(this, X, 40, 660, HEIGHT - 80));
-    layer.add(text(this, WIDTH / 2, 54, 'City gate: register your prisoners', { fontSize: '22px', color: COLORS.gold }).setOrigin(0.5, 0));
+    layer.add(text(this, WIDTH / 2, 54, 'City Gate: Register Your Prisoners', { fontSize: '22px', color: COLORS.gold }).setOrigin(0.5, 0));
     layer.add(text(this, X + 20, 88, `The guards won't let prisoners into ${GUILD.city} unregistered. Turn each one in for the bounty, or register them as your slave: the fee is their market value minus the bounty, and slaves are taxed weekly.${full ? ` Your party is full (${GUILD.maxRoster}), so you can only turn them in.` : ''}  Gold: ${state.gold}.`, {
       fontSize: '13px', wordWrap: { width: 620 }, lineSpacing: 2,
     }));
@@ -195,7 +196,7 @@ export class CityScene extends Phaser.Scene {
       return { obj: row, height: 80 };
     }), 'top');
     const total = state.prisoners.reduce((sum, o) => sum + o.price, 0);
-    layer.add(button(this, WIDTH / 2 - 140, HEIGHT - 94, 280, 40, `Turn them all in: ${total} gold`, () => {
+    layer.add(button(this, WIDTH / 2 - 140, HEIGHT - 94, 280, 40, `Turn Them All In: ${total} Gold`, () => {
       const names = state.prisoners.map((o) => o.character.id);
       let gold = 0;
       for (const id of names) gold += turnInPrisoner(state, id);
@@ -277,7 +278,7 @@ export class CityScene extends Phaser.Scene {
     const bw = (W - 48 - 24) / 3;
     layer.add(button(this, X + 24, by, bw, 46, 'Manage Party', () => this.scene.start('Party'), { fontSize: 15 }));
     layer.add(button(this, X + 24 + bw + 12, by, bw, 46, 'Cancel', () => layer.destroy(), { fontSize: 15 }));
-    layer.add(button(this, X + 24 + (bw + 12) * 2, by, bw, 46, short ? 'End Day anyway' : 'End Day', () => {
+    layer.add(button(this, X + 24 + (bw + 12) * 2, by, bw, 46, short ? 'End Day Anyway' : 'End Day', () => {
       layer.destroy();
       this.runEndDay();
     }, { fontSize: 15, fill: short ? 0x4a2a22 : 0x2a3348 }));
@@ -305,7 +306,7 @@ export class CityScene extends Phaser.Scene {
     const W = 600;
     const X = WIDTH / 2 - W / 2;
     layer.add(panel(this, X, 40, W, HEIGHT - 80));
-    layer.add(text(this, WIDTH / 2, 54, `Day ${state.day} begins`, { fontSize: '24px', color: COLORS.gold }).setOrigin(0.5, 0));
+    layer.add(text(this, WIDTH / 2, 54, `Day ${state.day} Begins`, { fontSize: '24px', color: COLORS.gold }).setOrigin(0.5, 0));
     const dGold = state.gold - gold;
     layer.add(text(this, WIDTH / 2, 88, `Gold: ${gold} → ${state.gold} (${dGold >= 0 ? '+' : ''}${dGold})`, {
       fontSize: '14px', color: dGold < 0 ? COLORS.text : COLORS.good,
@@ -325,7 +326,7 @@ export class CityScene extends Phaser.Scene {
     for (const b of before) {
       const now = state.party.find((c) => c.id === b.id);
       if (now) change(b.name, b.morale, moraleOf(now));
-      else add(`  ${b.name}: left the party`, { color: COLORS.bad });
+      else add(`  ${b.name}: Left the Party`, { color: COLORS.bad });
     }
     // Relationship: one line per companion and slave.
     const bonds = before.filter((b) => b.rel !== undefined);
@@ -335,13 +336,13 @@ export class CityScene extends Phaser.Scene {
         const now = state.party.find((c) => c.id === b.id);
         const bond = now && bondOf(now);
         if (!bond) {
-          add(`  ${b.name}: left the party`, { color: COLORS.bad });
+          add(`  ${b.name}: Left the Party`, { color: COLORS.bad });
           continue;
         }
         change(b.name, b.rel!, bond.relationship);
       }
     }
-    add('What happened', { fontSize: '15px', color: COLORS.gold });
+    add('What Happened', { fontSize: '15px', color: COLORS.gold });
     if (!msgs.length) add('  A quiet night.', { color: COLORS.dim });
     for (const m of msgs) add(`• ${m}`);
 
@@ -405,7 +406,41 @@ export class CityScene extends Phaser.Scene {
     const q = state.quest;
     const block = departBlock(state);
     if (!q || block) return toast(this, block ?? 'Accept a quest at the Adventurer Guild first.', COLORS.bad);
-    const members = lineupMembers(state);
-    confirmDialog(this, `Set out: ${q.title}?\n${members.map((c) => `${c.name} (Lv ${c.level})`).join(', ')}`, () => this.scene.start('Battle'), 'Set out');
+    this.departDialog(q.title, lineupMembers(state));
+  }
+
+  /** Confirm setting out, showing the lineup the way Manage Party's slots do. */
+  private departDialog(title: string, members: Character[]): void {
+    const SW = 76;
+    const SH = 100;
+    const GAP = 8;
+    const W = Math.max(440, MAX_PARTY_SIZE * (SW + GAP) - GAP + 48);
+    const H = 270;
+    const X = WIDTH / 2 - W / 2;
+    const Y = HEIGHT / 2 - H / 2;
+    const layer = this.add.container(0, 0).setDepth(1000);
+    layer.add(this.add.rectangle(0, 0, WIDTH, HEIGHT, 0x000000, 0.6).setOrigin(0).setInteractive());
+    layer.add(panel(this, X, Y, W, H));
+    layer.add(text(this, WIDTH / 2, Y + 18, `Set Out: ${title}?`, { fontSize: '18px', color: COLORS.gold, align: 'center', wordWrap: { width: W - 40 } }).setOrigin(0.5, 0));
+    const left = WIDTH / 2 - (MAX_PARTY_SIZE * (SW + GAP) - GAP) / 2;
+    const top = Y + 60;
+    for (let i = 0; i < MAX_PARTY_SIZE; i++) {
+      const x = left + i * (SW + GAP);
+      const c = members[i];
+      layer.add(this.add.rectangle(x, top, SW, SH, c ? COLORS.panelLight : 0x0b0d14, c ? 0.7 : 0.6).setOrigin(0).setStrokeStyle(2, COLORS.border));
+      layer.add(text(this, x + 4, top + 2, `${i + 1}`, { fontSize: '11px', color: c ? COLORS.gold : COLORS.dim }));
+      if (!c) {
+        layer.add(text(this, x + SW / 2, top + SH / 2, 'Empty', { fontSize: '11px', color: COLORS.dim }).setOrigin(0.5));
+        continue;
+      }
+      layer.add(figure(this, x + SW / 2, top + SH - 28, 62, c.appearance, c.weaponId, { base: false }));
+      layer.add(text(this, x + SW / 2, top + SH - 26, c.name, { fontSize: '11px', color: isInjured(c) ? COLORS.bad : COLORS.text, fixedWidth: SW - 4, align: 'center' }).setOrigin(0.5, 0));
+      layer.add(text(this, x + SW / 2, top + SH - 13, `Lv ${c.level}`, { fontSize: '10px', color: COLORS.dim }).setOrigin(0.5, 0));
+    }
+    layer.add(button(this, WIDTH / 2 - 170, Y + H - 64, 150, 44, 'Set Out', () => {
+      layer.destroy();
+      this.scene.start('Battle');
+    }));
+    layer.add(button(this, WIDTH / 2 + 20, Y + H - 64, 150, 44, 'Cancel', () => layer.destroy()));
   }
 }

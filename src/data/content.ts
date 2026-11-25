@@ -339,8 +339,8 @@ export function modeWithTag(basic: SkillDef, tag: string): SkillDef | undefined 
 }
 export const isFree = (s: SkillDef) => s.ap === 0;
 
-/** "Free", "1 AP", "2 AP" or "Ends turn". */
-export const apLabel = (s: SkillDef) => (s.ap === 0 ? 'Free' : s.ap === 'end' ? 'Ends turn' : `${s.ap} AP`);
+/** "Free", "1 AP", "2 AP" or "Ends Turn". */
+export const apLabel = (s: SkillDef) => (s.ap === 0 ? 'Free' : s.ap === 'end' ? 'Ends Turn' : `${s.ap} AP`);
 /** Helpful skills (heals, cleanses, shields, buffs) are drawn green; attacks red. */
 export const isSupport = (s: SkillDef) =>
   s.affects === 'ally' || !!(s.heal || s.cleanse || s.shield) || (s.applyStatus ?? []).some((a) => !STATUSES[a.status]?.debuff);
@@ -439,7 +439,7 @@ export function skillStats(s: SkillDef): SkillStat[] {
   const c = s.modes ? SKILLS[s.modes[0]] : s;
   rows.push({ label: 'AP', value: apLabel(c) });
   if (c.mana) rows.push({ label: 'Mana', value: String(c.mana) });
-  if (c.cooldown > 0) rows.push({ label: 'Cooldown', value: turns(c.cooldown) });
+  if (c.cooldown > 0) rows.push({ label: 'Cooldown', value: `${c.cooldown} Turn${c.cooldown === 1 ? '' : 's'}` });
   return rows;
 }
 

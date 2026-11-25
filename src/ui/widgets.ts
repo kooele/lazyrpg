@@ -73,7 +73,7 @@ export function text(
 export function fittedList(
   scene: Phaser.Scene, x: number, y: number, names: string[], maxLines: number,
   style: Partial<Phaser.Types.GameObjects.Text.TextStyle> = {},
-  format: (shown: string[], hidden: number) => string = (shown, hidden) => `${shown.join(', ')}${hidden ? ` +${hidden} more` : ''}`,
+  format: (shown: string[], hidden: number) => string = (shown, hidden) => `${shown.join(', ')}${hidden ? ` +${hidden} More` : ''}`,
   empty = '—',
 ): Phaser.GameObjects.Text {
   const t = text(scene, x, y, Array(maxLines).fill('Ag').join('\n'), style);
@@ -176,38 +176,70 @@ export function toast(scene: Phaser.Scene, message: string, color = COLORS.text)
 }
 
 /**
- * A real HTML <input> laid over the canvas at layout coordinates (x, y, w, h).
- * Kept in place when the window resizes and removed when the scene shuts down.
+ * Lay an HTML element over the canvas at layout coordinates (x, y, w, h). `style` sets the rest of its look for
+ * the current canvas scale `k` (layout px -> screen px). Kept in place when the window resizes; removed when the
+ * scene shuts down or when the returned function is called.
  */
-export function overlayInput(scene: Phaser.Scene, x: number, y: number, w: number, h: number): HTMLInputElement {
-  const input = document.createElement('input');
-  input.className = 'name-input';
-  input.style.position = 'fixed';
-  input.style.boxSizing = 'border-box';
-  document.body.appendChild(input);
+function overlay(
+  scene: Phaser.Scene, el: HTMLElement, x: number, y: number, w: number, h: number, style: (k: number) => void,
+): () => void {
+  el.style.position = 'fixed';
+  el.style.boxSizing = 'border-box';
+  document.body.appendChild(el);
   const place = () => {
     const rect = scene.game.canvas.getBoundingClientRect();
     const k = rect.width / WIDTH;
-    input.style.left = `${rect.left + x * k}px`;
-    input.style.top = `${rect.top + y * k}px`;
-    input.style.width = `${w * k}px`;
-    input.style.height = `${h * k}px`;
-    input.style.fontSize = `${18 * k}px`;
-    input.style.padding = `0 ${10 * k}px`;
-    input.style.borderWidth = `${Math.max(1, 2 * k)}px`;
-    input.style.borderRadius = `${4 * k}px`;
+    el.style.left = `${rect.left + x * k}px`;
+    el.style.top = `${rect.top + y * k}px`;
+    el.style.width = `${w * k}px`;
+    el.style.height = `${h * k}px`;
+    style(k);
   };
   place();
   // The canvas may still be settling on the first frame; re-place once it has.
   requestAnimationFrame(place);
   window.addEventListener('resize', place);
   scene.scale.on('resize', place);
-  scene.events.once('shutdown', () => {
+  const remove = () => {
     window.removeEventListener('resize', place);
     scene.scale.off('resize', place);
-    input.remove();
+    scene.events.off('shutdown', remove);
+    el.remove();
+  };
+  scene.events.once('shutdown', remove);
+  return remove;
+}
+
+/**
+ * A real HTML <input> laid over the canvas at layout coordinates (x, y, w, h).
+ * Kept in place when the window resizes and removed when the scene shuts down.
+ */
+export function overlayInput(scene: Phaser.Scene, x: number, y: number, w: number, h: number): HTMLInputElement {
+  const input = document.createElement('input');
+  input.className = 'name-input';
+  overlay(scene, input, x, y, w, h, (k) => {
+    input.style.fontSize = `${18 * k}px`;
+    input.style.padding = `0 ${10 * k}px`;
+    input.style.borderWidth = `${Math.max(1, 2 * k)}px`;
+    input.style.borderRadius = `${4 * k}px`;
   });
   return input;
+}
+
+/**
+ * Selectable (copyable) text laid over the canvas in a box at (x, y, w, h), scrolling if it doesn't fit.
+ * Canvas text can't be selected, so use this for text players may want to copy. Returns a function that removes it.
+ */
+export function overlayText(
+  scene: Phaser.Scene, x: number, y: number, w: number, h: number, value: string, fontSize = 15, lineSpacing = 4,
+): () => void {
+  const el = document.createElement('div');
+  el.className = 'overlay-text';
+  el.textContent = value;
+  return overlay(scene, el, x, y, w, h, (k) => {
+    el.style.fontSize = `${fontSize * k}px`;
+    el.style.lineHeight = `${(fontSize * 1.2 + lineSpacing) * k}px`;
+  });
 }
 
 // ---- unit art -----------------------------------------------------------------
