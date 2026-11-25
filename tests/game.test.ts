@@ -96,7 +96,7 @@ describe('stats and content files', () => {
 
   it('every weapon grants defined skills; formulas are generated from the data', () => {
     for (const w of Object.values(WEAPONS)) for (const s of w.skills) expect(SKILLS[s]).toBeDefined();
-    expect(skillEffect(SKILLS.execute)).toBe("100% P.Atk + 15% of target's missing HP");
+    expect(skillEffect(SKILLS.execute)).toBe("Basic attack, x1 to x2 damage by the target's missing Health (x2 at 25% Health or less)");
     expect(skillEffect(SKILLS.double_strike)).toBe('Basic attack x2 (100%, then 50% damage)');
     expect(skillEffect(SKILLS.life_risking_strike)).toBe('250% P.Atk, You: Exposed (1 turn), 100% P.Atk recoil if the target survives');
   });
@@ -109,15 +109,15 @@ describe('stats and content files', () => {
       expect(labels, id).toEqual(want);
     }
     expect(skillStatText(SKILLS.fireball)).toBe(
-      'Effect: 120% M.Atk, a stack of Burn\nTags: Projectile, Debuff, Magical\nAP: Ends turn\nMana: 40\nCooldown: 2 turns');
+      'Effect: 120% M.Atk, a stack of Burn\nTags: Projectile, Debuff, Magical\nAP: Ends turn\nMana: 40\nCooldown: 3 turns');
     expect(skillStatText(SKILLS.ignite)).toBe(
-      'Effect: 20% M.Atk, a stack of Burn\nTags: Debuff, Magical\nAP: 1 AP\nMana: 30\nCooldown: 1 turn');
+      'Effect: 20% M.Atk, a stack of Burn\nTags: Debuff, Magical\nAP: 1 AP\nMana: 30\nCooldown: 2 turns');
     expect(skillStats(SKILLS.arcane_weapon)[0].value).toBe('Toggle: Weapon attacks +50% M.Atk per hit (10 mana each)');
-    expect(skillStatText(SKILLS.sword_slash)).toBe('Effect: 100% P.Atk\nTags: Melee, Engage, Physical\nAP: Ends turn');
+    expect(skillStatText(SKILLS.sword_slash)).toBe('Effect: 100% P.Atk\nTags: Melee, Engage, Physical\nAP: Ends turn\nCooldown: 1 turn');
     expect(skillStats(SKILLS.engage)[0].value).toBe(SKILLS.engage.description);
     expect(skillStats(SKILLS.bow_attack)[0].value).toBe("Attacks based on the bow's mode.");
-    expect(skillStats(SKILLS.protection)[0].value).toBe('Defense +25% M.Atk (2 turns)');
-    expect(skillStats(SKILLS.barrier)[0].value).toBe('Shield 100% M.Atk (1 turn)');
+    expect(skillStats(SKILLS.protection)[0].value).toBe('Defense +25% M.Atk (3 turns)');
+    expect(skillStats(SKILLS.barrier)[0].value).toBe('Shield 80% M.Atk (1 turn)');
     expect(skillStats(SKILLS.shield_up)[0].value).toBe('Shield 10% of max HP (1 turn)');
   });
 });
@@ -241,7 +241,7 @@ describe('ranges, lines and tags', () => {
     expect(hasLineOfSight(map, { x: 1, y: 3 }, { x: 5, y: 3 })).toBe(false);
   });
 
-  it('Movement tag: Charge range = Movement (Slow shrinks it); Arcane Shift is a fixed range 2', () => {
+  it('Movement tag: Charge range = Movement (Chilled shrinks it); Arcane Shift is a fixed range 2', () => {
     const { battle, units: [m, e] } = setup(openMap(), [
       { c: hero('staff', ['arcane_shift', 'charge']), team: 'player', at: { x: 1, y: 1 } },
       { c: hero('staff', ['freeze']), team: 'enemy', at: { x: 6, y: 1 } },
@@ -255,7 +255,7 @@ describe('ranges, lines and tags', () => {
     battle.perform(e, 'freeze', { x: 1, y: 1 });
     battle.endPhase();
     expect(battle.stat(m, 'movement')).toBe(12);
-    expect(battle.skillRange(m, SKILLS.charge)).toBe(3); // 12 / 4 per tile
+    expect(battle.skillRange(m, SKILLS.charge)).toBe(3); // 75% of 16 = 12, / 4 per tile
     expect(battle.skillRange(m, SKILLS.arcane_shift)).toBe(2);
   });
 
@@ -271,13 +271,40 @@ describe('ranges, lines and tags', () => {
     expect(battle.isUsable(archer, 'execute')).toBe(false);
   });
 
-  it('empty tiles can be targeted; the action is still spent', () => {
-    const { battle, units: [m] } = setup(openMap(), [
-      { c: hero('staff'), team: 'player', at: { x: 0, y: 0 } },
-      { c: hero(), team: 'enemy', at: { x: 9, y: 6 } },
+  it('single-target skills need a unit: empty tiles and Stealthed enemies are in range but not aimable', () => {
+    const { battle, units: [m, e] } = setup(openMap(), [
+      { c: hero('staff', ['charge']), team: 'player', at: { x: 0, y: 0 } },
+      { c: hero(), team: 'enemy', at: { x: 3, y: 1 } },
     ]);
-    expect(battle.perform(m, 'magic_bolt', { x: 3, y: 0 })).toEqual([]);
-    expect(m.acted).toBe(true);
+    // Still part of the range box...
+    expect(battle.canTarget(m, SKILLS.magic_bolt, { x: 3, y: 0 })).toBe(true);
+    // ...but can't be aimed at.
+    expect(battle.canAim(m, SKILLS.magic_bolt, { x: 3, y: 0 })).toBe(false);
+    expect(battle.targetError(m, SKILLS.magic_bolt, { x: 3, y: 0 })).toBe('Magic Bolt needs a unit to target.');
+    expect(() => battle.perform(m, 'magic_bolt', { x: 3, y: 0 })).toThrow('needs a unit');
+    expect(battle.canAim(m, SKILLS.charge, { x: 2, y: 0 })).toBe(false); // no charging at empty ground
+    expect(battle.canAim(m, SKILLS.magic_bolt, { x: 3, y: 1 })).toBe(true);
+    e.statuses.push({ id: 'stealth', name: 'Stealthed', debuff: false, stacks: 1, amount: 0, turns: 1, tick: 'start' });
+    expect(battle.canAim(m, SKILLS.magic_bolt, { x: 3, y: 1 })).toBe(false);
+    expect(m.acted).toBe(false);
+    // Area and line skills can still be aimed at empty ground.
+    expect(battle.canAim(m, SKILLS.spear_thrust, { x: 2, y: 0 })).toBe(true);
+  });
+
+  it('cleric skills only work on your own side', () => {
+    const { battle, units: [c, ally, e] } = setup(openMap(), [
+      { c: hero('staff', ['heal', 'cleanse', 'protection', 'barrier']), team: 'player', at: { x: 1, y: 1 } },
+      { c: hero('sword_shield', [], 'Ally'), team: 'player', at: { x: 2, y: 1 } },
+      { c: hero(), team: 'enemy', at: { x: 3, y: 1 } },
+    ]);
+    for (const id of ['heal', 'cleanse', 'protection', 'barrier']) {
+      expect(battle.canAim(c, SKILLS[id], { x: 3, y: 1 }), id).toBe(false);
+      expect(battle.canAim(c, SKILLS[id], { x: 2, y: 1 }), id).toBe(true);
+      expect(battle.canAim(c, SKILLS[id], { x: 1, y: 1 }), id).toBe(true); // yourself
+    }
+    expect(battle.targetError(c, SKILLS.heal, { x: 3, y: 1 })).toBe('Heal only works on your own side.');
+    expect(() => battle.perform(c, 'heal', { x: 3, y: 1 })).toThrow('own side');
+    expect([ally.hp, e.hp]).toEqual([ally.stats.health, e.stats.health]);
   });
 });
 
@@ -473,7 +500,7 @@ describe('skills', () => {
     expect(h.statuses).toEqual([]);
   });
 
-  it("Protection adds Defense from the caster's M.Atk; Barrier shields for 100% M.Atk; neither has a cooldown", () => {
+  it("Protection adds Defense from the caster's M.Atk; Barrier shields for 80% M.Atk with a 2-turn cooldown; Protection lasts 3 turns", () => {
     const { battle, units: [c, ally] } = setup(openMap(), [
       { c: hero('staff', ['protection', 'barrier']), team: 'player', at: { x: 1, y: 1 } },
       { c: hero('sword_shield', [], 'Ally'), team: 'player', at: { x: 3, y: 1 } },
@@ -481,20 +508,26 @@ describe('skills', () => {
     const def = battle.stat(ally, 'defense');
     battle.perform(c, 'protection', { x: 3, y: 1 });
     expect(battle.stat(ally, 'defense')).toBe(def + 30); // 25% of 120 M.Atk
+    expect(battle.isReady(c, 'protection')).toBe(false); // cooldown 1: not again this turn
+    battle.endPhase();
+    battle.endPhase();
     expect(battle.isReady(c, 'protection')).toBe(true);
-    battle.endPhase();
-    battle.endPhase();
     battle.perform(c, 'barrier', { x: 3, y: 1 });
-    expect(battle.shieldOf(ally)).toBe(120);
+    expect(battle.shieldOf(ally)).toBe(96); // 80% of 120 M.Atk
+    expect(battle.isReady(c, 'barrier')).toBe(false);
+    battle.endPhase();
+    battle.endPhase();
+    expect(battle.isReady(c, 'barrier')).toBe(false); // cooldown 2: skips the next turn
+    // Protected lasts 3 of the ally's turns: still on after 2...
+    expect(battle.stat(ally, 'defense')).toBe(def + 30);
+    battle.endPhase();
+    battle.endPhase();
     expect(battle.isReady(c, 'barrier')).toBe(true);
-    // Protected lasts 2 of the ally's turns.
-    battle.endPhase();
-    battle.endPhase();
-    expect(battle.stat(ally, 'defense')).toBe(def);
-    expect(SKILLS.heal.cooldown).toBe(0);
+    expect(battle.stat(ally, 'defense')).toBe(def); // ...gone after the 3rd
+    expect(SKILLS.heal.cooldown).toBe(1);
   });
 
-  it('Burn: 5% of max health per stack at the end of the burning unit\'s turn, reduced by Defense and shields, then a stack drops off', () => {
+  it('Burn: 5% of max health (whatever the stacks) at the end of the burning unit\'s turn, reduced by Defense and shields, then a stack drops off', () => {
     const { battle, units: [m, e, cleric] } = setup(openMap(), [
       { c: hero('staff', ['ignite']), team: 'player', at: { x: 1, y: 1 } },
       { c: tank(), team: 'enemy', at: { x: 4, y: 1 } },
@@ -506,9 +539,9 @@ describe('skills', () => {
     battle.endPhase(); // the enemy's turn starts: no damage yet, it gets to act first
     expect(e.hp).toBe(hp);
     const events = battle.endPhase(); // ...and burns as it ends
-    // 2 stacks x 5% of 750 = 75, x 100/163 for Def 63 = 46.
-    expect(events[0]).toMatchObject({ type: 'damage', cause: 'status', amount: 46, target: e.uid });
-    expect(e.hp).toBe(hp - 46);
+    // 2 stacks burn as hard as 1: 5% of 750 = 37.5, x 100/163 for Def 63 = 23.
+    expect(events[0]).toMatchObject({ type: 'damage', cause: 'status', amount: 23, target: e.uid });
+    expect(e.hp).toBe(hp - 23);
     expect(e.statuses.find((st) => st.id === 'burn')?.stacks).toBe(1);
     // A shield soaks the next tick (1 stack: 37.5 x 100/163 = 23), then Burn is gone.
     e.statuses.push({ id: 'shield', name: 'Shield', debuff: false, stacks: 0, amount: 100, turns: 2, tick: 'start' });
@@ -524,7 +557,7 @@ describe('skills', () => {
     expect(battle.endPhase().some((ev) => ev.type === 'damage' && ev.cause === 'status')).toBe(false);
   });
 
-  it('freeze puts a stack of Slow on the target, which drops off at the end of its next turn', () => {
+  it('freeze puts a stack of Chilled on the target, which drops off at the end of its next turn', () => {
     const { battle, units: [m, e] } = setup(openMap(), [
       { c: hero('staff', ['freeze']), team: 'player', at: { x: 1, y: 1 } },
       { c: hero('bow'), team: 'enemy', at: { x: 5, y: 1 } },
@@ -539,14 +572,15 @@ describe('skills', () => {
     expect(moveOnEnemyTurns).toEqual([12, 16, 16]);
   });
 
-  it('charge dashes next to an enemy within Movement and strikes', () => {
+  it('charge dashes next to an enemy within Movement and strikes for 60% P.Atk, 30 mana', () => {
     const { battle, units: [v, e] } = setup(openMap(), [
       { c: hero('sword_shield', ['charge']), team: 'player', at: { x: 1, y: 3 } },
       { c: hero('bow'), team: 'enemy', at: { x: 5, y: 3 } },
     ]);
     battle.perform(v, 'charge', { x: 5, y: 3 });
     expect(Math.hypot(v.x - 5, v.y - 3)).toBeLessThanOrEqual(1.5);
-    expect(e.hp).toBe(500 - 100); // 100% P.Atk on Def 0
+    expect(e.hp).toBe(500 - 60); // 60% P.Atk on Def 0
+    expect(v.mp).toBe(v.stats.mana - 30);
     expect(v.acted).toBe(false); // 1 AP: the action AP is still there
   });
 
@@ -561,14 +595,45 @@ describe('skills', () => {
     expect(k.acted).toBe(true);
   });
 
-  it("execute: 100% P.Atk + 15% of the target's missing health", () => {
-    const { battle, units: [a, e] } = setup(openMap(), [
-      { c: hero('sword_shield', ['execute']), team: 'player', at: { x: 1, y: 1 } },
-      { c: hero('bow'), team: 'enemy', at: { x: 2, y: 1 } },
-    ]);
-    e.hp = 200;
-    battle.perform(a, 'execute', { x: 2, y: 1 });
-    expect(e.hp).toBe(200 - 145); // 100 + 15% of 300 missing, Def 0
+  it('execute: the basic attack x1 at full Health, growing smoothly to x2 at 25% Health (from Health before the hit)', () => {
+    const duelAt = (weapon: string, hp: number) => {
+      const { battle, units: [a, e] } = setup(openMap(), [
+        { c: hero(weapon, ['execute']), team: 'player', at: { x: 1, y: 1 } },
+        { c: hero('bow'), team: 'enemy', at: { x: 2, y: 1 } },
+      ]);
+      e.hp = hp;
+      return { battle, a, e };
+    };
+    // Sword Slash is 100 P.Atk on a Def 0, 500-Health target.
+    for (const [hp, dmg] of [[500, 100], [350, 140], [200, 180], [125, 200], [100, 200]]) {
+      const { battle, a, e } = duelAt('sword_shield', hp);
+      expect(battle.missingHpMultiplier(SKILLS.execute, e)).toBeCloseTo(dmg / 100);
+      expect(battle.previewHits(a, SKILLS.execute, e), `${hp} HP`).toEqual([dmg]);
+      battle.perform(a, 'execute', { x: 2, y: 1 });
+      expect(e.hp).toBe(Math.max(0, hp - dmg));
+    }
+    // It follows the weapon: an Indirect bow shot is 70%, so at most 140%.
+    const bow = duelAt('bow', 100);
+    bow.battle.perform(bow.a, 'switch_mode', { x: 1, y: 1 });
+    expect(bow.battle.previewHits(bow.a, SKILLS.execute, bow.e)).toEqual([Math.round(0.7 * bow.battle.stat(bow.a, 'pAtk') * 2)]);
+    // Staff: both parts of Empowered Strike are doubled.
+    const staff = duelAt('staff', 100);
+    const base = staff.battle.previewHits(staff.a, staff.battle.basicAttack(staff.a), staff.e).reduce((x, y) => x + y, 0);
+    const exec = staff.battle.previewHits(staff.a, SKILLS.execute, staff.e).reduce((x, y) => x + y, 0);
+    expect(Math.abs(exec - 2 * base)).toBeLessThanOrEqual(1); // rounding per damage type
+  });
+
+  it("execute doesn't multiply Arcane Weapon's extra hit", () => {
+    const c = hero('sword_shield', ['execute', 'arcane_weapon']);
+    c.level = 3;
+    const a = makeUnit(c, 'player', { x: 1, y: 1 });
+    const e = makeUnit(hero('bow'), 'enemy', { x: 2, y: 1 });
+    const battle = new Battle(openMap(), [a, e], () => 0.99);
+    battle.perform(a, 'arcane_weapon', a);
+    const plain = battle.previewHits(a, SKILLS.sword_slash, e);
+    e.hp = 100; // 20% Health: x2
+    const exec = battle.previewHits(a, SKILLS.execute, e);
+    expect(exec).toEqual([plain[0] * 2, plain[1]]);
   });
 });
 
@@ -672,6 +737,8 @@ describe('engagement', () => {
     expect(a.engagedWith).toBeNull();
     expect(e.engagedWith).toBeNull();
     expect(a).toMatchObject({ x: 1, y: 3 });
+    // 1 AP: the turn goes on, so the escapee can still act.
+    expect(a).toMatchObject({ ap: 1, acted: false });
   });
 
   it('engaged spears can Spear Thrust and Circle Swing their opponent, incl. diagonally', () => {
@@ -842,7 +909,10 @@ describe('enemies', () => {
     battle.perform(slime, 'sticky_spit', { x: 3, y: 3 });
     expect(battle.stat(a, 'defense')).toBe(Math.round(def * 0.75));
     expect(a.statuses.map((s) => s.id).sort()).toEqual(['corrode', 'slow']);
-    expect(SKILLS.sticky_spit.cooldown).toBe(2);
+    // Separate debuffs: Slow (-25% Movement) for 1 turn, Corrode for 2.
+    expect(a.statuses.find((s) => s.id === 'slow')).toMatchObject({ stacks: 1, turns: 1 });
+    expect(a.statuses.find((s) => s.id === 'corrode')?.turns).toBe(2);
+    expect(SKILLS.sticky_spit.cooldown).toBe(3);
     battle.endPhase();
     battle.endPhase();
     battle.perform(slime, 'slam', { x: 4, y: 4 });
@@ -1487,7 +1557,7 @@ describe('action points, mana and Dash', () => {
     ]);
     const original = { ...SKILLS.bow_attack };
     try {
-      Object.assign(SKILLS.bow_attack, skill('bow_attack', { ap: 1 }));
+      Object.assign(SKILLS.bow_attack, skill('bow_attack', { ap: 1, cooldown: 0 }));
       battle.perform(a, 'bow_attack', { x: 2, y: 1 });
       expect(a).toMatchObject({ ap: 1, moved: true, acted: false }); // the movement AP went first
       expect(battle.canMove(a)).toBe(false);
@@ -1861,7 +1931,7 @@ describe('bow modes and damage types', () => {
   });
 });
 
-describe('zones (Firestorm, Blizzard), Slow stacks and Frozen', () => {
+describe('zones (Firestorm, Blizzard), Chilled stacks and Frozen', () => {
   const zoned = (skill: string) => {
     const { battle, units: [m, e] } = setup(openMap(), [
       { c: hero('staff', [skill]), team: 'player', at: { x: 2, y: 3 } },
@@ -1871,7 +1941,7 @@ describe('zones (Firestorm, Blizzard), Slow stacks and Frozen', () => {
     return { battle, m, e };
   };
 
-  it('Blizzard: each tile walked through hits and slows; the 3rd Slow stack Freezes and stops the walk', () => {
+  it('Blizzard: each tile walked through hits and chills; the 3rd Chilled stack Freezes and stops the walk', () => {
     const { battle, m, e } = zoned('blizzard');
     battle.perform(m, 'blizzard', { x: 6, y: 3 });
     expect(battle.zonesAt({ x: 7, y: 4 })).toHaveLength(1);
@@ -1881,26 +1951,26 @@ describe('zones (Firestorm, Blizzard), Slow stacks and Frozen', () => {
     const zoneHits = result.triggers.flatMap((t) => t.events).filter((ev) => ev.type === 'zoneHit');
     expect(zoneHits).toHaveLength(3);
     expect(battle.isFrozen(e)).toBe(true);
-    expect(e.statuses.find((st) => st.id === 'slow')).toBeUndefined(); // the stacks became Frozen
+    expect(e.statuses.find((st) => st.id === 'chilled')).toBeUndefined(); // the stacks became Frozen
     expect(result.interrupted).toBe(true);
     expect(battle.canMove(e)).toBe(false);
-    // Frozen lasts one turn: this one. Ending the turn inside: 2 more hits (2 new Slow stacks) that carry over.
+    // Frozen lasts one turn: this one. Ending the turn inside: 2 more hits (2 new Chilled stacks) that carry over.
     const end = battle.endPhase();
     expect(end.filter((ev) => ev.type === 'zoneHit')).toHaveLength(2);
     expect(battle.isFrozen(e)).toBe(false);
-    expect(e.statuses.find((st) => st.id === 'slow')?.stacks).toBe(2);
-    // Next own turn: free to move again, slowed by both stacks (one drops off as it ends).
+    expect(e.statuses.find((st) => st.id === 'chilled')?.stacks).toBe(2);
+    // Next own turn: free to move again, at -25% (2 stacks slow no more than 1; one drops off as it ends).
     battle.endPhase();
     expect(e.ap).toBe(2);
     expect(battle.canMove(e)).toBe(true);
-    expect(battle.stat(e, 'movement')).toBe(16 - 8);
+    expect(battle.stat(e, 'movement')).toBe(12);
   });
 
-  it('a 3rd Slow stack from a skill Freezes the target for exactly its next turn', () => {
+  it('a 3rd Chilled stack from a skill Freezes the target for exactly its next turn', () => {
     const m = makeUnit(hero('staff', ['freeze']), 'player', { x: 1, y: 3 });
     const e = makeUnit(hero('bow'), 'enemy', { x: 4, y: 3 });
     const battle = new Battle(openMap(), [m, e], () => 0.99); // never resisted
-    e.statuses.push({ id: 'slow', name: 'Slow', debuff: true, stacks: 2, amount: 0, turns: Infinity, tick: 'end' });
+    e.statuses.push({ id: 'chilled', name: 'Chilled', debuff: true, stacks: 2, amount: 0, turns: Infinity, tick: 'end' });
     battle.perform(m, 'freeze', { x: 4, y: 3 });
     expect(e.statuses.map((st) => [st.id, st.turns])).toEqual([['frozen', 1]]);
     battle.endPhase(); // the enemy's turn: Frozen, movement AP gone
@@ -1940,14 +2010,57 @@ describe('zones (Firestorm, Blizzard), Slow stacks and Frozen', () => {
     expect(battle.pathTo(battle.reachable(u), { x: 5, y: 2 })).toEqual([{ x: 5, y: 1 }, { x: 5, y: 2 }]);
   });
 
-  it('Slow stacks (2 max) and each takes a grass tile of Movement', () => {
+  it('Chilled is -25% Movement however many stacks; 2 stacks just last a turn longer', () => {
     const { battle, m, e } = zoned('freeze');
     const base = battle.stat(e, 'movement');
     e.x = 6;
     e.y = 3;
     battle.perform(m, 'freeze', { x: 6, y: 3 });
-    expect(battle.stat(e, 'movement')).toBe(base - 4);
+    expect(battle.stat(e, 'movement')).toBe(base * 0.75);
+    e.statuses.find((st) => st.id === 'chilled')!.stacks = 2;
+    expect(battle.stat(e, 'movement')).toBe(base * 0.75);
+    battle.endPhase(); // enemy turn: still chilled
+    battle.endPhase(); // it ends: down to 1 stack, not gone
+    expect(e.statuses.find((st) => st.id === 'chilled')?.stacks).toBe(1);
+    expect(battle.stat(e, 'movement')).toBe(base * 0.75);
     expect(skillEffect(SKILLS.firestorm)).toBe('3x3 zone for 2 turns. Each tile entered: 50% M.Atk, a stack of Burn. Ending a turn inside: 2 hits');
+  });
+
+  it('Slow (Web, Sticky Spit) is -25% Movement for 1 turn, renews instead of stacking, and never Freezes', () => {
+    expect(SKILLS.web.applyStatus).toEqual([{ status: 'slow', turns: 1 }]);
+    for (const id of ['freeze', 'iceblast', 'chill_touch']) expect(SKILLS[id].applyStatus?.[0].status, id).toBe('chilled');
+    expect(SKILLS.blizzard.zone?.applyStatus?.[0].status).toBe('chilled');
+    const spider = makeUnit(makeEnemy('spider', 6, makeRng(1)), 'enemy', { x: 4, y: 3 });
+    const h = makeUnit(hero('bow'), 'player', { x: 1, y: 3 });
+    const battle = new Battle(openMap(), [h, spider], () => 0.99); // never resisted
+    battle.endPhase();
+    for (let i = 0; i < 3; i++) {
+      battle.perform(spider, 'web', { x: 1, y: 3 });
+      spider.cooldowns = {};
+      spider.ap = 2;
+      spider.acted = false;
+      spider.locked = false;
+    }
+    expect(h.statuses.map((st) => [st.id, st.stacks, st.turns])).toEqual([['slow', 1, 1]]);
+    expect(battle.isFrozen(h)).toBe(false);
+    battle.endPhase(); // the player's turn: slowed
+    expect(battle.stat(h, 'movement')).toBe(12);
+    battle.endPhase(); // worn off as it ended
+    expect(h.statuses).toEqual([]);
+  });
+
+  it('Slow and Chilled are separate and multiply: 75% x 75% of Movement', () => {
+    const { battle, e } = zoned('freeze');
+    e.statuses.push({ id: 'slow', name: 'Slow', debuff: true, stacks: 1, amount: 0, turns: 1, tick: 'end' });
+    e.statuses.push({ id: 'chilled', name: 'Chilled', debuff: true, stacks: 2, amount: 0, turns: Infinity, tick: 'end' });
+    expect(battle.stat(e, 'movement')).toBe(Math.round(16 * 0.75 * 0.75)); // 9
+  });
+
+  it('Poison still hits harder per stack', () => {
+    const { battle, e } = zoned('freeze');
+    e.statuses.push({ id: 'poison', name: 'Poison', debuff: true, stacks: 2, amount: 0, turns: 3, tick: 'start' });
+    battle.endPhase(); // the enemy's turn starts: Poison ticks, ignoring Defense
+    expect(e.stats.health - e.hp).toBe(Math.round(e.stats.health * 0.06));
   });
 });
 
@@ -2037,26 +2150,26 @@ describe('Elementalist rework: Ignite, Freeze, Fireball, Iceblast and Burn explo
     return { battle: new Battle(openMap(), [m, e], () => 0.99), m, e };
   };
 
-  it('Ignite: 1 AP, 30 mana, 1-turn cooldown, 20% M.Atk and one Burn stack; Freeze does the same with Slow', () => {
-    expect(SKILLS.ignite).toMatchObject({ ap: 1, mana: 30, cooldown: 1, level: 1, hits: [{ mAtk: 0.2 }] });
-    expect(SKILLS.freeze).toMatchObject({ ap: 1, mana: 30, cooldown: 1, level: 1, hits: [{ mAtk: 0.2 }] });
+  it('Ignite: 1 AP, 30 mana, 2-turn cooldown, 20% M.Atk and one Burn stack; Freeze does the same with Chilled', () => {
+    expect(SKILLS.ignite).toMatchObject({ ap: 1, mana: 30, cooldown: 2, level: 1, hits: [{ mAtk: 0.2 }] });
+    expect(SKILLS.freeze).toMatchObject({ ap: 1, mana: 30, cooldown: 2, level: 1, hits: [{ mAtk: 0.2 }] });
     const { battle, m, e } = duelOf(['ignite', 'freeze']);
     battle.perform(m, 'ignite', { x: 4, y: 3 });
     expect(e.hp).toBe(750 - 15); // 24 M.Atk x 100/163
     expect(e.statuses.find((s) => s.id === 'burn')?.stacks).toBe(1);
     expect(m).toMatchObject({ acted: false, mp: m.stats.mana - 30 }); // 1 AP: the turn goes on
     battle.perform(m, 'freeze', { x: 4, y: 3 });
-    expect(e.statuses.find((s) => s.id === 'slow')?.stacks).toBe(1);
+    expect(e.statuses.find((s) => s.id === 'chilled')?.stacks).toBe(1);
     expect(m.ap).toBe(0); // both AP spent
   });
 
   it('Fireball and Iceblast are level 3 and hit for 120% M.Atk', () => {
     expect(SKILLS.fireball).toMatchObject({ level: 3, hits: [{ mAtk: 1.2 }] });
-    expect(SKILLS.iceblast).toMatchObject({ level: 3, los: 'sight', hits: [{ mAtk: 1.2 }], applyStatus: [{ status: 'slow', stacks: 1 }] });
+    expect(SKILLS.iceblast).toMatchObject({ level: 3, los: 'sight', hits: [{ mAtk: 1.2 }], applyStatus: [{ status: 'chilled', stacks: 1 }] });
     const { battle, m, e } = duelOf(['iceblast']);
     battle.perform(m, 'iceblast', { x: 4, y: 3 });
     expect(e.hp).toBe(750 - 88); // 144 M.Atk x 100/163
-    expect(e.statuses.find((s) => s.id === 'slow')?.stacks).toBe(1);
+    expect(e.statuses.find((s) => s.id === 'chilled')?.stacks).toBe(1);
   });
 
   it('Burn stacks to 2; a 3rd stack Explodes: Burn is gone and the unit takes 15% of max Health, reduced by Defense', () => {
@@ -2076,15 +2189,15 @@ describe('Elementalist rework: Ignite, Freeze, Fireball, Iceblast and Burn explo
     expect(b.e.hp).toBe(750);
   });
 
-  it('Wraiths attack with Spectral Touch; Chill Touch (Slow) has a 1-turn cooldown', () => {
-    expect(SKILLS.chill_touch.cooldown).toBe(1);
+  it('Wraiths attack with Spectral Touch; Chill Touch (Chilled) has a 2-turn cooldown', () => {
+    expect(SKILLS.chill_touch.cooldown).toBe(2);
     const w = makeUnit(makeEnemy('wraith', 12, makeRng(1)), 'enemy', { x: 4, y: 3 });
     const h = makeUnit(hero(), 'player', { x: 3, y: 3 });
     const battle = new Battle(openMap(), [h, w], () => 0.99);
     expect(battle.basicAttack(w).id).toBe('spectral_touch');
     battle.endPhase();
     battle.perform(w, 'chill_touch', { x: 3, y: 3 });
-    expect(h.statuses.find((s) => s.id === 'slow')?.stacks).toBe(1);
+    expect(h.statuses.find((s) => s.id === 'chilled')?.stacks).toBe(1);
     battle.endPhase();
     battle.endPhase();
     expect(battle.isReady(w, 'chill_touch')).toBe(false); // next turn: Spectral Touch only

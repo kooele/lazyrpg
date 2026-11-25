@@ -139,7 +139,7 @@ Everything gameplay-related lives in plain JSON files in `src/data/`. Each file 
 | File | What's in it |
 |---|---|
 | `stats.json` | Base stats and per-level growth, talent grades (growth rates and roll weights), Defense scaling, terrain movement costs, forest bonus, map size, vision switch |
-| `skills.json` | Every skill (numbers and descriptions), tags, status effects (Burn, Slow), skill trees |
+| `skills.json` | Every skill (numbers and descriptions), tags, status effects (Burn, Chilled, Slow), skill trees |
 | `weapons.json` | Weapons: stat multipliers and granted skills |
 | `enemies.json` | Enemy types: level range, stats, skills, art, and how big encounters are |
 | `guild.json` | Arch City: starting gold, rank shares, quest rewards, upkeep, mercenary and companion pay, slave prices, and the rival-party simulation |
@@ -158,7 +158,7 @@ Tooltips show a formula line generated from the numbers (e.g. "80% P.Atk, then 4
 | Resist | 20 (+10) | Chance to shrug off a debuff: Resist ÷ (100 + Resist) |
 | Movement | 16 | Movement points per turn: grass costs 4, forest 6, river 8 (so 16 = 4 grass tiles) |
 
-Every attack hits. **Resist** gives a chance to shrug off debuffs (Burn, Slow, Corrode...): Resist ÷ (100 + Resist), the same curve as Defense, so 50 Resist = 33% and 100 = 50%. A resisted debuff shows "Resisted" and doesn't apply; the attack's damage still lands. Targeting shows the chance, and the enemy AI weighs it. Enemies' Resist matches their Defense.
+Every attack hits. **Resist** gives a chance to shrug off debuffs (Burn, Chilled, Slow, Corrode...): Resist ÷ (100 + Resist), the same curve as Defense, so 50 Resist = 33% and 100 = 50%. A resisted debuff shows "Resisted" and doesn't apply; the attack's damage still lands. Targeting shows the chance, and the enemy AI weighs it. Enemies' Resist matches their Defense.
 
 Stats grow automatically on level up (80 XP for the first level, then 5 x L² + 15 x L + 60 for level L), at a speed set by the Adventurer's **talent**. Every growing stat (Health, Mana, P.Atk, M.Atk, Defense, Resist) has its own talent grade, rolled when the Adventurer is created; the grade multiplies that stat's growth per level (the numbers in brackets above):
 
@@ -193,7 +193,7 @@ Every unit gets **2 AP** each turn: a **movement AP** (the regular move) and an 
 
 Moving after a skill isn't possible once the movement AP is gone. **Undo move** takes back a regular move as long as nothing else happened since: once that unit uses a skill, takes an Overwatch shot, or another unit on your team moves or acts, the move is locked in.
 
-Skills can cost **mana** (`mana` in `skills.json`), which doesn't come back during a battle: Engage 10, Kick 10, Arcane Weapon 10 (toggle), Charge 20, Cleanse 20, Dash 20, Double Strike 20, Execute 20, Pocket Sand 20, Arcane Bolt 30, Freeze 30, Ignite 30, Arcane Shift 40, Barrier 40, Fireball 40, Flicker Strike 40, Heal 40, Iceblast 40, Life-Risking Strike 40, Protection 40, Shadow Step 40, Circle Swing 50, Arcane Pulse 60, Firestorm 100, Blizzard 100. Skill buttons show the cost; without enough mana a skill is greyed out. In battle, units with mana have a blue **mana bar** under their HP bar.
+Skills can cost **mana** (`mana` in `skills.json`), which doesn't come back during a battle: Engage 10, Kick 10, Arcane Weapon 10 (toggle), Cleanse 20, Dash 20, Double Strike 20, Execute 20, Pocket Sand 20, Arcane Bolt 30, Charge 30, Freeze 30, Ignite 30, Arcane Shift 40, Barrier 40, Fireball 40, Flicker Strike 40, Heal 40, Iceblast 40, Life-Risking Strike 40, Protection 40, Shadow Step 40, Circle Swing 50, Arcane Pulse 60, Firestorm 100, Blizzard 100. Skill buttons show the cost; without enough mana a skill is greyed out. In battle, units with mana have a blue **mana bar** under their HP bar.
 
 **Bow modes**: the bow's basic attack depends on its mode. **Switch Mode** (a free action) cycles Direct → Indirect → Melee → Direct. The bow keeps the selected mode between battles (saved as `weaponMode` on the character). Overwatch, opportunity attacks and Weapon skills (Execute, Double Strike) use the current mode. Circle Swing always swings in Melee mode without changing the selection. Bow Strike (Melee) engages, and a bow user that is engaged always fights in Melee mode; its selected mode comes back once it breaks free. Enemy archers fight at range: each turn they pick Direct or Indirect, whichever gives the better attack (Indirect when cover is in the way), and only fight in Melee when engaged. Modes are set in `skills.json` (`bow_attack.modes`), with ranges relative to the weapon's `range` in `weapons.json`.
 
@@ -207,7 +207,7 @@ Skills can cost **mana** (`mana` in `skills.json`), which doesn't come back duri
 
 **Basic abilities** (every Adventurer, listed under the weapon in the creator):
 
-- **Dash** (1 AP, 20 MP, cooldown 1): only after the regular move. Spends the action AP to move again, up to your Movement. Overwatch can still fire on the way; it can't be undone.
+- **Dash** (1 AP, 20 MP, cooldown 2): only after the regular move. Spends the action AP to move again, up to your Movement. Overwatch can still fire on the way; it can't be undone.
 - **Overwatch** (ends turn): watch a 60° arc in any direction, as far as your weapon reaches (Bow 5 in Direct mode, 7.5 in Indirect, 1.5 in Melee; Spear 2; sword and staff 1.5). The first enemy to move into it takes your basic attack and keeps moving. Bow and Spear no longer have their own Overwatch / Intercept.
 
 ### Skill points, skill trees and the Body tab
@@ -218,18 +218,18 @@ Adventurers have **skill points**: 2 at level 1 and 1 more every level. Each poi
 Some skills need a **minimum level** (`level` in `skills.json`; shown as "Lv 3" in the skill tree). Until then they're greyed out and can't be learned. A loaded save with a skill above the character's level unlearns it and refunds the point. Random adventurers only pick skills their level has unlocked.
 
 - **Mage**: Arcanist (Arcane Bolt, Arcane Pulse Lv 3, Arcane Shift Lv 3, Arcane Weapon Lv 3), Elementalist (Ignite, Freeze, Fireball Lv 3, Iceblast Lv 3, Firestorm Lv 5, Blizzard Lv 5), Cleric (Heal, Cleanse, Protection Lv 3, Barrier Lv 3)
-  - **Ignite** / **Freeze** (1 AP, 30 mana, 1-turn cooldown): 20% M.Atk and a stack of Burn / Slow. **Fireball** / **Iceblast** (level 3): 120% M.Atk and a stack of Burn / Slow.
+  - **Ignite** / **Freeze** (1 AP, 30 mana, 2-turn cooldown): 20% M.Atk and a stack of Burn / Chilled. **Fireball** / **Iceblast** (level 3): 120% M.Atk and a stack of Burn / Chilled.
   - **Arcane Weapon** is a **toggle** (free action): switching it on costs 10 mana, and keeping it on costs nothing. While it's on, every weapon attack (basic attacks, Overwatch, opportunity attacks and Weapon skills such as Double Strike, Execute and Circle Swing) deals an extra 50% M.Atk Magical hit each time it hits, for **10 mana per hit**: Double Strike pays twice, Circle Swing once per target it hits. Mana never goes below 0: a hit you can't pay for gets no extra damage, and Arcane Weapon switches off. Using it again switches it off for free. The skill bar shows it as **ON**, and damage previews include the extra hit.
 - **Warrior**: Vanguard (Engage, Charge Lv 3), Infighter (Kick, Pocket Sand Lv 3), Assassin (Shadow Step, Flicker Strike Lv 3, Life-Risking Strike Lv 5), Weapon Master (Double Strike, Execute Lv 3, Circle Swing Lv 5)
 
-Status effects: **Burn** and **Slow** don't last a set number of turns: skills apply **stacks**, and the unit loses one stack each turn. **Burn** deals 5% of max Health per stack at the end of the burning unit's turn (reduced by Defense and absorbed by shields, like a hit), then drops a stack, so the unit (and its team, e.g. with Cleanse) gets to act first; it holds up to 2 stacks, and a 3rd stack **Explodes**: Burn is removed and the unit takes 15% of its max Health at once (also reduced by Defense and shields). **Slow** is −4 Movement per stack and drops a stack at the end of each turn; up to 2 stacks, and a 3rd Freezes the unit for one turn (it can't move and loses its movement AP; Frozen wears off at the end of that turn, so if it happens mid-walk, it's that same turn). Slow and Frozen count down before end-of-turn zone hits, so Slow stacks picked up by ending a turn in a Blizzard last into the next turn. Also Corrode, Frenzy, **Blinded** (Pocket Sand: −30% P.Atk and M.Atk), **Exposed** (Life-Risking Strike: no Defense until your next turn) and **Stealthed** (Shadow Step: enemies can't target you directly or trigger overwatch on you until your next turn; area attacks still hit, and attacking ends it).
+Status effects: **Burn** and **Chilled** (from ice skills) don't last a set number of turns: skills apply **stacks**, and the unit loses one stack each turn. Stacks are turns, not strength: 2 stacks affect the unit exactly as much as 1, for one more turn, and the unit panel shows them as "Burn (2)". **Burn** deals 5% of max Health at the end of the burning unit's turn (reduced by Defense and absorbed by shields, like a hit), then drops a stack, so the unit (and its team, e.g. with Cleanse) gets to act first; it holds up to 2 stacks, and a 3rd stack **Explodes**: Burn is removed and the unit takes 15% of its max Health at once (also reduced by Defense and shields). **Chilled** is −25% Movement and drops a stack at the end of each turn; up to 2 stacks, and a 3rd Freezes the unit for one turn (it can't move and loses its movement AP; Frozen wears off at the end of that turn, so if it happens mid-walk, it's that same turn). Chilled and Frozen count down before end-of-turn zone hits, so Chilled stacks picked up by ending a turn in a Blizzard last into the next turn. **Slow** (Web, Sticky Spit) is also −25% Movement, for 1 turn; it has no stacks, never Freezes and has nothing to do with Chilled (being slowed again just renews it). Percentage stat changes multiply, so Slow and Chilled together leave 56% Movement. Poison is different: its stacks do add damage. Statuses only exist during a battle, so old saves aren't affected. Also Corrode, Frenzy, **Blinded** (Pocket Sand: −30% P.Atk and M.Atk), **Exposed** (Life-Risking Strike: no Defense until your next turn) and **Stealthed** (Shadow Step: enemies can't target you directly or trigger overwatch on you until your next turn; area attacks still hit, and attacking ends it).
 
 ### Tags
 
 Every skill has tags that explain how it behaves. These five change the rules:
 
-- **Movement**: range in tiles = rangeScale × Movement ÷ 4 (the grass cost), rounded down. Charge uses 100% (4 tiles at Movement 16), and Slow (−4 Movement) shortens it. Arcane Shift has a fixed range of 2.
-- **Weapon**: uses your weapon's basic-attack range and line rules (Execute with a Bow reaches 5 tiles). Double Strike hits with the basic attack twice (the second hit at 50% damage), and Circle Swing hits every unit within the weapon's range with it, allies included (a bow uses its Melee mode for both the reach and the hit). Unusable while the weapon is disabled (nothing disables weapons yet).
+- **Movement**: range in tiles = rangeScale × Movement ÷ 4 (the grass cost), rounded down. Charge uses 100% (4 tiles at Movement 16), and Slow or Chilled (−25% Movement) shortens it. Arcane Shift has a fixed range of 2.
+- **Weapon**: uses your weapon's basic-attack range and line rules (Execute with a Bow reaches 5 tiles). Double Strike hits with the basic attack twice (the second hit at 50% damage). Execute hits with the basic attack once, multiplied by the target's missing Health: x1 at full Health, growing smoothly to x2 at 25% Health or less (from its Health before the hit; Arcane Weapon's extra hit isn't multiplied). So it follows the weapon: an Indirect bow Executes for 70% P.Atk, up to 140%. Circle Swing hits every unit within the weapon's range with it, allies included (a bow uses its Melee mode for both the reach and the hit). Unusable while the weapon is disabled (nothing disables weapons yet).
 - **Engage**: see below. Sword Slash, Bow Strike (bow in Melee mode), Empowered Strike, Engage, Kick, Charge, Flicker Strike, Life-Risking Strike.
 - **Disengage**: usable while engaged, on anyone, and it ends your engagement with no free attack for your opponent. Arcane Shift, Shadow Step.
 - **Free Action**: costs 0 AP (Kick, Engage). Usable any time until the unit's turn ends, so after a move or a 1/2-AP skill, but not after a turn-ending one. The turn doesn't end automatically while a unit still has a free action with a target in reach; press **End Turn** when done.
@@ -252,7 +252,7 @@ Each enemy type has a fixed level range and its own stats and skills (`src/data/
 | Orc | 7–13 | Tribal | Warriors and brutes with Cleave (hits everyone adjacent); War Cry at level 9. |
 | Sellsword | 8–14 | Human | Full weapon kits plus Kick, Charge, Execute, or Fireball and Heal (Hedge Mages). |
 | Cave Bear | 9–14 | Beast | Maul (Engage), Rend (heavy hit); Roar at level 12 (Blinds nearby enemies). |
-| Wraith | 10–16 | Evil | Spectral Touch (magic, Engage), Chill Touch (also a stack of Slow; 1-turn cooldown), Wail (hurts and Blinds everyone nearby). |
+| Wraith | 10–16 | Evil | Spectral Touch (magic, Engage), Chill Touch (also a stack of Chilled; 2-turn cooldown), Wail (hurts and Blinds everyone nearby). |
 | Troll | 13–20 | Tribal | Club (Engage), Smash (knockback), Regenerate (heals itself). Slow and huge. |
 | Renegade | 14–25 | Human | Knights, lancers, rangers and sorcerers with Double Strike, Circle Swing, Freeze, Heal... |
 | Wyvern | 15–23 | Beast | Bite (Engage), Dive (swoops in), Tail Sting (Poison x2). Very fast. |
@@ -278,7 +278,7 @@ Hitting a unit with an **Engage** skill (or **Spear Thrust** on an adjacent targ
 - **Disengage** skills (Arcane Shift, Shadow Step) slip out of an engagement with no opportunity attack. **Arcane Pulse** isn't one: an engaged caster can only Pulse its own opponent, and pushing it away breaks the engagement and gives the caster the free hit. Other teleports and moves need you to disengage first.
 - Engagement also ends if either unit falls, or if either one is successfully pushed by a knockback (Circle Swing, Arcane Pulse), even if they still end up next to each other. The pushed unit takes a free basic attack from its old opponent, just like disengaging. A push that's blocked doesn't break it.
 
-Cleric skills (Heal, Cleanse, Protection, Barrier) work only on your own side, yourself included. An attack aimed straight at an ally hits them normally (lines like Spear Thrust pass by allies they aren't aimed at). In battle, the game asks for confirmation before you attack an empty tile or an ally. The battle log keeps the whole fight: scroll it with the mouse wheel or the bar on its right.
+Cleric skills (Heal, Cleanse, Protection, Barrier) work only on your own side, yourself included: they can't be aimed at enemies. Single-target skills (target `unit`: Heal, Fireball, Charge...) must be aimed at a unit, never an empty tile or a Stealthed enemy. An attack aimed straight at an ally hits them normally (lines like Spear Thrust pass by allies they aren't aimed at). In battle, the game asks for confirmation before you attack an ally, or aim a line or area attack where it will hit nothing. The battle log keeps the whole fight: scroll it with the mouse wheel or the bar on its right.
 
 ### Lines, cooldowns, and prepared systems
 
@@ -287,7 +287,7 @@ Cleric skills (Heal, Cleanse, Protection, Barrier) work only on your own side, y
 - No line needed: melee skills, Spear Thrust (it stops at the first enemy in the way), Indirect Shot (bow in Indirect mode), Ignite, Freeze, Heal, Cleanse, Arcane Shift.
 - **Ranges** use Euclidean distance. Ranges of 2 or more round the distance to the nearest tile, so range 2 also reaches 2-over-1-up and shapes are rounder. Ranges 1 and 1.5 stay exact: 1 is the 4 neighbours, 1.5 adds the diagonals. Set `rangeRounding.fromRange` in `stats.json` to change the cut-off.
 - Skill tooltips and the weapon panel show a **tile diagram** of what each skill covers, with you in gold, rather than describing range in words.
-- A cooldown of N means the skill can't be used during your next N turns.
+- Cooldowns count from the turn a skill is used: cooldown 1 means not again that turn but ready next turn; cooldown 2 skips your next turn. Every skill has a cooldown of at least 1.
 - `vision` (fog of war) is built but switched off in `stats.json`.
 
 ### Art
