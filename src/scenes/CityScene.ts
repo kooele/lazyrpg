@@ -3,6 +3,7 @@ import { GUILD } from '../data/guild';
 import { WEAPONS } from '../data/content';
 import { dailyUpkeep, departBlock, endDay, foodCost, lineupMembers, lodgingCost, prisonersAtGate, registerPrisoner, turnInPrisoner } from '../game/city';
 import { adventurerRank } from '../game/guild';
+import { moraleOf } from '../game/condition';
 import { bondOf, registrationFee, slaveTax } from '../game/contracts';
 import { markDirty, requireState, session } from '../game/session';
 import { cityHeader, rankBadge } from '../ui/hud';
@@ -229,9 +230,9 @@ export class CityScene extends Phaser.Scene {
     const total = dailyUpkeep(state, 'city');
     const short = total > state.gold ? '\nYou can\'t afford it: companions and slaves will be unhappy.' : '';
     confirmDialog(this, `End the day?\nTonight: ${total} gold (lodging ${lodgingCost(state, 'city')} + food ${foodCost(state)}).\nSet where each member lodges in Manage Party.${short}`, () => {
-      // Before the night: gold, and everyone's relationship, for the summary.
+      // Before the night: gold, everyone's Morale and companions' and slaves' relationship, for the summary.
       const gold = state.gold;
-      const before = state.party.filter((c) => bondOf(c)).map((c) => ({ id: c.id, name: c.name, rel: bondOf(c)!.relationship }));
+      const before = state.party.map((c) => ({ id: c.id, name: c.name, morale: moraleOf(c), rel: bondOf(c)?.relationship }));
       const msgs = endDay(state, Math.random);
       markDirty();
       this.render();
@@ -240,10 +241,10 @@ export class CityScene extends Phaser.Scene {
   }
 
   /**
-   * The summary after End Day: gold spent or earned, each companion's and slave's relationship change over the night
-   * (or that they left), and everything that happened.
+   * The summary after End Day: gold spent or earned, each member's Morale and each companion's and slave's
+   * relationship change over the night (or that they left), and everything that happened.
    */
-  private daySummary(gold: number, before: { id: string; name: string; rel: number }[], msgs: string[]): void {
+  private daySummary(gold: number, before: { id: string; name: string; morale: number; rel?: number }[], msgs: string[]): void {
     const state = requireState();
     const layer = this.add.container(0, 0).setDepth(1000);
     layer.add(this.add.rectangle(0, 0, WIDTH, HEIGHT, 0x000000, 0.7).setOrigin(0).setInteractive());
@@ -261,20 +262,29 @@ export class CityScene extends Phaser.Scene {
       const obj = text(this, 0, 0, t, { fontSize: '13px', wordWrap: { width: W - 60 }, lineSpacing: 2, ...style });
       items.push({ obj: this.add.container(0, 0, [obj]), height: obj.height });
     };
+    const change = (name: string, from: number, to: number) => {
+      const d = Math.round(to) - Math.round(from);
+      add(`  ${name}: ${Math.round(from)} → ${Math.round(to)}  (${d > 0 ? '+' : ''}${d})`, { color: d > 0 ? COLORS.good : d < 0 ? COLORS.bad : COLORS.dim });
+    };
+    // Morale: one line per member (food, lodging and the schedule move it every day).
+    add('Morale', { fontSize: '15px', color: COLORS.gold });
+    for (const b of before) {
+      const now = state.party.find((c) => c.id === b.id);
+      if (now) change(b.name, b.morale, moraleOf(now));
+      else add(`  ${b.name}: left the party`, { color: COLORS.bad });
+    }
     // Relationship: one line per companion and slave.
-    if (before.length) {
+    const bonds = before.filter((b) => b.rel !== undefined);
+    if (bonds.length) {
       add('Relationships', { fontSize: '15px', color: COLORS.gold });
-      for (const b of before) {
+      for (const b of bonds) {
         const now = state.party.find((c) => c.id === b.id);
         const bond = now && bondOf(now);
         if (!bond) {
           add(`  ${b.name}: left the party`, { color: COLORS.bad });
           continue;
         }
-        const d = Math.round(bond.relationship) - Math.round(b.rel);
-        add(`  ${b.name}: ${Math.round(b.rel)} → ${Math.round(bond.relationship)}  (${d > 0 ? '+' : ''}${d})`, {
-          color: d > 0 ? COLORS.good : d < 0 ? COLORS.bad : COLORS.dim,
-        });
+        change(b.name, b.rel!, bond.relationship);
       }
     }
     add('What happened', { fontSize: '15px', color: COLORS.gold });

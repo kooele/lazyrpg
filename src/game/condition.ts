@@ -76,12 +76,18 @@ export function lodgingName(l: Lodging): string {
   return isResidence(l) ? `your ${GUILD.residences[l].name}` : GUILD.inns[l].name;
 }
 
-/** Relationship change for a night spent at `where` (better than expected: up; worse: down per step). */
-export function lodgingRelationship(c: Character, where: CityLodging): number {
+/**
+ * Morale change for a night spent at `where` (better than expected: up; worse: down, per step), before traits:
+ * changeMorale multiplies gains (Protagonist x2). See moraleGainOf for what the member actually gets.
+ */
+export function lodgingMorale(c: Character, where: CityLodging): number {
   const diff = LODGING_QUALITY[where] - expectedQuality(c);
-  if (diff > 0) return GUILD.lodging.relationshipAbovePerStep * diff;
-  return diff < 0 ? -GUILD.lodging.relationshipBelowPerStep * -diff : 0;
+  if (diff > 0) return GUILD.lodging.moraleAbovePerStep * diff;
+  return diff < 0 ? -GUILD.lodging.moraleBelowPerStep * -diff : 0;
 }
+
+/** What a Morale change becomes for `c` once traits apply (gains are multiplied, losses aren't). */
+export const moraleGainOf = (c: Character, delta: number) => (delta > 0 ? delta * traitFactor(c, 'moraleGain') : delta);
 
 /**
  * Where a member sleeps in the city: as set in Manage Party, else the stables ('outside'). A residence the party
@@ -95,11 +101,11 @@ export function lodgingOf(state: GameState, c: Pick<Character, 'id'>): CityLodgi
 /** The food a member gets each day: as set in Manage Party, else food.default. */
 export const foodOf = (state: GameState, c: Character): FoodTier => state.food[c.id] ?? GUILD.food.default;
 
-/** Relationship change for a day's food (better than they expect: up; worse: down per step). */
-export function foodRelationship(c: Character, tier: FoodTier): number {
+/** Morale change for a day's food (better than they expect: up; worse: down, per step), before traits (see lodgingMorale). */
+export function foodMorale(c: Character, tier: FoodTier): number {
   const diff = foodQuality(tier) - expectedQuality(c);
-  if (diff > 0) return GUILD.food.relationshipAbovePerStep * diff;
-  return diff < 0 ? -GUILD.food.relationshipBelowPerStep * -diff : 0;
+  if (diff > 0) return GUILD.food.moraleAbovePerStep * diff;
+  return diff < 0 ? -GUILD.food.moraleBelowPerStep * -diff : 0;
 }
 
 /** What a food quality means for someone's expectations, for the UI. */

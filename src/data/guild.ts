@@ -66,15 +66,18 @@ export interface GuildConfig {
   board: { maxPostsPerDay: number; rankWeights: Record<Rank, number>; pay: [number, number] };
   quests: Record<Rank, QuestTier>;
   threat: ThreatConfig;
-  food: Record<FoodTier, { name: string; pricePerPerson: number }> & { default: FoodTier; relationshipAbovePerStep: number; relationshipBelowPerStep: number };
+  food: Record<FoodTier, { name: string; pricePerPerson: number }> & { default: FoodTier; moraleAbovePerStep: number; moraleBelowPerStep: number };
   inns: Record<InnTier, InnConfig>;
-  lodging: { expectedQuality: Record<'S' | Rank, number>; slaveExpectedQuality: number; relationshipAbovePerStep: number; relationshipBelowPerStep: number; stablesPerPerson: number };
+  lodging: { expectedQuality: Record<'S' | Rank, number>; slaveExpectedQuality: number; moraleAbovePerStep: number; moraleBelowPerStep: number; stablesPerPerson: number };
   residences: Record<Ring, { name: string; price: number }> & { sellShare: number; capacity: number };
   condition: {
     maxHealthLoss: number;
     healthPerDay: number;
     lowMorale: number;
     lowMoraleRelationshipPerDay: number;
+    /** Above this Morale, companions and slaves gain highMoraleRelationshipPerDay relationship a day. */
+    highMorale: number;
+    highMoraleRelationshipPerDay: number;
     startingMorale: number;
     moralePerTurn: number;
     moraleFailedQuest: number;
@@ -194,8 +197,8 @@ function parseInns(v: unknown): Record<InnTier, InnConfig> {
 function parseFood(v: unknown): GuildConfig['food'] {
   const o = obj(v, 'food');
   const out = {
-    relationshipAbovePerStep: num(o.relationshipAbovePerStep, 'food.relationshipAbovePerStep', 0, 100),
-    relationshipBelowPerStep: num(o.relationshipBelowPerStep, 'food.relationshipBelowPerStep', 0, 100),
+    moraleAbovePerStep: num(o.moraleAbovePerStep, 'food.moraleAbovePerStep', 0, 100),
+    moraleBelowPerStep: num(o.moraleBelowPerStep, 'food.moraleBelowPerStep', 0, 100),
   } as GuildConfig['food'];
   for (const t of FOOD_TIERS) {
     const f = obj(o[t], `food.${t}`);
@@ -297,13 +300,13 @@ export function parseGuildConfig(data: unknown): GuildConfig {
     food: parseFood(d.food),
     inns: parseInns(d.inns),
     lodging: {
-      ...numbers<Omit<GuildConfig['lodging'], 'expectedQuality'>>(d.lodging, 'lodging', ['relationshipAbovePerStep', 'relationshipBelowPerStep', 'stablesPerPerson']),
+      ...numbers<Omit<GuildConfig['lodging'], 'expectedQuality'>>(d.lodging, 'lodging', ['moraleAbovePerStep', 'moraleBelowPerStep', 'stablesPerPerson']),
       expectedQuality: numbers(obj(d.lodging, 'lodging').expectedQuality, 'lodging.expectedQuality', [...RANKS], 3),
       slaveExpectedQuality: num(obj(d.lodging, 'lodging').slaveExpectedQuality ?? 0, 'lodging.slaveExpectedQuality', 0, 3),
     },
     residences: parseResidences(d.residences),
     condition: numbers<GuildConfig['condition']>(d.condition, 'condition', ['maxHealthLoss', 'healthPerDay', 'startingMorale', 'moralePerTurn',
-      'moraleFailedQuest', 'moralePerHealthLost', 'moraleMemberDied', 'lowMorale', 'lowMoraleRelationshipPerDay'], 100),
+      'moraleFailedQuest', 'moralePerHealthLost', 'moraleMemberDied', 'lowMorale', 'lowMoraleRelationshipPerDay', 'highMorale', 'highMoraleRelationshipPerDay'], 100),
     xp: {
       pool: numbers(obj(d.xp, 'xp').pool, 'xp.pool', ['a', 'b', 'c']),
     },
