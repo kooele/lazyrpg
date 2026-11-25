@@ -109,7 +109,7 @@ export class MarketScene extends Phaser.Scene {
   private sell(c: Character): void {
     const state = requireState();
     confirmDialog(this, `Sell ${c.name} (Lv ${c.level}) to the slave market for ${marketBuyPrice(state, c)} gold?`, () => {
-      const gold = sellSlave(state, c.id, Math.random);
+      const gold = sellSlave(state, c.id);
       markDirty();
       this.render();
       toast(this, `${c.name} goes on the market. You get ${gold} gold.`);

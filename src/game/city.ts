@@ -6,7 +6,7 @@ import { RANKS, type Character, type CompanionTerms, type GameState, type Offer,
 import { dangerRating, makeQuest, postQuests } from './board';
 import { grantXp, type Rng } from './character';
 import {
-  bondOf, bounty, canFight, registrationFee, slaveTax, changeRelationship, isCompanion, isHoused, isSlave, leaveParty, releaseTotal, proratedWages, wagesBetween, lastPayday, slaveContract, slavePrice, talentPriceFactor,
+  bondOf, bounty, canFight, registrationFee, slaveTax, changeRelationship, isCompanion, isHoused, isSlave, leaveParty, releaseTotal, proratedWages, wagesBetween, lastPayday, slaveContract, slaveValue,
 } from './contracts';
 import {
   ACTIVITY_INFO, FOOD_EXPECT_TEXT, QUALITY_TEXT, activityOf, changeHealth, changeMorale, defaultLodging, expectedQuality, foodMorale, foodOf, healthLoss, healthOf,
@@ -688,7 +688,7 @@ export function advanceDay(state: GameState, rng: Rng, night: 'road' | 'city' = 
         state.gold -= tax;
         taxed += tax;
       } else {
-        seizeSlave(state, c, rng);
+        seizeSlave(state, c);
         say(`You couldn't pay the property tax on ${c.name} (${tax} gold): the city seized them for the slave market.`);
       }
     }
@@ -726,16 +726,18 @@ const round5 = (v: number) => Math.max(5, Math.round(v / 5) * 5);
 function marketSlave(state: GameState, rng: Rng) {
   const [lo, hi] = MARKET_LEVELS[state.rank];
   const c = randomAdventurer(randInt(lo, hi, rng), rng);
-  return { character: c, price: slavePrice(c.level, rng, talentPriceFactor(c)) };
+  return { character: c, price: round5(slaveValue(c)) };
 }
 
-/** Asking price of a slave for sale: its value x the market's price index. */
-export const askingPrice = (state: GameState, o: Offer) => round5(o.price * state.market.priceIndex);
+/**
+ * Asking price of a slave for sale: its value x the market's price index. Worked out from the slave itself, not the
+ * offer's stored price, so it always matches the value shown once they're bought (and older saves' stored prices don't matter).
+ */
+export const askingPrice = (state: GameState, o: Offer) => round5(slaveValue(o.character) * state.market.priceIndex);
 
 /** What the market pays for one of the party's slaves right now (sellBackShare of the current price). It doesn't buy prisoners. */
 export function marketBuyPrice(state: GameState, c: Character): number {
-  const value = slavePrice(c.level, () => 0.5, talentPriceFactor(c));
-  return Math.round(value * state.market.priceIndex * GUILD.slave.sellBackShare);
+  return Math.round(round5(slaveValue(c)) * state.market.priceIndex * GUILD.slave.sellBackShare);
 }
 
 /** Is a shipment due on `day` (market.shipmentWeekdays)? And the next shipment day from `day` on. */
@@ -793,7 +795,7 @@ export function buySlave(state: GameState, id: string, rng: Rng = Math.random): 
 }
 
 /** Sell a party slave to the market (sellBackShare of the current price). Returns the gold received. */
-export function sellSlave(state: GameState, id: string, rng: Rng): number {
+export function sellSlave(state: GameState, id: string): number {
   const c = state.party.find((m) => m.id === id);
   if (!c || c.contract?.type !== 'slave') return 0;
   const gold = marketBuyPrice(state, c);
@@ -804,19 +806,19 @@ export function sellSlave(state: GameState, id: string, rng: Rng): number {
   delete state.food[c.id];
   delete state.lodging[c.id];
   const { contract: _k, ...character } = c;
-  state.market.slaves.push({ character, price: slavePrice(c.level, rng, talentPriceFactor(c)) });
+  state.market.slaves.push({ character, price: round5(slaveValue(c)) });
   return gold;
 }
 
 /** The city takes a slave whose property tax went unpaid; it goes up for sale at the slave market. */
-function seizeSlave(state: GameState, c: Character, rng: Rng): void {
+function seizeSlave(state: GameState, c: Character): void {
   state.party = state.party.filter((m) => m !== c);
   state.lineup = state.lineup.filter((x) => x !== c.id);
   delete state.schedule[c.id];
   delete state.food[c.id];
   delete state.lodging[c.id];
   const { contract: _k, ...character } = c;
-  state.market.slaves.push({ character, price: slavePrice(c.level, rng, talentPriceFactor(c)) });
+  state.market.slaves.push({ character, price: round5(slaveValue(c)) });
 }
 
 // ---- prisoners: registered at the city gate --------------------------------------------------------

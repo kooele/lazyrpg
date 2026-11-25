@@ -963,7 +963,24 @@ describe('contracts', () => {
     // Asking prices follow the index.
     const o = s.market.slaves[0];
     s.market.priceIndex = 1.2;
-    expect(askingPrice(s, o)).toBe(Math.max(5, Math.round((o.price * 1.2) / 5) * 5));
+    expect(askingPrice(s, o)).toBe(Math.max(5, Math.round((slaveValue(o.character) * 1.2) / 5) * 5));
+  });
+
+  it('a slave costs exactly their value x the price index, the same value Manage Party shows once bought', () => {
+    const s = start();
+    s.gold = 1e6;
+    s.market.priceIndex = 1;
+    for (const o of [...s.market.slaves]) {
+      const paid = askingPrice(s, o);
+      expect(paid).toBe(Math.max(5, Math.round(slaveValue(o.character) / 5) * 5));
+      if (s.party.length < GUILD.maxRoster) {
+        expect(buySlave(s, o.character.id)).toBeNull();
+        expect(Math.round(slaveValue(s.party[s.party.length - 1]) / 5) * 5).toBe(paid);
+      }
+    }
+    // An offer saved with a different price (older saves rolled ±15% luck) still asks the slave's value.
+    const o = s.market.slaves[0] ?? { character: s.party[s.party.length - 1], price: 1 };
+    expect(askingPrice(s, { ...o, price: 1 })).toBe(Math.max(5, Math.round(slaveValue(o.character) / 5) * 5));
   });
 
   it('there is no limit on prisoners; each is turned in for the bounty or registered as a slave', () => {
@@ -990,7 +1007,7 @@ describe('contracts', () => {
     const gold = s.gold;
     const pay = marketBuyPrice(s, slave);
     expect(GUILD.slave.sellBackShare).toBe(0.8);
-    expect(sellSlave(s, slave.id, makeRng(1))).toBe(pay);
+    expect(sellSlave(s, slave.id)).toBe(pay);
     expect(s.gold).toBe(gold + pay);
     expect(s.market.slaves).toHaveLength(stock + 1);
   });

@@ -432,7 +432,7 @@ export class PartyScene extends Phaser.Scene {
       if (left > 7) text(this, X + 156, by - 18, 'Renewal opens in the last week.', { fontSize: '11px', color: COLORS.dim });
     } else if (k?.type === 'slave') {
       button(this, X + 156, by, 140, 44, 'Sell', () => confirmDialog(this, `Sell ${c.name} to the slave market for ${marketBuyPrice(state, c)} gold?`, () => {
-        const gold = sellSlave(state, c.id, Math.random);
+        const gold = sellSlave(state, c.id);
         markDirty();
         this.render();
         toast(this, `Sold for ${gold} gold.`);
