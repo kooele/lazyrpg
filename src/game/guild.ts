@@ -29,15 +29,6 @@ export function adventurerRank(level: number): AdventurerRank {
   return level >= r.S ? 'S' : level >= r.A ? 'A' : level >= r.B ? 'B' : level >= r.C ? 'C' : 'D';
 }
 
-/** Levels of an adventurer rank (S: from its first level to 5 above). */
-export function rankLevels(rank: AdventurerRank): [number, number] {
-  const r = GUILD.adventurerRanks;
-  const bounds: Record<AdventurerRank, [number, number]> = {
-    D: [1, r.C - 1], C: [r.C, r.B - 1], B: [r.B, r.A - 1], A: [r.A, r.S - 1], S: [r.S, r.S + 4],
-  };
-  return bounds[rank];
-}
-
 /** Can a party with this renown take its next rank's promotion quest? Never past ranks.highestPromotion. */
 export const promotionReady = (rank: Rank, renown: number) => {
   const up = nextRank(rank);
@@ -234,14 +225,6 @@ export function rivalPickQuest(p: RivalParty, board: Quest[]): Quest | null {
     }
   }
   return best;
-}
-
-/** Which quest rank a rival takes: the hardest one at or below its rank it is fairly sure of, and now and then one above. */
-export function rivalQuestRank(p: RivalParty, rng: Rng): Rank {
-  const own = RANKS.indexOf(p.rank);
-  if (own > 0 && rng() < 0.3 && rivalSuccessChance(p, RANKS[own - 1]) >= 0.7) return RANKS[own - 1];
-  for (let i = own; i < RANKS.length; i++) if (rivalSuccessChance(p, RANKS[i]) >= 0.6) return RANKS[i];
-  return 'D';
 }
 
 /** Expected adventurers lost today across all parties (used to pace new arrivals). */

@@ -362,7 +362,6 @@ export type Rank = 'S' | 'A' | 'B' | 'C' | 'D';
 export const RANKS: readonly Rank[] = ['S', 'A', 'B', 'C', 'D'];
 /** An adventurer's own rank, from their level (the same letters as party ranks). */
 export type AdventurerRank = 'S' | Rank;
-export const ADVENTURER_RANKS: readonly AdventurerRank[] = ['S', 'A', 'B', 'C', 'D'];
 
 /**
  * main      – the player's own character: permanent, can't be dismissed.
@@ -407,8 +406,6 @@ export type Contract =
     /** Day they were last punished (once a day). */
     punishedDay?: number;
   };
-
-export type MemberType = Contract['type'];
 
 /** Terms of a companion contract while negotiating. */
 export interface CompanionTerms {
