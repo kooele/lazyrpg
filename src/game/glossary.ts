@@ -31,6 +31,7 @@ export function glossaryEntries(): GlossaryEntry[] {
   const food = (q: number) => G.food[FOOD_TIERS[q]].pricePerPerson;
   const night = (q: number) => (q === 0 ? L.stablesPerPerson : G.inns[INN_TIERS[q - 1]].pricePerPerson);
   const adventurerQ = L.expectedQuality;
+  const drinks = INN_TIERS.map((t) => G.inns[t].drinksMorale);
   const promoRanks = RANKS.filter((r) => r !== 'D' && RANKS.indexOf(r) >= RANKS.indexOf(G.ranks.highestPromotion)).reverse() as Exclude<Rank, 'D'>[];
   const thresholds = promoRanks.map((r) => `${r} ${n(G.ranks.renown[r])}`).join(', ');
   const [payLo, payHi] = G.board.pay;
@@ -47,13 +48,14 @@ export function glossaryEntries(): GlossaryEntry[] {
     + `You can go on one quest a day: coming back from one doesn't end the day, but the next one has to wait until tomorrow. Multi-day quests spend the nights before the last one on the road: free lodging for the members on the quest, food still paid. Members who stayed home live those days as usual, paying for and sleeping where they lodge.\n\n`
     + `Every 7th day is payday: companion wages and slave taxes are due.`);
   add('City life', 'Health (not battle HP)',
-    `Health is a member's condition between battles, out of 100. It isn't their HP in battle.\n\n`
-    + `After a battle each member loses up to ${C.maxHealthLoss} Health, depending on how low their HP got (falling costs the full ${C.maxHealthLoss}). Below 100 a member is injured: every battle stat drops by a third of their missing Health (Health 70 = −10%).\n\n`
-    + `Everyone recovers ${C.healthPerDay} Health a night (${C.healthPerDay * G.schedule.recoverMultiplier} on Recover). At 0 Health a member dies, so an injured member who falls again can die. The main character pulls through at 1 instead.`);
+    `A member's condition between battles, out of 100. It isn't their HP in battle.\n\n`
+    + `Below 100: all battle stats −1% per 3 missing (Health 70 = −10%). At 0: the member dies (the main character pulls through at 1).\n\n`
+    + `Rises (×2 for the Protagonist):\n• +${C.healthPerDay} each night\n• +${C.healthPerDay * G.schedule.recoverMultiplier} each night on Recover\n\n`
+    + `Falls:\n• Up to −${C.maxHealthLoss} after each battle, the lower their HP fell (−${C.maxHealthLoss} if they fell)`);
   add('City life', 'Morale',
-    `Morale (out of 100) drops by ${C.moralePerTurn} per battle turn for everyone who fought, by ${C.moraleFailedQuest} more for a failed quest, with injuries, and by ${C.moraleMemberDied} for everyone when a member dies. New members start at ${C.startingMorale}.\n\n`
-    + `It comes back with a round of drinks at an inn (once a day), with days off, and with food and lodging better than a member expects (worse food and lodging lower it; see Food and lodging expectations). The main character's gains count double (Protagonist).\n\n`
-    + `Above ${C.highMorale}, companions and slaves gain ${C.highMoraleRelationshipPerDay} relationship a day; below ${C.lowMorale}, they lose ${C.lowMoraleRelationshipPerDay}. At 0 a member leaves the party (the main character stays).`);
+    `A member's spirits, out of 100. Below 100: all battle stats −${G.combat.percentPer5}% per 5 missing. Above ${C.highMorale}: companions and slaves gain ${C.highMoraleRelationshipPerDay} relationship a day; below ${C.lowMorale}: they lose ${C.lowMoraleRelationshipPerDay}. At 0: the member leaves the party (the main character stays). New members start at ${C.startingMorale}.\n\n`
+    + `Rises (×2 for the Protagonist):\n• +${G.schedule.dayOffMorale} each Day Off\n• +${Math.min(...drinks)} to +${Math.max(...drinks)} per round of drinks at an inn (once a day)\n• +${G.food.moraleAbovePerStep} a day per step of food better than expected\n• +${L.moraleAbovePerStep} a night per step of lodging better than expected\n\n`
+    + `Falls:\n• −${C.moralePerTurn} per battle turn on a quest\n• −${C.moraleFailedQuest} per failed quest\n• −1 per ${Math.round(1 / C.moralePerHealthLost)} Health lost\n• −${C.moraleMemberDied} when a party member dies\n• −${G.food.moraleBelowPerStep} a day per step of food worse than expected\n• −${L.moraleBelowPerStep} a night per step of lodging worse than expected`);
   add('City life', 'Battle penalties',
     `Injury, Morale and Obedience all weaken a member in battle, and the penalties multiply:\n\n`
     + `• Injury: −1/3 of missing Health.\n• Morale: −${G.combat.percentPer5}% per 5 Morale below 100.\n• Obedience (slaves): −${G.combat.percentPer5}% per 5 Obedience below 100.\n\n`
@@ -151,8 +153,9 @@ export function glossaryEntries(): GlossaryEntry[] {
     + `Releasing a companion before their term ends breaks the contract: you pay them ${pct(K.releaseShareOfRemaining)} of what the rest of the term is worth (base pay, loot cut and food & lodging), but never more than ${K.releaseMinWeeks} week${K.releaseMinWeeks === 1 ? '' : 's'} of it. Once the term has ended, there's no buyout.\n\n`
     + `Either way, you also pay the base pay they've earned since the last payday, by the day (3 days in: 3/7 of a week's pay).`);
   add('Party members', 'Relationship',
-    `Companions and slaves have a relationship from 0 to 100. It rises by ${K.relationshipPerQuest} for every quest completed together, and moves with Morale (+${G.condition.highMoraleRelationshipPerDay} a day above ${G.condition.highMorale}, −${G.condition.lowMoraleRelationshipPerDay} below ${G.condition.lowMorale}) and missed pay. Good food and lodging help through Morale.\n\n`
-    + `Unpaid companions lose ${-K.relationshipUnpaid} relationship each payday. They quit at 0, which costs the party renown (see Failure and deaths). Slaves' relationship drives their Obedience.`);
+    `Companions and slaves only, out of 100. Companions: lowers their demands when you renew (up to −${pct(K.renewalDiscountAtMax)} at 100), and at 0 after a missed payday they quit (see Failure and deaths). Slaves: drives Obedience.\n\n`
+    + `Rises:\n• +${K.relationshipPerQuest} per quest completed together\n• +${C.highMoraleRelationshipPerDay} a day while Morale is above ${C.highMorale}\n\n`
+    + `Falls:\n• −2 per failed quest together\n• −${C.lowMoraleRelationshipPerDay} a day while Morale is below ${C.lowMorale}\n• −5 a day the party can't pay food and lodging\n• −${-K.relationshipUnpaid} per missed payday (companions)\n• −${S.punishRelationship} per Punish (slaves)`);
   add('Party members', 'Protagonist',
     `Your main character's trait: they recover Health twice as fast and gain Morale twice as fast (drinks, days off). Morale losses aren't doubled.\n\n`
     + `The main character can't be dismissed or die from 0 Health (they pull through at 1), and they don't complain about food or lodging.`);
@@ -163,9 +166,10 @@ export function glossaryEntries(): GlossaryEntry[] {
     + `Every slave you own is taxed ${pct(S.weeklyTaxShare)} of that value each payday. If you can't pay a slave's tax, the city seizes them and sells them at the slave market.\n\n`
     + `Slaves have no wage and expect only ${FOOD_TIERS[L.slaveExpectedQuality]} food and the stables.`);
   add('Slaves', 'Obedience and punishment',
-    `Slaves have Obedience (0–100) besides relationship. Bought slaves start at ${S.obedienceMarket[0]}–${S.obedienceMarket[1]}, registered captives at ${S.obedienceCaptive[0]}–${S.obedienceCaptive[1]}.\n\n`
-    + `Obedience rises ${S.obedienceChangePerDay} a day while relationship is ${S.obedienceRiseFrom} or more, and falls ${S.obedienceChangePerDay} a day while it's below ${S.obedienceFallBelow}. Low Obedience weakens a slave in battle.\n\n`
-    + `Punish (once a day) gives +${S.punishObedience} Obedience for −${S.punishRelationship} relationship: a quick boost that drains away again unless the relationship is repaired.`);
+    `Slaves only, out of 100. Below 100: all battle stats −${G.combat.percentPer5}% per 5 missing. Bought slaves start at ${S.obedienceMarket[0]}–${S.obedienceMarket[1]}, registered prisoners at ${S.obedienceCaptive[0]}–${S.obedienceCaptive[1]}.\n\n`
+    + `Rises:\n• +${S.obedienceChangePerDay} a day while relationship is ${S.obedienceRiseFrom}+\n• +${S.punishObedience} per Punish (once a day; costs ${S.punishRelationship} relationship)\n\n`
+    + `Falls:\n• −${S.obedienceChangePerDay} a day while relationship is below ${S.obedienceFallBelow}\n\n`
+    + `Punishing is a quick boost that drains away again unless the relationship recovers.`);
   add('Slaves', 'Prisoners and the city gate',
     `Human enemies who surrender are taken prisoner if you win. The city gate won't let them in until each one is registered:\n\n`
     + `• Turned in for a bounty (${S.bountyPerLevel} gold per level), or\n• Registered as your slave (if the party has room) for a fee of their market value minus the bounty.\n\n`
