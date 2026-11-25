@@ -289,12 +289,12 @@ export class GuildScene extends Phaser.Scene {
       fontSize: 12, enabled: state.gold >= rates.fee,
     }));
     row.add(text(this, 392, 64, 'Fee paid now; a bigger cut is taken from the reward.', { fontSize: '11px', color: COLORS.dim }));
-    row.add(text(this, 668, 16, 'Companion (permanent)', { fontSize: '12px', color: COLORS.dim }));
+    row.add(text(this, 668, 8, 'Companion (permanent)', { fontSize: '12px', color: COLORS.dim }));
     const sulking = a.refusedUntil > state.day;
-    row.add(button(this, 668, 36, 220, 32, sulking ? `Won't talk until day ${a.refusedUntil}` : 'Negotiate a contract', () => {
+    row.add(button(this, 668, 28, 220, 32, sulking ? `Won't talk until day ${a.refusedUntil}` : 'Negotiate a contract', () => {
       if (rosterFull(state)) return toast(this, `Your party is full (${GUILD.maxRoster}).`, COLORS.bad);
       this.scene.start('Negotiate', { mode: 'hire', id: c.id });
-    }, { fontSize: 14, enabled: !sulking }));
+    }, { fontSize: 12, enabled: !sulking }));
     return { obj: row, height: 84 };
   }
 
