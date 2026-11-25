@@ -585,7 +585,7 @@ function activityEffect(c: Character, a: Activity): string {
 function effectOf(c: Character, quality: number, morale: number, per: 'day' | 'night'): { effect: string; color: string } {
   const d = moraleGainOf(c, morale);
   return {
-    effect: `quality ${quality} · ${d ? `${d > 0 ? '+' : ''}${d} morale/${per}` : 'as expected'}`,
+    effect: `quality ${quality} · ${d ? `${d > 0 ? '+' : ''}${d} morale/${per}` : 'meets expectations'}`,
     color: d > 0 ? COLORS.good : d < 0 ? COLORS.bad : COLORS.dim,
   };
 }

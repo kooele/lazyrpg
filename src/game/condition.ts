@@ -3,7 +3,6 @@
 import { GUILD, LODGING_QUALITY, foodQuality, isResidence, type Activity, type CityLodging, type FoodTier, type Lodging } from '../data/guild';
 import { TRAITS, type TraitDef } from '../data/traits';
 import type { Character, GameState } from '../data/types';
-import { adventurerRank } from './guild';
 
 export const MAX_HEALTH = 100;
 export const MAX_MORALE = 100;
@@ -60,10 +59,14 @@ export function healthLoss(lowestHp: number): number {
   return Math.round(GUILD.condition.maxHealthLoss * (1 - clamp(lowestHp, 1)));
 }
 
-/** The food and night quality a member expects: slaves lodging.slaveExpectedQuality, everyone else lodging.expectedQuality for their rank. */
-export function expectedQuality(c: Character): number {
-  if (c.contract?.type === 'slave') return GUILD.lodging.slaveExpectedQuality;
-  return GUILD.lodging.expectedQuality[adventurerRank(c.level)];
+/** The food and night quality a member expects: slaves lodging.slaveExpectedQuality, everyone else lodging.expectedQuality. */
+export function expectedQuality(c: Pick<Character, 'contract'>): number {
+  return c.contract?.type === 'slave' ? GUILD.lodging.slaveExpectedQuality : GUILD.lodging.expectedQuality;
+}
+
+/** Where a member sleeps when nobody has placed them: lodging.slaveDefault for slaves, lodging.adventurerDefault for everyone else. */
+export function defaultLodging(c: Pick<Character, 'contract'>): CityLodging {
+  return c.contract?.type === 'slave' ? GUILD.lodging.slaveDefault : GUILD.lodging.adventurerDefault;
 }
 
 /** What a night quality means, for the UI. */
@@ -90,12 +93,12 @@ export function lodgingMorale(c: Character, where: CityLodging): number {
 export const moraleGainOf = (c: Character, delta: number) => (delta > 0 ? delta * traitFactor(c, 'moraleGain') : delta);
 
 /**
- * Where a member sleeps in the city: as set in Manage Party, else the stables ('outside'). A residence the party
- * no longer owns counts as the stables.
+ * Where a member sleeps in the city: as set in Manage Party, else their default lodging (see defaultLodging),
+ * which is also where they go when the party no longer owns the residence they were placed in.
  */
-export function lodgingOf(state: GameState, c: Pick<Character, 'id'>): CityLodging {
-  const l = state.lodging?.[c.id] ?? 'outside';
-  return isResidence(l) && !state.residences.includes(l) ? 'outside' : l;
+export function lodgingOf(state: GameState, c: Pick<Character, 'id' | 'contract'>): CityLodging {
+  const l = state.lodging?.[c.id];
+  return !l || (isResidence(l) && !state.residences.includes(l)) ? defaultLodging(c) : l;
 }
 
 /** The food a member gets each day: as set in Manage Party, else food.default. */

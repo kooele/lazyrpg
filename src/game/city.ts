@@ -9,7 +9,7 @@ import {
   bondOf, bounty, canFight, registrationFee, slaveTax, changeRelationship, isCompanion, isHoused, isSlave, leaveParty, releaseTotal, proratedWages, wagesBetween, lastPayday, slaveContract, slavePrice, talentPriceFactor,
 } from './contracts';
 import {
-  ACTIVITY_INFO, FOOD_EXPECT_TEXT, QUALITY_TEXT, activityOf, changeHealth, changeMorale, expectedQuality, foodMorale, foodOf, healthLoss, healthOf,
+  ACTIVITY_INFO, FOOD_EXPECT_TEXT, QUALITY_TEXT, activityOf, changeHealth, changeMorale, defaultLodging, expectedQuality, foodMorale, foodOf, healthLoss, healthOf,
   lodgingMorale, lodgingName, lodgingOf, moraleOf,
   type BattleCondition,
 } from './condition';
@@ -464,7 +464,8 @@ export function setLodging(state: GameState, id: string, where: CityLodging): st
       return `The ${home.name} is full (${GUILD.residences.capacity} residents).`;
     }
   }
-  if (where === 'outside') delete state.lodging[id];
+  // Their default (see defaultLodging) isn't stored, so a change of default in guild.json reaches them.
+  if (where === defaultLodging(c)) delete state.lodging[id];
   else state.lodging[id] = where;
   return null;
 }
@@ -483,7 +484,7 @@ export function buyResidence(state: GameState, ring: Ring): string | null {
 /** What the Estate Office pays for a residence. */
 export const residenceSellPrice = (ring: Ring) => Math.round(GUILD.residences[ring].price * GUILD.residences.sellShare);
 
-/** Sell a residence back to the Estate Office; its residents sleep in the stables until moved. Returns the gold received (0 if not owned). */
+/** Sell a residence back to the Estate Office; its residents go back to their default lodging until moved. Returns the gold received (0 if not owned). */
 export function sellResidence(state: GameState, ring: Ring): number {
   if (!state.residences.includes(ring)) return 0;
   const gold = residenceSellPrice(ring);
@@ -491,7 +492,7 @@ export function sellResidence(state: GameState, ring: Ring): number {
   for (const c of moved) delete state.lodging[c.id];
   state.residences = state.residences.filter((r) => r !== ring);
   state.gold += gold;
-  note(state, `Sold the ${GUILD.residences[ring].name} to the Estate Office for ${gold} gold.${moved.length ? ` ${moved.map((c) => c.name).join(', ')} sleep${moved.length === 1 ? 's' : ''} in the stables until you find them somewhere.` : ''}`);
+  note(state, `Sold the ${GUILD.residences[ring].name} to the Estate Office for ${gold} gold.${moved.length ? ` ${moved.map((c) => `${c.name} goes back to ${lodgingName(defaultLodging(c))}`).join(', ')} until you find them somewhere.` : ''}`);
   return gold;
 }
 
@@ -610,7 +611,7 @@ export function advanceDay(state: GameState, rng: Rng, night: 'road' | 'city' = 
     for (const c of state.party) if (isHoused(c)) changeRelationship(c, -5);
   } else {
     state.gold -= upkeep;
-    // Everyone the party feeds compares the day's food with what someone of their rank expects: Morale up or down.
+    // Everyone the party feeds compares the day's food with what they expect: Morale up or down.
     const meals: string[] = [];
     for (const c of state.party) {
       if (!isHoused(c)) continue;
@@ -618,7 +619,7 @@ export function advanceDay(state: GameState, rng: Rng, night: 'road' | 'city' = 
       if (d) meals.push(`${c.name} ${d > 0 ? '+' : ''}${d} (expects ${FOOD_EXPECT_TEXT[expectedQuality(c)]})`);
     }
     if (meals.length) say(`Food. Morale: ${meals.join(', ')}.`);
-    // Housed members who slept in the city compare it with what someone of their rank expects.
+    // Housed members who slept in the city compare it with what they expect.
     {
       const moods: string[] = [];
       for (const c of cityBoarders(state, night, away)) {

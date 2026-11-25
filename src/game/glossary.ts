@@ -4,6 +4,7 @@ import { MAX_PARTY_SIZE, STATUSES, xpToNext } from '../data/content';
 import { FOOD_TIERS, GUILD, INN_TIERS, trainingXp } from '../data/guild';
 import { STAT_CONFIG } from '../data/stats';
 import { RANKS, type Rank } from '../data/types';
+import { lodgingName } from './condition';
 
 export const GLOSSARY_TOPICS = ['City life', 'Quests & ranks', 'Experience', 'Party members', 'Slaves', 'Battle'] as const;
 export type GlossaryTopic = (typeof GLOSSARY_TOPICS)[number];
@@ -29,7 +30,7 @@ export function glossaryEntries(): GlossaryEntry[] {
   const T = G.threat;
   const food = (q: number) => G.food[FOOD_TIERS[q]].pricePerPerson;
   const night = (q: number) => (q === 0 ? L.stablesPerPerson : G.inns[INN_TIERS[q - 1]].pricePerPerson);
-  const adventurerQ = L.expectedQuality.D;
+  const adventurerQ = L.expectedQuality;
   const promoRanks = RANKS.filter((r) => r !== 'D' && RANKS.indexOf(r) >= RANKS.indexOf(G.ranks.highestPromotion)).reverse() as Exclude<Rank, 'D'>[];
   const thresholds = promoRanks.map((r) => `${r} ${n(G.ranks.renown[r])}`).join(', ');
   const [payLo, payHi] = G.board.pay;
@@ -62,12 +63,12 @@ export function glossaryEntries(): GlossaryEntry[] {
     + `• Recover: ${G.schedule.recoverMultiplier}× Health recovery.\n• Training: ${G.schedule.trainingXp.perLevel} XP per level + ${G.schedule.trainingXp.flat} (${trainingXp(1)} at level 1, ${trainingXp(20)} at level 20).\n• Odd Jobs: +${G.schedule.oddJobsGold} gold.\n• Day Off: +${G.schedule.dayOffMorale} Morale.\n\n`
     + `A schedule you set stays until you change it, except Recover: once Health is full they go back to Day Off. Unscheduled members take a Day Off, unless their Health would take longer to heal than their Morale takes to fill on Day Off: then they Recover. Benched members (not in the lineup) follow it too.`);
   add('City life', 'Food and lodging expectations',
-    `Each member you house eats at a food tier and sleeps at a lodging you pick in Manage Party. Each has a quality from 0 to 3.\n\n`
-    + `Adventurers of every rank expect quality ${adventurerQ}: ${FOOD_TIERS[adventurerQ]} food (${food(adventurerQ)} gold a day) and an inn (${night(adventurerQ)} gold a night). Slaves expect quality ${L.slaveExpectedQuality}: ${FOOD_TIERS[L.slaveExpectedQuality]} food and the stables.\n\n`
+    `Each member you house eats at a food tier and sleeps at a lodging you pick in Manage Party. Each has a quality from 0 to 3. Until you pick, adventurers lodge at ${lodgingName(L.adventurerDefault)} and slaves at ${lodgingName(L.slaveDefault)}.\n\n`
+    + `Adventurers expect quality ${adventurerQ}: ${FOOD_TIERS[adventurerQ]} food (${food(adventurerQ)} gold a day) and an inn (${night(adventurerQ)} gold a night). Slaves expect quality ${L.slaveExpectedQuality}: ${FOOD_TIERS[L.slaveExpectedQuality]} food and the stables.\n\n`
     + `Each night in the city, everyone you house (the main character included) gains ${L.moraleAbovePerStep} Morale per step of lodging better than they expect and loses ${L.moraleBelowPerStep} per step worse. Food works the same way every day: +${G.food.moraleAbovePerStep} per step better, −${G.food.moraleBelowPerStep} per step worse. Food is paid on the road too.`);
   add('City life', 'Stables',
-    `Everyone's default lodging: ${L.stablesPerPerson} gold a night per person, quality 0. Slaves are content there; adventurers, the main character included, lose ${L.moraleBelowPerStep} Morale per night in it.\n\n`
-    + `Members also end up in the stables when you sell the residence they live in.`);
+    `The cheapest lodging: ${L.stablesPerPerson} gold a night per person, quality 0. Slaves are content there, and sleep there until you move them; adventurers, the main character included, lose ${L.moraleBelowPerStep} Morale per night in it.\n\n`
+    + `When you sell a residence, the members living there go back to their default lodging until you move them.`);
   add('City life', 'Residences',
     `Bought at the Estate Office: the ${G.residences.outer.name} (${n(G.residences.outer.price)} gold), the ${G.residences.middle.name} (${n(G.residences.middle.price)}) and the ${G.residences.inner.name} (${n(G.residences.inner.price)}).\n\n`
     + `Nights there are free and count as quality 1, 2 and 3, as good as the matching inn. Each houses at most ${G.residences.capacity} residents, whatever its tier. Food still costs.\n\n`

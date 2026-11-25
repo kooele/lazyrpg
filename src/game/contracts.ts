@@ -2,7 +2,6 @@
 import { GUILD } from '../data/guild';
 import type { Character, CompanionTerms, Contract, FreeAdventurer, GameState, Rank } from '../data/types';
 import { FOOD_TIERS, INN_TIERS } from '../data/guild';
-import { adventurerRank } from './guild';
 import { talentScore } from './talent';
 
 const C = GUILD.companion;
@@ -52,12 +51,11 @@ export function mercenaryRates(level: number, greed: number, talent = 1): { fee:
 // ---- companions -----------------------------------------------------------------------------------
 
 /**
- * What food and lodging are worth per week to an adventurer of `level`: what the party would pay to give them the
- * food and the night their rank expects (lodging.expectedQuality): D and C-rank common food at the Sleeping Griffin,
- * B and A-rank fine food at the Silver Lantern, S-rank luxury food at the Gilded Crown.
+ * What food and lodging are worth per week to an adventurer: what the party would pay to give them the food and the
+ * night adventurers expect (lodging.expectedQuality): common food at the Sleeping Griffin.
  */
-export function foodLodgingWeekly(level: number): number {
-  const q = GUILD.lodging.expectedQuality[adventurerRank(level)];
+export function foodLodgingWeekly(): number {
+  const q = GUILD.lodging.expectedQuality;
   const food = GUILD.food[FOOD_TIERS[q]].pricePerPerson;
   const night = q === 0 ? GUILD.lodging.stablesPerPerson : GUILD.inns[INN_TIERS[q - 1]].pricePerPerson;
   return (food + night) * 7;
@@ -66,9 +64,9 @@ export function foodLodgingWeekly(level: number): number {
 /** How much a loot cut is worth per week to a candidate, given the party's rank. */
 export const lootValue = (lootPct: number, rank: Rank) => (lootPct / 100) * C.expectedWeeklyLoot[rank];
 
-/** What the terms are worth to a companion of `level`, in gold per week. */
-export function offerValue(t: CompanionTerms, rank: Rank, level: number): number {
-  return t.basePay + lootValue(t.lootPct, rank) + (t.foodLodging ? foodLodgingWeekly(level) : 0);
+/** What the terms are worth to a companion, in gold per week (a loot cut is valued at the party's `rank`). */
+export function offerValue(t: CompanionTerms, rank: Rank): number {
+  return t.basePay + lootValue(t.lootPct, rank) + (t.foodLodging ? foodLodgingWeekly() : 0);
 }
 
 /**
@@ -85,7 +83,7 @@ export function companionDemand(level: number, greed: number, termWeeks: number,
 export function openingTerms(level: number, greed: number, rank: Rank, relationship = 0, talent = 1): CompanionTerms {
   const terms: CompanionTerms = { basePay: 0, lootPct: 5, foodLodging: true, termWeeks: 4 };
   const want = companionDemand(level, greed, terms.termWeeks, relationship, talent);
-  terms.basePay = round5(Math.max(0, want * 0.85 - lootValue(terms.lootPct, rank) - foodLodgingWeekly(level)));
+  terms.basePay = round5(Math.max(0, want * 0.85 - lootValue(terms.lootPct, rank) - foodLodgingWeekly()));
   return terms;
 }
 
@@ -109,7 +107,7 @@ export function evaluateOffer(
   terms: CompanionTerms, rank: Rank,
 ): NegotiationResult {
   const demand = companionDemand(who.level, who.greed, terms.termWeeks, who.relationship ?? 0, who.talent ?? 1);
-  const value = offerValue(terms, rank, who.level);
+  const value = offerValue(terms, rank);
   const ratio = value / Math.max(1, demand);
   if (ratio >= 1) return { verdict: 'accept', ratio, message: `"You have a deal." ${who.name} signs the contract.` };
   const counterPay = round5(terms.basePay + (demand - value) + 2.5);
@@ -165,7 +163,7 @@ export const releaseTotal = (c: Character & { contract: CompanionContract }, day
 export function releaseCost(c: Character & { contract: CompanionContract }, day: number, rank: Rank): number {
   const left = daysLeft(c.contract, day);
   if (left <= 0) return 0;
-  const weekly = offerValue(c.contract, rank, c.level);
+  const weekly = offerValue(c.contract, rank);
   const weeks = Math.min(C.releaseMinWeeks, (C.releaseShareOfRemaining * left) / 7);
   return round5(weekly * weeks);
 }

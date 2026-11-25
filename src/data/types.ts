@@ -529,7 +529,7 @@ export interface GameState {
   schedule: Record<string, 'recover' | 'training' | 'oddJobs' | 'dayOff'>;
   /** Food quality for each member the party feeds (by character id; missing = food.default in guild.json). */
   food: Record<string, 'poor' | 'common' | 'fine' | 'luxury'>;
-  /** Where each housed member sleeps in the city (by character id; missing = the stables, stored as 'outside'): an inn tier or an owned residence. */
+  /** Where each housed member sleeps in the city (by character id; missing = their default, see defaultLodging): the stables ('outside'), an inn tier or an owned residence. */
   lodging: Record<string, 'outside' | 'standard' | 'highEnd' | 'luxury' | 'outer' | 'middle' | 'inner'>;
   /** Day the party last bought a round of drinks (once a day). */
   drinksDay: number;

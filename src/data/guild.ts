@@ -68,7 +68,17 @@ export interface GuildConfig {
   threat: ThreatConfig;
   food: Record<FoodTier, { name: string; pricePerPerson: number }> & { default: FoodTier; moraleAbovePerStep: number; moraleBelowPerStep: number };
   inns: Record<InnTier, InnConfig>;
-  lodging: { expectedQuality: Record<'S' | Rank, number>; slaveExpectedQuality: number; moraleAbovePerStep: number; moraleBelowPerStep: number; stablesPerPerson: number };
+  lodging: {
+    /** Food and night quality adventurers expect (slaves: slaveExpectedQuality). */
+    expectedQuality: number;
+    slaveExpectedQuality: number;
+    /** Where members nobody has placed sleep: the stables ('outside') or an inn. */
+    adventurerDefault: 'outside' | InnTier;
+    slaveDefault: 'outside' | InnTier;
+    moraleAbovePerStep: number;
+    moraleBelowPerStep: number;
+    stablesPerPerson: number;
+  };
   residences: Record<Ring, { name: string; price: number }> & { sellShare: number; capacity: number };
   condition: {
     maxHealthLoss: number;
@@ -194,6 +204,12 @@ function parseInns(v: unknown): Record<InnTier, InnConfig> {
   return out;
 }
 
+/** A default lodging: the stables ('outside') or an inn tier (residences can't be a default: the party may not own one). */
+function defaultLodging(v: unknown, path: string): 'outside' | InnTier {
+  if (v === 'outside' || (INN_TIERS as readonly unknown[]).includes(v)) return v as 'outside' | InnTier;
+  return fail(path, `must be "outside" or one of ${INN_TIERS.join(', ')} (got ${JSON.stringify(v)})`);
+}
+
 function parseFood(v: unknown): GuildConfig['food'] {
   const o = obj(v, 'food');
   const out = {
@@ -300,9 +316,11 @@ export function parseGuildConfig(data: unknown): GuildConfig {
     food: parseFood(d.food),
     inns: parseInns(d.inns),
     lodging: {
-      ...numbers<Omit<GuildConfig['lodging'], 'expectedQuality'>>(d.lodging, 'lodging', ['moraleAbovePerStep', 'moraleBelowPerStep', 'stablesPerPerson']),
-      expectedQuality: numbers(obj(d.lodging, 'lodging').expectedQuality, 'lodging.expectedQuality', [...RANKS], 3),
+      ...numbers<Pick<GuildConfig['lodging'], 'moraleAbovePerStep' | 'moraleBelowPerStep' | 'stablesPerPerson'>>(d.lodging, 'lodging', ['moraleAbovePerStep', 'moraleBelowPerStep', 'stablesPerPerson']),
+      expectedQuality: num(obj(d.lodging, 'lodging').expectedQuality, 'lodging.expectedQuality', 0, 3),
       slaveExpectedQuality: num(obj(d.lodging, 'lodging').slaveExpectedQuality ?? 0, 'lodging.slaveExpectedQuality', 0, 3),
+      adventurerDefault: defaultLodging(obj(d.lodging, 'lodging').adventurerDefault, 'lodging.adventurerDefault'),
+      slaveDefault: defaultLodging(obj(d.lodging, 'lodging').slaveDefault, 'lodging.slaveDefault'),
     },
     residences: parseResidences(d.residences),
     condition: numbers<GuildConfig['condition']>(d.condition, 'condition', ['maxHealthLoss', 'healthPerDay', 'startingMorale', 'moralePerTurn',
