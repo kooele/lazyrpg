@@ -45,9 +45,10 @@ export function glossaryEntries(): GlossaryEntry[] {
   // ---- City life -------------------------------------------------------------------------------
   add('City life', 'Days and End Day',
     `Time only passes when you press End Day. Everyone the party houses eats and sleeps where you lodge them, and the schedule runs for members who didn't quest that day.\n\n`
-    + `You can go on one quest a day: coming back from one doesn't end the day, but the next one has to wait until tomorrow. Multi-day quests spend the nights before the last one on the road: free lodging for the members on the quest, food still paid. Members who stayed home live those days as usual, eating and sleeping where they lodge.\n\n`
-    + `Nothing is paid on the road: the trip's food and lodging, and the wages and slave tax of any payday on the way, go on tabs that the next End Day settles: the Food and Lodging Tab, the Owed Wages Tab and the Slave Tax Tab. Releasing a companion pays their Owed Wages Tab; selling a slave takes their Slave Tax Tab out of the sale. Contracts don't lapse on the road either: that waits for End Day too.\n\n`
-    + `Every 7th day is payday: companion wages and slave taxes are due. End Day warns you when you can't pay everything due, and what will happen if you go ahead.`);
+    + `One quest a day: coming back doesn't end the day, but the next quest waits until tomorrow. Multi-day quests spend their nights on the road (free lodging for those on the quest); members at home live those days as usual.\n\n`
+    + `Every 7th day is payday and tax day: companion wages and slave tax are due.\n\n`
+    + `Nothing is paid on the road. It goes on tabs settled at the next End Day: the Food and Lodging Tab (the quest's nights), the Owed Wages Tab (payday on the quest) and the Slave Tax Tab (tax day on the quest). Releasing or selling a member pays their tab. Contracts only lapse at End Day in the city.\n\n`
+    + `End Day warns you when you can't pay everything due, and what will happen.`);
   add('City life', 'Health (not battle HP)',
     `A member's condition between battles, out of 100. It isn't their HP in battle.\n\n`
     + `Below 100: all battle stats −1% per 3 missing (Health 70 = −10%). At 0: the member dies (the main character pulls through at 1).\n\n`

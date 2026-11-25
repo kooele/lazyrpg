@@ -604,6 +604,12 @@ export const isPayday = (day: number) => day % 7 === 0;
 /** The tabs a multi-day quest runs up (see GameState.tab), as the player sees them named. */
 export const TAB_NAMES = { upkeep: 'Food and Lodging Tab', wages: 'Owed Wages Tab', taxes: 'Slave Tax Tab' } as const;
 
+/** Where each tab comes from: the quest's nights, and a payday (wages) or tax day (slave tax; the same day) during it. */
+export const TAB_SOURCES = { upkeep: 'nights on the quest', wages: 'payday on the quest', taxes: 'tax day on the quest' } as const;
+
+/** A tab's name with where it comes from: "Owed Wages Tab (payday on the quest)". */
+export const tabLabel = (k: keyof typeof TAB_NAMES) => `${TAB_NAMES[k]} (${TAB_SOURCES[k]})`;
+
 /** What's on each tab, in gold. */
 export function tabParts(state: GameState): Record<keyof typeof TAB_NAMES, number> {
   const t = state.tab;
@@ -748,7 +754,7 @@ export function advanceDay(state: GameState, rng: Rng, night: 'road' | 'city' = 
     if (tab) tab.upkeep += upkeep;
     else {
       state.gold -= owing;
-      if (state.tab?.upkeep) say(`Paid the ${TAB_NAMES.upkeep}: ${state.tab.upkeep} gold.`);
+      if (state.tab?.upkeep) say(`Paid the ${tabLabel('upkeep')}: ${state.tab.upkeep} gold.`);
     }
     // Everyone the party feeds compares the day's food with what they expect: Morale up or down.
     const meals: string[] = [];
@@ -805,7 +811,7 @@ export function advanceDay(state: GameState, rng: Rng, night: 'road' | 'city' = 
         } else taxes += due;
       }
       const onto = [wages ? `${wages} gold in wages onto the ${TAB_NAMES.wages}` : '', taxes ? `${taxes} gold in slave tax onto the ${TAB_NAMES.taxes}` : ''].filter(Boolean);
-      if (onto.length) say(`Payday on the road: ${onto.join(', ')}, until you're back in ${GUILD.city}.`);
+      if (onto.length) say(`${taxes ? 'Payday and tax day' : 'Payday'} on the road: ${onto.join(', ')}, until you're back in ${GUILD.city}.`);
     }
   } else {
     // Wages (payday's, and the tab's), then slave property tax.
@@ -825,7 +831,11 @@ export function advanceDay(state: GameState, rng: Rng, night: 'road' | 'city' = 
       }
     }
     if (isPayday(state.day)) for (const c of state.party.filter(isCompanion)) delete c.contract.carriedWages;
-    if (paid) say(`${isPayday(state.day) ? 'Payday' : `Paid the ${TAB_NAMES.wages}`}: ${paid} gold in wages.`);
+    if (paid) {
+      say(isPayday(state.day)
+        ? `Payday: ${paid} gold in wages${fromTab.wages ? `, ${Math.min(paid, fromTab.wages)} of it the ${tabLabel('wages')}` : ''}.`
+        : `Paid the ${tabLabel('wages')}: ${paid} gold.`);
+    }
     // Property tax on slaves: one the party can't pay for is seized and sold at the slave market.
     let taxed = 0;
     for (const { c, tax } of taxesDue(state, state.day)) {
@@ -837,9 +847,11 @@ export function advanceDay(state: GameState, rng: Rng, night: 'road' | 'city' = 
         say(`You couldn't pay the property tax on ${c.name} (${tax} gold): the city seized them for the slave market.`);
       }
     }
-    if (taxed) say(`Slave property tax: ${taxed} gold.`);
-    const settled = [fromTab.wages && paid && isPayday(state.day) ? `the ${TAB_NAMES.wages} (${fromTab.wages} gold)` : '', fromTab.taxes && taxed ? `the ${TAB_NAMES.taxes} (${fromTab.taxes} gold)` : ''].filter(Boolean);
-    if (settled.length) say(`That settles ${settled.join(' and ')}.`);
+    if (taxed) {
+      say(isPayday(state.day)
+        ? `Slave property tax: ${taxed} gold${fromTab.taxes ? `, ${Math.min(taxed, fromTab.taxes)} of it the ${tabLabel('taxes')}` : ''}.`
+        : `Paid the ${tabLabel('taxes')}: ${taxed} gold.`);
+    }
     delete state.tab;
   }
 

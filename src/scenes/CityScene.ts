@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { GUILD } from '../data/guild';
 import { WEAPONS } from '../data/content';
-import { departBlock, endDay, foodCost, forecastNight, lineupMembers, lodgingCost, prisonersAtGate, registerPrisoner, turnInPrisoner, tabParts, TAB_NAMES, type NightForecast } from '../game/city';
+import { departBlock, endDay, foodCost, forecastNight, lineupMembers, lodgingCost, prisonersAtGate, registerPrisoner, turnInPrisoner, tabLabel, tabParts, TAB_NAMES, type NightForecast } from '../game/city';
 import { adventurerRank } from '../game/guild';
 import { moraleOf } from '../game/condition';
 import { bondOf, registrationFee, slaveTax } from '../game/contracts';
@@ -245,7 +245,7 @@ export class CityScene extends Phaser.Scene {
     const tabWages = tabs.wages;
     const tabTaxes = tabs.taxes;
     const lines = [`Tonight: ${f.upkeep} gold (lodging ${lodgingCost(state, 'city')} + food ${foodCost(state)}).`];
-    for (const k of Object.keys(TAB_NAMES) as (keyof typeof TAB_NAMES)[]) if (tabs[k]) lines.push(`${TAB_NAMES[k]}: ${tabs[k]} gold.`);
+    for (const k of Object.keys(TAB_NAMES) as (keyof typeof TAB_NAMES)[]) if (tabs[k]) lines.push(`${tabLabel(k)}: ${tabs[k]} gold.`);
     const payWages = f.wages - tabWages;
     const payTaxes = f.taxes - tabTaxes;
     if (f.payday && payWages + payTaxes) lines.push(`Tomorrow is payday: wages ${payWages}${payTaxes ? ` + slave tax ${payTaxes}` : ''} gold.`);
