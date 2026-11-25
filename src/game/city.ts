@@ -395,6 +395,16 @@ export function moraleDepartures(state: GameState): string[] {
   return out;
 }
 
+/** At the end of the day, companions whose relationship has fallen to 0 quit, costing renown. */
+export function relationshipDepartures(state: GameState): string[] {
+  const out: string[] = [];
+  for (const c of state.party.filter((m) => isCompanion(m) && m.contract.relationship <= 0)) {
+    const lost = quit(state, c);
+    out.push(note(state, `${c.name} has had enough of the party (relationship 0) and quit.${lost ? ` Renown -${Math.round(lost)}.` : ''}`));
+  }
+  return out;
+}
+
 /** Update the leaderboard ranks; returns the player's promotion or demotion message, if any. */
 function rankNews(state: GameState): string[] {
   const ranks = updateRanks(state);
@@ -648,7 +658,7 @@ export function advanceDay(state: GameState, rng: Rng, night: 'road' | 'city' = 
   }
   if (warm.length) say(`High morale (above ${GUILD.condition.highMorale}): ${warm.join(', ')} +${GUILD.condition.highMoraleRelationshipPerDay} relationship.`);
   out.push(...obedienceDrift(state));
-  out.push(...moraleDepartures(state));
+  out.push(...moraleDepartures(state), ...relationshipDepartures(state));
 
   // Payday every 7th day.
   if (isPayday(state.day)) {

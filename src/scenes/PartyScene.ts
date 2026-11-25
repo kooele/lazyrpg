@@ -196,7 +196,7 @@ export class PartyScene extends Phaser.Scene {
     clearScene(this);
     const state = requireState();
     cityHeader(this, state, 'Manage Party');
-    this.tip = new Tooltip(this, 320);
+    this.tip = new Tooltip(this, 420);
     if (!state.party.some((c) => c.id === this.selected)) this.selected = state.mainId;
     const members = lineupMembers(state);
     const lineup = new Set(members.map((c) => c.id));
@@ -256,24 +256,32 @@ export class PartyScene extends Phaser.Scene {
     g.fillStyle(0x7d6bd8).fillRect(X + 150, 150, 200 * Math.min(1, c.xp / xpToNext(c.level)), 8);
     text(this, X + 356, 146, `${c.xp}/${xpToNext(c.level)} XP`, { fontSize: '11px', color: COLORS.dim });
     // Strategic Layer condition: Health (not battle HP) and Morale.
-    const bar = (y: number, label: string, v: number, color: number, note: string, tip: () => string) => {
-      const warn = label === 'Health' ? v < 100 : v < GUILD.condition.lowMorale;
-      text(this, X + 420, y, `${label} ${v}/100${warn && note ? ` · ${note}` : ''} ⓘ`, { fontSize: '11px', color: warn ? COLORS.bad : COLORS.text });
+    const bar = (y: number, label: string, v: number, color: number, warn: boolean, note: string, tip: () => string) => {
+      text(this, X + 420, y, `${label} ${Math.round(v)}/100${note ? ` · ${note}` : ''} ⓘ`, { fontSize: '11px', color: warn ? COLORS.bad : COLORS.text });
       g.fillStyle(0x0b0d14).fillRect(X + 420, y + 17, 150, 6);
       g.fillStyle(color).fillRect(X + 420, y + 17, 1.5 * v, 6);
       this.hoverTip(X + 416, y - 2, 158, 28, tip);
     };
-    bar(88, 'Health', healthOf(c), 0x6fdc8c, isInjured(c) ? `-${Math.round(injuryPenalty(c) * 100)}% stats` : '', () => this.healthTip(c));
-    bar(116, 'Morale', moraleOf(c), 0xe0b44c, c.id !== state.mainId ? 'unhappy' : '', () => this.moraleTip(c));
+    // Each bar names its state; the battle penalty they add up to is shown once, below them.
+    bar(88, 'Health', healthOf(c), 0x6fdc8c, isInjured(c), isInjured(c) ? 'injured' : '', () => this.healthTip(c));
+    const unhappy = c.id !== state.mainId && moraleOf(c) < GUILD.condition.lowMorale;
+    bar(116, 'Morale', moraleOf(c), 0xe0b44c, unhappy, unhappy ? 'unhappy' : '', () => this.moraleTip(c));
+    let penY = 144;
+    if (isSlave(c)) {
+      const ob = c.contract.obedience;
+      const trend = obedienceTrend(c.contract.relationship);
+      bar(144, 'Obedience', ob, 0x9fb7d8, ob < 50 || trend.startsWith('falling'), trend, () => this.obedienceTip(c));
+      penY = 172;
+    }
     const pen = combatPenalty(c);
     if (pen > 0) {
       const parts = [
         injuryPenalty(c) ? `injury ${Math.round(injuryPenalty(c) * 100)}` : '',
         moralePenalty(c) ? `morale ${Math.round(moralePenalty(c) * 100)}` : '',
-        obediencePenalty(c) ? `obey ${Math.round(obediencePenalty(c) * 100)}` : '',
+        obediencePenalty(c) ? `obedience ${Math.round(obediencePenalty(c) * 100)}` : '',
       ].filter(Boolean);
-      text(this, X + 570, 140, `In battle: -${Math.round(pen * 100)}% all stats`, { fontSize: '11px', color: COLORS.bad }).setOrigin(1, 0);
-      text(this, X + 570, 153, parts.join(' × '), { fontSize: '10px', color: COLORS.dim }).setOrigin(1, 0);
+      text(this, X + 570, penY - 4, `In battle: -${Math.round(pen * 100)}% all stats`, { fontSize: '11px', color: COLORS.bad }).setOrigin(1, 0);
+      text(this, X + 570, penY + 9, parts.join(' × '), { fontSize: '10px', color: COLORS.dim }).setOrigin(1, 0);
     }
 
     const st = deriveStats(c);
@@ -328,17 +336,11 @@ export class PartyScene extends Phaser.Scene {
       g.fillStyle(0xe05a9b).fillRect(X + 170, y0 + 96, 2.2 * rel, 10);
       this.hoverTip(X + 12, y0 + 88, 382, 22, () => this.relationshipTip(c));
     } else if (isSlave(c)) {
-      const { relationship: rel, obedience: ob } = c.contract;
+      const rel = c.contract.relationship;
       text(this, X + 16, y0 + 70, `Relationship ${Math.round(rel)}/100 ⓘ`, { fontSize: '13px' });
       g.fillStyle(0x0b0d14).fillRect(X + 170, y0 + 74, 220, 10);
       g.fillStyle(0xe05a9b).fillRect(X + 170, y0 + 74, 2.2 * rel, 10);
       this.hoverTip(X + 12, y0 + 66, 382, 22, () => this.relationshipTip(c));
-      text(this, X + 16, y0 + 92, `Obedience ${Math.round(ob)}/100 ⓘ`, { fontSize: '13px', color: ob < 50 ? COLORS.bad : COLORS.text });
-      g.fillStyle(0x0b0d14).fillRect(X + 170, y0 + 96, 220, 10);
-      g.fillStyle(0x9fb7d8).fillRect(X + 170, y0 + 96, 2.2 * ob, 10);
-      this.hoverTip(X + 12, y0 + 88, 382, 22, () => this.obedienceTip(c));
-      const trend = obedienceTrend(rel);
-      text(this, X + 400, y0 + 92, trend, { fontSize: '11px', color: trend.startsWith('falling') ? COLORS.bad : COLORS.dim });
     }
 
     // ---- schedule: what they do on days they aren't on a quest ----
@@ -500,50 +502,84 @@ export class PartyScene extends Phaser.Scene {
     const k = traitFactor(c, 'healthRecovery');
     const night = C.healthPerDay * k;
     return [
-      `Health ${healthOf(c)}/100: wear and tear between quests, not battle HP.`,
-      `After a battle, a member loses up to ${C.maxHealthLoss} Health depending on how low their HP fell (falling: all ${C.maxHealthLoss}).`,
-      `Below 100 they're injured: every battle stat drops by 1/3 of the missing Health${isInjured(c) ? ` (now -${Math.round(injuryPenalty(c) * 100)}%)` : ''}.`,
-      `Recovers ${night} a night, ${night * GUILD.schedule.recoverMultiplier} on the Recover schedule${k !== 1 ? ` (x${k}: ${(c.traits ?? []).map((t) => TRAITS[t].name).join(', ')})` : ''}.`,
-      `At 0 Health a member dies${c.contract?.type === 'main' ? '; you pull through at 1 instead' : ''}.`,
+      `Health ${healthOf(c)}/100 (not battle HP)`,
+      `Below 100: all battle stats -1% per 3 missing${isInjured(c) ? ` (now -${Math.round(injuryPenalty(c) * 100)}%)` : ''}.`,
+      c.contract?.type === 'main' ? 'At 0: you pull through at 1 instead of dying.' : 'At 0: they die.',
+      `Rises${traitNote(c, k)}:`,
+      `• +${night} each night`,
+      `• +${night * GUILD.schedule.recoverMultiplier} each night on Recover`,
+      'Falls:',
+      `• Up to -${C.maxHealthLoss} after each battle, the lower their HP fell (-${C.maxHealthLoss} if they fell)`,
     ].join('\n');
   }
 
   private moraleTip(c: Character): string {
     const C = GUILD.condition;
     const k = traitFactor(c, 'moraleGain');
-    const main = c.contract?.type === 'main';
-    return [
-      `Morale ${moraleOf(c)}/100.`,
-      `Falls ${C.moralePerTurn} for each turn of a quest's battle (${C.moraleFailedQuest} more if it fails), 1 per ${Math.round(1 / C.moralePerHealthLost)} Health lost to injuries, and ${C.moraleMemberDied} for everyone when a member dies.`,
-      `Rises with a round of drinks at an inn and with Day Off (+${GUILD.schedule.dayOffMorale * k} a day)${k !== 1 ? `: gains x${k} (${(c.traits ?? []).map((t) => TRAITS[t].name).join(', ')})` : ''}.`,
-      isHoused(c)
-        ? `Food and lodging: every day, +${GUILD.food.moraleAbovePerStep * k} per step of food better than they expect (-${GUILD.food.moraleBelowPerStep} worse), and every night in the city, +${GUILD.lodging.moraleAbovePerStep * k} per step of lodging better (-${GUILD.lodging.moraleBelowPerStep} worse). They expect ${GUILD.food[FOOD_TIERS[expectedQuality(c)]].name.toLowerCase()} food and ${QUALITY_TEXT[expectedQuality(c)]}.`
-        : 'They find their own food and lodging, so the party\'s choices don\'t affect their Morale.',
-      `In battle: -${GUILD.combat.percentPer5}% to all stats per 5 below 100${moralePenalty(c) ? ` (now -${Math.round(moralePenalty(c) * 100)}%)` : ''}.`,
-      main ? 'Your main character never leaves, however low it gets.'
-        : `${c.contract?.type === 'mercenary' ? '' : `Above ${C.highMorale} they gain ${C.highMoraleRelationshipPerDay} relationship a day; below ${C.lowMorale} they lose ${C.lowMoraleRelationshipPerDay}. `}At 0 they leave the party (renown -${quitRenown(c)}).`,
-    ].join('\n');
+    const drinks = INN_TIERS.map((t) => GUILD.inns[t].drinksMorale * k);
+    const housed = isHoused(c);
+    const bonded = c.contract?.type === 'companion' || c.contract?.type === 'slave';
+    const lines = [
+      `Morale ${moraleOf(c)}/100`,
+      `Below 100: all battle stats -${GUILD.combat.percentPer5}% per 5 missing${moralePenalty(c) ? ` (now -${Math.round(moralePenalty(c) * 100)}%)` : ''}.`,
+    ];
+    if (bonded) lines.push(`Above ${C.highMorale}: +${C.highMoraleRelationshipPerDay} relationship a day. Below ${C.lowMorale}: -${C.lowMoraleRelationshipPerDay} a day.`);
+    lines.push(c.contract?.type === 'main' ? 'At 0: nothing; you never leave.' : `At 0: they leave the party (renown -${quitRenown(c)}).`);
+    lines.push(
+      `Rises${traitNote(c, k)}:`,
+      `• +${GUILD.schedule.dayOffMorale * k} each Day Off`,
+      `• +${Math.min(...drinks)} to +${Math.max(...drinks)} per round of drinks at an inn (once a day)`,
+    );
+    if (housed) {
+      lines.push(
+        `• +${GUILD.food.moraleAbovePerStep * k} a day per level of quality above expected food`,
+        `• +${GUILD.lodging.moraleAbovePerStep * k} a night per level of quality above expected lodging`,
+      );
+    }
+    lines.push(
+      'Falls:',
+      `• -${C.moralePerTurn} per turn in battle`,
+      `• -${C.moraleFailedQuest} per failed quest`,
+      `• -1 per ${Math.round(1 / C.moralePerHealthLost)} Health lost`,
+      `• -${C.moraleMemberDied} when a party member dies`,
+    );
+    if (housed) {
+      lines.push(
+        `• -${GUILD.food.moraleBelowPerStep} a day per level of quality below expected food`,
+        `• -${GUILD.lodging.moraleBelowPerStep} a night per level of quality below expected lodging`,
+        `Expects ${GUILD.food[FOOD_TIERS[expectedQuality(c)]].name.toLowerCase()} food and ${QUALITY_TEXT[expectedQuality(c)]}.`,
+      );
+    } else {
+      lines.push('Finds their own food and lodging, so the party\'s choices don\'t affect it.');
+    }
+    return lines.join('\n');
   }
 
   private relationshipTip(c: Character): string {
     const k = c.contract;
     if (k?.type !== 'companion' && k?.type !== 'slave') return '';
-    const lines = [
-      `Relationship ${Math.round(k.relationship)}/100.`,
-      `+${GUILD.companion.relationshipPerQuest} for each quest completed together, -2 for a failed one.`,
-    ];
-    lines.push(
-      `+${GUILD.condition.highMoraleRelationshipPerDay} a day while Morale is above ${GUILD.condition.highMorale}, -${GUILD.condition.lowMoraleRelationshipPerDay} a day while it's below ${GUILD.condition.lowMorale} (now ${moraleOf(c)}). Good food and lodging keep Morale up.`,
-    );
-    if (isHoused(c)) lines.push('If the party can\'t pay food and lodging: -5.');
+    const C = GUILD.condition;
+    const S = GUILD.slave;
+    const lines = [`Relationship ${Math.round(k.relationship)}/100`];
     if (k.type === 'companion') {
       lines.push(
-        `Unpaid wages: ${GUILD.companion.relationshipUnpaid} each payday; they quit at 0 (renown -${quitRenown(c)}).`,
-        `A higher relationship lowers their demands when you renew (up to -${Math.round(GUILD.companion.renewalDiscountAtMax * 100)}% at 100).`,
+        `Lowers their demands when you renew: up to -${Math.round(GUILD.companion.renewalDiscountAtMax * 100)}% at 100.`,
+        `At 0: they quit at the end of the day (renown -${quitRenown(c)}).`,
       );
     } else {
-      lines.push(`Drives Obedience: it rises while relationship is ${GUILD.slave.obedienceRiseFrom}+ and falls below ${GUILD.slave.obedienceFallBelow}. Punishing costs ${GUILD.slave.punishRelationship}.`);
+      lines.push(`Drives Obedience: ${S.obedienceRiseFrom}+ raises it, below ${S.obedienceFallBelow} lowers it.`);
     }
+    lines.push(
+      'Rises:',
+      `• +${GUILD.companion.relationshipPerQuest} per quest completed together`,
+      `• +${C.highMoraleRelationshipPerDay} a day while Morale is above ${C.highMorale} (now ${moraleOf(c)})`,
+      'Falls:',
+      '• -2 per failed quest together',
+      `• -${C.lowMoraleRelationshipPerDay} a day while Morale is below ${C.lowMorale}`,
+    );
+    if (isHoused(c)) lines.push('• -5 a day the party can\'t pay food and lodging');
+    if (k.type === 'companion') lines.push(`• ${GUILD.companion.relationshipUnpaid} per missed payday`);
+    else lines.push(`• -${S.punishRelationship} per Punish`);
     return lines.join('\n');
   }
 
@@ -551,13 +587,21 @@ export class PartyScene extends Phaser.Scene {
     if (!isSlave(c)) return '';
     const S = GUILD.slave;
     return [
-      `Obedience ${Math.round(c.contract.obedience)}/100: how willingly a slave fights.`,
-      `In battle: -${GUILD.combat.percentPer5}% to all stats per 5 below 100${obediencePenalty(c) ? ` (now -${Math.round(obediencePenalty(c) * 100)}%)` : ''}.`,
-      `Rises ${S.obedienceChangePerDay} a day while relationship is ${S.obedienceRiseFrom}+, falls ${S.obedienceChangePerDay} a day below ${S.obedienceFallBelow}, steady in between (now ${obedienceTrend(c.contract.relationship)}).`,
-      `Punish (once a day): +${S.punishObedience} Obedience, -${S.punishRelationship} relationship. A quick boost that drains away unless the relationship recovers.`,
-      `Market slaves start at ${S.obedienceMarket[0]}-${S.obedienceMarket[1]}, registered prisoners at ${S.obedienceCaptive[0]}-${S.obedienceCaptive[1]}.`,
+      `Obedience ${Math.round(c.contract.obedience)}/100 (slaves only)`,
+      `Below 100: all battle stats -${GUILD.combat.percentPer5}% per 5 missing${obediencePenalty(c) ? ` (now -${Math.round(obediencePenalty(c) * 100)}%)` : ''}.`,
+      `Starts at ${S.obedienceMarket[0]}-${S.obedienceMarket[1]} for bought slaves, ${S.obedienceCaptive[0]}-${S.obedienceCaptive[1]} for registered prisoners.`,
+      'Rises:',
+      `• +${S.obedienceChangePerDay} a day while relationship is ${S.obedienceRiseFrom}+ (now ${Math.round(c.contract.relationship)})`,
+      `• +${S.punishObedience} per Punish (once a day; costs ${S.punishRelationship} relationship)`,
+      'Falls:',
+      `• -${S.obedienceChangePerDay} a day while relationship is below ${S.obedienceFallBelow}`,
     ].join('\n');
   }
+}
+
+/** " (x2: Protagonist)" when a member's traits multiply a gain, else "". */
+function traitNote(c: Character, k: number): string {
+  return k !== 1 ? ` (x${k}: ${(c.traits ?? []).map((t) => TRAITS[t].name).join(', ')})` : '';
 }
 
 const DROP_W = 460;
