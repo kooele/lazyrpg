@@ -358,7 +358,7 @@ export function resolveQuest(
   const ids = members.map((c) => c.id);
   // Multi-day trips: nights on the road; the members away don't follow their schedule.
   for (let i = 1; i < q.days; i++) lines.push(...advanceDay(state, rng, 'road', ids, true));
-  if (state.tab) lines.push(`On the tab: ${tabTotal(state)} gold for the trip's food, lodging and pay, due at the next End Day.`);
+  if (state.tab) lines.push(`Due at the next End Day: ${tabList(state, ' gold')}.`);
   state.lastQuestDay = state.day;
   state.questMembers = ids.filter((id) => state.party.some((c) => c.id === id));
   tidyLineup(state);
@@ -601,12 +601,26 @@ export const isPayday = (day: number) => day % 7 === 0;
 // ---- what the end of a day costs ---------------------------------------------------------------------------
 // advanceDay and forecastNight both use these, so the End Day warning names exactly what End Day will charge.
 
-/** Everything on the quest tab (see GameState.tab). */
-export function tabTotal(state: GameState): number {
+/** The tabs a multi-day quest runs up (see GameState.tab), as the player sees them named. */
+export const TAB_NAMES = { upkeep: 'Food and Lodging Tab', wages: 'Owed Wages Tab', taxes: 'Slave Tax Tab' } as const;
+
+/** What's on each tab, in gold. */
+export function tabParts(state: GameState): Record<keyof typeof TAB_NAMES, number> {
   const t = state.tab;
-  if (!t) return 0;
-  const sum = (r: Record<string, number>) => Object.values(r).reduce((s, g) => s + g, 0);
-  return t.upkeep + sum(t.wages) + sum(t.taxes);
+  const sum = (r: Record<string, number> = {}) => Object.values(r).reduce((s, g) => s + g, 0);
+  return { upkeep: t?.upkeep ?? 0, wages: sum(t?.wages), taxes: sum(t?.taxes) };
+}
+
+/** The tabs that have anything on them, as "Food and Lodging Tab 96, Owed Wages Tab 70" (with `unit` after each amount). */
+export function tabList(state: GameState, unit = ''): string {
+  const parts = tabParts(state);
+  return (Object.keys(TAB_NAMES) as (keyof typeof TAB_NAMES)[]).filter((k) => parts[k]).map((k) => `${TAB_NAMES[k]} ${parts[k]}${unit}`).join(', ');
+}
+
+/** Everything on the quest's tabs. */
+export function tabTotal(state: GameState): number {
+  const p = tabParts(state);
+  return p.upkeep + p.wages + p.taxes;
 }
 
 /** Wages paid as the day `day` begins: on payday each companion's week (paydayWages), plus what the quest tab owes them. */
@@ -727,14 +741,14 @@ export function advanceDay(state: GameState, rng: Rng, night: 'road' | 'city' = 
   const upkeep = dailyUpkeep(state, night, away);
   const owing = tab ? 0 : upkeep + (state.tab?.upkeep ?? 0);
   if (owing > state.gold) {
-    say(`Not enough gold for food and lodging (${owing} needed${state.tab?.upkeep ? `, ${state.tab.upkeep} of it from the quest` : ''}). Your companions and slaves are unhappy.`);
+    say(`Not enough gold for food and lodging (${owing} needed${state.tab?.upkeep ? `, ${state.tab.upkeep} of it on the ${TAB_NAMES.upkeep}` : ''}). Your companions and slaves are unhappy.`);
     state.gold = 0;
     for (const c of state.party) if (isHoused(c)) changeRelationship(c, -5);
   } else {
     if (tab) tab.upkeep += upkeep;
     else {
       state.gold -= owing;
-      if (state.tab?.upkeep) say(`Paid the quest's food and lodging: ${state.tab.upkeep} gold.`);
+      if (state.tab?.upkeep) say(`Paid the ${TAB_NAMES.upkeep}: ${state.tab.upkeep} gold.`);
     }
     // Everyone the party feeds compares the day's food with what they expect: Morale up or down.
     const meals: string[] = [];
@@ -778,20 +792,24 @@ export function advanceDay(state: GameState, rng: Rng, night: 'road' | 'city' = 
   if (tab) {
     // Payday on the road: wages and slave tax go on the tab.
     if (isPayday(state.day)) {
-      let owed = 0;
+      let wages = 0;
+      let taxes = 0;
       for (const c of state.party) {
         const due = isCompanion(c) ? paydayWages(c, state.day) : isSlave(c) ? slaveTax(c) : 0;
         if (!due) continue;
         const book = isCompanion(c) ? tab.wages : tab.taxes;
         book[c.id] = (book[c.id] ?? 0) + due;
-        owed += due;
-        if (isCompanion(c)) delete c.contract.carriedWages;
+        if (isCompanion(c)) {
+          wages += due;
+          delete c.contract.carriedWages;
+        } else taxes += due;
       }
-      if (owed) say(`Payday on the road: ${owed} gold in wages and slave tax, on the tab until you're back in ${GUILD.city}.`);
+      const onto = [wages ? `${wages} gold in wages onto the ${TAB_NAMES.wages}` : '', taxes ? `${taxes} gold in slave tax onto the ${TAB_NAMES.taxes}` : ''].filter(Boolean);
+      if (onto.length) say(`Payday on the road: ${onto.join(', ')}, until you're back in ${GUILD.city}.`);
     }
   } else {
     // Wages (payday's, and the tab's), then slave property tax.
-    const fromTab = state.tab ? tabTotal(state) - state.tab.upkeep : 0;
+    const fromTab = tabParts(state);
     let paid = 0;
     for (const { c, due } of wagesDue(state, state.day)) {
       if (state.gold >= due) {
@@ -807,7 +825,7 @@ export function advanceDay(state: GameState, rng: Rng, night: 'road' | 'city' = 
       }
     }
     if (isPayday(state.day)) for (const c of state.party.filter(isCompanion)) delete c.contract.carriedWages;
-    if (paid) say(`${isPayday(state.day) ? 'Payday' : 'Wages from the quest'}: ${paid} gold in wages.`);
+    if (paid) say(`${isPayday(state.day) ? 'Payday' : `Paid the ${TAB_NAMES.wages}`}: ${paid} gold in wages.`);
     // Property tax on slaves: one the party can't pay for is seized and sold at the slave market.
     let taxed = 0;
     for (const { c, tax } of taxesDue(state, state.day)) {
@@ -820,7 +838,8 @@ export function advanceDay(state: GameState, rng: Rng, night: 'road' | 'city' = 
       }
     }
     if (taxed) say(`Slave property tax: ${taxed} gold.`);
-    if (fromTab && (paid || taxed)) say(`That settles the quest's tab for wages and tax (${fromTab} gold).`);
+    const settled = [fromTab.wages && paid && isPayday(state.day) ? `the ${TAB_NAMES.wages} (${fromTab.wages} gold)` : '', fromTab.taxes && taxed ? `the ${TAB_NAMES.taxes} (${fromTab.taxes} gold)` : ''].filter(Boolean);
+    if (settled.length) say(`That settles ${settled.join(' and ')}.`);
     delete state.tab;
   }
 

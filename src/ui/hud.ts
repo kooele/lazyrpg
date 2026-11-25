@@ -46,7 +46,7 @@ export function cityHeader(scene: Phaser.Scene, state: GameState, title: string,
   const gold = text(scene, WIDTH - 20, 6, `${state.gold} gold`, { fontSize: '20px', color: COLORS.gold }).setOrigin(1, 0);
   // What a multi-day quest ran up, due at the next End Day.
   const tab = tabTotal(state);
-  if (tab) text(scene, WIDTH - 30 - gold.width, 12, `Tab: ${tab}g due at End Day`, { fontSize: '12px', color: tab > state.gold ? COLORS.bad : COLORS.dim }).setOrigin(1, 0);
+  if (tab) text(scene, WIDTH - 30 - gold.width, 12, `Tabs: ${tab}g due at End Day`, { fontSize: '12px', color: tab > state.gold ? COLORS.bad : COLORS.dim }).setOrigin(1, 0);
   const feeding = text(scene, WIDTH - 20, 32, `Housing ${boarders(state).length}: ${dailyUpkeep(state, 'city')}g/day (food ${foodCost(state)}, lodging ${lodgingCost(state, 'city')})`, { fontSize: '11px', color: COLORS.dim }).setOrigin(1, 0);
   const wages = text(scene, WIDTH - 20, 46,
     `Wages ${weeklyWages(state)}${weeklyTaxes(state) ? ` + slave tax ${weeklyTaxes(state)}` : ''}/week ${isPayday(state.day) ? '(paid today)' : `(payday in ${toPay}d)`}`,
