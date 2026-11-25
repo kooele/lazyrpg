@@ -1077,6 +1077,7 @@ export class BattleScene extends Phaser.Scene {
       this.casterUid = u.uid;
       this.refresh();
       await this.wait(250);
+      const start = { x: u.x, y: u.y };
       if (shouldSurrender(b, u)) {
         b.surrender(u);
         this.floatText(u, 'Surrenders', '#e0e0e0');
@@ -1119,7 +1120,7 @@ export class BattleScene extends Phaser.Scene {
       if (action) await this.enemyUse(u, action.id, action.target);
       else {
         b.wait(u);
-        this.addLog(`${u.character.name} advances.`);
+        this.addLog(`${u.character.name} ${u.x !== start.x || u.y !== start.y ? 'advances' : 'waits'}.`);
       }
       // Free actions still work if the turn didn't end.
       if (!free && u.alive && !b.outcome()) {
