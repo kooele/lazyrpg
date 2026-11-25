@@ -6,7 +6,7 @@ import { createCharacter, deriveStats, makeRng } from '../src/game/character';
 import { makeEnemy, makeUnit } from '../src/game/battle';
 import {
   acceptQuest, advanceDay, advanceDays, askingPrice, buyDrinks, isShipmentDay, marketBuyPrice, marketDay, sellSlave, turnInPrisoner, buyResidence, buySlave, makeQuest, sellResidence, endDay, setLodging, boarders, lodgingCost, residents, canTakeQuest, dailyUpkeep, foodCost, departBlock, lineupMembers, mainCharacter, moveMember,
-  killBounty, newCampaign, questMoraleLoss, questXpPool, questXpShares, registerPrisoner, resolveQuest, rewardShares, toggleLineup, weeklyTaxes, setLineupSlot, benchMember, releaseCompanion, moraleDepartures, relationshipDepartures, quitRenown, renewContract, weeklyWages,
+  killBounty, newCampaign, questMoraleLoss, questXpPool, questXpShares, registerPrisoner, resolveQuest, rewardShares, toggleLineup, weeklyTaxes, setLineupSlot, benchMember, releaseCompanion, moraleDepartures, relationshipDepartures, quitRenown, renewContract, weeklyWages, forecastNight,
 } from '../src/game/city';
 import { activityOf, defaultActivity, lodgingOf, combatPenalty, expectedQuality, foodMorale, healthOf, isInjured, moraleOf, moralePenalty, obediencePenalty } from '../src/game/condition';
 import { parseSave, serializeSave } from '../src/game/save';
@@ -1054,6 +1054,47 @@ describe('contracts', () => {
     expect(s.party.some((m) => m.id === c.id)).toBe(false);
     expect(s.market.slaves.some((o) => o.character.id === c.id)).toBe(true);
     expect(s.market.slaves.length).toBeGreaterThanOrEqual(Math.min(stock, GUILD.market.stock[0]));
+  });
+
+  it('forecastNight predicts the End Day bill and what goes unpaid', () => {
+    const s = start();
+    s.day = 6; // tomorrow is payday
+    const k = s.guild.pool[0];
+    const comp = joinParty(s, k, companionContract({ basePay: 70, lootPct: 0, foodLodging: false, termWeeks: 4 }, 0, 1, 10));
+    const slave = s.guild.pool[0].character;
+    s.party.push({ ...slave, contract: slaveContract('market', 100, makeRng(1)) });
+    s.guild.pool = s.guild.pool.filter((a) => a.character.id !== slave.id);
+    for (const c of s.party) s.schedule[c.id] = 'training';
+    // Plenty of gold: everything is paid, nothing short.
+    s.gold = 10000;
+    let f = forecastNight(s);
+    expect(f.payday).toBe(true);
+    expect(f.upkeep).toBe(dailyUpkeep(s, 'city'));
+    expect(f.wages).toBe(70); // a full week: hired on day 0
+    expect(f.taxes).toBe(slaveTax(slave));
+    expect(f.total).toBe(f.upkeep + f.wages + f.taxes);
+    expect(f.shortfall).toBe(0);
+    expect(f.unpaid).toEqual([]);
+    expect(f.seized).toEqual([]);
+    // Enough for food and lodging only: the companion goes unpaid (and quits at relationship 10), the slave is seized.
+    s.gold = f.upkeep;
+    f = forecastNight(s);
+    expect(f.unfed).toBe(false);
+    expect(f.shortfall).toBe(f.wages + f.taxes);
+    expect(f.unpaid.map((u) => [u.id, u.quits])).toEqual([[comp.id, true]]);
+    expect(f.seized.map((x) => x.id)).toEqual([slave.id]);
+    s.market.slaves = s.market.slaves.slice(0, GUILD.market.stock[0] - 1);
+    endDay(s, makeRng(2));
+    expect(s.party.some((m) => m.id === comp.id)).toBe(false);
+    expect(s.party.some((m) => m.id === slave.id)).toBe(false);
+    // Odd jobs come in before the bills.
+    const t = start();
+    t.schedule[t.mainId] = 'oddJobs';
+    t.gold = 0;
+    f = forecastNight(t);
+    expect(f.income).toBe(GUILD.schedule.oddJobsGold);
+    expect(f.unfed).toBe(f.upkeep > GUILD.schedule.oddJobsGold);
+    expect(f.shortfall).toBe(Math.max(0, f.upkeep - GUILD.schedule.oddJobsGold));
   });
 
   it('market slaves start fairly obedient (40-80), captives much less (0-40)', () => {

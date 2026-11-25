@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { GUILD } from '../data/guild';
 import { WEAPONS } from '../data/content';
-import { dailyUpkeep, departBlock, endDay, foodCost, lineupMembers, lodgingCost, prisonersAtGate, registerPrisoner, turnInPrisoner } from '../game/city';
+import { dailyUpkeep, departBlock, endDay, foodCost, forecastNight, lineupMembers, lodgingCost, prisonersAtGate, registerPrisoner, turnInPrisoner, type NightForecast } from '../game/city';
 import { adventurerRank } from '../game/guild';
 import { moraleOf } from '../game/condition';
 import { bondOf, registrationFee, slaveTax } from '../game/contracts';
@@ -227,17 +227,65 @@ export class CityScene extends Phaser.Scene {
   /** End the day: everyone the party houses sleeps where they lodge (set in Manage Party), and the next day begins. */
   private endDay(): void {
     const state = requireState();
-    const total = dailyUpkeep(state, 'city');
-    const short = total > state.gold ? '\nYou can\'t afford it: companions and slaves will be unhappy.' : '';
-    confirmDialog(this, `End the day?\nTonight: ${total} gold (lodging ${lodgingCost(state, 'city')} + food ${foodCost(state)}).\nSet where each member lodges in Manage Party.${short}`, () => {
-      // Before the night: gold, everyone's Morale and companions' and slaves' relationship, for the summary.
-      const gold = state.gold;
-      const before = state.party.map((c) => ({ id: c.id, name: c.name, morale: moraleOf(c), rel: bondOf(c)?.relationship }));
-      const msgs = endDay(state, Math.random);
-      markDirty();
-      this.render();
-      this.daySummary(gold, before, msgs);
-    }, 'End Day');
+    const f = forecastNight(state);
+    const bill = `Tonight: ${f.upkeep} gold (lodging ${lodgingCost(state, 'city')} + food ${foodCost(state)}).`;
+    if (f.shortfall > 0) {
+      this.endDayWarning(f, bill);
+      return;
+    }
+    const payday = f.payday && f.wages + f.taxes ? `\nTomorrow is payday: ${f.wages + f.taxes} gold in wages and slave tax.` : '';
+    confirmDialog(this, `End the day?\n${bill}${payday}\nSet where each member lodges in Manage Party.`, () => this.runEndDay(), 'End Day');
+  }
+
+  /**
+   * End Day when the party can't pay everything that's due: the bill, what goes unpaid and what that will cost,
+   * with a way to Manage Party (cheaper lodging, sell slaves) before going ahead.
+   */
+  private endDayWarning(f: NightForecast, bill: string): void {
+    const layer = this.add.container(0, 0).setDepth(1000);
+    layer.add(this.add.rectangle(0, 0, WIDTH, HEIGHT, 0x000000, 0.7).setOrigin(0).setInteractive());
+    const W = 560;
+    const X = WIDTH / 2 - W / 2;
+    const lines = [bill];
+    if (f.payday && f.wages + f.taxes) lines.push(`Tomorrow is payday: wages ${f.wages}${f.taxes ? ` + slave tax ${f.taxes}` : ''} gold.`);
+    if (f.income) lines.push(`Odd jobs bring in ${f.income} gold first.`);
+    lines.push(`You have ${f.gold} gold of the ${f.total} needed: ${f.shortfall} short.`);
+    const effects: string[] = [];
+    if (f.unfed) effects.push(`• No food or lodging: your gold goes to 0 and everyone you house loses 5 relationship.`);
+    for (const u of f.unpaid) {
+      effects.push(`• ${u.name} goes unpaid (${u.due} gold): relationship ${GUILD.companion.relationshipUnpaid}${u.quits ? `, and they will quit${u.renown >= 1 ? ` (renown -${Math.round(u.renown)})` : ''}` : ''}.`);
+    }
+    for (const s of f.seized) effects.push(`• The city seizes ${s.name} for the slave market (tax ${s.tax} gold).`);
+    const body = text(this, X + 24, 0, lines.join('\n'), { fontSize: '14px', wordWrap: { width: W - 48 }, lineSpacing: 3 });
+    const warn = text(this, X + 24, 0, `If you end the day now:\n${effects.join('\n')}`, { fontSize: '14px', color: COLORS.bad, wordWrap: { width: W - 48 }, lineSpacing: 3 });
+    const hint = text(this, X + 24, 0, 'In Manage Party you can move members to cheaper lodging or sell slaves to raise gold.', { fontSize: '13px', color: COLORS.dim, wordWrap: { width: W - 48 } });
+    const H = 60 + body.height + 14 + warn.height + 14 + hint.height + 20 + 46 + 20;
+    const Y = Math.max(20, HEIGHT / 2 - H / 2);
+    layer.add(panel(this, X, Y, W, H));
+    layer.add(text(this, WIDTH / 2, Y + 16, 'You can\'t pay everything that\'s due', { fontSize: '20px', color: COLORS.gold }).setOrigin(0.5, 0));
+    body.setY(Y + 60);
+    warn.setY(body.y + body.height + 14);
+    hint.setY(warn.y + warn.height + 14);
+    layer.add([body, warn, hint]);
+    const by = Y + H - 66;
+    const bw = (W - 48 - 24) / 3;
+    layer.add(button(this, X + 24, by, bw, 46, 'Manage Party', () => this.scene.start('Party'), { fontSize: 15 }));
+    layer.add(button(this, X + 24 + bw + 12, by, bw, 46, 'Cancel', () => layer.destroy(), { fontSize: 15 }));
+    layer.add(button(this, X + 24 + (bw + 12) * 2, by, bw, 46, 'End Day anyway', () => {
+      layer.destroy();
+      this.runEndDay();
+    }, { fontSize: 15, fill: 0x4a2a22 }));
+  }
+
+  private runEndDay(): void {
+    const state = requireState();
+    // Before the night: gold, everyone's Morale and companions' and slaves' relationship, for the summary.
+    const gold = state.gold;
+    const before = state.party.map((c) => ({ id: c.id, name: c.name, morale: moraleOf(c), rel: bondOf(c)?.relationship }));
+    const msgs = endDay(state, Math.random);
+    markDirty();
+    this.render();
+    this.daySummary(gold, before, msgs);
   }
 
   /**

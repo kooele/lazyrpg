@@ -593,6 +593,68 @@ export function weeklyTaxes(state: GameState): number {
 
 export const isPayday = (day: number) => day % 7 === 0;
 
+/** What ending the day in the city will cost, and what happens if the party can't pay (see forecastNight). */
+export interface NightForecast {
+  /** Gold the party has now, and what the day's odd jobs bring in before the bills. */
+  gold: number;
+  income: number;
+  /** Tonight's food and lodging. */
+  upkeep: number;
+  /** Does the next day start on a payday, and its wages and slave tax. */
+  payday: boolean;
+  wages: number;
+  taxes: number;
+  /** Everything due, and how much gold is missing (0 if the party can pay it all). */
+  total: number;
+  shortfall: number;
+  /** The party can't pay for food and lodging: gold goes to 0 and housed members lose relationship. */
+  unfed: boolean;
+  /** Companions who won't be paid on payday, and whether they're likely to quit over it. */
+  unpaid: { id: string; name: string; due: number; quits: boolean; renown: number }[];
+  /** Slaves whose tax can't be paid: the city seizes them. */
+  seized: { id: string; name: string; tax: number }[];
+}
+
+/**
+ * Forecast the next End Day in the city: the day's odd jobs, then food and lodging, then (on payday) each companion's
+ * wages and each slave's tax, in the order advanceDay charges them. Assumes nobody leaves the party during the day.
+ */
+export function forecastNight(state: GameState): NightForecast {
+  const income = scheduledMembers(state).filter((c) => activityOf(state, c) === 'oddJobs').length * GUILD.schedule.oddJobsGold;
+  const upkeep = dailyUpkeep(state, 'city');
+  const payday = isPayday(state.day + 1);
+  let gold = state.gold + income;
+  const unfed = upkeep > gold;
+  gold = unfed ? 0 : gold - upkeep;
+  let wages = 0;
+  let taxes = 0;
+  const unpaid: NightForecast['unpaid'] = [];
+  const seized: NightForecast['seized'] = [];
+  if (payday) {
+    for (const c of state.party.filter(isCompanion)) {
+      const due = wagesBetween(c, state.day + 1 - 7, state.day + 1);
+      if (!due) continue;
+      wages += due;
+      if (gold >= due) gold -= due;
+      else {
+        const rel = c.contract.relationship + (unfed && isHoused(c) ? -5 : 0) + GUILD.companion.relationshipUnpaid;
+        unpaid.push({ id: c.id, name: c.name, due, quits: rel <= 0, renown: Math.min(state.renown, quitRenown(c)) });
+      }
+    }
+    for (const c of state.party.filter(isSlave)) {
+      const tax = slaveTax(c);
+      taxes += tax;
+      if (gold >= tax) gold -= tax;
+      else seized.push({ id: c.id, name: c.name, tax });
+    }
+  }
+  const total = upkeep + wages + taxes;
+  return {
+    gold: state.gold, income, upkeep, payday, wages, taxes, total,
+    shortfall: Math.max(0, total - state.gold - income), unfed, unpaid, seized,
+  };
+}
+
 /** Pass `days` days (nights on the road). Returns the messages for the player. */
 export function advanceDays(state: GameState, days: number, rng: Rng): string[] {
   const out: string[] = [];
