@@ -30,7 +30,6 @@ export interface BattleMap {
 }
 
 export const key = (x: number, y: number) => `${x},${y}`;
-export const manhattan = (a: Point, b: Point) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 /** Euclidean distance; all skill ranges use this (1.5 reaches diagonal neighbours). */
 export const dist = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
 export const EPS = 1e-6;
@@ -46,14 +45,6 @@ export function withinRange(d: number, range: number): boolean {
 }
 export const DIRS: Point[] = [{ x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 }];
 export const DIRS8: Point[] = [...DIRS, { x: 1, y: 1 }, { x: 1, y: -1 }, { x: -1, y: 1 }, { x: -1, y: -1 }];
-
-/** Snap the direction from `from` toward `to` to one of the 8 grid directions. */
-export function snapDirection(from: Point, to: Point): Point {
-  const angle = Math.atan2(to.y - from.y, to.x - from.x);
-  const step = Math.round(angle / (Math.PI / 4));
-  const a = step * (Math.PI / 4);
-  return { x: Math.round(Math.cos(a)), y: Math.round(Math.sin(a)) };
-}
 
 /** Tiles strictly between two tiles along the straight line joining their centers. */
 export function tilesBetween(a: Point, b: Point): Point[] {

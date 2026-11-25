@@ -70,8 +70,3 @@ export function overallTalentLabel(c: Pick<Character, 'talents'>, cfg: StatConfi
 export const TALENT_COLORS: Record<Talent, string> = {
   S: '#ff9f43', A: '#e0b44c', B: '#6fdc8c', C: '#f4ecd8', D: '#9aa3bd', F: '#ff6b6b',
 };
-
-/** "HP B · P.Atk C · ..." */
-export function talentLine(c: Pick<Character, 'talents'>, short: (k: StatKey) => string): string {
-  return talentStats().map((k) => `${short(k)} ${talentOf(c, k)}`).join(' · ');
-}
