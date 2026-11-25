@@ -46,8 +46,10 @@ export function glossaryEntries(): GlossaryEntry[] {
   // ---- City life -------------------------------------------------------------------------------
   add('City life', 'Days and End Day',
     `Time only passes when you press End Day. Everyone the party houses eats and sleeps where you lodge them, and the schedule runs for members who didn't quest that day.\n\n`
-    + `You can go on one quest a day: coming back from one doesn't end the day, but the next one has to wait until tomorrow. Multi-day quests spend the nights before the last one on the road: free lodging for the members on the quest, food still paid. Members who stayed home live those days as usual, paying for and sleeping where they lodge.\n\n`
-    + `Every 7th day is payday: companion wages and slave taxes are due.`);
+    + `One quest a day: coming back doesn't end the day, but the next quest waits until tomorrow. Multi-day quests spend their nights on the road (free lodging for those on the quest); members at home live those days as usual.\n\n`
+    + `Every 7th day is payday and tax day: companion wages and slave tax are due.\n\n`
+    + `Nothing is paid on the road. It goes on tabs settled at the next End Day: the Food and Lodging Tab (the quest's nights), the Owed Wages Tab (payday on the quest) and the Slave Tax Tab (tax day on the quest). Releasing or selling a member pays their tab. Contracts only lapse at End Day in the city.\n\n`
+    + `End Day warns you when you can't pay everything due, and what will happen.`);
   add('City life', 'Health (not battle HP)',
     `A member's condition between battles, out of 100. It isn't their HP in battle.\n\n`
     + `Below 100: all battle stats −1% per 3 missing (Health 70 = −10%). At 0: the member dies (the main character pulls through at 1).\n\n`
@@ -149,7 +151,7 @@ export function glossaryEntries(): GlossaryEntry[] {
   add('Party members', 'Negotiation',
     `An offer close to what a candidate wants gets a counter-offer; a low one offends them. Each rejected offer uses up patience (counters cost 1, insults 2). Once it runs out they walk away and won't talk to you for a week.`);
   add('Party members', 'Contracts and renewal',
-    `Contracts run ${K.terms.join(', ')} weeks. Base pay is due every payday, by the day: a companion hired midweek gets only the days they've worked, and so does one whose term ends midweek. Renewing settles the wages earned under the old terms on the spot. When a contract ends, the companion sits out of quests and you have ${K.graceDays} days to renew it in Manage Party before they leave.\n\n`
+    `Contracts run ${K.terms.join(', ')} weeks. Base pay is due every payday, by the day: a companion hired midweek gets only the days they've worked, and so does one whose term ends midweek. Renewing carries the wages earned under the old terms over to the next payday. When a contract ends, the companion sits out of quests and you have ${K.graceDays} days to renew it in Manage Party; if you don't, they leave at the End Day after, paid the days of their term since payday. If you can't pay those final wages, they leave without them and it costs renown, as if they'd quit.\n\n`
     + `A good relationship lowers their demands on renewal, by up to ${pct(K.renewalDiscountAtMax)} at 100. Walking out of a renewal ends the contract on the spot.\n\n`
     + `Releasing a companion before their term ends breaks the contract: you pay them ${pct(K.releaseShareOfRemaining)} of what the rest of the term is worth (base pay, loot cut and food & lodging), but never more than ${K.releaseMinWeeks} week${K.releaseMinWeeks === 1 ? '' : 's'} of it. Once the term has ended, there's no buyout.\n\n`
     + `Either way, you also pay the base pay they've earned since the last payday, by the day (3 days in: 3/7 of a week's pay).`);

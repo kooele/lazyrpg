@@ -394,6 +394,8 @@ export type Contract =
     relationship: number;
     /** How demanding they are (1 = average). */
     greed: number;
+    /** Wages earned under earlier terms since the last payday (a renewal carries them over), paid on the next payday. */
+    carriedWages?: number;
   }
   | {
     type: 'slave';
@@ -501,6 +503,12 @@ export interface Progress {
   defeats: number;
 }
 
+export interface QuestTab {
+  upkeep: number;
+  wages: Record<string, number>;
+  taxes: Record<string, number>;
+}
+
 export interface GameState {
   progress: Progress;
   /** Day 1 is the first day in Arch City. */
@@ -539,6 +547,11 @@ export interface GameState {
   belowRankSince: number;
   /** City rings where the party owns a residence. */
   residences: ('outer' | 'middle' | 'inner')[];
+  /**
+   * What the party ran up on the road during a multi-day quest, settled at the next End Day: food and lodging, and the
+   * wages (companions) and property tax (slaves) of any payday that fell on the trip, by character id.
+   */
+  tab?: QuestTab;
   /** Messages for the player (newest last). */
   log: NewsItem[];
 }
