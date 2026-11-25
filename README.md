@@ -68,7 +68,7 @@ The **schedule** (Manage Party) sets what each member does on days they aren't o
 
 Unscheduled members recover when injured and take a day off otherwise.
 
-Every 7th day is **payday** for companions.
+Every 7th day is **payday** for companions. Nothing is paid on a multi-day quest: its food and lodging, and any payday on the way, go on a **tab** settled at the next End Day. End Day warns you before you go ahead if you can't pay everything that's due.
 
 ### Ranks, the leaderboard and quests
 
@@ -124,7 +124,7 @@ The rival parties are simulated day by day. A new game starts them spread over t
 
 **Companion contracts** have four terms: **base pay**, **loot cut** (% of each quest reward), **food and lodging included** (worth to them what the food and night adventurers expect would cost you: 126 gold a week), and **term length** (2, 4, 8 or 12 weeks). Candidates' base pay starts from **100 + 20 × level × talent** gold a week, then goes up with greed, a little more for short terms and less for long ones. They value a loot cut by what a party of your rank usually earns (150 gold a week at D, 2000 at A, 4500 at S). An offer close to what they want gets a counter-offer; a low one offends them. Each rejected offer uses up patience, and once it runs out they won't talk to you for a week.
 
-Companions (and slaves, see above) have a **relationship** score (0–100). It goes up by 6 for every quest completed together and by 1 a day while their Morale is above 75, drops by 1 a day while it's below 50 and if you can't pay them, and lowers their demands when you renew: by up to 30% at 100. When a contract ends, they sit out of quests and you have 3 days to **renew** it (Manage Party) before they leave. Walking out of a renewal ends the contract on the spot. Unpaid companions lose 20 relationship each payday. A companion whose relationship is 0 at the end of a day quits.
+Companions (and slaves, see above) have a **relationship** score (0–100). It goes up by 6 for every quest completed together and by 1 a day while their Morale is above 75, drops by 1 a day while it's below 50 and if you can't pay them, and lowers their demands when you renew: by up to 30% at 100. When a contract ends, they sit out of quests and you have 3 days to **renew** it (Manage Party); they leave at the End Day after, with their final wages (if you can't pay those, they leave anyway and it costs renown). Renewing carries the wages earned under the old terms over to the next payday. Walking out of a renewal ends the contract on the spot. Unpaid companions lose 20 relationship each payday. A companion whose relationship is 0 at the end of a day quits.
 
 **Prisoners**: human enemies who surrender in battle are taken prisoner when you win, as many as surrender. The party doesn't keep prisoners: when it comes back, the **city gate** won't let them in until each one is registered, either **turned in for a bounty** (9 gold per level) or **registered as your slave** (only while the party has room) for a fee of its normal market value minus its bounty, so at an average market both come to the same: a level-6 prisoner with average talent is worth 1,100 gold, so its bounty is 54 and its fee 1,045. **Slaves are taxed** every payday (every 7th day, with companion wages) 10% of their normal market value (110 gold a week for that level-6 slave; `slave.weeklyTaxShare` in `guild.json`). If you can't pay a slave's tax, the city **seizes** them and sells them at the slave market. **Turn them all in** settles them at once.
 

@@ -6,7 +6,7 @@ import { createCharacter, deriveStats, makeRng } from '../src/game/character';
 import { makeEnemy, makeUnit } from '../src/game/battle';
 import {
   acceptQuest, advanceDay, advanceDays, askingPrice, buyDrinks, isShipmentDay, marketBuyPrice, marketDay, sellSlave, turnInPrisoner, buyResidence, buySlave, makeQuest, sellResidence, endDay, setLodging, boarders, lodgingCost, residents, canTakeQuest, dailyUpkeep, foodCost, departBlock, lineupMembers, mainCharacter, moveMember,
-  killBounty, newCampaign, questMoraleLoss, questXpPool, questXpShares, registerPrisoner, resolveQuest, rewardShares, toggleLineup, weeklyTaxes, setLineupSlot, benchMember, releaseCompanion, moraleDepartures, relationshipDepartures, quitRenown, renewContract, weeklyWages, forecastNight,
+  killBounty, newCampaign, questMoraleLoss, questXpPool, questXpShares, registerPrisoner, resolveQuest, rewardShares, toggleLineup, weeklyTaxes, setLineupSlot, benchMember, releaseCompanion, moraleDepartures, relationshipDepartures, quitRenown, renewContract, weeklyWages, forecastNight, tabTotal,
 } from '../src/game/city';
 import { activityOf, defaultActivity, lodgingOf, combatPenalty, expectedQuality, foodMorale, healthOf, isInjured, moraleOf, moralePenalty, obediencePenalty } from '../src/game/condition';
 import { parseSave, serializeSave } from '../src/game/save';
@@ -1373,7 +1373,7 @@ describe('contracts', () => {
     expect(s.party.some((m) => m.id === c.id)).toBe(false);
   });
 
-  it('renewing midweek settles the old wages; the next payday pays the new pay from the renewal day', () => {
+  it('renewing midweek carries the old wages over to the next payday, with the new pay from the renewal day', () => {
     const s = start();
     const c = companion(s);
     if (!isCompanion(c)) throw new Error('not a companion');
@@ -1382,11 +1382,121 @@ describe('contracts', () => {
     s.gold = 1000;
     const rel = c.contract.relationship;
     renewContract(s, c.id, { basePay: 140, lootPct: 5, foodLodging: false, termWeeks: 4 });
-    expect(s.gold).toBe(970); // days 8-10 at 70 a week
-    expect(c.contract).toMatchObject({ basePay: 140, startDay: 10, endDay: 38 });
+    expect(s.gold).toBe(1000); // nothing paid now
+    expect(c.contract).toMatchObject({ basePay: 140, startDay: 10, endDay: 38, carriedWages: 30 }); // days 8-10 at 70 a week
     expect(wagesBetween(c, 7, 14)).toBe(80); // days 11-14 at 140 a week
     expect(c.contract.relationship).toBe(rel);
-    expect(weeklyWages(s)).toBe(80);
+    expect(weeklyWages(s)).toBe(110);
+    expect(proratedWages(c, s.day)).toBe(30); // what releasing them now would pay
+    // Renewing again before payday keeps what's owed under both earlier terms.
+    s.day = 12;
+    renewContract(s, c.id, { basePay: 70, lootPct: 5, foodLodging: false, termWeeks: 4 });
+    expect(c.contract.carriedWages).toBe(70); // 30 + days 11-12 at 140
+    expect(weeklyWages(s)).toBe(90); // + days 13-14 at 70
+    expect(forecastNight(s).wages).toBe(0); // not payday yet
+    s.day = 13;
+    expect(forecastNight(s).wages).toBe(90);
+    endDay(s, makeRng(1));
+    expect(s.log.some((n) => n.text.includes('Payday: 90 gold in wages'))).toBe(true);
+    expect(c.contract.carriedWages).toBeUndefined();
+  });
+
+  it('a multi-day quest runs up a tab: food, lodging and payday are paid at the next End Day', () => {
+    const s = start();
+    const c = companion(s);
+    if (!isCompanion(c)) throw new Error('not a companion');
+    Object.assign(c.contract, { basePay: 70, startDay: 0, endDay: 60, foodLodging: false });
+    const slave = s.guild.pool[0].character;
+    s.party.push({ ...slave, contract: slaveContract('market', 100, makeRng(1)) });
+    s.guild.pool = s.guild.pool.filter((a) => a.character.id !== slave.id);
+    s.day = 5;
+    s.gold = 100;
+    const upkeep = dailyUpkeep(s, 'road', [s.mainId]);
+    // Three nights on the road, through payday (day 7): nothing is paid, everything goes on the tab.
+    for (let i = 0; i < 3; i++) advanceDay(s, makeRng(i), 'road', [s.mainId], true);
+    expect(s.day).toBe(8);
+    expect(s.gold).toBe(100);
+    expect(s.tab).toEqual({ upkeep: upkeep * 3, wages: { [c.id]: 70 }, taxes: { [slave.id]: slaveTax(slave) } });
+    expect(tabTotal(s)).toBe(upkeep * 3 + 70 + slaveTax(slave));
+    // Nobody went unpaid on the road.
+    expect(s.party.some((m) => m.id === slave.id)).toBe(true);
+    // The next End Day forecasts and settles the tab along with the night.
+    s.gold = 10000;
+    const f = forecastNight(s);
+    expect(f.tab).toBe(tabTotal(s));
+    expect(f.payday).toBe(false);
+    expect(f.wages).toBe(70);
+    expect(f.taxes).toBe(slaveTax(slave));
+    expect(f.total).toBe(dailyUpkeep(s, 'city') + tabTotal(s));
+    endDay(s, makeRng(9));
+    expect(s.gold).toBe(10000 - f.total);
+    expect(s.tab).toBeUndefined();
+    // Releasing a companion pays what the tab owes them, too.
+    for (let i = 0; i < 6; i++) advanceDay(s, makeRng(i), 'road', [s.mainId], true);
+    expect(s.tab?.wages[c.id]).toBe(70);
+    const before = s.gold;
+    expect(releaseCompanion(s, c.id)).toBeNull();
+    expect(before - s.gold).toBe(70 + proratedWages({ ...c, contract: { ...c.contract } } as typeof c, s.day) + releaseCost(c, s.day, s.rank));
+    expect(s.tab?.wages[c.id]).toBeUndefined();
+    // The tab survives a save.
+    const loaded = parseSave(serializeSave(s));
+    expect(loaded.ok && loaded.state.tab).toEqual(s.tab);
+  });
+
+  it('can\'t pay the tab at End Day: the usual consequences (unpaid wages, seized slaves)', () => {
+    const s = start();
+    const c = companion(s);
+    if (!isCompanion(c)) throw new Error('not a companion');
+    Object.assign(c.contract, { basePay: 70, startDay: 0, endDay: 60, foodLodging: false, relationship: 10 });
+    const slave = s.guild.pool[0].character;
+    s.party.push({ ...slave, contract: slaveContract('market', 100, makeRng(1)) });
+    s.guild.pool = s.guild.pool.filter((a) => a.character.id !== slave.id);
+    s.day = 6;
+    for (let i = 0; i < 2; i++) advanceDay(s, makeRng(i), 'road', [s.mainId], true);
+    s.gold = dailyUpkeep(s, 'city') + (s.tab?.upkeep ?? 0);
+    const f = forecastNight(s);
+    expect(f.unpaid.map((u) => [u.id, u.quits])).toEqual([[c.id, true]]);
+    expect(f.seized.map((x) => x.id)).toEqual([slave.id]);
+    s.market.slaves = s.market.slaves.slice(0, GUILD.market.stock[0] - 1);
+    endDay(s, makeRng(5));
+    expect(s.party.some((m) => m.id === c.id)).toBe(false);
+    expect(s.party.some((m) => m.id === slave.id)).toBe(false);
+    expect(s.tab).toBeUndefined();
+  });
+
+  it('contracts lapse at End Day (not on the road), with their final wages in the bill', () => {
+    const s = start();
+    const c = companion(s, 4);
+    if (!isCompanion(c)) throw new Error('not a companion');
+    Object.assign(c.contract, { basePay: 70, startDay: 0, endDay: 15, foodLodging: false });
+    s.day = 18; // grace ends on day 18: the contract lapses as day 19 begins
+    s.gold = 1000;
+    // On the road, the lapse waits.
+    advanceDay(s, makeRng(1), 'road', [s.mainId], true);
+    expect(s.party.some((m) => m.id === c.id)).toBe(true);
+    // Back in the city, End Day (into day 20) settles it: the term since payday (day 14) ran to day 15, a day of wages.
+    let f = forecastNight(s);
+    expect(f.lapses).toEqual([{ id: c.id, name: c.name, owed: 10 }]);
+    expect(f.total).toBe(dailyUpkeep(s, 'city') + (s.tab?.upkeep ?? 0) + 10);
+    s.gold = f.total;
+    endDay(s, makeRng(2));
+    expect(s.party.some((m) => m.id === c.id)).toBe(false);
+    expect(s.gold).toBe(0);
+    expect(s.log.some((n) => n.text.includes(`${c.name} left the party: their contract was not renewed. Final wages: 10 gold.`))).toBe(true);
+    // Can't pay the final wages: they leave without them, and it costs renown.
+    const t = start();
+    const d = companion(t, 4);
+    if (!isCompanion(d)) throw new Error('not a companion');
+    Object.assign(d.contract, { basePay: 70, startDay: 0, endDay: 15, foodLodging: false });
+    t.day = 18;
+    t.renown = 100;
+    t.gold = dailyUpkeep(t, 'city');
+    f = forecastNight(t);
+    expect(f.unpaidFinal).toEqual([{ id: d.id, name: d.name, owed: 10, renown: quitRenown(d) }]);
+    expect(f.shortfall).toBe(10);
+    endDay(t, makeRng(3));
+    expect(t.party.some((m) => m.id === d.id)).toBe(false);
+    expect(t.renown).toBe(100 - quitRenown(d));
   });
 
   it('releasing a companion also pays the wages earned since payday, by the day', () => {

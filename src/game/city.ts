@@ -6,7 +6,7 @@ import { RANKS, type Character, type CompanionTerms, type GameState, type Offer,
 import { dangerRating, makeQuest, postQuests } from './board';
 import { grantXp, type Rng } from './character';
 import {
-  bondOf, bounty, canFight, registrationFee, slaveTax, changeRelationship, isCompanion, isHoused, isSlave, leaveParty, releaseTotal, proratedWages, wagesBetween, lastPayday, slaveContract, slaveValue,
+  bondOf, bounty, canFight, registrationFee, slaveTax, changeRelationship, isCompanion, isHoused, isSlave, leaveParty, releaseTotal, proratedWages, paydayWages, wagesBetween, lastPayday, type CompanionContract, slaveContract, slaveValue,
 } from './contracts';
 import {
   ACTIVITY_INFO, FOOD_EXPECT_TEXT, QUALITY_TEXT, activityOf, changeHealth, changeMorale, defaultLodging, expectedQuality, foodMorale, foodOf, healthLoss, healthOf,
@@ -137,13 +137,20 @@ function quit(state: GameState, c: Character): number {
   return lost;
 }
 
-/** Release a companion, paying their wages since payday and, before their term ends, the buyout (releaseTotal). Returns an error message, or null. */
+/** What the quest tab owes for one member: a companion's wages or a slave's tax from a payday on the road. */
+export const tabOwed = (state: GameState, id: string) => (state.tab?.wages[id] ?? 0) + (state.tab?.taxes[id] ?? 0);
+
+/**
+ * Release a companion, paying their wages since payday, any on the quest tab and, before their term ends, the buyout
+ * (releaseTotal). Returns an error message, or null.
+ */
 export function releaseCompanion(state: GameState, id: string): string | null {
   const c = state.party.find((m) => m.id === id);
   if (!c || !isCompanion(c)) return 'Only companions can be released.';
-  const cost = releaseTotal(c, state.day, state.rank);
+  const cost = releaseTotal(c, state.day, state.rank) + tabOwed(state, id);
   if (state.gold < cost) return `Not enough gold to release ${c.name} (${cost} needed).`;
   state.gold -= cost;
+  if (state.tab) delete state.tab.wages[id];
   leaveParty(state, c, c.contract.greed);
   note(state, cost ? `Released ${c.name} from their contract: paid ${cost} gold.` : `${c.name} was released and went back to the guild hall.`);
   return null;
@@ -350,7 +357,8 @@ export function resolveQuest(
   note(state, outcome === 'victory' ? `Completed "${q.title}" (${q.rank} rank): ${q.reward} gold reward.` : `Failed "${q.title}" (${q.rank} rank).`);
   const ids = members.map((c) => c.id);
   // Multi-day trips: nights on the road; the members away don't follow their schedule.
-  for (let i = 1; i < q.days; i++) lines.push(...advanceDay(state, rng, 'road', ids));
+  for (let i = 1; i < q.days; i++) lines.push(...advanceDay(state, rng, 'road', ids, true));
+  if (state.tab) lines.push(`On the tab: ${tabTotal(state)} gold for the trip's food, lodging and pay, due at the next End Day.`);
   state.lastQuestDay = state.day;
   state.questMembers = ids.filter((id) => state.party.some((c) => c.id === id));
   tidyLineup(state);
@@ -560,27 +568,24 @@ function runSchedule(state: GameState, away: string[]): string[] {
   return out;
 }
 
-/** What the next payday's wages come to (the week ending on it, prorated for companions who joined or leave midweek). */
+/** What the next payday's wages come to (the week ending on it, prorated for companions who joined or leave midweek, plus wages carried over from a renewal). */
 export function weeklyWages(state: GameState): number {
   const next = lastPayday(state.day) + 7;
-  return state.party.reduce((s, c) => s + (isCompanion(c) ? wagesBetween(c, next - 7, next) : 0), 0);
+  return state.party.reduce((s, c) => s + (isCompanion(c) ? paydayWages(c, next) : 0), 0);
 }
 
 /**
- * Renew a companion's contract on new terms. The wages they've earned under the old terms since payday are settled
- * first; if the party can't pay them, it's like a missed payday (relationship falls).
+ * Renew a companion's contract on new terms. The wages they've earned under the old terms since payday aren't paid
+ * now: they carry over (carriedWages) and are paid with the rest on the next payday.
  */
 export function renewContract(state: GameState, id: string, terms: CompanionTerms): string[] {
   const c = state.party.find((m) => m.id === id);
   if (!c || !isCompanion(c)) return [];
   const out: string[] = [];
   const owed = proratedWages(c, state.day);
-  if (owed && state.gold >= owed) {
-    state.gold -= owed;
-    out.push(note(state, `Settled ${c.name}'s wages under the old contract: ${owed} gold.`));
-  } else if (owed) {
-    changeRelationship(c, GUILD.companion.relationshipUnpaid);
-    out.push(note(state, `You couldn't settle ${c.name}'s wages under the old contract (${owed} gold).`));
+  if (owed) {
+    c.contract.carriedWages = owed;
+    out.push(note(state, `${c.name}'s wages under the old contract (${owed} gold) will be paid on payday.`));
   }
   Object.assign(c.contract, { ...terms, startDay: state.day, endDay: state.day + terms.termWeeks * 7 });
   return out;
@@ -593,65 +598,105 @@ export function weeklyTaxes(state: GameState): number {
 
 export const isPayday = (day: number) => day % 7 === 0;
 
+// ---- what the end of a day costs ---------------------------------------------------------------------------
+// advanceDay and forecastNight both use these, so the End Day warning names exactly what End Day will charge.
+
+/** Everything on the quest tab (see GameState.tab). */
+export function tabTotal(state: GameState): number {
+  const t = state.tab;
+  if (!t) return 0;
+  const sum = (r: Record<string, number>) => Object.values(r).reduce((s, g) => s + g, 0);
+  return t.upkeep + sum(t.wages) + sum(t.taxes);
+}
+
+/** Wages paid as the day `day` begins: on payday each companion's week (paydayWages), plus what the quest tab owes them. */
+function wagesDue(state: GameState, day: number): { c: Character & { contract: CompanionContract }; due: number }[] {
+  return state.party.filter(isCompanion)
+    .map((c) => ({ c, due: (isPayday(day) ? paydayWages(c, day) : 0) + (state.tab?.wages[c.id] ?? 0) }))
+    .filter((w) => w.due > 0);
+}
+
+/** Slave tax paid as the day `day` begins: on payday each slave's (slaveTax), plus what the quest tab owes for them. */
+function taxesDue(state: GameState, day: number): { c: Character; tax: number }[] {
+  return state.party.filter(isSlave)
+    .map((c) => ({ c, tax: (isPayday(day) ? slaveTax(c) : 0) + (state.tab?.taxes[c.id] ?? 0) }))
+    .filter((t) => t.tax > 0);
+}
+
+/** Companions whose contract lapses as the day `day` begins: it ended and the grace period is over. */
+const lapsing = (state: GameState, day: number) => state.party.filter(isCompanion).filter((c) => day > c.contract.endDay + GUILD.companion.graceDays);
+
+/** A lapsing companion's final wages: the days of their term since the last payday (on payday, those were just paid). */
+const finalWages = (c: Character & { contract: CompanionContract }, day: number) => wagesBetween(c, lastPayday(day), day) + (isPayday(day) ? 0 : c.contract.carriedWages ?? 0);
+
 /** What ending the day in the city will cost, and what happens if the party can't pay (see forecastNight). */
 export interface NightForecast {
   /** Gold the party has now, and what the day's odd jobs bring in before the bills. */
   gold: number;
   income: number;
-  /** Tonight's food and lodging. */
+  /** Tonight's food and lodging, and what's on the quest tab (food, lodging, wages and tax from a multi-day quest). */
   upkeep: number;
-  /** Does the next day start on a payday, and its wages and slave tax. */
+  tab: number;
+  /** Does the next day start on a payday, and the wages and slave tax due (tab included). */
   payday: boolean;
   wages: number;
   taxes: number;
+  /** Final wages of companions whose contract lapses tonight. */
+  lapses: { id: string; name: string; owed: number }[];
   /** Everything due, and how much gold is missing (0 if the party can pay it all). */
   total: number;
   shortfall: number;
   /** The party can't pay for food and lodging: gold goes to 0 and housed members lose relationship. */
   unfed: boolean;
-  /** Companions who won't be paid on payday, and whether they're likely to quit over it. */
+  /** Companions who won't be paid, and whether they're likely to quit over it. */
   unpaid: { id: string; name: string; due: number; quits: boolean; renown: number }[];
   /** Slaves whose tax can't be paid: the city seizes them. */
   seized: { id: string; name: string; tax: number }[];
+  /** Lapsing companions whose final wages can't be paid: they leave without them, costing renown. */
+  unpaidFinal: { id: string; name: string; owed: number; renown: number }[];
 }
 
 /**
- * Forecast the next End Day in the city: the day's odd jobs, then food and lodging, then (on payday) each companion's
- * wages and each slave's tax, in the order advanceDay charges them. Assumes nobody leaves the party during the day.
+ * Forecast the next End Day in the city: the day's odd jobs, then food and lodging (and the quest tab's), then wages
+ * and slave tax (payday's and the tab's), then lapsing contracts' final wages, in the order advanceDay charges them.
+ * Assumes nobody leaves the party during the day for other reasons.
  */
 export function forecastNight(state: GameState): NightForecast {
+  const day = state.day + 1;
   const income = scheduledMembers(state).filter((c) => activityOf(state, c) === 'oddJobs').length * GUILD.schedule.oddJobsGold;
   const upkeep = dailyUpkeep(state, 'city');
-  const payday = isPayday(state.day + 1);
   let gold = state.gold + income;
-  const unfed = upkeep > gold;
-  gold = unfed ? 0 : gold - upkeep;
+  const unfed = upkeep + (state.tab?.upkeep ?? 0) > gold;
+  gold = unfed ? 0 : gold - upkeep - (state.tab?.upkeep ?? 0);
   let wages = 0;
   let taxes = 0;
   const unpaid: NightForecast['unpaid'] = [];
   const seized: NightForecast['seized'] = [];
-  if (payday) {
-    for (const c of state.party.filter(isCompanion)) {
-      const due = wagesBetween(c, state.day + 1 - 7, state.day + 1);
-      if (!due) continue;
-      wages += due;
-      if (gold >= due) gold -= due;
-      else {
-        const rel = c.contract.relationship + (unfed && isHoused(c) ? -5 : 0) + GUILD.companion.relationshipUnpaid;
-        unpaid.push({ id: c.id, name: c.name, due, quits: rel <= 0, renown: Math.min(state.renown, quitRenown(c)) });
-      }
-    }
-    for (const c of state.party.filter(isSlave)) {
-      const tax = slaveTax(c);
-      taxes += tax;
-      if (gold >= tax) gold -= tax;
-      else seized.push({ id: c.id, name: c.name, tax });
+  const unpaidFinal: NightForecast['unpaidFinal'] = [];
+  for (const { c, due } of wagesDue(state, day)) {
+    wages += due;
+    if (gold >= due) gold -= due;
+    else {
+      const rel = c.contract.relationship + (unfed && isHoused(c) ? -5 : 0) + GUILD.companion.relationshipUnpaid;
+      unpaid.push({ id: c.id, name: c.name, due, quits: rel <= 0, renown: Math.min(state.renown, quitRenown(c)) });
     }
   }
-  const total = upkeep + wages + taxes;
+  for (const { c, tax } of taxesDue(state, day)) {
+    taxes += tax;
+    if (gold >= tax) gold -= tax;
+    else seized.push({ id: c.id, name: c.name, tax });
+  }
+  const lapses = lapsing(state, day).filter((c) => !unpaid.some((u) => u.id === c.id && u.quits))
+    .map((c) => ({ id: c.id, name: c.name, owed: finalWages(c, day) }));
+  for (const l of lapses) {
+    if (gold >= l.owed) gold -= l.owed;
+    else unpaidFinal.push({ ...l, renown: Math.min(state.renown, quitRenown(state.party.find((m) => m.id === l.id)!)) });
+  }
+  const tab = tabTotal(state);
+  const total = upkeep + (state.tab?.upkeep ?? 0) + wages + taxes + lapses.reduce((s, l) => s + l.owed, 0);
   return {
-    gold: state.gold, income, upkeep, payday, wages, taxes, total,
-    shortfall: Math.max(0, total - state.gold - income), unfed, unpaid, seized,
+    gold: state.gold, income, upkeep, tab, payday: isPayday(day), wages, taxes, lapses, total,
+    shortfall: Math.max(0, total - state.gold - income), unfed, unpaid, seized, unpaidFinal,
   };
 }
 
@@ -668,21 +713,29 @@ export function advanceDays(state: GameState, days: number, rng: Rng): string[] 
  * their food and where they slept, payday, contracts, the rest of the guild, the board and the market.
  * `away`: on a road night, the members out on the quest: they sleep on the road for free and don't follow their
  * schedule, while everyone else lives a normal city day and night. Without it, the whole party is on the road.
+ * `onTab`: a night of a multi-day quest. Nothing is paid: food, lodging and any payday go on the quest tab
+ * (GameState.tab), settled at the next End Day, and contracts don't lapse until then.
  */
-export function advanceDay(state: GameState, rng: Rng, night: 'road' | 'city' = 'road', away?: string[]): string[] {
+export function advanceDay(state: GameState, rng: Rng, night: 'road' | 'city' = 'road', away?: string[], onTab = false): string[] {
   const out: string[] = [];
   const say = (t: string) => out.push(note(state, t));
   for (const t of runSchedule(state, away ?? [])) say(t);
   state.day += 1;
+  const tab = onTab ? (state.tab ??= { upkeep: 0, wages: {}, taxes: {} }) : null;
 
-  // Food and lodging.
+  // Food and lodging (tonight's, and the quest tab's when the party is back).
   const upkeep = dailyUpkeep(state, night, away);
-  if (upkeep > state.gold) {
-    say(`Not enough gold for food and lodging (${upkeep} needed). Your companions and slaves are unhappy.`);
+  const owing = tab ? 0 : upkeep + (state.tab?.upkeep ?? 0);
+  if (owing > state.gold) {
+    say(`Not enough gold for food and lodging (${owing} needed${state.tab?.upkeep ? `, ${state.tab.upkeep} of it from the quest` : ''}). Your companions and slaves are unhappy.`);
     state.gold = 0;
     for (const c of state.party) if (isHoused(c)) changeRelationship(c, -5);
   } else {
-    state.gold -= upkeep;
+    if (tab) tab.upkeep += upkeep;
+    else {
+      state.gold -= owing;
+      if (state.tab?.upkeep) say(`Paid the quest's food and lodging: ${state.tab.upkeep} gold.`);
+    }
     // Everyone the party feeds compares the day's food with what they expect: Morale up or down.
     const meals: string[] = [];
     for (const c of state.party) {
@@ -722,13 +775,25 @@ export function advanceDay(state: GameState, rng: Rng, night: 'road' | 'city' = 
   out.push(...obedienceDrift(state));
   out.push(...moraleDepartures(state), ...relationshipDepartures(state));
 
-  // Payday every 7th day.
-  if (isPayday(state.day)) {
+  if (tab) {
+    // Payday on the road: wages and slave tax go on the tab.
+    if (isPayday(state.day)) {
+      let owed = 0;
+      for (const c of state.party) {
+        const due = isCompanion(c) ? paydayWages(c, state.day) : isSlave(c) ? slaveTax(c) : 0;
+        if (!due) continue;
+        const book = isCompanion(c) ? tab.wages : tab.taxes;
+        book[c.id] = (book[c.id] ?? 0) + due;
+        owed += due;
+        if (isCompanion(c)) delete c.contract.carriedWages;
+      }
+      if (owed) say(`Payday on the road: ${owed} gold in wages and slave tax, on the tab until you're back in ${GUILD.city}.`);
+    }
+  } else {
+    // Wages (payday's, and the tab's), then slave property tax.
+    const fromTab = state.tab ? tabTotal(state) - state.tab.upkeep : 0;
     let paid = 0;
-    for (const c of state.party.filter(isCompanion)) {
-      // The week just ended, prorated: companions who joined midweek, or whose term ended in it, get their days' worth.
-      const due = wagesBetween(c, state.day - 7, state.day);
-      if (!due) continue;
+    for (const { c, due } of wagesDue(state, state.day)) {
       if (state.gold >= due) {
         state.gold -= due;
         paid += due;
@@ -741,11 +806,11 @@ export function advanceDay(state: GameState, rng: Rng, night: 'road' | 'city' = 
         }
       }
     }
-    if (paid) say(`Payday: ${paid} gold in wages.`);
+    if (isPayday(state.day)) for (const c of state.party.filter(isCompanion)) delete c.contract.carriedWages;
+    if (paid) say(`${isPayday(state.day) ? 'Payday' : 'Wages from the quest'}: ${paid} gold in wages.`);
     // Property tax on slaves: one the party can't pay for is seized and sold at the slave market.
     let taxed = 0;
-    for (const c of state.party.filter(isSlave)) {
-      const tax = slaveTax(c);
+    for (const { c, tax } of taxesDue(state, state.day)) {
       if (state.gold >= tax) {
         state.gold -= tax;
         taxed += tax;
@@ -755,18 +820,26 @@ export function advanceDay(state: GameState, rng: Rng, night: 'road' | 'city' = 
       }
     }
     if (taxed) say(`Slave property tax: ${taxed} gold.`);
+    if (fromTab && (paid || taxed)) say(`That settles the quest's tab for wages and tax (${fromTab} gold).`);
+    delete state.tab;
   }
 
-  // Contracts running out.
+  // Contracts running out (lapses wait until the party is back from a multi-day quest).
   for (const c of state.party.filter(isCompanion)) {
     const k = c.contract;
     if (k.endDay === state.day) say(`${c.name}'s contract has ended. Renew it within ${GUILD.companion.graceDays} days (Party screen) or they will leave.`);
-    if (state.day > k.endDay + GUILD.companion.graceDays) {
-      // Settle the days of their term since the last payday.
-      const owed = Math.min(state.gold, proratedWages(c, state.day));
-      state.gold -= owed;
-      leaveParty(state, c, k.greed);
-      say(`${c.name} left the party: their contract was not renewed.${owed ? ` Final wages: ${owed} gold.` : ''}`);
+  }
+  if (!tab) {
+    for (const c of lapsing(state, state.day)) {
+      const owed = finalWages(c, state.day);
+      if (state.gold >= owed) {
+        state.gold -= owed;
+        leaveParty(state, c, c.contract.greed);
+        say(`${c.name} left the party: their contract was not renewed.${owed ? ` Final wages: ${owed} gold.` : ''}`);
+      } else {
+        const lost = quit(state, c);
+        say(`${c.name} left the party: their contract was not renewed, and you couldn't pay their final wages (${owed} gold).${lost ? ` Renown -${Math.round(lost)}.` : ''}`);
+      }
     }
   }
   tidyLineup(state);
@@ -856,11 +929,15 @@ export function buySlave(state: GameState, id: string, rng: Rng = Math.random): 
   return null;
 }
 
-/** Sell a party slave to the market (sellBackShare of the current price). Returns the gold received. */
+/**
+ * Sell a party slave to the market (sellBackShare of the current price). Tax on the quest tab for them comes out of
+ * the sale. Returns the gold received.
+ */
 export function sellSlave(state: GameState, id: string): number {
   const c = state.party.find((m) => m.id === id);
   if (!c || c.contract?.type !== 'slave') return 0;
-  const gold = marketBuyPrice(state, c);
+  const gold = Math.max(0, marketBuyPrice(state, c) - tabOwed(state, id));
+  if (state.tab) delete state.tab.taxes[id];
   state.gold += gold;
   state.party = state.party.filter((m) => m !== c);
   state.lineup = state.lineup.filter((x) => x !== c.id);

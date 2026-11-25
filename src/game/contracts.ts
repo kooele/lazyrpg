@@ -148,9 +148,12 @@ export const lastPayday = (day: number) => day - (day % 7);
 
 /**
  * Base pay a companion has earned since the last payday, prorated by the day: what they're owed if they leave (or
- * renew) before the next one. Days after their term ended don't count.
+ * renew) before the next one, including wages carried over from earlier terms (carriedWages). Days after their term ended don't count.
  */
-export const proratedWages = (c: Character & { contract: CompanionContract }, day: number) => wagesBetween(c, lastPayday(day), day);
+export const proratedWages = (c: Character & { contract: CompanionContract }, day: number) => wagesBetween(c, lastPayday(day), day) + (c.contract.carriedWages ?? 0);
+
+/** What a companion is due on the payday `day`: the week ending on it, prorated, plus wages carried over from earlier terms. */
+export const paydayWages = (c: Character & { contract: CompanionContract }, day: number) => wagesBetween(c, day - 7, day) + (c.contract.carriedWages ?? 0);
 
 /** Everything releasing a companion costs: the wages they've earned since payday, plus the buyout (releaseCost). */
 export const releaseTotal = (c: Character & { contract: CompanionContract }, day: number, rank: Rank) => proratedWages(c, day) + releaseCost(c, day, rank);

@@ -4,7 +4,7 @@ import { ACTIVITIES, FOOD_TIERS, GUILD, INN_TIERS, LODGING_QUALITY, RINGS, foodQ
 import { TRAITS } from '../data/traits';
 import type { Character, GameState } from '../data/types';
 import { bodyPoints, deriveStats, freePoints, skillPoints } from '../game/character';
-import { benchMember, quitRenown, lineupMembers, lodgingPrice, marketBuyPrice, moveMember, releaseCompanion, residents, scheduledMembers, sellSlave, setLineupSlot, setLodging } from '../game/city';
+import { benchMember, quitRenown, lineupMembers, lodgingPrice, marketBuyPrice, moveMember, releaseCompanion, residents, scheduledMembers, sellSlave, setLineupSlot, setLodging, tabOwed } from '../game/city';
 import {
   ACTIVITY_INFO, QUALITY_TEXT, activityOf, lodgingOf, lodgingMorale, combatPenalty, expectedQuality, foodOf, foodMorale, healthOf, injuryPenalty, isInjured, moraleGainOf, moraleOf, moralePenalty,
   obediencePenalty, traitFactor,
@@ -417,10 +417,12 @@ export class PartyScene extends Phaser.Scene {
         enabled: left <= 7, fontSize: 14, selected: left <= 0,
       });
       const wages = proratedWages(c, state.day);
+      const owed = tabOwed(state, c.id);
       const buyout = releaseCost(c, state.day, state.rank);
-      const cost = wages + buyout;
+      const cost = wages + owed + buyout;
       const why = [
         wages ? `Wages since payday: ${wages} gold.` : '',
+        owed ? `Wages on the quest tab: ${owed} gold.` : '',
         buyout ? `Breaking the contract early: ${buyout} gold\n(half the rest of the term, at most a week's pay).` : 'Their term is over: no buyout.',
       ].filter(Boolean).join('\n');
       button(this, X + 286, by, 128, 44, cost ? `Release\n(${cost}g)` : 'Release', () => confirmDialog(this, `Release ${c.name} from their contract?\n${why}\nThey go back to the guild hall.`, () => {
@@ -431,7 +433,7 @@ export class PartyScene extends Phaser.Scene {
       }, 'Release'), { fontSize: cost ? 12 : 14 });
       if (left > 7) text(this, X + 156, by - 18, 'Renewal opens in the last week.', { fontSize: '11px', color: COLORS.dim });
     } else if (k?.type === 'slave') {
-      button(this, X + 156, by, 140, 44, 'Sell', () => confirmDialog(this, `Sell ${c.name} to the slave market for ${marketBuyPrice(state, c)} gold?`, () => {
+      button(this, X + 156, by, 140, 44, 'Sell', () => confirmDialog(this, `Sell ${c.name} to the slave market for ${marketBuyPrice(state, c)} gold?${tabOwed(state, c.id) ? `\nTheir tax on the quest tab (${tabOwed(state, c.id)} gold) comes out of it.` : ''}`, () => {
         const gold = sellSlave(state, c.id);
         markDirty();
         this.render();

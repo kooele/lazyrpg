@@ -4,7 +4,7 @@ import { ACTIVITIES, FOOD_TIERS, GUILD, type Activity, type FoodTier } from '../
 import { ENEMIES } from '../data/enemies';
 import {
   BODY_MODELS, ENEMY_MODELS, FACE_COUNT, HAIR_COLORS, HAIR_STYLES, RANKS, SEXES, SKIN_TONES, STAT_KEYS, TALENT_GRADES, TRAIT_IDS,
-  type BodyInvestment, type Character, type StatKey, type Talents, type Contract, type GameState, type Look, type NewsItem, type Offer, type Quest, type Rank, type RivalParty,
+  type BodyInvestment, type Character, type StatKey, type Talents, type Contract, type GameState, type Look, type NewsItem, type Offer, type Quest, type QuestTab, type Rank, type RivalParty,
 } from '../data/types';
 import { usualCount } from './board';
 import { bodyStats, makeRng, modelFor } from './character';
@@ -120,6 +120,7 @@ function validateContract(raw: unknown, path: string): Contract {
     endDay: int(o.endDay, `${path}.endDay`, startDay),
     relationship: num(o.relationship, `${path}.relationship`, 0, 100),
     greed: num(o.greed, `${path}.greed`, 0.1, 5),
+    ...(o.carriedWages ? { carriedWages: int(o.carriedWages, `${path}.carriedWages`) } : {}),
   };
 }
 
@@ -313,6 +314,18 @@ function validateLodging(raw: unknown, party: Character[]): GameState['lodging']
   return out;
 }
 
+/** The quest tab: gold amounts by member (entries for members no longer in the party are dropped). */
+function validateTab(raw: unknown, party: Character[]): QuestTab {
+  const o = obj(raw, 'tab');
+  const byMember = (v: unknown, path: string) => {
+    const out: Record<string, number> = {};
+    if (v === undefined) return out;
+    for (const [id, g] of Object.entries(obj(v, path))) if (party.some((c) => c.id === id)) out[id] = int(g, `${path}.${id}`);
+    return out;
+  };
+  return { upkeep: o.upkeep === undefined ? 0 : int(o.upkeep, 'tab.upkeep'), wages: byMember(o.wages, 'tab.wages'), taxes: byMember(o.taxes, 'tab.taxes') };
+}
+
 function validateState(raw: Record<string, unknown>): GameState {
   const progress = obj(raw.progress, 'progress');
   const party = arr(raw.party, 'party').map((c, i) => validateCharacter(c, `party[${i}]`, { member: true }));
@@ -374,6 +387,7 @@ function validateState(raw: Record<string, unknown>): GameState {
     belowRankSince: raw.belowRankSince === undefined ? 0 : int(raw.belowRankSince, 'belowRankSince'),
     residences: raw.residences === undefined ? [] : [...new Set(arr(raw.residences, 'residences').map((r, i) => oneOf(r, RINGS, `residences[${i}]`)))],
     log: validateNews(raw.log ?? [], 'log'),
+    ...(raw.tab === undefined ? {} : { tab: validateTab(raw.tab, party) }),
   };
   tidyLineup(state);
   return state;
