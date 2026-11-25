@@ -113,9 +113,9 @@ function scoreSkill(battle: Battle, u: Unit, skill: SkillDef, from: Point, aim: 
       if (!friendly && def.debuff) {
         // Worth less against targets likely to resist it.
         const lands = 1 - battle.resistChance(t) / 100;
-        // Decaying statuses (Burn, Slow) lose a stack a turn: n stacks give n + (n-1) + ... stack-turns.
+        // Decaying statuses (Burn, Chilled) last a turn per stack at the same strength; others hit per stack, per turn.
         const n = a.stacks ?? 1;
-        const stackTurns = def.decay ? (n * (n + 1)) / 2 : n * a.turns;
+        const stackTurns = def.decay ? n : n * a.turns;
         const lasts = def.decay ? n : a.turns;
         score += lands * t.stats.health * (def.damagePctMaxHpPerStack ?? 0) * stackTurns;
         if (def.statMods || def.statPct) score += lands * 15 * lasts;
@@ -142,9 +142,9 @@ function scoreSkill(battle: Battle, u: Unit, skill: SkillDef, from: Point, aim: 
       for (const s of t.statuses) {
         if (!s.debuff) continue;
         const def = STATUSES[s.id];
-        // Decaying statuses (Burn, Slow) last as many turns as they have stacks.
+        // Decaying statuses (Burn, Chilled) last as many turns as they have stacks, at the same strength.
         const lasts = def?.decay ? s.stacks : s.turns;
-        const stackTurns = def?.decay ? (s.stacks * (s.stacks + 1)) / 2 : s.stacks * s.turns;
+        const stackTurns = def?.decay ? s.stacks : s.stacks * s.turns;
         score += t.stats.health * (def?.damagePctMaxHpPerStack ?? 0) * stackTurns + 15 * lasts;
       }
     }

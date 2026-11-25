@@ -10,8 +10,8 @@
     "hits": "list of hits, each { pAtk, mAtk, def, missingHp } as fractions",
     "los": "sight = line of sight (rocks block) | fire = line of fire (rocks AND units block; kept for future skills). Omit for none.",
     "rangeScale": "for 'movement' skills: range in tiles = floor(rangeScale x Movement / movementCosts.grass)",
-    "applyStatus": "list of { status, turns, stacks }. Statuses with \"decay\": true (Burn, Slow) take only stacks: they lose one stack each turn instead of lasting a number of turns.",
-    "decay": "Statuses: lose one stack each time they tick (start or end of the unit's turn) and end at 0 stacks, instead of lasting a set number of turns.",
+    "applyStatus": "list of { status, turns, stacks }. Statuses with \"decay\": true (Burn, Chilled) take only stacks: they lose one stack each turn instead of lasting a number of turns.",
+    "decay": "Statuses: lose one stack each time they tick (start or end of the unit's turn) and end at 0 stacks, instead of lasting a set number of turns. Their stacks are turns left (and count toward maxStacks), not strength: 2 stacks hit as hard as 1.",
     "mitigated": "Statuses with damage (damagePctMaxHpPerStack, instantDamagePctMaxHp): reduced by Defense and absorbed by shields, like a hit. Without it the damage ignores both.",
     "level": "Skill-tree skills: the character level needed to learn it (default 1).",
     "modes": "A weapon basic attack with switchable modes (the Bow): list of skill ids, the first is the default. The unit's current mode decides which one is used; Switch Mode cycles them. Overwatch and 'weapon' skills follow the current mode.",
@@ -55,12 +55,13 @@
   },
 
   "statuses": {
-    "burn": { "name": "Burn", "debuff": true, "stacking": true, "decay": true, "maxStacks": 2, "overflow": { "status": "explosion", "turns": 1 }, "tick": "end", "damagePctMaxHpPerStack": 0.05, "mitigated": true, "description": "At the end of each turn: take 5% of max Health per stack (reduced by Defense, absorbed by shields), then lose a stack. Up to 2 stacks; a 3rd stack Explodes instead." },
+    "burn": { "name": "Burn", "debuff": true, "stacking": true, "decay": true, "maxStacks": 2, "overflow": { "status": "explosion", "turns": 1 }, "tick": "end", "damagePctMaxHpPerStack": 0.05, "mitigated": true, "description": "At the end of each turn: take 5% of max Health (reduced by Defense, absorbed by shields), then lose a stack. Each stack is a turn; more stacks last longer but don't burn harder. Up to 2 stacks; a 3rd stack Explodes instead." },
     "explosion": { "name": "Explosion", "debuff": true, "stacking": false, "tick": "start", "instantDamagePctMaxHp": 0.15, "mitigated": true, "description": "Burn's 3rd stack: removes Burn and deals 15% of max Health at once (reduced by Defense, absorbed by shields)." },
     "arcane_weapon": { "name": "Arcane Weapon", "debuff": false, "stacking": false, "tick": "start", "toggle": true, "manaPerHit": 10, "weaponOnHit": { "mAtk": 0.5 }, "description": "Weapon attacks deal an extra 50% M.Atk (Magical) each time they hit, for 10 mana each (Double Strike: twice; Circle Swing: once per target). No cost while it is on and unused. Switches off when there is no mana left to pay for a hit." },
     "frenzy": { "name": "Frenzy", "debuff": false, "stacking": false, "tick": "end", "statMods": { "pAtk": 20 }, "description": "+20 P.Atk." },
-    "slow": { "name": "Slow", "debuff": true, "stacking": true, "decay": true, "maxStacks": 2, "overflow": { "status": "frozen", "turns": 1 }, "tick": "end", "statMods": { "movement": -4 }, "description": "-4 Movement (one grass tile) per stack; loses a stack at the end of each turn. Up to 2 stacks; a 3rd stack Freezes the unit instead." },
-    "frozen": { "name": "Frozen", "debuff": true, "stacking": false, "frozen": true, "tick": "end", "description": "Can't move for one turn: it loses its movement AP, and wears off at the end of that turn." },
+    "chilled": { "name": "Chilled", "debuff": true, "stacking": true, "decay": true, "maxStacks": 2, "overflow": { "status": "frozen", "turns": 1 }, "tick": "end", "statPct": { "movement": -0.25 }, "description": "-25% Movement; loses a stack at the end of each turn. Each stack is a turn; more stacks last longer but don't slow more. Up to 2 stacks; a 3rd stack Freezes the unit instead." },
+    "slow": { "name": "Slow", "debuff": true, "stacking": false, "tick": "end", "statPct": { "movement": -0.25 }, "description": "-25% Movement. Doesn't stack and can't Freeze; getting slowed again only renews it." },
+    "frozen": { "name": "Frozen", "debuff": true, "stacking": false, "frozen": true, "tick": "end", "description": "Chilled's 3rd stack: can't move for one turn. It loses its movement AP, and Frozen wears off at the end of that turn." },
     "blind": { "name": "Blinded", "debuff": true, "stacking": false, "tick": "end", "statPct": { "pAtk": -0.3, "mAtk": -0.3 }, "description": "-30% P.Atk and M.Atk." },
     "exposed": { "name": "Exposed", "debuff": true, "stacking": false, "tick": "start", "statPct": { "defense": -1 }, "description": "No Defense (forest cover included)." },
     "stealth": { "name": "Stealthed", "debuff": false, "stacking": false, "tick": "start", "stealth": true, "description": "Enemies can't target you directly or trigger overwatch on you; area attacks still hit. Ends early if you attack." },
@@ -176,7 +177,7 @@
       "tags": ["debuff", "magical"],
       "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "ap": 1, "cooldown": 2, "mana": 30,
       "hits": [{ "mAtk": 0.2 }],
-      "applyStatus": [{ "status": "slow", "stacks": 1 }]
+      "applyStatus": [{ "status": "chilled", "stacks": 1 }]
     },
     "fireball": {
       "name": "Fireball", "description": "Hurl a fireball that sets an enemy alight.",
@@ -186,11 +187,11 @@
       "applyStatus": [{ "status": "burn", "stacks": 1 }]
     },
     "iceblast": {
-      "name": "Iceblast", "description": "Hurl a shard of ice that slows an enemy down.",
+      "name": "Iceblast", "description": "Hurl a shard of ice that chills an enemy.",
       "tags": ["projectile", "debuff", "magical"],
       "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "los": "sight", "cooldown": 3, "mana": 40, "level": 3,
       "hits": [{ "mAtk": 1.2 }],
-      "applyStatus": [{ "status": "slow", "stacks": 1 }]
+      "applyStatus": [{ "status": "chilled", "stacks": 1 }]
     },
     "firestorm": {
       "name": "Firestorm", "description": "Cover a 3x3 area in a firestorm for 2 turns. Anyone moving through it or ending a turn in it burns.",
@@ -199,10 +200,10 @@
       "zone": { "radius": 1.5, "turns": 2, "hit": { "mAtk": 0.5 }, "applyStatus": [{ "status": "burn", "stacks": 1 }], "endTurnHits": 2 }
     },
     "blizzard": {
-      "name": "Blizzard", "description": "Cover a 3x3 area in a snowstorm for 2 turns. Anyone moving through it or ending a turn in it is slowed, and can freeze.",
+      "name": "Blizzard", "description": "Cover a 3x3 area in a snowstorm for 2 turns. Anyone moving through it or ending a turn in it is chilled, and can freeze.",
       "tags": ["area", "debuff", "magical"],
       "target": "ground", "affects": "any", "range": 5, "minRange": 0, "cooldown": 4, "mana": 100, "level": 5,
-      "zone": { "radius": 1.5, "turns": 2, "hit": { "mAtk": 0.5 }, "applyStatus": [{ "status": "slow", "stacks": 1 }], "endTurnHits": 2 }
+      "zone": { "radius": 1.5, "turns": 2, "hit": { "mAtk": 0.5 }, "applyStatus": [{ "status": "chilled", "stacks": 1 }], "endTurnHits": 2 }
     },
     "heal": {
       "name": "Heal", "description": "Heal a unit.",
@@ -307,7 +308,7 @@
       "tags": ["monster", "projectile", "debuff", "magical"],
       "target": "unit", "affects": "enemy", "range": 3, "minRange": 1, "los": "sight", "cooldown": 3,
       "hits": [{ "mAtk": 0.6 }],
-      "applyStatus": [{ "status": "slow", "stacks": 1 }, { "status": "corrode", "turns": 2 }]
+      "applyStatus": [{ "status": "slow", "turns": 1 }, { "status": "corrode", "turns": 2 }]
     },
     "bite": {
       "name": "Bite", "description": "Bite an enemy and latch on.",
@@ -349,7 +350,7 @@
       "name": "Web", "description": "Spit a sticky web that slows an enemy.",
       "tags": ["monster", "projectile", "debuff", "physical"],
       "target": "unit", "affects": "enemy", "range": 3, "minRange": 1, "los": "sight", "cooldown": 3,
-      "hits": [{ "pAtk": 0.4 }], "applyStatus": [{ "status": "slow", "stacks": 1 }]
+      "hits": [{ "pAtk": 0.4 }], "applyStatus": [{ "status": "slow", "turns": 1 }]
     },
     "maul": {
       "name": "Maul", "description": "Swipe and grapple an adjacent enemy.",
@@ -412,10 +413,10 @@
       "hits": [{ "mAtk": 1 }]
     },
     "chill_touch": {
-      "name": "Chill Touch", "description": "A freezing touch that drains warmth and slows an adjacent enemy.",
+      "name": "Chill Touch", "description": "A freezing touch that drains warmth and chills an adjacent enemy.",
       "tags": ["monster", "melee", "engage", "magical", "debuff"],
       "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 2,
-      "hits": [{ "mAtk": 1 }], "applyStatus": [{ "status": "slow", "stacks": 1 }]
+      "hits": [{ "mAtk": 1 }], "applyStatus": [{ "status": "chilled", "stacks": 1 }]
     },
     "wail": {
       "name": "Wail", "description": "A deathly wail that hurts and blinds every enemy nearby.",

@@ -14,7 +14,7 @@ import {
 export type Team = 'player' | 'enemy';
 
 export interface Status {
-  /** 'shield', or a status id from skills.json ("burn", "slow"...). */
+  /** 'shield', or a status id from skills.json ("burn", "chilled"...). */
   id: string;
   name: string;
   /** Debuffs can be removed by Cleanse. */
@@ -193,6 +193,14 @@ function scaleHits(hits: DamagePart[], m: number): DamagePart[] {
   return hits.map((h) => Object.fromEntries(Object.entries(h).filter(([, v]) => typeof v === 'number').map(([k, v]) => [k, v * m])) as DamagePart);
 }
 
+/**
+ * How many times a status's effect applies. Stacking statuses (Poison) hit harder per stack; decaying ones
+ * (Burn, Chilled) don't: their stacks are turns left and progress toward the 3rd stack.
+ */
+export function statusStrength(s: { id: string; stacks: number }): number {
+  return STATUSES[s.id]?.decay ? 1 : Math.max(1, s.stacks);
+}
+
 export class Battle {
   readonly units: Unit[];
   /** Ground effects in play (Firestorm, Blizzard). */
@@ -226,15 +234,17 @@ export class Battle {
     let value = u.stats[stat];
     for (const s of u.statuses) {
       const mod = STATUSES[s.id]?.statMods?.[stat];
-      if (mod) value += mod * Math.max(1, s.stacks);
+      if (mod) value += mod * statusStrength(s);
       if (STATUSES[s.id]?.casterScaled?.stat === stat) value += s.amount;
     }
     if (stat === 'defense') {
       value += TERRAIN[this.map.tiles[u.y][u.x]].defense;
     }
-    let pct = 0;
-    for (const s of u.statuses) pct += (STATUSES[s.id]?.statPct?.[stat] ?? 0) * Math.max(1, s.stacks);
-    if (pct) value *= Math.max(0, 1 + pct);
+    // Percentage changes multiply: Slow and Chilled (-25% Movement each) together leave 75% x 75% = 56%.
+    for (const s of u.statuses) {
+      const pct = STATUSES[s.id]?.statPct?.[stat];
+      if (pct) value *= Math.max(0, 1 + pct * statusStrength(s));
+    }
     if (stat === 'movement') value = Math.max(0, value);
     return Math.round(value);
   }
@@ -1416,13 +1426,13 @@ export class Battle {
       return [{ type: 'status', source: source.uid, target: t.uid, name: def.name }, this.statusDamage(t, def.instantDamagePctMaxHp, def.mitigated, source.uid)];
     }
     const existing = t.statuses.find((s) => s.id === id);
-    // Past its stack cap the status turns into its overflow (Slow x3 -> Frozen, Burn x3 -> Explosion).
+    // Past its stack cap the status turns into its overflow (Chilled x3 -> Frozen, Burn x3 -> Explosion).
     const have = existing?.stacks ?? 0;
     if (def.stacking && def.overflow && def.maxStacks !== undefined && have + stacks > def.maxStacks) {
       t.statuses = t.statuses.filter((s) => s.id !== id);
       return this.applyStatus(source, t, def.overflow.status, def.overflow.turns, 1, true);
     }
-    // Decaying statuses (Burn, Slow) last until their stacks run out, not a number of turns.
+    // Decaying statuses (Burn, Chilled) last until their stacks run out, not a number of turns.
     const lasts = def.decay ? Infinity : turns;
     if (existing) {
       if (def.stacking) existing.stacks += stacks;
@@ -1459,14 +1469,14 @@ export class Battle {
     for (const s of u.statuses) {
       if (s.tick !== when) continue;
       const def = STATUSES[s.id];
-      if (def?.damagePctMaxHpPerStack && u.alive) events.push(this.statusDamage(u, def.damagePctMaxHpPerStack * s.stacks, def.mitigated));
+      if (def?.damagePctMaxHpPerStack && u.alive) events.push(this.statusDamage(u, def.damagePctMaxHpPerStack * statusStrength(s), def.mitigated));
       this.tickStatus(s);
     }
     u.statuses = u.statuses.filter((s) => this.stillActive(s));
     return events;
   }
 
-  /** A status ticks (start or end of the unit's turn): one turn less, or one stack less for decaying ones (Burn, Slow). */
+  /** A status ticks (start or end of the unit's turn): one turn less, or one stack less for decaying ones (Burn, Chilled). */
   private tickStatus(s: Status): void {
     if (STATUSES[s.id]?.decay) s.stacks -= 1;
     else s.turns -= 1;
@@ -1576,7 +1586,7 @@ export class Battle {
 
   /** End the current team's turn; returns events from the start of the next turn (e.g. Burn). */
   endPhase(): BattleEvent[] {
-    // Effects that last "through" the unit's turn (Slow, Frozen) count down first, so the end-of-turn zone hits
+    // Effects that last "through" the unit's turn (Slow, Chilled, Frozen) count down first, so the end-of-turn zone hits
     // below (and anything they freeze) carry over into the unit's next turn instead of wearing off at once.
     const events: BattleEvent[] = [];
     for (const u of this.living(this.phase)) events.push(...this.tickStatuses(u, 'end'));

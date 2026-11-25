@@ -142,7 +142,7 @@ export function parseContent(skillsData: unknown, weaponsData: unknown): GameCon
       const o = S.obj(a, `${path}[${i}]`);
       const status = S.str(o.status, `${path}[${i}].status`);
       if (!statuses[status]) fail('skills.json', `${path}[${i}].status`, `"${status}" is not defined in "statuses"`);
-      // Decaying statuses (Burn, Slow) last by stacks, not turns.
+      // Decaying statuses (Burn, Chilled) last by stacks, not turns.
       const turns = statuses[status].decay && o.turns === undefined ? 0 : S.num(o.turns, `${path}[${i}].turns`);
       return { status, turns, stacks: S.optNum(o.stacks, `${path}[${i}].stacks`) };
     });

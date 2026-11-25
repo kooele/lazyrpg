@@ -11,7 +11,7 @@ export const STAT_INFO: Record<StatKey, { name: string; short: string; descripti
   pAtk: { name: 'Physical Attack', short: 'P.Atk', description: 'Power of physical skills. A skill deals a % of this as damage.' },
   mAtk: { name: 'Magic Attack', short: 'M.Atk', description: 'Power of magic skills and healing.' },
   defense: { name: 'Defense', short: 'Def', description: 'Reduces damage taken: every 100 Defense = +100% effective health.' },
-  resist: { name: 'Resist', short: 'Res', description: 'Chance to shrug off debuffs (Burn, Slow...): Resist / (100 + Resist), so 50 = 33%, 100 = 50%.' },
+  resist: { name: 'Resist', short: 'Res', description: 'Chance to shrug off debuffs (Burn, Chilled...): Resist / (100 + Resist), so 50 = 33%, 100 = 50%.' },
   movement: { name: 'Movement', short: 'Move', description: 'Movement points per turn (forest costs 2).' },
   vision: { name: 'Vision', short: 'Vis', description: 'How far the unit can see (when fog of war is enabled).' },
 };
@@ -51,7 +51,7 @@ export interface TagDef {
   description: string;
 }
 
-/** A status effect definition (Burn, Slow...). Shields are handled separately. */
+/** A status effect definition (Burn, Chilled...). Shields are handled separately. */
 export interface StatusDef {
   id: string;
   name: string;
@@ -77,11 +77,11 @@ export interface StatusDef {
   stealth?: boolean;
   /** Stacking statuses: the most stacks it can have. One more turns it into `overflow` instead. */
   maxStacks?: number;
-  /** What a stack past `maxStacks` becomes (Slow -> Frozen), and for how many turns. */
+  /** What a stack past `maxStacks` becomes (Chilled -> Frozen), and for how many turns. */
   overflow?: { status: string; turns: number };
   /** Can't move (walk, Dash, Movement skills) and loses its movement AP at the start of its turn. */
   frozen?: boolean;
-  /** Loses one stack each time it ticks and ends at 0 stacks (Burn, Slow), instead of lasting a number of turns. */
+  /** Loses one stack each time it ticks and ends at 0 stacks (Burn, Chilled), instead of lasting a number of turns. Stacks are turns, not strength. */
   decay?: boolean;
   /** Its damage (damagePctMaxHpPerStack, instantDamagePctMaxHp) is reduced by Defense and absorbed by shields, like a hit. */
   mitigated?: boolean;

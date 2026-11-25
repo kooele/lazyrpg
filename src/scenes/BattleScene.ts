@@ -57,10 +57,10 @@ interface UnitView {
   statusText: Phaser.GameObjects.Text;
 }
 
-/** Map tint for a zone: fire orange for Burn zones, ice blue for Slow/Freeze ones. */
+/** Map tint for a zone: fire orange for Burn zones, ice blue for Chilled/Freeze ones. */
 function zoneColor(statuses: string[]): number {
   if (statuses.includes('burn')) return 0xff7a2e;
-  if (statuses.includes('slow') || statuses.includes('frozen')) return 0x7fc8ff;
+  if (statuses.includes('chilled') || statuses.includes('frozen')) return 0x7fc8ff;
   return 0xc18cff;
 }
 
@@ -689,7 +689,7 @@ export class BattleScene extends Phaser.Scene {
     const shield = b.shieldOf(u);
     const terrainDef = TERRAIN[b.map.tiles[u.y][u.x]].defense;
     const effects = u.statuses.map((s) => (s.id === 'shield' ? `Shield ${s.amount} (${s.turns}t)`
-      : STATUSES[s.id]?.decay ? `${s.name} x${s.stacks}` // loses a stack each turn
+      : STATUSES[s.id]?.decay ? `${s.name} (${s.stacks})` // loses a stack each turn
         : `${s.name}${s.stacks > 1 ? ` x${s.stacks}` : ''} (${Number.isFinite(s.turns) ? `${s.turns}t` : 'on'})`));
     if (u.overwatch) effects.push(`Watching: ${SKILLS[u.overwatch.skillId].name}`);
     const opp = b.opponentOf(u);
