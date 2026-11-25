@@ -638,6 +638,22 @@ describe('skills', () => {
 });
 
 describe('engagement', () => {
+  it('an engaged beast attacks its opponent even when another foe is closer', () => {
+    const bear = makeEnemy('bear', 9, makeRng(1));
+    const { battle, units: [b, opp, near] } = setup(openMap(), [
+      { c: bear, team: 'enemy', at: { x: 4, y: 3 } },
+      { c: tank('Opp'), team: 'player', at: { x: 5, y: 4 } }, // diagonal: 1.41 away
+      { c: tank('Near'), team: 'player', at: { x: 3, y: 3 } }, // orthogonal: 1 away, nearer
+    ]);
+    b.engagedWith = opp.uid;
+    opp.engagedWith = b.uid;
+    battle.endPhase(); // enemy turn
+    const action = bestAction(battle, b);
+    expect(action).not.toBeNull();
+    expect(action!.target).toEqual({ x: opp.x, y: opp.y });
+    expect(near.hp).toBe(near.stats.health);
+  });
+
   function duel() {
     return setup(openMap(), [
       { c: tank('A'), team: 'player', at: { x: 3, y: 3 } }, // Defense 63
