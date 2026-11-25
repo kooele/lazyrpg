@@ -1,5 +1,5 @@
 {
-  "_readme": "Skills, tags, status effects and skill trees. Percentages are fractions (0.8 = 80%). Ranges are in tiles (Euclidean: 1 = the 4 neighbours, 1.5 includes diagonals). Cooldown N = can't be used during your next N turns. Keys starting with _ are comments. The game checks this file on load and reports the exact field if something is wrong.",
+  "_readme": "Skills, tags, status effects and skill trees. Percentages are fractions (0.8 = 80%). Ranges are in tiles (Euclidean: 1 = the 4 neighbours, 1.5 includes diagonals). Cooldown N = usable again N turns after the turn it was used (1 = once per turn). Keys starting with _ are comments. The game checks this file on load and reports the exact field if something is wrong.",
 
   "_fields": {
     "description": "One plain sentence on what the skill does. The numbers (damage, range, costs, statuses) are listed under it in game, generated from the data, so leave them out of the text.",
@@ -73,19 +73,19 @@
     "sword_slash": {
       "name": "Sword Slash", "description": "Slash an adjacent enemy.",
       "tags": ["melee", "engage", "physical"],
-      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 0,
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 1,
       "hits": [{ "pAtk": 1 }]
     },
     "shield_up": {
       "name": "Shield Up", "description": "Raise your shield to absorb damage until your next turn.",
       "tags": ["support"],
-      "target": "self", "affects": "ally", "range": 0, "minRange": 0, "cooldown": 1,
+      "target": "self", "affects": "ally", "range": 0, "minRange": 0, "cooldown": 2,
       "shield": { "maxHpPct": 0.1, "turns": 1 }
     },
     "spear_thrust": {
       "name": "Spear Thrust", "description": "Thrust toward a tile, hitting the first enemy in the way. An adjacent target becomes engaged.",
       "tags": ["melee", "physical"],
-      "target": "line", "affects": "enemy", "range": 2, "minRange": 1, "cooldown": 0,
+      "target": "line", "affects": "enemy", "range": 2, "minRange": 1, "cooldown": 1,
       "hits": [{ "pAtk": 1 }], "engageWithin": 1.5
     },
     "bow_attack": {
@@ -95,19 +95,19 @@
     "direct_shot": {
       "name": "Direct Shot", "modeName": "Direct", "description": "Shoot an enemy you can see.",
       "tags": ["projectile", "physical"],
-      "target": "unit", "affects": "enemy", "range": 5, "weaponRange": 1, "minRange": 1, "los": "sight", "cooldown": 0,
+      "target": "unit", "affects": "enemy", "range": 5, "weaponRange": 1, "minRange": 1, "los": "sight", "cooldown": 1,
       "hits": [{ "pAtk": 1 }]
     },
     "indirect_shot": {
       "name": "Indirect Shot", "modeName": "Indirect", "description": "Lob an arrow that arcs over obstacles.",
       "tags": ["indirect", "physical"],
-      "target": "unit", "affects": "enemy", "range": 7.5, "weaponRange": 1.5, "minRange": 1, "cooldown": 0,
+      "target": "unit", "affects": "enemy", "range": 7.5, "weaponRange": 1.5, "minRange": 1, "cooldown": 1,
       "hits": [{ "pAtk": 0.7 }]
     },
     "bow_strike": {
       "name": "Bow Strike", "modeName": "Melee", "description": "Strike an adjacent enemy with the bow. A bow user that is engaged always attacks this way.",
       "tags": ["melee", "engage", "physical"],
-      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 0,
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 1,
       "hits": [{ "pAtk": 0.8 }]
     },
     "switch_mode": {
@@ -119,43 +119,43 @@
     "overwatch": {
       "name": "Overwatch", "description": "Basic ability. Watch an arc in any direction. The first enemy to move into it takes your basic attack but keeps moving.",
       "tags": ["reaction", "weapon"],
-      "target": "cone", "affects": "enemy", "range": 1, "minRange": 1, "cooldown": 0, "ap": "end",
+      "target": "cone", "affects": "enemy", "range": 1, "minRange": 1, "cooldown": 1, "ap": "end",
       "cone": { "angle": 60, "interrupt": false }
     },
     "dash": {
       "name": "Dash", "description": "Basic ability. After your regular move, spend your other AP to move again.",
       "tags": [],
-      "target": "move", "affects": "ally", "range": 0, "cooldown": 1, "ap": 1, "mana": 20
+      "target": "move", "affects": "ally", "range": 0, "cooldown": 2, "ap": 1, "mana": 20
     },
     "empowered_strike": {
       "name": "Empowered Strike", "description": "Strike an adjacent enemy with physical and magical power.",
       "tags": ["melee", "engage", "physical", "magical"],
-      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 0,
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 1,
       "hits": [{ "pAtk": 1, "mAtk": 0.5 }]
     },
     "magic_bolt": {
       "name": "Magic Bolt", "description": "Fire a bolt of physical and magical power at an enemy.",
       "tags": ["projectile", "physical", "magical"],
-      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "los": "sight", "cooldown": 0,
+      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "los": "sight", "cooldown": 1,
       "hits": [{ "pAtk": 0.5, "mAtk": 0.5 }]
     },
 
     "arcane_bolt": {
       "name": "Arcane Bolt", "description": "Fire an arcane bolt at an enemy.",
       "tags": ["projectile", "magical"],
-      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "los": "sight", "cooldown": 0, "mana": 30,
+      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "los": "sight", "cooldown": 1, "mana": 30,
       "hits": [{ "mAtk": 1 }]
     },
     "arcane_pulse": {
       "name": "Arcane Pulse", "description": "Blast an enemy and knock it away.",
       "tags": ["knockback", "magical"],
-      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "los": "sight", "cooldown": 2, "mana": 60, "level": 3,
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "los": "sight", "cooldown": 3, "mana": 60, "level": 3,
       "hits": [{ "mAtk": 1 }], "knockback": 2
     },
     "arcane_shift": {
       "name": "Arcane Shift", "description": "Teleport to an empty tile.",
       "tags": ["disengage", "teleport"],
-      "target": "emptyTile", "affects": "ally", "range": 2, "minRange": 1, "cooldown": 2, "mana": 40, "level": 3,
+      "target": "emptyTile", "affects": "ally", "range": 2, "minRange": 1, "cooldown": 3, "mana": 40, "level": 3,
       "teleport": true
     },
     "arcane_weapon": {
@@ -167,125 +167,125 @@
     "ignite": {
       "name": "Ignite", "description": "Set an enemy on fire.",
       "tags": ["debuff", "magical"],
-      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "ap": 1, "cooldown": 1, "mana": 30,
+      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "ap": 1, "cooldown": 2, "mana": 30,
       "hits": [{ "mAtk": 0.2 }],
       "applyStatus": [{ "status": "burn", "stacks": 1 }]
     },
     "freeze": {
       "name": "Freeze", "description": "Chill an enemy, slowing it down.",
       "tags": ["debuff", "magical"],
-      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "ap": 1, "cooldown": 1, "mana": 30,
+      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "ap": 1, "cooldown": 2, "mana": 30,
       "hits": [{ "mAtk": 0.2 }],
       "applyStatus": [{ "status": "slow", "stacks": 1 }]
     },
     "fireball": {
       "name": "Fireball", "description": "Hurl a fireball that sets an enemy alight.",
       "tags": ["projectile", "debuff", "magical"],
-      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "los": "sight", "cooldown": 2, "mana": 40, "level": 3,
+      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "los": "sight", "cooldown": 3, "mana": 40, "level": 3,
       "hits": [{ "mAtk": 1.2 }],
       "applyStatus": [{ "status": "burn", "stacks": 1 }]
     },
     "iceblast": {
       "name": "Iceblast", "description": "Hurl a shard of ice that slows an enemy down.",
       "tags": ["projectile", "debuff", "magical"],
-      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "los": "sight", "cooldown": 2, "mana": 40, "level": 3,
+      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "los": "sight", "cooldown": 3, "mana": 40, "level": 3,
       "hits": [{ "mAtk": 1.2 }],
       "applyStatus": [{ "status": "slow", "stacks": 1 }]
     },
     "firestorm": {
       "name": "Firestorm", "description": "Cover a 3x3 area in a firestorm for 2 turns. Anyone moving through it or ending a turn in it burns.",
       "tags": ["area", "debuff", "magical"],
-      "target": "ground", "affects": "any", "range": 5, "minRange": 0, "cooldown": 3, "mana": 100, "level": 5,
+      "target": "ground", "affects": "any", "range": 5, "minRange": 0, "cooldown": 4, "mana": 100, "level": 5,
       "zone": { "radius": 1.5, "turns": 2, "hit": { "mAtk": 0.5 }, "applyStatus": [{ "status": "burn", "stacks": 1 }], "endTurnHits": 2 }
     },
     "blizzard": {
       "name": "Blizzard", "description": "Cover a 3x3 area in a snowstorm for 2 turns. Anyone moving through it or ending a turn in it is slowed, and can freeze.",
       "tags": ["area", "debuff", "magical"],
-      "target": "ground", "affects": "any", "range": 5, "minRange": 0, "cooldown": 3, "mana": 100, "level": 5,
+      "target": "ground", "affects": "any", "range": 5, "minRange": 0, "cooldown": 4, "mana": 100, "level": 5,
       "zone": { "radius": 1.5, "turns": 2, "hit": { "mAtk": 0.5 }, "applyStatus": [{ "status": "slow", "stacks": 1 }], "endTurnHits": 2 }
     },
     "heal": {
       "name": "Heal", "description": "Heal a unit.",
       "tags": ["support"],
-      "target": "unit", "affects": "ally", "range": 5, "minRange": 0, "cooldown": 0, "mana": 40,
+      "target": "unit", "affects": "ally", "range": 5, "minRange": 0, "cooldown": 1, "mana": 40,
       "heal": { "mAtk": 0.8 }
     },
     "cleanse": {
       "name": "Cleanse", "description": "Remove all debuffs from a unit.",
       "tags": ["support"],
-      "target": "unit", "affects": "ally", "range": 5, "minRange": 0, "cooldown": 0, "mana": 20,
+      "target": "unit", "affects": "ally", "range": 5, "minRange": 0, "cooldown": 1, "mana": 20,
       "cleanse": true
     },
     "protection": {
       "name": "Protection", "description": "Grant a unit Defense equal to 25% of your M.Atk for 2 turns.",
       "tags": ["support"],
-      "target": "unit", "affects": "ally", "range": 5, "minRange": 0, "cooldown": 0, "mana": 40, "level": 3,
+      "target": "unit", "affects": "ally", "range": 5, "minRange": 0, "cooldown": 1, "mana": 40, "level": 3,
       "applyStatus": [{ "status": "protected", "turns": 2 }]
     },
     "barrier": {
       "name": "Barrier", "description": "Grant a unit a shield equal to 100% of your M.Atk for 1 turn.",
       "tags": ["support"],
-      "target": "unit", "affects": "ally", "range": 5, "minRange": 0, "cooldown": 0, "mana": 40, "level": 3,
+      "target": "unit", "affects": "ally", "range": 5, "minRange": 0, "cooldown": 1, "mana": 40, "level": 3,
       "shield": { "mAtk": 1, "turns": 1 }
     },
     "engage": {
       "name": "Engage", "description": "Engage an adjacent enemy without attacking it.",
       "tags": ["free", "engage"],
-      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 0, "ap": 0, "mana": 10
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 1, "ap": 0, "mana": 10
     },
     "charge": {
       "name": "Charge", "description": "Dash next to an enemy and strike it.",
       "tags": ["movement", "physical", "engage"],
-      "target": "unit", "affects": "enemy", "range": 4, "rangeScale": 1, "minRange": 1, "cooldown": 2, "ap": 1, "mana": 20, "level": 3,
+      "target": "unit", "affects": "enemy", "range": 4, "rangeScale": 1, "minRange": 1, "cooldown": 3, "ap": 1, "mana": 20, "level": 3,
       "hits": [{ "pAtk": 1 }], "charge": true
     },
     "kick": {
       "name": "Kick", "description": "Kick an adjacent enemy.",
       "tags": ["physical", "engage"],
-      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 2, "mana": 10, "ap": 0,
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 3, "mana": 10, "ap": 0,
       "hits": [{ "pAtk": 0.6 }]
     },
     "pocket_sand": {
       "name": "Pocket Sand", "description": "Throw sand in an enemy's eyes to blind it.",
       "tags": ["projectile", "debuff"],
-      "target": "unit", "affects": "enemy", "range": 3, "minRange": 1, "los": "sight", "cooldown": 2, "ap": 1, "mana": 20, "level": 3,
+      "target": "unit", "affects": "enemy", "range": 3, "minRange": 1, "los": "sight", "cooldown": 3, "ap": 1, "mana": 20, "level": 3,
       "applyStatus": [{ "status": "blind", "turns": 1 }]
     },
     "shadow_step": {
       "name": "Shadow Step", "description": "Teleport a short distance and slip out of sight.",
       "tags": ["disengage", "teleport", "stealth"],
-      "target": "emptyTile", "affects": "ally", "range": 1.5, "minRange": 1, "cooldown": 3, "ap": 1, "mana": 40,
+      "target": "emptyTile", "affects": "ally", "range": 1.5, "minRange": 1, "cooldown": 4, "ap": 1, "mana": 40,
       "teleport": true, "selfStatus": [{ "status": "stealth", "turns": 1 }]
     },
     "flicker_strike": {
       "name": "Flicker Strike", "description": "Teleport next to an enemy and strike it.",
       "tags": ["teleport", "physical", "engage"],
-      "target": "unit", "affects": "enemy", "range": 3, "minRange": 1, "cooldown": 2, "mana": 40, "level": 3,
+      "target": "unit", "affects": "enemy", "range": 3, "minRange": 1, "cooldown": 3, "mana": 40, "level": 3,
       "hits": [{ "pAtk": 1 }], "charge": true, "teleport": true
     },
     "life_risking_strike": {
       "name": "Life-Risking Strike", "description": "Drop your guard for a devastating strike. If the enemy survives, the blow hurts you too.",
       "tags": ["physical", "engage"],
-      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 3, "mana": 40, "level": 5,
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 4, "mana": 40, "level": 5,
       "selfStatus": [{ "status": "exposed", "turns": 1 }],
       "hits": [{ "pAtk": 2.5 }], "recoilIfSurvives": { "pAtk": 1 }
     },
     "double_strike": {
       "name": "Double Strike", "description": "Hit an enemy with your basic attack twice, the second time at half strength.",
       "tags": ["weapon"],
-      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 2, "mana": 20,
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 3, "mana": 20,
       "basicAttack": 2, "basicAttackDamage": [1, 0.5]
     },
     "execute": {
       "name": "Execute", "description": "Strike an enemy, dealing more damage the more Health it has lost.",
       "tags": ["weapon", "physical"],
-      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 2, "mana": 20, "level": 3,
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 3, "mana": 20, "level": 3,
       "hits": [{ "pAtk": 1, "missingHp": 0.15 }]
     },
     "circle_swing": {
       "name": "Circle Swing", "description": "Swing at every unit around you, allies included, and knock them back. A bow always swings in Melee mode.",
       "tags": ["weapon", "area", "knockback"],
-      "target": "self", "affects": "any", "range": 0, "minRange": 0, "cooldown": 3, "mana": 50, "level": 5,
+      "target": "self", "affects": "any", "range": 0, "minRange": 0, "cooldown": 4, "mana": 50, "level": 5,
       "basicAttack": 1, "basicMode": "melee", "knockback": 1
     },
 
@@ -293,152 +293,152 @@
     "gnaw": {
       "name": "Gnaw", "description": "Gnaw an adjacent enemy.",
       "tags": ["monster", "melee", "physical"],
-      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 0,
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 1,
       "hits": [{ "pAtk": 1 }]
     },
     "slam": {
       "name": "Slam", "description": "Slam into an adjacent enemy.",
       "tags": ["monster", "melee", "engage", "physical"],
-      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 0,
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 1,
       "hits": [{ "pAtk": 1 }]
     },
     "sticky_spit": {
       "name": "Sticky Spit", "description": "Spit goo that slows an enemy and eats away its armor.",
       "tags": ["monster", "projectile", "debuff", "magical"],
-      "target": "unit", "affects": "enemy", "range": 3, "minRange": 1, "los": "sight", "cooldown": 2,
+      "target": "unit", "affects": "enemy", "range": 3, "minRange": 1, "los": "sight", "cooldown": 3,
       "hits": [{ "mAtk": 0.6 }],
       "applyStatus": [{ "status": "slow", "stacks": 1 }, { "status": "corrode", "turns": 2 }]
     },
     "bite": {
       "name": "Bite", "description": "Bite an enemy and latch on.",
       "tags": ["monster", "melee", "engage", "physical"],
-      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 0,
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 1,
       "hits": [{ "pAtk": 1 }]
     },
     "pounce": {
       "name": "Pounce", "description": "Leap next to an enemy and strike it.",
       "tags": ["monster", "movement", "melee", "engage", "physical"],
-      "target": "unit", "affects": "enemy", "range": 4, "rangeScale": 1, "minRange": 1, "cooldown": 2,
+      "target": "unit", "affects": "enemy", "range": 4, "rangeScale": 1, "minRange": 1, "cooldown": 3,
       "hits": [{ "pAtk": 0.9 }], "charge": true
     },
     "howl": {
       "name": "Howl", "description": "Howl to rouse yourself and nearby allies.",
       "tags": ["monster", "area", "support"],
-      "target": "self", "affects": "ally", "range": 0, "minRange": 0, "aoeRadius": 3, "cooldown": 3,
+      "target": "self", "affects": "ally", "range": 0, "minRange": 0, "aoeRadius": 3, "cooldown": 4,
       "applyStatus": [{ "status": "frenzy", "turns": 2 }]
     },
     "war_cry": {
       "name": "War Cry", "description": "A battle cry that drives nearby allies into a frenzy.",
       "tags": ["monster", "area", "support"],
-      "target": "self", "affects": "ally", "range": 0, "minRange": 0, "aoeRadius": 3, "cooldown": 3,
+      "target": "self", "affects": "ally", "range": 0, "minRange": 0, "aoeRadius": 3, "cooldown": 4,
       "applyStatus": [{ "status": "frenzy", "turns": 2 }]
     },
     "cleave": {
       "name": "Cleave", "description": "A wide swing that hits every enemy next to you.",
       "tags": ["monster", "melee", "area", "physical"],
-      "target": "self", "affects": "enemy", "range": 0, "minRange": 0, "aoeRadius": 1.5, "cooldown": 2,
+      "target": "self", "affects": "enemy", "range": 0, "minRange": 0, "aoeRadius": 1.5, "cooldown": 3,
       "hits": [{ "pAtk": 0.8 }]
     },
     "poison_bite": {
       "name": "Poison Bite", "description": "Sink venomous fangs into an adjacent enemy.",
       "tags": ["monster", "melee", "engage", "physical", "debuff"],
-      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 0,
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 1,
       "hits": [{ "pAtk": 1 }], "applyStatus": [{ "status": "poison", "stacks": 1, "turns": 3 }]
     },
     "web": {
       "name": "Web", "description": "Spit a sticky web that slows an enemy.",
       "tags": ["monster", "projectile", "debuff", "physical"],
-      "target": "unit", "affects": "enemy", "range": 3, "minRange": 1, "los": "sight", "cooldown": 2,
+      "target": "unit", "affects": "enemy", "range": 3, "minRange": 1, "los": "sight", "cooldown": 3,
       "hits": [{ "pAtk": 0.4 }], "applyStatus": [{ "status": "slow", "stacks": 1 }]
     },
     "maul": {
       "name": "Maul", "description": "Swipe and grapple an adjacent enemy.",
       "tags": ["monster", "melee", "engage", "physical"],
-      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 0,
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 1,
       "hits": [{ "pAtk": 1 }]
     },
     "rend": {
       "name": "Rend", "description": "Tear into an adjacent enemy with both claws.",
       "tags": ["monster", "melee", "physical"],
-      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 2,
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 3,
       "hits": [{ "pAtk": 1.6 }]
     },
     "roar": {
       "name": "Roar", "description": "A terrifying roar that blinds nearby enemies with fear.",
       "tags": ["monster", "area", "debuff"],
-      "target": "self", "affects": "enemy", "range": 0, "minRange": 0, "aoeRadius": 2, "cooldown": 3,
+      "target": "self", "affects": "enemy", "range": 0, "minRange": 0, "aoeRadius": 2, "cooldown": 4,
       "applyStatus": [{ "status": "blind", "turns": 2 }]
     },
     "club": {
       "name": "Club", "description": "Bash an adjacent enemy with a huge club.",
       "tags": ["monster", "melee", "engage", "physical"],
-      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 0,
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 1,
       "hits": [{ "pAtk": 1 }]
     },
     "smash": {
       "name": "Smash", "description": "A crushing overhead blow that sends an enemy flying.",
       "tags": ["monster", "melee", "knockback", "physical"],
-      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 2,
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 3,
       "hits": [{ "pAtk": 1.3 }], "knockback": 1
     },
     "regenerate": {
       "name": "Regenerate", "description": "Troll flesh knits itself back together.",
       "tags": ["monster", "support"],
-      "target": "self", "affects": "ally", "range": 0, "minRange": 0, "cooldown": 3,
+      "target": "self", "affects": "ally", "range": 0, "minRange": 0, "cooldown": 4,
       "heal": { "mAtk": 2 }
     },
     "wyvern_bite": {
       "name": "Bite", "description": "Snap at an adjacent enemy and hold on.",
       "tags": ["monster", "melee", "engage", "physical"],
-      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 0,
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 1,
       "hits": [{ "pAtk": 1 }]
     },
     "dive": {
       "name": "Dive", "description": "Swoop down next to an enemy and strike it.",
       "tags": ["monster", "movement", "melee", "engage", "physical"],
-      "target": "unit", "affects": "enemy", "range": 4, "rangeScale": 1, "minRange": 1, "cooldown": 2,
+      "target": "unit", "affects": "enemy", "range": 4, "rangeScale": 1, "minRange": 1, "cooldown": 3,
       "hits": [{ "pAtk": 1.1 }], "charge": true
     },
     "tail_sting": {
       "name": "Tail Sting", "description": "Lash an adjacent enemy with a venomous tail.",
       "tags": ["monster", "melee", "physical", "debuff"],
-      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 2,
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 3,
       "hits": [{ "pAtk": 0.6 }], "applyStatus": [{ "status": "poison", "stacks": 2, "turns": 3 }]
     },
     "spectral_touch": {
       "name": "Spectral Touch", "description": "A cold, grasping touch on an adjacent enemy.",
       "tags": ["monster", "melee", "engage", "magical"],
-      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 0,
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 1,
       "hits": [{ "mAtk": 1 }]
     },
     "chill_touch": {
       "name": "Chill Touch", "description": "A freezing touch that drains warmth and slows an adjacent enemy.",
       "tags": ["monster", "melee", "engage", "magical", "debuff"],
-      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 1,
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 2,
       "hits": [{ "mAtk": 1 }], "applyStatus": [{ "status": "slow", "stacks": 1 }]
     },
     "wail": {
       "name": "Wail", "description": "A deathly wail that hurts and blinds every enemy nearby.",
       "tags": ["monster", "area", "magical", "debuff"],
-      "target": "self", "affects": "enemy", "range": 0, "minRange": 0, "aoeRadius": 2, "cooldown": 3,
+      "target": "self", "affects": "enemy", "range": 0, "minRange": 0, "aoeRadius": 2, "cooldown": 4,
       "hits": [{ "mAtk": 0.6 }], "applyStatus": [{ "status": "blind", "turns": 1 }]
     },
     "demon_claw": {
       "name": "Claw", "description": "Rake an adjacent enemy with burning claws.",
       "tags": ["monster", "melee", "engage", "physical"],
-      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 0,
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 1,
       "hits": [{ "pAtk": 1.1 }]
     },
     "hellfire": {
       "name": "Hellfire", "description": "Hurl hellfire that sets an enemy ablaze.",
       "tags": ["monster", "projectile", "debuff", "magical"],
-      "target": "unit", "affects": "enemy", "range": 4, "minRange": 1, "los": "sight", "cooldown": 2,
+      "target": "unit", "affects": "enemy", "range": 4, "minRange": 1, "los": "sight", "cooldown": 3,
       "hits": [{ "mAtk": 1.1 }], "applyStatus": [{ "status": "burn", "stacks": 2 }]
     },
     "infernal_leap": {
       "name": "Infernal Leap", "description": "Leap through the air to land next to an enemy and strike.",
       "tags": ["monster", "movement", "melee", "engage", "physical"],
-      "target": "unit", "affects": "enemy", "range": 4, "rangeScale": 1, "minRange": 1, "cooldown": 3,
+      "target": "unit", "affects": "enemy", "range": 4, "rangeScale": 1, "minRange": 1, "cooldown": 4,
       "hits": [{ "pAtk": 1 }], "charge": true
     }
 

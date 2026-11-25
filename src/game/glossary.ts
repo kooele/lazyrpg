@@ -199,8 +199,9 @@ export function glossaryEntries(): GlossaryEntry[] {
     `• Beasts act alone, go for the nearest target and flee when badly hurt.\n• Tribal enemies fight as a group, and the whole group runs once half of it is gone.\n• Humans use cover and pick off the weak; when cornered and badly hurt they may surrender, and you take them prisoner if you win.\n• Evil enemies never flee and go for kills.\n\n`
     + `Click an enemy to see where it can move and hit next turn.`);
   add('Battle', 'Ranges',
-    `Ranges use straight-line distance. Ranges of 2 or more round to the nearest tile, so shapes are roundish. Range 1 is the 4 neighbours; 1.5 adds the diagonals.\n\n`
-    + `A cooldown of N means the skill can't be used during your next N turns.`);
+    `Ranges use straight-line distance. Ranges of 2 or more round to the nearest tile, so shapes are roundish. Range 1 is the 4 neighbours; 1.5 adds the diagonals.`);
+  add('Battle', 'Cooldowns',
+    `Cooldowns count from the turn a skill is used. A cooldown of 1 means the skill can't be used again that turn, but it's ready on your next turn; a cooldown of 2 means it skips your next turn and is ready the turn after.`);
 
   return out;
 }

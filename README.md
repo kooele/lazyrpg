@@ -207,7 +207,7 @@ Skills can cost **mana** (`mana` in `skills.json`), which doesn't come back duri
 
 **Basic abilities** (every Adventurer, listed under the weapon in the creator):
 
-- **Dash** (1 AP, 20 MP, cooldown 1): only after the regular move. Spends the action AP to move again, up to your Movement. Overwatch can still fire on the way; it can't be undone.
+- **Dash** (1 AP, 20 MP, cooldown 2): only after the regular move. Spends the action AP to move again, up to your Movement. Overwatch can still fire on the way; it can't be undone.
 - **Overwatch** (ends turn): watch a 60° arc in any direction, as far as your weapon reaches (Bow 5 in Direct mode, 7.5 in Indirect, 1.5 in Melee; Spear 2; sword and staff 1.5). The first enemy to move into it takes your basic attack and keeps moving. Bow and Spear no longer have their own Overwatch / Intercept.
 
 ### Skill points, skill trees and the Body tab
@@ -218,7 +218,7 @@ Adventurers have **skill points**: 2 at level 1 and 1 more every level. Each poi
 Some skills need a **minimum level** (`level` in `skills.json`; shown as "Lv 3" in the skill tree). Until then they're greyed out and can't be learned. A loaded save with a skill above the character's level unlearns it and refunds the point. Random adventurers only pick skills their level has unlocked.
 
 - **Mage**: Arcanist (Arcane Bolt, Arcane Pulse Lv 3, Arcane Shift Lv 3, Arcane Weapon Lv 3), Elementalist (Ignite, Freeze, Fireball Lv 3, Iceblast Lv 3, Firestorm Lv 5, Blizzard Lv 5), Cleric (Heal, Cleanse, Protection Lv 3, Barrier Lv 3)
-  - **Ignite** / **Freeze** (1 AP, 30 mana, 1-turn cooldown): 20% M.Atk and a stack of Burn / Slow. **Fireball** / **Iceblast** (level 3): 120% M.Atk and a stack of Burn / Slow.
+  - **Ignite** / **Freeze** (1 AP, 30 mana, 2-turn cooldown): 20% M.Atk and a stack of Burn / Slow. **Fireball** / **Iceblast** (level 3): 120% M.Atk and a stack of Burn / Slow.
   - **Arcane Weapon** is a **toggle** (free action): switching it on costs 10 mana, and keeping it on costs nothing. While it's on, every weapon attack (basic attacks, Overwatch, opportunity attacks and Weapon skills such as Double Strike, Execute and Circle Swing) deals an extra 50% M.Atk Magical hit each time it hits, for **10 mana per hit**: Double Strike pays twice, Circle Swing once per target it hits. Mana never goes below 0: a hit you can't pay for gets no extra damage, and Arcane Weapon switches off. Using it again switches it off for free. The skill bar shows it as **ON**, and damage previews include the extra hit.
 - **Warrior**: Vanguard (Engage, Charge Lv 3), Infighter (Kick, Pocket Sand Lv 3), Assassin (Shadow Step, Flicker Strike Lv 3, Life-Risking Strike Lv 5), Weapon Master (Double Strike, Execute Lv 3, Circle Swing Lv 5)
 
@@ -252,7 +252,7 @@ Each enemy type has a fixed level range and its own stats and skills (`src/data/
 | Orc | 7–13 | Tribal | Warriors and brutes with Cleave (hits everyone adjacent); War Cry at level 9. |
 | Sellsword | 8–14 | Human | Full weapon kits plus Kick, Charge, Execute, or Fireball and Heal (Hedge Mages). |
 | Cave Bear | 9–14 | Beast | Maul (Engage), Rend (heavy hit); Roar at level 12 (Blinds nearby enemies). |
-| Wraith | 10–16 | Evil | Spectral Touch (magic, Engage), Chill Touch (also a stack of Slow; 1-turn cooldown), Wail (hurts and Blinds everyone nearby). |
+| Wraith | 10–16 | Evil | Spectral Touch (magic, Engage), Chill Touch (also a stack of Slow; 2-turn cooldown), Wail (hurts and Blinds everyone nearby). |
 | Troll | 13–20 | Tribal | Club (Engage), Smash (knockback), Regenerate (heals itself). Slow and huge. |
 | Renegade | 14–25 | Human | Knights, lancers, rangers and sorcerers with Double Strike, Circle Swing, Freeze, Heal... |
 | Wyvern | 15–23 | Beast | Bite (Engage), Dive (swoops in), Tail Sting (Poison x2). Very fast. |
@@ -287,7 +287,7 @@ Cleric skills (Heal, Cleanse, Protection, Barrier) work only on your own side, y
 - No line needed: melee skills, Spear Thrust (it stops at the first enemy in the way), Indirect Shot (bow in Indirect mode), Ignite, Freeze, Heal, Cleanse, Arcane Shift.
 - **Ranges** use Euclidean distance. Ranges of 2 or more round the distance to the nearest tile, so range 2 also reaches 2-over-1-up and shapes are rounder. Ranges 1 and 1.5 stay exact: 1 is the 4 neighbours, 1.5 adds the diagonals. Set `rangeRounding.fromRange` in `stats.json` to change the cut-off.
 - Skill tooltips and the weapon panel show a **tile diagram** of what each skill covers, with you in gold, rather than describing range in words.
-- A cooldown of N means the skill can't be used during your next N turns.
+- Cooldowns count from the turn a skill is used: cooldown 1 means not again that turn but ready next turn; cooldown 2 skips your next turn. Every skill has a cooldown of at least 1.
 - `vision` (fog of war) is built but switched off in `stats.json`.
 
 ### Art

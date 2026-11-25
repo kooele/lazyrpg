@@ -703,9 +703,9 @@ export class Battle {
     const skill = SKILLS[skillId];
     this.spendAp(u, skill);
     if (!noMana) u.mp -= skill.mana;
-    // Cooldown N = can't be used during the next N turns. The counter ticks at the
-    // start of each of the unit's turns, so store N + 1 (it hits 0 on the turn it's usable).
-    if (skill.cooldown > 0) u.cooldowns[skillId] = skill.cooldown + 1;
+    // Cooldown N counts from the current turn: the counter ticks at the start of each of
+    // the unit's turns, so 1 = not again this turn, usable next turn.
+    if (skill.cooldown > 0) u.cooldowns[skillId] = skill.cooldown;
     u.locked = true;
     this.lockTeammates(u);
   }
