@@ -75,11 +75,11 @@ export class GuildScene extends Phaser.Scene {
     const all = state.guild.board;
     const mine = all.filter((q) => canTakeQuest(state, q));
     const quests = sortQuests(this.allQuests ? all : mine, this.questSort.key, this.questSort.dir);
-    button(this, 16, 156, 200, 28, `Quests you can take (${mine.length})`, () => {
+    button(this, 16, 156, 200, 28, `Quests You Can Take (${mine.length})`, () => {
       this.allQuests = false;
       this.render();
     }, { selected: !this.allQuests, fontSize: 12 });
-    button(this, 224, 156, 160, 28, `All quests (${all.length})`, () => {
+    button(this, 224, 156, 160, 28, `All Quests (${all.length})`, () => {
       this.allQuests = true;
       this.render();
     }, { selected: this.allQuests, fontSize: 12 });
@@ -97,7 +97,7 @@ export class GuildScene extends Phaser.Scene {
     list.setItems(rows, 'keep');
     if (quests.length === 0) text(this, WIDTH / 2, 320, 'No quests you can take right now. Check back tomorrow.', { color: COLORS.dim }).setOrigin(0.5);
     if (state.quest) {
-      button(this, WIDTH - 196, 112, 180, 36, 'Set out now', () => this.scene.start('City'), { fill: 0x4a2a22, fontSize: 14 });
+      button(this, WIDTH - 196, 112, 180, 36, 'Set Out Now', () => this.scene.start('City'), { fill: 0x4a2a22, fontSize: 14 });
     }
   }
 
@@ -221,12 +221,12 @@ export class GuildScene extends Phaser.Scene {
     const days = ['', "A day's", 'A two-day', 'A three-day', 'A four-day', 'A five-day'][q.days] ?? `A ${q.days}-day`;
     const when = q.promotion ? 'The guild holds this trial open' : `The notice comes down after day ${q.expires}`;
     c.add(text(this, 10, 86, `${days} journey · ${when}.`, { fontSize: '11px', color: COLORS.dim, fontStyle: 'italic', wordWrap: { width: W - 140 } }));
-    c.add(text(this, 10, 100, `${q.reward} gold`, { fontSize: '17px', color: COLORS.gold }));
+    c.add(text(this, 10, 100, `${q.reward} Gold`, { fontSize: '17px', color: COLORS.gold }));
     const pay = payRating(q);
-    if (pay !== 'fair') c.add(text(this, 100, 104, pay === 'generous' ? 'Generous pay' : 'Poor pay', { fontSize: '12px', color: pay === 'generous' ? '#6fdc8c' : COLORS.bad }));
+    if (pay !== 'fair') c.add(text(this, 100, 104, pay === 'generous' ? 'Generous Pay' : 'Poor Pay', { fontSize: '12px', color: pay === 'generous' ? '#6fdc8c' : COLORS.bad }));
     c.add(text(this, 196, 104, `Renown +${q.renown}`, { fontSize: '12px', color: COLORS.dim }));
     if (!allowed) {
-      c.add(text(this, W - 10, 104, q.promotion ? `Needs ${rankThreshold(q.rank)} renown` : `Requires ${q.rank} rank`, { fontSize: '12px', color: COLORS.bad }).setOrigin(1, 0));
+      c.add(text(this, W - 10, 104, q.promotion ? `Needs ${rankThreshold(q.rank)} Renown` : `Requires ${q.rank} Rank`, { fontSize: '12px', color: COLORS.bad }).setOrigin(1, 0));
       return c;
     }
     c.add(button(this, W - 122, 92, 112, 32, 'Accept', () => {
@@ -248,7 +248,7 @@ export class GuildScene extends Phaser.Scene {
     text(this, 20, 118, `Free adventurers in the hall: ${pool.length}.  Hire one as a mercenary for your next quest, or negotiate a companion contract.`, {
       fontSize: '13px', wordWrap: { width: 920 },
     });
-    text(this, 20, 138, `Your party: ${state.party.length}/${GUILD.maxRoster} members · ${state.gold} gold`, { fontSize: '12px', color: COLORS.dim });
+    text(this, 20, 138, `Your Party: ${state.party.length}/${GUILD.maxRoster} Members · ${state.gold} Gold`, { fontSize: '12px', color: COLORS.dim });
     sortBar(this, WIDTH - 16 - 318, 134, PEOPLE_SORTS, this.hallSort, (key) => {
       this.hallSort = nextSort(this.hallSort, key);
       this.render();
@@ -271,16 +271,16 @@ export class GuildScene extends Phaser.Scene {
     row.add(talentTag(this, 64 + name.width + 12, 10, c, { fontSize: 12, detail: false }));
     row.add(text(this, 64, 28, `Level ${c.level} (${adventurerRank(c.level)}-rank) · ${WEAPONS[c.weaponId].name}`, { fontSize: '13px', color: COLORS.gold }));
     row.add(talentTag(this, 64, 47, c, { fontSize: 11, overall: false, sep: '   ' }));
-    row.add(fittedList(this, 64, 64, c.skillIds.map((s) => SKILLS[s].name), 1, { fontSize: '12px', color: COLORS.dim, wordWrap: { width: 316 } }, undefined, 'No tree skills yet'));
+    row.add(fittedList(this, 64, 64, c.skillIds.map((s) => SKILLS[s].name), 1, { fontSize: '12px', color: COLORS.dim, wordWrap: { width: 316 } }, undefined, 'No Tree Skills Yet'));
     const rates = mercenaryRates(c.level, a.greed, talentPriceFactor(c));
     row.add(text(this, 392, 8, 'Mercenary (next quest only)', { fontSize: '12px', color: COLORS.dim }));
-    row.add(button(this, 392, 28, 248, 32, `Hire: ${rates.fee}g or ${rates.cutPct}%, whichever is more`, () => this.hireMerc(a, rates.fee, rates.cutPct), {
+    row.add(button(this, 392, 28, 248, 32, `Hire: ${rates.fee}g or ${rates.cutPct}%, Whichever Is More`, () => this.hireMerc(a, rates.fee, rates.cutPct), {
       fontSize: 12, enabled: state.gold >= rates.fee,
     }));
     row.add(text(this, 392, 64, 'Fee paid now; a bigger cut is taken from the reward.', { fontSize: '11px', color: COLORS.dim }));
     row.add(text(this, 668, 8, 'Companion (permanent)', { fontSize: '12px', color: COLORS.dim }));
     const sulking = a.refusedUntil > state.day;
-    row.add(button(this, 668, 28, 220, 32, sulking ? `Won't talk until day ${a.refusedUntil}` : 'Negotiate a contract', () => {
+    row.add(button(this, 668, 28, 220, 32, sulking ? `Won't Talk Until Day ${a.refusedUntil}` : 'Negotiate a Contract', () => {
       if (rosterFull(state)) return toast(this, `Your party is full (${GUILD.maxRoster}).`, COLORS.bad);
       this.scene.start('Negotiate', { mode: 'hire', id: c.id });
     }, { fontSize: 12, enabled: !sulking }));

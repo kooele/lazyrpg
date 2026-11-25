@@ -161,7 +161,7 @@ export class CharacterCreatorScene extends Phaser.Scene {
     this.nameInput = input;
     this.partyInput = null;
     if (this.mode === 'main') {
-      text(this, 636, 478, 'Party name (as registered at the guild)', { color: COLORS.dim, fontSize: '13px' });
+      text(this, 636, 478, 'Party Name (as registered at the guild)', { color: COLORS.dim, fontSize: '13px' });
       const p = overlayInput(this, 636, 498, 300, 36);
       p.maxLength = PARTY_NAME_MAX_LENGTH;
       p.value = this.partyName;
@@ -240,7 +240,7 @@ export class CharacterCreatorScene extends Phaser.Scene {
       c.add(wdesc);
       const my = 24 + wdesc.height + 6;
       const changed = STAT_KEYS.filter((k) => (w.statMultipliers[k] ?? 1) !== 1);
-      if (changed.length === 0) c.add(text(this, 0, my, 'No stat changes', { fontSize: '14px', color: COLORS.dim }));
+      if (changed.length === 0) c.add(text(this, 0, my, 'No Stat Changes', { fontSize: '14px', color: COLORS.dim }));
       let mx = 0;
       for (const k of changed) {
         const m = w.statMultipliers[k]!;
@@ -248,7 +248,7 @@ export class CharacterCreatorScene extends Phaser.Scene {
         c.add(t);
         mx += t.width + 16;
       }
-      c.add(text(this, 0, my + 26, 'Weapon skills (always equipped)', { fontSize: '12px', color: COLORS.dim }));
+      c.add(text(this, 0, my + 26, 'Weapon Skills (always equipped)', { fontSize: '12px', color: COLORS.dim }));
       items.push({ obj: c, height: my + 42 });
     }
     const skillItem = (sid: string, note = '') => {
@@ -277,7 +277,7 @@ export class CharacterCreatorScene extends Phaser.Scene {
     // ---- Right: skill trees (hover a skill for details) --------------------------------
     const points = skillPoints(d);
     const free = freePoints(d);
-    L.add(text(this, 636, 66, `Skill points  ${pointsUsed(d)}/${points}`, { color: free > 0 ? COLORS.gold : COLORS.dim }));
+    L.add(text(this, 636, 66, `Skill Points  ${pointsUsed(d)}/${points}`, { color: free > 0 ? COLORS.gold : COLORS.dim }));
     [...SKILL_TABS, { id: 'body', name: 'Body' }].forEach((t, i) => {
       L.add(button(this, 636 + i * 102, 90, 96, 30, t.name, () => {
         this.tab = t.id;
@@ -291,7 +291,7 @@ export class CharacterCreatorScene extends Phaser.Scene {
     }
     // ---- Bottom buttons -------------------------------------------------------------
     L.add(button(this, 330, 560, 290, 50, 'Cancel', () => this.leave()));
-    L.add(button(this, 636, 560, 300, 50, this.mode === 'main' ? `Begin in ${GUILD.city}` : this.mode === 'demo' ? 'Recruit' : 'Save changes', () => this.confirm(), { fill: 0x2c4a2f, fontSize: 18 }));
+    L.add(button(this, 636, 560, 300, 50, this.mode === 'main' ? `Begin in ${GUILD.city}` : this.mode === 'demo' ? 'Recruit' : 'Save Changes', () => this.confirm(), { fill: 0x2c4a2f, fontSize: 18 }));
   }
 
   /** A class tab: a second row of subclass tabs, then the selected subclass's skills. Click a skill to learn it (1 point) or unlearn it. */
@@ -329,7 +329,7 @@ export class CharacterCreatorScene extends Phaser.Scene {
     const otherPicks = d.skillIds.filter((sid) => !tree.skills.includes(sid) && SKILL_TREES.some((t) => t.skills.includes(sid)));
     if (otherPicks.length) {
       const where = (sid: string) => SKILL_TREES.find((t) => t.skills.includes(sid))!.name;
-      L.add(text(this, subX, ty + 4, `Also equipped: ${otherPicks.map((sid) => `${SKILLS[sid].name} (${where(sid)})`).join(', ')}`, {
+      L.add(text(this, subX, ty + 4, `Also Equipped: ${otherPicks.map((sid) => `${SKILLS[sid].name} (${where(sid)})`).join(', ')}`, {
         fontSize: '12px', color: COLORS.dim, wordWrap: { width: subW },
       }));
     }
@@ -349,7 +349,7 @@ export class CharacterCreatorScene extends Phaser.Scene {
       const row = this.add.rectangle(636, y, 300, 32, COLORS.panelLight, n ? 0.9 : 0.4).setOrigin(0).setStrokeStyle(1, n ? COLORS.accent : COLORS.border);
       L.add(this.tip(row, () => `${info.name} (${info.short})\n${info.description}\n\nEach point: +${gain} ${info.short} (2 x base growth ${STAT_CONFIG.growthPerLevel[k]}).\n${n ? `Invested ${n}: +${gain * n} ${info.short}.` : 'Not trained yet.'}\nMax rank ${cap} at level ${d.level}.`));
       L.add(text(this, 646, y + 8, info.name, { fontSize: '14px' }));
-      L.add(text(this, 766, y + 9, `+${gain} each`, { fontSize: '12px', color: COLORS.dim }));
+      L.add(text(this, 766, y + 9, `+${gain} Each`, { fontSize: '12px', color: COLORS.dim }));
       L.add(button(this, 836, y + 4, 26, 24, '−', () => this.invest(k, -1), { fontSize: 15, enabled: n > 0 }));
       L.add(text(this, 880, y + 7, `${n}/${cap}`, { fontSize: '13px', color: n ? COLORS.gold : COLORS.dim }).setOrigin(0.5, 0));
       L.add(button(this, 900, y + 4, 26, 24, '+', () => this.invest(k, 1), { fontSize: 15, enabled: free > 0 && n < cap }));
@@ -396,7 +396,7 @@ export class CharacterCreatorScene extends Phaser.Scene {
     styles.forEach((hair, i) => L.add(button(this, 100 + (i % 2) * 108, 218 + Math.floor(i / 2) * 25, 104, 22, HAIR_NAMES[hair], () => setLook({ hair }), {
       selected: look.hair === hair, fontSize: 12,
     })));
-    label(298, 'Hair color');
+    label(298, 'Hair Color');
     HAIR_COLORS.forEach((hc, i) => swatch(100 + i * 30, 298, 26, 20, HAIR_HEX[hc], look.hairColor === hc, `Hair: ${HAIR_COLOR_NAMES[hc]}`, () => setLook({ hairColor: hc })));
     label(326, 'Clothes');
     PALETTE.forEach((color, i) => swatch(100 + i * 27, 326, 24, 20, color, d.appearance.color === color, 'Clothes and the disc you stand on', () => {
@@ -414,7 +414,7 @@ export class CharacterCreatorScene extends Phaser.Scene {
     L.add(text(this, 140, 366, d.name.trim() || '(no name)', { fontSize: '16px', wordWrap: { width: 168 } }));
     L.add(text(this, 140, 388, `Level ${d.level} · ${WEAPONS[d.weaponId].name}`, { color: COLORS.dim, fontSize: '12px', wordWrap: { width: 168 } }));
     if (this.canReroll) {
-      L.add(button(this, 30, 362, 100, 22, 'Reroll talent', () => this.reroll(), {
+      L.add(button(this, 30, 362, 100, 22, 'Reroll Talent', () => this.reroll(), {
         fontSize: 12, ...this.hoverTip(() => `Roll new talent grades (F to S) for every growing stat.\nOr set each one with the ‹ › arrows next to it.\nTalent sets how fast a stat grows with level:\n${this.gradeTable()}\n\nOverall talent now: ${overallTalentLabel(d)}`),
       }));
     }

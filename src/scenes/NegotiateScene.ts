@@ -19,7 +19,7 @@ interface NegotiateData {
   id: string;
 }
 
-const greedWord = (g: number) => (g < 0.9 ? 'Modest' : g < 1.05 ? 'Fair-minded' : g < 1.15 ? 'Ambitious' : 'Greedy');
+const greedWord = (g: number) => (g < 0.9 ? 'Modest' : g < 1.05 ? 'Fair-Minded' : g < 1.15 ? 'Ambitious' : 'Greedy');
 
 /** Negotiate a companion contract: base pay, loot cut, food & lodging and term length. */
 export class NegotiateScene extends Phaser.Scene {
@@ -106,7 +106,7 @@ export class NegotiateScene extends Phaser.Scene {
     panel(this, 16, 76, 300, 488);
     figure(this, 90, 270, 170, c.appearance, c.weaponId);
     text(this, 170, 96, c.name, { fontSize: '22px', wordWrap: { width: 140 } });
-    text(this, 170, 126, `Level ${c.level} · ${adventurerRank(c.level)}-rank`, { fontSize: '15px', color: COLORS.gold });
+    text(this, 170, 126, `Level ${c.level} · ${adventurerRank(c.level)}-Rank`, { fontSize: '15px', color: COLORS.gold });
     text(this, 170, 148, WEAPONS[c.weaponId].name, { fontSize: '13px', color: COLORS.dim, wordWrap: { width: 140 } });
     text(this, 170, 170, greedWord(who.greed), { fontSize: '13px', color: COLORS.dim });
     talentTag(this, 170, 192, c, { fontSize: 13, detail: false });
@@ -116,7 +116,7 @@ export class NegotiateScene extends Phaser.Scene {
       text(this, 220, 212 + i * 16, g, { fontSize: '12px', color: TALENT_COLORS[g], fontStyle: 'bold' });
     });
     fittedList(this, 30, 314, c.skillIds.map((s) => SKILLS[s].name), 2, { fontSize: '12px', color: COLORS.dim, wordWrap: { width: 272 } },
-      (shown, hidden) => `Skills: ${shown.join(', ')}${hidden ? ` +${hidden} more` : ''}`, 'Skills: none yet');
+      (shown, hidden) => `Skills: ${shown.join(', ')}${hidden ? ` +${hidden} More` : ''}`, 'Skills: None Yet');
     if (this.mode === 'renew') {
       text(this, 30, 350, `Relationship ${Math.round(who.relationship)}/100`, { fontSize: '14px' });
       const g = this.add.graphics();
@@ -124,10 +124,10 @@ export class NegotiateScene extends Phaser.Scene {
       g.fillStyle(0xe05a9b).fillRect(30, 372, 2.72 * who.relationship, 10);
       text(this, 30, 386, 'Quests together raise it. A good relationship lowers what they ask on renewal.', { fontSize: '11px', color: COLORS.dim, wordWrap: { width: 272 } });
     }
-    text(this, 30, 420, 'How they value things', { fontSize: '13px', color: COLORS.dim });
+    text(this, 30, 420, 'How They Value Things', { fontSize: '13px', color: COLORS.dim });
     text(this, 30, 440, [
-      `Food & lodging: ${foodLodgingWeekly()} gold/week (common food and an inn, as adventurers expect)`,
-      `1% loot cut: ~${lootValue(1, state.rank).toFixed(1)} gold/week`,
+      `Food & Lodging: ${foodLodgingWeekly()} Gold/Week (common food and an inn, as adventurers expect)`,
+      `1% Loot Cut: ~${lootValue(1, state.rank).toFixed(1)} Gold/Week`,
       `(a ${state.rank}-rank party earns about ${GUILD.companion.expectedWeeklyLoot[state.rank]} a week)`,
       'Longer terms: they ask a bit less per week.',
     ].join('\n'), { fontSize: '12px', lineSpacing: 3, wordWrap: { width: 272 } });
@@ -137,7 +137,7 @@ export class NegotiateScene extends Phaser.Scene {
     // ---- middle: terms ----
     const X = 332;
     panel(this, X, 76, 320, 488);
-    text(this, X + 14, 86, 'Your offer', { fontSize: '18px', color: COLORS.gold });
+    text(this, X + 14, 86, 'Your Offer', { fontSize: '18px', color: COLORS.gold });
     const step = (y: number, label: string, value: string, minus: () => void, plus: () => void, big?: [() => void, () => void]) => {
       text(this, X + 14, y, label, { fontSize: '13px', color: COLORS.dim });
       if (big) button(this, X + 14, y + 20, 44, 34, '−−', big[0], { fontSize: 14, enabled: !this.done });
@@ -150,24 +150,24 @@ export class NegotiateScene extends Phaser.Scene {
       f();
       this.render();
     };
-    step(118, 'Base pay (every 7th day)', `${t.basePay} gold`, set(() => (t.basePay = Math.max(0, t.basePay - 5))), set(() => (t.basePay += 5)),
+    step(118, 'Base Pay (every 7th day)', `${t.basePay} Gold`, set(() => (t.basePay = Math.max(0, t.basePay - 5))), set(() => (t.basePay += 5)),
       [set(() => (t.basePay = Math.max(0, t.basePay - 25))), set(() => (t.basePay += 25))]);
-    step(184, 'Cut of each quest reward', `${t.lootPct}%`, set(() => (t.lootPct = Math.max(0, t.lootPct - 1))), set(() => (t.lootPct = Math.min(50, t.lootPct + 1))),
+    step(184, 'Cut of Each Quest Reward', `${t.lootPct}%`, set(() => (t.lootPct = Math.max(0, t.lootPct - 1))), set(() => (t.lootPct = Math.min(50, t.lootPct + 1))),
       [set(() => (t.lootPct = Math.max(0, t.lootPct - 5))), set(() => (t.lootPct = Math.min(50, t.lootPct + 5)))]);
-    text(this, X + 14, 250, 'Food and lodging', { fontSize: '13px', color: COLORS.dim });
+    text(this, X + 14, 250, 'Food and Lodging', { fontSize: '13px', color: COLORS.dim });
     button(this, X + 14, 270, 140, 34, 'Included', set(() => (t.foodLodging = true)), { selected: t.foodLodging, fontSize: 14, enabled: !this.done });
-    button(this, X + 162, 270, 144, 34, 'Not included', set(() => (t.foodLodging = false)), { selected: !t.foodLodging, fontSize: 14, enabled: !this.done });
-    text(this, X + 14, 316, 'Contract term', { fontSize: '13px', color: COLORS.dim });
+    button(this, X + 162, 270, 144, 34, 'Not Included', set(() => (t.foodLodging = false)), { selected: !t.foodLodging, fontSize: 14, enabled: !this.done });
+    text(this, X + 14, 316, 'Contract Term', { fontSize: '13px', color: COLORS.dim });
     GUILD.companion.terms.forEach((w, i) => button(this, X + 14 + i * 74, 336, 68, 34, `${w} wk`, set(() => (t.termWeeks = w)), {
       selected: t.termWeeks === w, fontSize: 14, enabled: !this.done,
     }));
     const weekly = t.basePay + (t.foodLodging ? foodLodgingWeekly() : 0);
     text(this, X + 14, 384, [
-      `Costs you ${weekly} gold a week${t.foodLodging ? ` (${t.basePay} pay + ${foodLodgingWeekly()} food & lodging)` : ''}`,
-      `+ ${t.lootPct}% of rewards · ${weekly * t.termWeeks} gold over ${t.termWeeks} weeks`,
+      `Costs You ${weekly} Gold a Week${t.foodLodging ? ` (${t.basePay} pay + ${foodLodgingWeekly()} food & lodging)` : ''}`,
+      `+ ${t.lootPct}% of Rewards · ${weekly * t.termWeeks} Gold over ${t.termWeeks} Weeks`,
     ].join('\n'), { fontSize: '13px', lineSpacing: 4, wordWrap: { width: 292 } });
-    button(this, X + 14, 456, 292, 46, 'Make offer', () => this.offer(), { fill: 0x2c4a2f, fontSize: 18, enabled: !this.done });
-    button(this, X + 14, 510, 292, 40, this.done ? 'Done' : 'Leave the table', () => this.leave(), { fontSize: 15 });
+    button(this, X + 14, 456, 292, 46, 'Make Offer', () => this.offer(), { fill: 0x2c4a2f, fontSize: 18, enabled: !this.done });
+    button(this, X + 14, 510, 292, 40, this.done ? 'Done' : 'Leave the Table', () => this.leave(), { fontSize: 15 });
 
     // ---- right: the conversation ----
     panel(this, 668, 76, 276, 488);

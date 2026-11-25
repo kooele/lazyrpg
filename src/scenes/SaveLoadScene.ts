@@ -48,25 +48,25 @@ export class SaveLoadScene extends Phaser.Scene {
       if (s.empty) {
         add(text(this, 150, y + 46, 'Empty', { color: COLORS.dim }));
       } else if (s.error) {
-        add(text(this, 150, y + 42, `Unreadable save: ${s.error}`, { color: COLORS.bad, fontSize: '14px', wordWrap: { width: 480 } }));
+        add(text(this, 150, y + 42, `Unreadable Save: ${s.error}`, { color: COLORS.bad, fontSize: '14px', wordWrap: { width: 480 } }));
       } else {
         const when = s.savedAt ? new Date(s.savedAt).toLocaleString() : '';
-        add(text(this, 240, y + 15, `Day ${s.day} · ${s.rank} rank · ${s.gold} gold   ·   ${when}`, { color: COLORS.dim, fontSize: '14px' }));
+        add(text(this, 240, y + 15, `Day ${s.day} · ${s.rank} Rank · ${s.gold} Gold   ·   ${when}`, { color: COLORS.dim, fontSize: '14px' }));
         add(text(this, 150, y + 46, s.party ?? '', { fontSize: '15px', wordWrap: { width: 500 } }));
       }
       const canClick = saving || (!s.empty && !s.error);
-      add(button(this, 680, y + 24, 130, 48, saving ? 'Save here' : 'Load', () => this.useSlot(slot, s.empty), { enabled: canClick }));
+      add(button(this, 680, y + 24, 130, 48, saving ? 'Save Here' : 'Load', () => this.useSlot(slot, s.empty), { enabled: canClick }));
     }
 
     const by = 470;
     if (saving) {
-      add(button(this, 130, by, 340, 50, 'Export to .json file', () => {
+      add(button(this, 130, by, 340, 50, 'Export to .json File', () => {
         exportToFile(requireState());
         session.dirty = false;
         toast(this, 'Save file downloaded.', COLORS.good);
       }));
     } else {
-      add(button(this, 130, by, 340, 50, 'Import .json file', () => this.importFile()));
+      add(button(this, 130, by, 340, 50, 'Import .json File', () => this.importFile()));
     }
     add(button(this, 490, by, 340, 50, 'Back', () => this.scene.start(this.returnTo)));
   }

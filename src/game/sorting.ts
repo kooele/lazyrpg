@@ -9,7 +9,7 @@ export type SortDir = 'asc' | 'desc';
 
 export type QuestSort = 'rank' | 'gold' | 'renown' | 'difficulty' | 'enemy';
 export const QUEST_SORTS: [QuestSort, string][] = [
-  ['rank', 'Rank'], ['gold', 'Gold'], ['renown', 'Renown'], ['difficulty', 'Difficulty'], ['enemy', 'Enemy type'],
+  ['rank', 'Rank'], ['gold', 'Gold'], ['renown', 'Renown'], ['difficulty', 'Difficulty'], ['enemy', 'Enemy Type'],
 ];
 
 export type PeopleSort = 'level' | 'talent' | 'name' | 'cost';

@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { GUILD, LODGING_QUALITY, RINGS, type Ring } from '../data/guild';
 import { buyResidence, residenceSellPrice, residents, sellResidence } from '../game/city';
 import { QUALITY_TEXT, lodgingName } from '../game/condition';
+import { titleCase } from '../game/titleCase';
 import { markDirty, requireState, session } from '../game/session';
 import { cityHeader } from '../ui/hud';
 import { COLORS, HEIGHT, WIDTH, button, confirmDialog, panel, setupCamera, text, toast, clearScene } from '../ui/widgets';
@@ -50,17 +51,17 @@ export class EstateScene extends Phaser.Scene {
       text(this, x + 14, y + 40, DISTRICT[ring], { fontSize: '13px', color: COLORS.dim });
       text(this, x + 14, y + 70, BLURB[ring], { fontSize: '13px', wordWrap: { width: w - 28 }, lineSpacing: 3 });
       const q = LODGING_QUALITY[ring];
-      text(this, x + 14, y + 140, `Night quality ${q} of 3: counts as ${QUALITY_TEXT[q]}.`, { fontSize: '12px', color: COLORS.dim, wordWrap: { width: w - 28 } });
-      text(this, x + 14, y + 190, `Price: ${home.price} gold`, { fontSize: '18px', color: COLORS.gold });
-      text(this, x + 14, y + 216, `Sells back for ${residenceSellPrice(ring)} gold`, { fontSize: '12px', color: COLORS.dim });
+      text(this, x + 14, y + 140, titleCase(`Night quality ${q} of 3: counts as ${QUALITY_TEXT[q]}`), { fontSize: '12px', color: COLORS.dim, wordWrap: { width: w - 28 } });
+      text(this, x + 14, y + 190, `Price: ${home.price} Gold`, { fontSize: '18px', color: COLORS.gold });
+      text(this, x + 14, y + 216, `Sells Back for ${residenceSellPrice(ring)} Gold`, { fontSize: '12px', color: COLORS.dim });
       if (owned) {
         text(this, x + 14, y + 250, 'You own this residence.', { fontSize: '14px', color: '#6fdc8c' });
         const people = residents(state, ring);
-        text(this, x + 14, y + 274, `Residents ${people.length}/${GUILD.residences.capacity}: ${people.map((c) => c.name).join(', ') || 'nobody yet'}`, {
+        text(this, x + 14, y + 274, `Residents ${people.length}/${GUILD.residences.capacity}: ${people.map((c) => c.name).join(', ') || 'Nobody Yet'}`, {
           fontSize: '12px', color: COLORS.dim, wordWrap: { width: w - 28 }, lineSpacing: 2,
         });
-        button(this, x + 14, HEIGHT - 120, w - 28, 40, 'Go there', () => this.scene.start('Inn', { ring }), { fontSize: 14, fill: 0x2c4a2f });
-        button(this, x + 14, HEIGHT - 72, w - 28, 40, `Sell for ${residenceSellPrice(ring)} gold`, () => confirmDialog(this,
+        button(this, x + 14, HEIGHT - 120, w - 28, 40, 'Go There', () => this.scene.start('Inn', { ring }), { fontSize: 14, fill: 0x2c4a2f });
+        button(this, x + 14, HEIGHT - 72, w - 28, 40, `Sell for ${residenceSellPrice(ring)} Gold`, () => confirmDialog(this,
           `Sell the ${home.name} for ${residenceSellPrice(ring)} gold?${residents(state, ring).length ? `\nIts residents go back to their default lodging (adventurers: ${lodgingName(GUILD.lodging.adventurerDefault)}, slaves: ${lodgingName(GUILD.lodging.slaveDefault)}) until you move them.` : ''}`, () => {
             const gold = sellResidence(state, ring);
             markDirty();
@@ -68,7 +69,7 @@ export class EstateScene extends Phaser.Scene {
             toast(this, `Sold for ${gold} gold.`);
           }, 'Sell'), { fontSize: 14 });
       } else {
-        button(this, x + 14, HEIGHT - 72, w - 28, 40, `Buy for ${home.price} gold`, () => confirmDialog(this, `Buy the ${home.name} for ${home.price} gold?`, () => {
+        button(this, x + 14, HEIGHT - 72, w - 28, 40, `Buy for ${home.price} Gold`, () => confirmDialog(this, `Buy the ${home.name} for ${home.price} gold?`, () => {
           const err = buyResidence(state, ring);
           if (err) return toast(this, err, COLORS.bad);
           markDirty();

@@ -24,13 +24,13 @@ export const MEMBER_COLOR: Record<string, string> = { main: '#e0b44c', mercenary
 export function memberStatus(state: GameState, c: Character): string {
   const k = c.contract;
   if (!k) return '';
-  if (k.type === 'mercenary') return `Mercenary · ${k.fee}g or ${k.cutPct}% · 1 quest`;
+  if (k.type === 'mercenary') return `Mercenary · ${k.fee}g or ${k.cutPct}% · 1 Quest`;
   if (isCompanion(c)) {
     const left = daysLeft(c.contract, state.day);
-    return `Companion · ${left > 0 ? `${left} day${left === 1 ? '' : 's'} left` : 'contract ended!'}`;
+    return `Companion · ${left > 0 ? `${left} Day${left === 1 ? '' : 's'} Left` : 'Contract Ended!'}`;
   }
-  if (k.type === 'slave') return `Slave · value ${Math.round(slaveValue(c))}g · tax ${slaveTax(c)}g/wk`;
-  return 'Leader · permanent';
+  if (k.type === 'slave') return `Slave · Value ${Math.round(slaveValue(c))}g · Tax ${slaveTax(c)}g/wk`;
+  return 'Leader · Permanent';
 }
 
 /** The status bar along the top of every city screen. With `onMenu`, a ☰ menu button sits at its left. */
@@ -43,21 +43,21 @@ export function cityHeader(scene: Phaser.Scene, state: GameState, title: string,
   text(scene, left + 2, 42, sub, { fontSize: '13px', color: COLORS.dim });
   const toPay = (7 - (state.day % 7)) % 7;
   // Right: gold, then upkeep on two short lines (so they stay clear of the party's renown in the middle).
-  const gold = text(scene, WIDTH - 20, 6, `${state.gold} gold`, { fontSize: '20px', color: COLORS.gold }).setOrigin(1, 0);
+  const gold = text(scene, WIDTH - 20, 6, `${state.gold} Gold`, { fontSize: '20px', color: COLORS.gold }).setOrigin(1, 0);
   // What a multi-day quest ran up, due at the next End Day.
   const tab = tabTotal(state);
-  if (tab) text(scene, WIDTH - 30 - gold.width, 12, `Tabs: ${tab}g due at End Day`, { fontSize: '12px', color: tab > state.gold ? COLORS.bad : COLORS.dim }).setOrigin(1, 0);
-  const feeding = text(scene, WIDTH - 20, 32, `Housing ${boarders(state).length}: ${dailyUpkeep(state, 'city')}g/day (food ${foodCost(state)}, lodging ${lodgingCost(state, 'city')})`, { fontSize: '11px', color: COLORS.dim }).setOrigin(1, 0);
+  if (tab) text(scene, WIDTH - 30 - gold.width, 12, `Tabs: ${tab}g Due at End Day`, { fontSize: '12px', color: tab > state.gold ? COLORS.bad : COLORS.dim }).setOrigin(1, 0);
+  const feeding = text(scene, WIDTH - 20, 32, `Living Expenses for ${boarders(state).length}: ${dailyUpkeep(state, 'city')}g/day (food ${foodCost(state)}, lodging ${lodgingCost(state, 'city')})`, { fontSize: '11px', color: COLORS.dim }).setOrigin(1, 0);
   const wages = text(scene, WIDTH - 20, 46,
-    `Wages ${weeklyWages(state)}${weeklyTaxes(state) ? ` + slave tax ${weeklyTaxes(state)}` : ''}/week ${isPayday(state.day) ? '(paid today)' : `(payday in ${toPay}d)`}`,
+    `Wages ${weeklyWages(state)}${weeklyTaxes(state) ? ` + Slave Tax ${weeklyTaxes(state)}` : ''}/Week ${isPayday(state.day) ? '(paid today)' : `(payday in ${toPay}d)`}`,
     { fontSize: '11px', color: COLORS.dim }).setOrigin(1, 0);
   // Middle: the party, with an "unsaved" tag beside its name, and its rank and renown underneath.
   rankBadge(scene, 330, 16, state.rank, 32);
   const name = text(scene, 372, 12, state.partyName, { fontSize: '15px' });
-  if (session.dirty) text(scene, name.x + name.width + 8, 15, 'unsaved', { fontSize: '11px', color: COLORS.dim, fontStyle: 'italic' });
+  if (session.dirty) text(scene, name.x + name.width + 8, 15, 'Unsaved', { fontSize: '11px', color: COLORS.dim, fontStyle: 'italic' });
   const up = nextRank(state.rank);
   const below = state.renown < rankThreshold(state.rank);
-  const renown = `Renown ${Math.round(state.renown)}${up ? `/${rankThreshold(up)}` : ''}${below ? ` · below ${state.rank} (${rankThreshold(state.rank)})!` : ''}`;
+  const renown = `Renown ${Math.round(state.renown)}${up ? `/${rankThreshold(up)}` : ''}${below ? ` · Below ${state.rank} (${rankThreshold(state.rank)})!` : ''}`;
   const room = WIDTH - 20 - Math.max(feeding.width, wages.width) - 16 - 372;
-  text(scene, 372, 34, `${state.rank}-rank party · ${renown}`, { fontSize: '12px', color: below ? COLORS.bad : COLORS.dim, wordWrap: { width: Math.max(120, room) } });
+  text(scene, 372, 34, `${state.rank}-Rank Party · ${renown}`, { fontSize: '12px', color: below ? COLORS.bad : COLORS.dim, wordWrap: { width: Math.max(120, room) } });
 }

@@ -12,6 +12,12 @@
         color: #f4ecd8; background: #1b2033; border: 2px solid #4b5578; border-style: solid; outline: none;
       }
       input.name-input:focus { border-color: #e0b44c; }
+      div.overlay-text {
+        margin: 0; padding: 0; overflow-y: auto; white-space: pre-wrap; overflow-wrap: break-word;
+        font-family: "Trebuchet MS", "Segoe UI", sans-serif; color: #f4ecd8;
+        user-select: text; -webkit-user-select: text; cursor: text;
+      }
+      div.overlay-text::selection { background: #e0b44c; color: #1a1410; }
     </style>
   </head>
   <body>

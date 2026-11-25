@@ -481,15 +481,15 @@ export class BattleScene extends Phaser.Scene {
       if (u.team === 'player' && b.phase === 'player') {
         const freeLeft = !u.acted && u.ap === 0 && b.usableFreeActions(u).length > 0;
         const done = u.acted || (u.ap === 0 && !freeLeft);
-        const status = done ? 'Done this turn' : freeLeft ? 'Out of AP — free action available'
-          : u.moved ? 'Moved — 1 AP left (act or Dash)' : 'Ready: move + act';
+        const status = done ? 'Done This Turn' : freeLeft ? 'Out of AP — Free Action Available'
+          : u.moved ? 'Moved — 1 AP Left (act or Dash)' : 'Ready: Move + Act';
         const pips = `${'●'.repeat(u.ap)}${'○'.repeat(Math.max(0, AP_PER_TURN - u.ap))}`;
         S.add(text(this, SIDE_X + 10, 156, `AP ${pips}  ${status}`, { fontSize: '12px', color: done ? COLORS.dim : COLORS.good }));
       }
     }
 
     if (b.phase !== 'player' || this.mode === 'over') {
-      S.add(text(this, SIDE_X + SIDE_W / 2, 230, this.mode === 'over' ? '' : 'Enemy turn…', { color: COLORS.dim }).setOrigin(0.5));
+      S.add(text(this, SIDE_X + SIDE_W / 2, 230, this.mode === 'over' ? '' : 'Enemy Turn…', { color: COLORS.dim }).setOrigin(0.5));
       return;
     }
     const interactive = this.mode === 'select' || this.mode === 'target';
@@ -506,7 +506,7 @@ export class BattleScene extends Phaser.Scene {
           },
         }));
       } else {
-        S.add(button(this, SIDE_X, y, 116, 30, 'Undo move', () => this.undoMove(), {
+        S.add(button(this, SIDE_X, y, 116, 30, 'Undo Move', () => this.undoMove(), {
           enabled: interactive && b.canUndoMove(u), fontSize: 14,
         }));
       }
@@ -563,7 +563,7 @@ export class BattleScene extends Phaser.Scene {
           fontSize: '11px', color: usable ? COLORS.text : '#5d6480', align: 'center', wordWrap: { width: SLOT_W - 6 },
         }).setOrigin(0.5));
         // AP along the bottom ("Ends Turn" for turn-ending skills), mana at the top between the hotkey and the cooldown.
-        const ap = toggledOn ? 'ON · free' : isFree(s) ? 'free' : s.ap === 'end' ? 'Ends Turn' : `${s.ap}AP`;
+        const ap = toggledOn ? 'ON · Free' : isFree(s) ? 'Free' : s.ap === 'end' ? 'Ends Turn' : `${s.ap}AP`;
         B.add(text(this, x + SLOT_W / 2, y + SLOT_H - 4, ap, { fontSize: '10px', color: COLORS.dim }).setOrigin(0.5, 1));
         if (s.mana && !toggledOn) B.add(text(this, x + SLOT_W / 2, y + 3, `${s.mana}MP`, { fontSize: '10px', color: u.mp < s.mana ? COLORS.bad : COLORS.dim }).setOrigin(0.5, 0));
         if (cd > 0) B.add(text(this, x + SLOT_W - 5, y + 2, String(cd), { fontSize: '13px', color: COLORS.bad, fontStyle: 'bold' }).setOrigin(1, 0));
@@ -605,7 +605,7 @@ export class BattleScene extends Phaser.Scene {
     const usable = interactive && b.canUseSkill(u, id);
     const why = !interactive || usable ? '' : u.mp < s.mana ? `\nNot enough mana (${u.mp}/${s.mana}).`
       : s.target === 'move' && !u.moved ? '\nUse your regular move first.' : !b.canAct(u) ? '\nThis unit\'s turn is over.' : !b.canPay(u, s) ? '\nNot enough AP.' : '';
-    const modeLine = raw.modes ? `\nBow mode: ${b.modeName(u)} (Switch Mode changes it)` : raw.switchMode && b.modesOf(u) ? `\nNow: ${b.modeName(u)}. Next: ${SKILLS[b.modesOf(u)![(u.weaponMode + 1) % b.modesOf(u)!.length]].modeName}` : '';
+    const modeLine = raw.modes ? `\nBow Mode: ${b.modeName(u)} (Switch Mode changes it)` : raw.switchMode && b.modesOf(u) ? `\nNow: ${b.modeName(u)}. Next: ${SKILLS[b.modesOf(u)![(u.weaponMode + 1) % b.modesOf(u)!.length]].modeName}` : '';
     this.hoverText.setText(`${s.name}\n${skillStatText(s)}${modeLine}${cd > 0 ? `\nReady ${cd === 1 ? 'next turn' : `in ${cd} turns`}.` : ''}${why}\nDrag to another slot to move it.`);
   }
 
@@ -695,10 +695,10 @@ export class BattleScene extends Phaser.Scene {
     const opp = b.opponentOf(u);
     if (opp) effects.push(`Engaged with ${opp.character.name}`);
     const mode = b.modeName(u);
-    if (mode) effects.push(`Bow mode: ${mode}${b.activeMode(u) !== u.weaponMode ? ` (${b.modeName(u, b.activeMode(u))} while engaged)` : ''}`);
+    if (mode) effects.push(`Bow Mode: ${mode}${b.activeMode(u) !== u.weaponMode ? ` (${b.modeName(u, b.activeMode(u))} while engaged)` : ''}`);
     if (u.team === 'enemy') effects.push(`Skills: ${b.skillIds(u).map((id) => b.skillFor(u, SKILLS[id]).name).join(', ')}`);
     return [
-      `HP ${u.hp}/${u.stats.health}${shield ? ` +${shield} shield` : ''}${u.stats.mana > 0 ? `   MP ${u.mp}/${u.stats.mana}` : ''}   Move ${b.stat(u, 'movement')}`,
+      `HP ${u.hp}/${u.stats.health}${shield ? ` +${shield} Shield` : ''}${u.stats.mana > 0 ? `   MP ${u.mp}/${u.stats.mana}` : ''}   Move ${b.stat(u, 'movement')}`,
       `P.Atk ${b.stat(u, 'pAtk')}  M.Atk ${b.stat(u, 'mAtk')}  Def ${b.stat(u, 'defense')}${terrainDef ? ' (forest)' : ''}  Res ${b.resistChance(u)}%`,
       effects.join(', '),
     ].filter(Boolean).join('\n');
@@ -872,7 +872,7 @@ export class BattleScene extends Phaser.Scene {
       const action = this.action;
       const warning = this.targetWarning(u, action, tile);
       if (warning) {
-        this.ask(warning, () => void this.useSkill(u, action, tile), 'Use anyway');
+        this.ask(warning, () => void this.useSkill(u, action, tile), 'Use Anyway');
         return;
       }
       await this.useSkill(u, action, tile);
@@ -991,7 +991,7 @@ export class BattleScene extends Phaser.Scene {
     const b = this.battle;
     const target = b.unitAt(tile.x, tile.y);
     const terrain = TERRAIN[b.map.tiles[tile.y][tile.x]];
-    let info = `${terrain.name}${terrain.moveCost === null ? ' (impassable)' : ` (move cost ${terrain.moveCost}${terrain.defense ? `, +${terrain.defense} Def` : ''})`}${terrain.blocksSight ? ', blocks sight' : ''}`;
+    let info = `${terrain.name}${terrain.moveCost === null ? ' (impassable)' : ` (move cost ${terrain.moveCost}${terrain.defense ? `, +${terrain.defense} Def` : ''})`}${terrain.blocksSight ? ', Blocks Sight' : ''}`;
     if (target && b.canSee('player', target)) info = `${target.character.name} — Lv ${target.character.level}\n${this.unitSummary(target)}`;
     const u = this.selected;
     if (this.mode === 'target' && this.action && u) {
@@ -1004,12 +1004,12 @@ export class BattleScene extends Phaser.Scene {
         : inReach ? `${b.targetError(u, this.action, tile)} Click to cancel.` : "Can't aim there — click to cancel.");
       info = b.canAim(u, this.action, tile) ? `${this.preview(u, this.action, tile)}\n${info}` : `${why}\n${info}`;
     }
-    for (const z of b.zonesAt(tile)) info = `${z.name} (${z.turnsLeft} turn${z.turnsLeft === 1 ? '' : 's'} left): hits anyone entering; ${z.def.endTurnHits}x if a turn ends here\n${info}`;
+    for (const z of b.zonesAt(tile)) info = `${z.name} (${z.turnsLeft} turn${z.turnsLeft === 1 ? '' : 's'} left): Hits Anyone Entering; ${z.def.endTurnHits}x If a Turn Ends Here\n${info}`;
     // Walking through zones: warn before the move.
     if (this.mode === 'select' && u && this.reach.has(key(tile.x, tile.y)) && (tile.x !== u.x || tile.y !== u.y)) {
       const path = b.pathTo(this.reach, tile);
       const hits = path.reduce((n, p) => n + b.zonesAt(p).length, 0);
-      if (hits) info = `⚠ Path crosses ${hits} zone tile${hits === 1 ? '' : 's'} (~${b.zoneDanger(u, path)} dmg incl. ending here)\n${info}`;
+      if (hits) info = `⚠ Path Crosses ${hits} Zone Tile${hits === 1 ? '' : 's'} (~${b.zoneDanger(u, path)} dmg incl. ending here)\n${info}`;
     }
     if (this.threat && this.mode === 'select') info = `${this.threat.label}\n${info}`;
     this.hoverText.setText(info);
@@ -1017,20 +1017,20 @@ export class BattleScene extends Phaser.Scene {
 
   private preview(u: Unit, s: SkillDef, tile: Point): string {
     const b = this.battle;
-    if (s.target === 'move') return `→ Dash here (${s.mana} MP, uses your last AP)`;
-    if (s.cone) return '→ Watch this cone until your next turn';
-    if (s.zone) return `→ Place a ${s.name} here for ${s.zone.turns} turns`;
+    if (s.target === 'move') return `→ Dash Here (${s.mana} MP, uses your last AP)`;
+    if (s.cone) return '→ Watch This Cone until Your Next Turn';
+    if (s.zone) return `→ Place a ${s.name} Here for ${s.zone.turns} Turns`;
     s = b.skillFor(u, s);
     const lines: string[] = [];
-    if (hasTag(s, 'disengage') && b.opponentOf(u)) lines.push(`→ Breaks away from ${b.opponentOf(u)!.character.name} (no free attack)`);
+    if (hasTag(s, 'disengage') && b.opponentOf(u)) lines.push(`→ Breaks Away from ${b.opponentOf(u)!.character.name} (no free attack)`);
     for (const a of s.selfStatus ?? []) lines.push(`→ You: ${STATUSES[a.status].name} (${STATUSES[a.status].description})`);
-    if (s.teleport && !s.charge) return [...lines, '→ Teleport here'].join('\n');
+    if (s.teleport && !s.charge) return [...lines, '→ Teleport Here'].join('\n');
     if (s.charge) {
       const land = b.chargeDestination(u, tile, u, s);
-      if (land && (land.x !== u.x || land.y !== u.y)) lines.push(s.teleport ? '→ Teleport in, then strike' : '→ Dash in, then strike');
+      if (land && (land.x !== u.x || land.y !== u.y)) lines.push(s.teleport ? '→ Teleport In, Then Strike' : '→ Dash In, Then Strike');
     }
     const targets = b.targetsOf(u, s, tile);
-    if (targets.length === 0 && lines.length === 0) return '→ Nobody affected (action will be spent)';
+    if (targets.length === 0 && lines.length === 0) return '→ Nobody Affected (action will be spent)';
     for (const t of targets) {
       const who = `${t.character.name}${t.team === u.team && s.hits ? ' (ALLY!)' : ''}`;
       if (s.hits?.length) {
@@ -1038,19 +1038,19 @@ export class BattleScene extends Phaser.Scene {
         const total = hits.reduce((a, c) => a + c, 0);
         const kills = total >= t.hp + b.shieldOf(t);
         lines.push(`→ ${who}: ${hits.join(' + ')} dmg${kills ? ' (defeats!)' : ''}`);
-        if (s.recoilIfSurvives && !kills) lines.push(`   If it survives, you take ${b.recoilDamage(u, s)} dmg`);
+        if (s.recoilIfSurvives && !kills) lines.push(`   If It Survives, You Take ${b.recoilDamage(u, s)} dmg`);
       }
-      if (hasTag(s, 'engage') && t.team !== u.team && !u.engagedWith && !t.engagedWith && !s.hits?.length) lines.push(`→ ${who}: engaged`);
+      if (hasTag(s, 'engage') && t.team !== u.team && !u.engagedWith && !t.engagedWith && !s.hits?.length) lines.push(`→ ${who}: Engaged`);
       if (s.heal) lines.push(`→ ${who}: +${Math.min(b.healAmount(u, s), t.stats.health - t.hp)} HP`);
-      if (s.shield) lines.push(`→ ${who}: +${b.shieldAmount(u, s, t)} shield`);
+      if (s.shield) lines.push(`→ ${who}: +${b.shieldAmount(u, s, t)} Shield`);
       for (const a of s.applyStatus ?? []) {
         const sc = STATUSES[a.status]?.casterScaled;
         if (sc) lines.push(`→ ${who}: +${b.scaledStatusAmount(u, a.status)} ${STAT_INFO[sc.stat].name} (${a.turns} turns)`);
       }
-      if (s.cleanse) lines.push(`→ ${who}: cleanse ${t.statuses.filter((x) => x.debuff).length} debuff(s)`);
+      if (s.cleanse) lines.push(`→ ${who}: Cleanse ${t.statuses.filter((x) => x.debuff).length} Debuff(s)`);
       const debuffs = (s.applyStatus ?? []).filter((a) => STATUSES[a.status]?.debuff).map((a) => STATUSES[a.status].name);
-      if (debuffs.length) lines.push(`   ${debuffs.join(', ')}: ${b.resistChance(t)}% chance ${t.character.name} resists`);
-      if (s.knockback) lines.push(`   knocked back ${s.knockback} tile${s.knockback > 1 ? 's' : ''}`);
+      if (debuffs.length) lines.push(`   ${debuffs.join(', ')}: ${b.resistChance(t)}% Chance ${t.character.name} Resists`);
+      if (s.knockback) lines.push(`   Knocked Back ${s.knockback} Tile${s.knockback > 1 ? 's' : ''}`);
     }
     return lines.join('\n');
   }
@@ -1247,7 +1247,7 @@ export class BattleScene extends Phaser.Scene {
       return;
     }
     if (e.type === 'toggle') {
-      const label = `${e.name} ${e.on ? 'on' : 'off'}`;
+      const label = `${e.name} ${e.on ? 'On' : 'Off'}`;
       summary.push(e.reason === 'mana' ? `${e.name} fades (out of mana)` : `${e.name} ${e.on ? 'on' : 'off'}`);
       this.floatText(this.battle.unit(e.target), label, '#c18cff', index * 120);
       return;
@@ -1335,7 +1335,7 @@ export class BattleScene extends Phaser.Scene {
       lines = resolveQuest(requireState(), outcome, makeRng(Date.now() & 0xffffffff), conditions, captives, { killed, total: enemies.length }, this.battle.round);
       markDirty();
     }
-    const title = this.demo ? (outcome === 'victory' ? 'Victory!' : 'Defeat') : (outcome === 'victory' ? 'Quest complete!' : 'Quest failed');
+    const title = this.demo ? (outcome === 'victory' ? 'Victory!' : 'Defeat') : (outcome === 'victory' ? 'Quest Complete!' : 'Quest Failed');
 
     const layer = this.add.container(0, 0).setDepth(1000);
     layer.add(this.add.rectangle(0, 0, WIDTH, HEIGHT, 0x000000, 0.65).setOrigin(0).setInteractive());
@@ -1351,7 +1351,7 @@ export class BattleScene extends Phaser.Scene {
       return { obj: this.add.container(0, 0, [t]), height: t.height };
     }), 'top');
     layer.add(this.demo
-      ? button(this, WIDTH / 2 - 120, 510, 240, 50, 'Return to camp', () => this.scene.start('DemoCamp'), { fontSize: 18 })
+      ? button(this, WIDTH / 2 - 120, 510, 240, 50, 'Return to Camp', () => this.scene.start('DemoCamp'), { fontSize: 18 })
       : button(this, WIDTH / 2 - 120, 510, 240, 50, `Return to ${GUILD.city}`, () => this.scene.start('City'), { fontSize: 18 }));
   }
 }

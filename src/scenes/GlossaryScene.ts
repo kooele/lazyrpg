@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { GLOSSARY_TOPICS, glossaryEntries, type GlossaryEntry, type GlossaryTopic } from '../game/glossary';
-import { COLORS, HEIGHT, WIDTH, ScrollList, button, panel, setupCamera, text, clearScene } from '../ui/widgets';
+import { COLORS, HEIGHT, WIDTH, ScrollList, button, overlayText, panel, setupCamera, text, clearScene } from '../ui/widgets';
 
 /**
  * The Guide: explanations of the game's less obvious rules, by topic. Opened from the main menu and the city;
@@ -11,6 +11,8 @@ export class GlossaryScene extends Phaser.Scene {
   private topic: GlossaryTopic = GLOSSARY_TOPICS[0];
   private selected = '';
   private entries: GlossaryEntry[] = [];
+  /** Removes the selected entry's (selectable) text. */
+  private removeBody: (() => void) | null = null;
 
   constructor() {
     super('Glossary');
@@ -30,6 +32,8 @@ export class GlossaryScene extends Phaser.Scene {
 
   private render(): void {
     clearScene(this);
+    this.removeBody?.();
+    this.removeBody = null;
     text(this, 24, 14, 'Guide', { fontSize: '30px', color: COLORS.gold });
     text(this, 128, 26, 'How the less obvious rules work. Numbers are the game\'s current settings.', { fontSize: '14px', color: COLORS.dim });
 
@@ -64,10 +68,10 @@ export class GlossaryScene extends Phaser.Scene {
     panel(this, RX, TOP, RW, H);
     if (entry) {
       text(this, RX + 20, TOP + 14, entry.term, { fontSize: '22px', color: COLORS.gold });
-      text(this, RX + 20, TOP + 54, entry.body, { fontSize: '15px', wordWrap: { width: RW - 40 }, lineSpacing: 4 });
+      // An HTML overlay rather than canvas text, so the explanation can be selected and copied.
+      this.removeBody = overlayText(this, RX + 20, TOP + 54, RW - 40, H - 54 - 14, entry.body);
     }
 
     button(this, 24, HEIGHT - 54, 180, 40, 'Back', () => this.scene.start(this.returnTo), { fontSize: 16 });
-    text(this, 220, HEIGHT - 42, 'Esc also goes back.', { fontSize: '13px', color: COLORS.dim });
   }
 }
