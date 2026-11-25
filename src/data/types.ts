@@ -11,7 +11,7 @@ export const STAT_INFO: Record<StatKey, { name: string; short: string; descripti
   pAtk: { name: 'Physical Attack', short: 'P.Atk', description: 'Power of physical skills. A skill deals a % of this as damage.' },
   mAtk: { name: 'Magic Attack', short: 'M.Atk', description: 'Power of magic skills and healing.' },
   defense: { name: 'Defense', short: 'Def', description: 'Reduces damage taken: every 100 Defense = +100% effective health.' },
-  resist: { name: 'Resist', short: 'Res', description: 'Chance to shrug off debuffs (Burn, Slow...): Resist / (100 + Resist), so 50 = 33%, 100 = 50%.' },
+  resist: { name: 'Resist', short: 'Res', description: 'Chance to shrug off debuffs (Burn, Chilled...): Resist / (100 + Resist), so 50 = 33%, 100 = 50%.' },
   movement: { name: 'Movement', short: 'Move', description: 'Movement points per turn (forest costs 2).' },
   vision: { name: 'Vision', short: 'Vis', description: 'How far the unit can see (when fog of war is enabled).' },
 };
@@ -51,7 +51,7 @@ export interface TagDef {
   description: string;
 }
 
-/** A status effect definition (Burn, Slow...). Shields are handled separately. */
+/** A status effect definition (Burn, Chilled...). Shields are handled separately. */
 export interface StatusDef {
   id: string;
   name: string;
@@ -77,11 +77,11 @@ export interface StatusDef {
   stealth?: boolean;
   /** Stacking statuses: the most stacks it can have. One more turns it into `overflow` instead. */
   maxStacks?: number;
-  /** What a stack past `maxStacks` becomes (Slow -> Frozen), and for how many turns. */
+  /** What a stack past `maxStacks` becomes (Chilled -> Frozen), and for how many turns. */
   overflow?: { status: string; turns: number };
   /** Can't move (walk, Dash, Movement skills) and loses its movement AP at the start of its turn. */
   frozen?: boolean;
-  /** Loses one stack each time it ticks and ends at 0 stacks (Burn, Slow), instead of lasting a number of turns. */
+  /** Loses one stack each time it ticks and ends at 0 stacks (Burn, Chilled), instead of lasting a number of turns. Stacks are turns, not strength. */
   decay?: boolean;
   /** Its damage (damagePctMaxHpPerStack, instantDamagePctMaxHp) is reduced by Defense and absorbed by shields, like a hit. */
   mitigated?: boolean;
@@ -206,6 +206,11 @@ export interface SkillDef {
   basicAttack?: number;
   /** For `basicAttack` skills: damage multiplier for each swing in order (Double Strike: [1, 0.5]). Missing = 1. */
   basicAttackDamage?: number[];
+  /**
+   * Damage multiplier from the target's missing Health (Execute): 1x at full Health, growing smoothly to `max`
+   * at `atHealth` of max Health and below. Uses Health before the hit; on-hit effects aren't multiplied.
+   */
+  missingHpBonus?: { max: number; atHealth: number };
   /** Engage the target (as the Engage tag does) only when it is within this many tiles (Spear Thrust: adjacent = 1.5). */
   engageWithin?: number;
   /** Statuses put on the user before the skill resolves (never resisted). */
@@ -357,7 +362,6 @@ export type Rank = 'S' | 'A' | 'B' | 'C' | 'D';
 export const RANKS: readonly Rank[] = ['S', 'A', 'B', 'C', 'D'];
 /** An adventurer's own rank, from their level (the same letters as party ranks). */
 export type AdventurerRank = 'S' | Rank;
-export const ADVENTURER_RANKS: readonly AdventurerRank[] = ['S', 'A', 'B', 'C', 'D'];
 
 /**
  * main      – the player's own character: permanent, can't be dismissed.
@@ -404,8 +408,6 @@ export type Contract =
     /** Day they were last punished (once a day). */
     punishedDay?: number;
   };
-
-export type MemberType = Contract['type'];
 
 /** Terms of a companion contract while negotiating. */
 export interface CompanionTerms {

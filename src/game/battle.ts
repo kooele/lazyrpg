@@ -14,7 +14,7 @@ import {
 export type Team = 'player' | 'enemy';
 
 export interface Status {
-  /** 'shield', or a status id from skills.json ("burn", "slow"...). */
+  /** 'shield', or a status id from skills.json ("burn", "chilled"...). */
   id: string;
   name: string;
   /** Debuffs can be removed by Cleanse. */
@@ -193,6 +193,14 @@ function scaleHits(hits: DamagePart[], m: number): DamagePart[] {
   return hits.map((h) => Object.fromEntries(Object.entries(h).filter(([, v]) => typeof v === 'number').map(([k, v]) => [k, v * m])) as DamagePart);
 }
 
+/**
+ * How many times a status's effect applies. Stacking statuses (Poison) hit harder per stack; decaying ones
+ * (Burn, Chilled) don't: their stacks are turns left and progress toward the 3rd stack.
+ */
+export function statusStrength(s: { id: string; stacks: number }): number {
+  return STATUSES[s.id]?.decay ? 1 : Math.max(1, s.stacks);
+}
+
 export class Battle {
   readonly units: Unit[];
   /** Ground effects in play (Firestorm, Blizzard). */
@@ -226,15 +234,17 @@ export class Battle {
     let value = u.stats[stat];
     for (const s of u.statuses) {
       const mod = STATUSES[s.id]?.statMods?.[stat];
-      if (mod) value += mod * Math.max(1, s.stacks);
+      if (mod) value += mod * statusStrength(s);
       if (STATUSES[s.id]?.casterScaled?.stat === stat) value += s.amount;
     }
     if (stat === 'defense') {
       value += TERRAIN[this.map.tiles[u.y][u.x]].defense;
     }
-    let pct = 0;
-    for (const s of u.statuses) pct += (STATUSES[s.id]?.statPct?.[stat] ?? 0) * Math.max(1, s.stacks);
-    if (pct) value *= Math.max(0, 1 + pct);
+    // Percentage changes multiply: Slow and Chilled (-25% Movement each) together leave 75% x 75% = 56%.
+    for (const s of u.statuses) {
+      const pct = STATUSES[s.id]?.statPct?.[stat];
+      if (pct) value *= Math.max(0, 1 + pct * statusStrength(s));
+    }
     if (stat === 'movement') value = Math.max(0, value);
     return Math.round(value);
   }
@@ -703,9 +713,9 @@ export class Battle {
     const skill = SKILLS[skillId];
     this.spendAp(u, skill);
     if (!noMana) u.mp -= skill.mana;
-    // Cooldown N = can't be used during the next N turns. The counter ticks at the
-    // start of each of the unit's turns, so store N + 1 (it hits 0 on the turn it's usable).
-    if (skill.cooldown > 0) u.cooldowns[skillId] = skill.cooldown + 1;
+    // Cooldown N counts from the current turn: the counter ticks at the start of each of
+    // the unit's turns, so 1 = not again this turn, usable next turn.
+    if (skill.cooldown > 0) u.cooldowns[skillId] = skill.cooldown;
     u.locked = true;
     this.lockTeammates(u);
   }
@@ -809,6 +819,25 @@ export class Battle {
   /** Can `caster`, standing on `from`, aim `skill` at `tile`? */
   canTarget(caster: Unit, skill: SkillDef, tile: Point, from: Point = caster): boolean {
     return this.inReach(caster, skill, tile, from) && !this.engagementBlock(caster, skill, tile, from);
+  }
+
+  /**
+   * Why a single-target skill can't be aimed at `tile` even though it's in reach: nobody there (or only a
+   * Stealthed enemy), or a support skill aimed at the other side. Null when the target is fine.
+   * Kept out of canTarget so the range box still shows every tile in reach.
+   */
+  targetError(caster: Unit, skill: SkillDef, tile: Point, from: Point = caster): string | null {
+    skill = this.skillFor(caster, skill);
+    if (skill.target !== 'unit') return null;
+    const t = this.occupantFrom(caster, from, tile);
+    if (!t || this.hiddenFrom(caster, t)) return `${skill.name} needs a unit to target.`;
+    if (skill.affects === 'ally' && t.team !== caster.team) return `${skill.name} only works on your own side.`;
+    return null;
+  }
+
+  /** In reach and a valid target: what the player can click and the AI can pick. */
+  canAim(caster: Unit, skill: SkillDef, tile: Point, from: Point = caster): boolean {
+    return this.canTarget(caster, skill, tile, from) && !this.targetError(caster, skill, tile, from);
   }
 
   /** Range / line / landing checks only (ignores engagement). */
@@ -1107,10 +1136,24 @@ export class Battle {
     return events;
   }
 
+  /**
+   * Execute's multiplier on `target` (1 without a missingHpBonus): 1x at full Health, growing smoothly to the
+   * skill's max at its `atHealth` share of max Health and below.
+   */
+  missingHpMultiplier(skill: SkillDef, target: Unit): number {
+    const b = skill.missingHpBonus;
+    if (!b) return 1;
+    const missing = 1 - target.hp / target.stats.health;
+    return 1 + (b.max - 1) * Math.min(1, Math.max(0, missing / (1 - b.atHealth)));
+  }
+
   /** Predicted damage of each hit of `skill` on `target` (accounts for missing health growing). */
   previewHits(attacker: Unit, skill: SkillDef, target: Unit): number[] {
     const swings = this.isWeaponAttack(attacker, skill) ? (this.skillFor(attacker, skill).basicAttack ?? 1) : 0;
     skill = this.skillFor(attacker, skill);
+    // Execute: the multiplier comes from Health before the hit, and leaves on-hit effects alone.
+    const mult = this.missingHpMultiplier(skill, target);
+    if (mult !== 1) skill = { ...skill, hits: scaleHits(skill.hits ?? [], mult) };
     // Weapon on-hit effects (Arcane Weapon) the attacker can pay for.
     if (swings) skill = { ...skill, hits: [...(skill.hits ?? []), ...this.procParts(attacker, swings, skill.mana)] };
     let hp = target.hp;
@@ -1266,6 +1309,8 @@ export class Battle {
     const block = this.engagementBlock(u, skill, tile);
     if (block) throw new Error(block);
     if (!this.canTarget(u, skill, tile)) throw new Error('Target out of range');
+    const bad = this.targetError(u, skill, tile);
+    if (bad) throw new Error(bad);
 
     const events: BattleEvent[] = [];
     // The skill's own mana comes first, so per-hit costs during it (Arcane Weapon) only spend what's left.
@@ -1333,7 +1378,9 @@ export class Battle {
     // Weapon attacks carry on-hit effects (Arcane Weapon): one per swing (Double Strike swings twice).
     const swings = this.isWeaponAttack(u, skill) ? (used.basicAttack ?? 1) : 0;
     for (const t of targets) {
-      for (const part of used.hits ?? []) {
+      // Execute: scaled by the target's Health before the hit.
+      const mult = this.missingHpMultiplier(used, t);
+      for (const part of scaleHits(used.hits ?? [], mult)) {
         if (!t.alive) break;
         events.push(...this.dealHit(u, t, part, 'skill'));
       }
@@ -1416,13 +1463,13 @@ export class Battle {
       return [{ type: 'status', source: source.uid, target: t.uid, name: def.name }, this.statusDamage(t, def.instantDamagePctMaxHp, def.mitigated, source.uid)];
     }
     const existing = t.statuses.find((s) => s.id === id);
-    // Past its stack cap the status turns into its overflow (Slow x3 -> Frozen, Burn x3 -> Explosion).
+    // Past its stack cap the status turns into its overflow (Chilled x3 -> Frozen, Burn x3 -> Explosion).
     const have = existing?.stacks ?? 0;
     if (def.stacking && def.overflow && def.maxStacks !== undefined && have + stacks > def.maxStacks) {
       t.statuses = t.statuses.filter((s) => s.id !== id);
       return this.applyStatus(source, t, def.overflow.status, def.overflow.turns, 1, true);
     }
-    // Decaying statuses (Burn, Slow) last until their stacks run out, not a number of turns.
+    // Decaying statuses (Burn, Chilled) last until their stacks run out, not a number of turns.
     const lasts = def.decay ? Infinity : turns;
     if (existing) {
       if (def.stacking) existing.stacks += stacks;
@@ -1459,14 +1506,14 @@ export class Battle {
     for (const s of u.statuses) {
       if (s.tick !== when) continue;
       const def = STATUSES[s.id];
-      if (def?.damagePctMaxHpPerStack && u.alive) events.push(this.statusDamage(u, def.damagePctMaxHpPerStack * s.stacks, def.mitigated));
+      if (def?.damagePctMaxHpPerStack && u.alive) events.push(this.statusDamage(u, def.damagePctMaxHpPerStack * statusStrength(s), def.mitigated));
       this.tickStatus(s);
     }
     u.statuses = u.statuses.filter((s) => this.stillActive(s));
     return events;
   }
 
-  /** A status ticks (start or end of the unit's turn): one turn less, or one stack less for decaying ones (Burn, Slow). */
+  /** A status ticks (start or end of the unit's turn): one turn less, or one stack less for decaying ones (Burn, Chilled). */
   private tickStatus(s: Status): void {
     if (STATUSES[s.id]?.decay) s.stacks -= 1;
     else s.turns -= 1;
@@ -1576,7 +1623,7 @@ export class Battle {
 
   /** End the current team's turn; returns events from the start of the next turn (e.g. Burn). */
   endPhase(): BattleEvent[] {
-    // Effects that last "through" the unit's turn (Slow, Frozen) count down first, so the end-of-turn zone hits
+    // Effects that last "through" the unit's turn (Slow, Chilled, Frozen) count down first, so the end-of-turn zone hits
     // below (and anything they freeze) carry over into the unit's next turn instead of wearing off at once.
     const events: BattleEvent[] = [];
     for (const u of this.living(this.phase)) events.push(...this.tickStatuses(u, 'end'));

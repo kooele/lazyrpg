@@ -38,6 +38,7 @@ export function glossaryEntries(): GlossaryEntry[] {
   const xp = G.xp.pool;
   const growth = STAT_CONFIG.talent.growthRate;
   const burn = STATUSES.burn;
+  const chilled = STATUSES.chilled;
   const slow = STATUSES.slow;
   const out: GlossaryEntry[] = [];
   const add = (topic: GlossaryTopic, term: string, body: string) => out.push({ topic, term, body });
@@ -195,14 +196,17 @@ export function glossaryEntries(): GlossaryEntry[] {
     + `Disengage breaks free, but your opponent gets a free basic attack. Disengage skills (like Shadow Step) slip out with no free attack. Knockbacks and falling also end it.`);
   add('Battle', 'Overwatch',
     `Overwatch ends the turn and watches a 60° arc as far as your weapon reaches. The first enemy to move into it takes your basic attack and keeps moving.`);
-  add('Battle', 'Burn and Slow stacks',
-    `${burn?.name ?? 'Burn'}: ${burn?.description ?? ''}\n\n${slow?.name ?? 'Slow'}: ${slow?.description ?? ''}\n\nStacks don't last a set number of turns: the unit loses one each turn.`);
+  add('Battle', 'Burn and Chilled stacks',
+    `${burn?.name ?? 'Burn'}: ${burn?.description ?? ''}\n\n${chilled?.name ?? 'Chilled'} (ice skills): ${chilled?.description ?? ''}\n\n`
+    + `Stacks don't last a set number of turns: the unit loses one each turn. A unit with 2 stacks is affected just as much as with 1, for one more turn; a status shows its stacks as Burn (2).\n\n`
+    + `${slow?.name ?? 'Slow'} (webs, goo and other non-ice effects): ${slow?.description ?? ''} Slow and Chilled are separate: a unit with both moves at 75% × 75% = 56%.`);
   add('Battle', 'Enemy temperaments',
     `• Beasts act alone, go for the nearest target and flee when badly hurt.\n• Tribal enemies fight as a group, and the whole group runs once half of it is gone.\n• Humans use cover and pick off the weak; when cornered and badly hurt they may surrender, and you take them prisoner if you win.\n• Evil enemies never flee and go for kills.\n\n`
     + `Click an enemy to see where it can move and hit next turn.`);
   add('Battle', 'Ranges',
-    `Ranges use straight-line distance. Ranges of 2 or more round to the nearest tile, so shapes are roundish. Range 1 is the 4 neighbours; 1.5 adds the diagonals.\n\n`
-    + `A cooldown of N means the skill can't be used during your next N turns.`);
+    `Ranges use straight-line distance. Ranges of 2 or more round to the nearest tile, so shapes are roundish. Range 1 is the 4 neighbours; 1.5 adds the diagonals.`);
+  add('Battle', 'Cooldowns',
+    `Cooldowns count from the turn a skill is used. A cooldown of 1 means the skill can't be used again that turn, but it's ready on your next turn; a cooldown of 2 means it skips your next turn and is ready the turn after.`);
 
   return out;
 }

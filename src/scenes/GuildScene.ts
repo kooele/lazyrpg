@@ -168,7 +168,6 @@ export class GuildScene extends Phaser.Scene {
   /**
    * A quest's foes at a glance: an icon per enemy expected, cycling through its enemy types (left), and skulls for how
    * hard it is on one scale for the whole game (right): `danger` 0.5-5 as white skulls, 5.5-10 as red ones over them.
-   * Hovering says the same in words.
    */
   private questIcons(x: number, y: number, enemies: number, danger: number, cardW: number, allowed: boolean, types: string[]): Phaser.GameObjects.Container {
     const box = this.add.container(0, 0);
@@ -202,16 +201,6 @@ export class GuildScene extends Phaser.Scene {
     }
     // Badges reach from x - 3 (goblin ears) to the last skull at cardW - 16, and y - 9 to y + 8.
     box.addAt(bakeGraphics(this, g, { x: x - 4, y: y - 11, w: cardW - x + 4, h: 22 }), 0);
-    const crowd = enemies <= 2 ? 'A couple of foes' : enemies <= 4 ? 'A handful of foes' : enemies <= 7 ? 'A sizeable band' : 'A horde';
-    const peril = danger <= 2 ? 'Work for beginners' : danger <= 4 ? 'Work for seasoned hands' : danger <= 6 ? 'A job for veterans'
-      : danger <= 8 ? 'A job for elites' : 'Only for the very best';
-    const hit = this.add.rectangle(x - 4, y - 10, cardW - x - 4, 20, 0xffffff, 0).setOrigin(0).setInteractive();
-    const tip = text(this, x, y + 10, `${crowd} (about ${enemies}). ${peril}.`, {
-      fontSize: '11px', color: COLORS.text, backgroundColor: '#000000d0', padding: { x: 6, y: 3 },
-    }).setVisible(false).setDepth(5);
-    hit.on('pointerover', () => tip.setVisible(true));
-    hit.on('pointerout', () => tip.setVisible(false));
-    box.add([hit, tip]);
     return box;
   }
 

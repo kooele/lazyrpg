@@ -256,10 +256,11 @@ export class PartyScene extends Phaser.Scene {
     g.fillStyle(0x7d6bd8).fillRect(X + 150, 150, 200 * Math.min(1, c.xp / xpToNext(c.level)), 8);
     text(this, X + 356, 146, `${c.xp}/${xpToNext(c.level)} XP`, { fontSize: '11px', color: COLORS.dim });
     // Strategic Layer condition: Health (not battle HP) and Morale.
-    const bar = (y: number, label: string, v: number, color: number, warn: boolean, note: string, tip: () => string) => {
+    const bar = (y: number, label: string, v: number, color: number, warn: boolean, note: string, tip: () => string, change = '') => {
       text(this, X + 420, y, `${label} ${Math.round(v)}/100${note ? ` · ${note}` : ''} ⓘ`, { fontSize: '11px', color: warn ? COLORS.bad : COLORS.text });
       g.fillStyle(0x0b0d14).fillRect(X + 420, y + 17, 150, 6);
       g.fillStyle(color).fillRect(X + 420, y + 17, 1.5 * v, 6);
+      if (change) text(this, X + 568, y + 20, change, { fontSize: '10px', color: change.startsWith('+') ? COLORS.good : COLORS.bad, stroke: '#000000', strokeThickness: 3 }).setOrigin(1, 0.5);
       this.hoverTip(X + 416, y - 2, 158, 28, tip);
     };
     // Each bar names its state; the battle penalty they add up to is shown once, below them.
@@ -270,7 +271,7 @@ export class PartyScene extends Phaser.Scene {
     if (isSlave(c)) {
       const ob = c.contract.obedience;
       const trend = obedienceTrend(c.contract.relationship);
-      bar(144, 'Obedience', ob, 0x9fb7d8, ob < 50 || trend.startsWith('falling'), trend, () => this.obedienceTip(c));
+      bar(144, 'Obedience', ob, 0x9fb7d8, ob < 50 || trend.startsWith('-'), '', () => this.obedienceTip(c), trend);
       penY = 172;
     }
     const pen = combatPenalty(c);
@@ -643,8 +644,8 @@ function lodgingLabel(state: GameState, where: CityLodging): string {
   return `${GUILD.inns[where].name} · ${lodgingPrice(where)}g`;
 }
 
-/** Which way a slave's Obedience is heading, from their relationship. */
+/** A slave's daily Obedience change from their relationship, as "+x" / "-x" ('' when steady). */
 function obedienceTrend(rel: number): string {
   const S = GUILD.slave;
-  return rel >= S.obedienceRiseFrom ? `rising ${S.obedienceChangePerDay}/day` : rel < S.obedienceFallBelow ? `falling ${S.obedienceChangePerDay}/day` : 'steady';
+  return rel >= S.obedienceRiseFrom ? `+${S.obedienceChangePerDay}` : rel < S.obedienceFallBelow ? `-${S.obedienceChangePerDay}` : '';
 }
