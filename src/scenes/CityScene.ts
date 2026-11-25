@@ -247,7 +247,7 @@ export class CityScene extends Phaser.Scene {
     const lines = [`Tonight: ${f.upkeep} gold (lodging ${lodgingCost(state, 'city')} + food ${foodCost(state)}).`];
     if (f.tab) {
       const parts = [`food and lodging ${state.tab?.upkeep ?? 0}`, tabWages ? `wages ${tabWages}` : '', tabTaxes ? `slave tax ${tabTaxes}` : ''].filter(Boolean);
-      lines.push(`The quest's tab: ${f.tab} gold (${parts.join(', ')}).`);
+      lines.push(`Accumulated tab: ${f.tab} gold (${parts.join(', ')}).`);
     }
     const payWages = f.wages - tabWages;
     const payTaxes = f.taxes - tabTaxes;
