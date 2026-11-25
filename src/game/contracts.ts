@@ -170,13 +170,7 @@ export function releaseCost(c: Character & { contract: CompanionContract }, day:
 
 // ---- slaves ---------------------------------------------------------------------------------------
 
-/** A slave's price: priceBase + pricePerLevel x level x talent (talentPriceFactor), with +-15% luck. */
-export function slavePrice(level: number, rng: () => number, talent = 1): number {
-  const s = GUILD.slave;
-  return round5((s.priceBase + s.pricePerLevel * level * talent) * (0.85 + rng() * 0.3));
-}
-
-/** A slave's normal market value: what the market asks on average (price index 1, no haggling luck). */
+/** A slave's normal market value: what the market asks for them at price index 1. */
 export function slaveValue(c: Pick<Character, 'level' | 'talents'>): number {
   const s = GUILD.slave;
   return s.priceBase + s.pricePerLevel * c.level * talentPriceFactor(c);
