@@ -197,8 +197,8 @@ export function glossaryEntries(): GlossaryEntry[] {
   add('Battle', 'Mana',
     `Mana is spent by skills and doesn't come back during a battle. Units start each battle with full mana.`);
   add('Battle', 'Defense and Resist',
-    `Every attack hits. Defense reduces damage taken to 100 ÷ (100 + Defense): 100 Defense halves it.\n\n`
-    + `Resist is a chance to shrug off a debuff: Resist ÷ (100 + Resist), so 100 Resist is 50%. A resisted debuff doesn't apply, but the hit's damage still lands.`);
+    `Every attack hits. Defense reduces damage taken: each point of Defense is +1% effective health.\n\n`
+    + `Resist shrugs off debuffs: each point of Resist is +1% effective resistance to debuffs. A resisted debuff doesn't apply, but the hit's damage still lands.`);
   add('Battle', 'Penetration',
     `P.Pen and M.Pen (from gear) make the target's Defense count for less against your Physical or Magical damage: the percent first, then the flat amount. 50% and 10 P.Pen make 100 Defense count as 40 against Physical damage.\n\n`
     + `Penetration never takes Defense below 0, and does nothing to Defense that is already 0 or less.`);

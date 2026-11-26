@@ -154,8 +154,8 @@ Tooltips show a formula line generated from the numbers (e.g. "80% P.Atk, then 4
 | Mana | 200 (+20) | Spent by skills; doesn't come back during a battle |
 | P.Atk | 100 (+10) | Physical power; skills deal a % of it |
 | M.Atk | 100 (+10) | Magic power and healing |
-| Defense | 20 (+10) | Damage taken × 100 / (100 + Defense) |
-| Resist | 20 (+10) | Chance to shrug off a debuff: Resist ÷ (100 + Resist) |
+| Defense | 20 (+10) | Reduces damage taken: each point is +1% effective health (damage × 100 / (100 + Defense)) |
+| Resist | 20 (+10) | Shrugs off debuffs: each point is +1% effective resistance to debuffs (chance Resist ÷ (100 + Resist)) |
 | Movement | 16 | Movement points per turn: grass costs 4, forest 6, river 8 (so 16 = 4 grass tiles) |
 | P.Pen / M.Pen | 0 | Penetration, from gear: Defense your Physical / Magical damage ignores. Shown as "P.Pen: 50% \| 10" (percent, then flat) |
 
