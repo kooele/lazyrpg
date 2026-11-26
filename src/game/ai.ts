@@ -3,12 +3,14 @@
 // advance toward the enemy and set up overwatch if the weapon has it.
 //
 // Enemy types fight one of four ways (enemies.json "ai"):
-//  beast  – acts alone: only goes for the nearest target, ignores danger, flees once hurt.
+//  beast  – acts alone: only goes for the nearest target, ignores danger (overwatch too), flees once hurt.
 //  tribal – fights as a group: keeps a loose formation, piles onto targets its allies are on,
 //           and the whole group runs once it's broken.
 //  human  – fights tactically (cover, danger, regrouping), flees from danger, and surrenders
 //           when it can't escape death.
-//  evil   – no self-preservation: never flees, ignores danger and its own allies, finishes off the weak.
+//  evil   – no self-preservation: never flees, ignores danger (overwatch too) and its own allies, finishes off the weak.
+// Humans and tribal fighters see overwatch coming: walking or charging through a watched arc counts as the
+// damage it would draw (see watchesForOverwatch).
 import { SKILLS, STATUSES, hasTag, isFree } from '../data/content';
 import { ENEMIES } from '../data/enemies';
 import type { EnemyAi, SkillDef } from '../data/types';
@@ -33,6 +35,23 @@ export function aiTypeOf(u: Unit): EnemyAi {
 }
 
 const ratio = (u: Unit) => u.hp / u.stats.health;
+/**
+ * Does this unit weigh enemy overwatch when it picks a route or a charge? Humans and tribal fighters do;
+ * beasts and evil charge straight in.
+ */
+export function watchesForOverwatch(u: Unit): boolean {
+  const kind = aiTypeOf(u);
+  return kind === 'human' || kind === 'tribal';
+}
+
+/** Hidden shots `u` would draw charging with `skill` from `from` at `aim` (0 if it doesn't care, or it's a teleport). */
+function chargeRisk(battle: Battle, u: Unit, skill: SkillDef, from: Point, aim: Point): number {
+  if (!skill.charge || skill.teleport || !watchesForOverwatch(u)) return 0;
+  if (!battle.living().some((w) => w.team !== u.team && w.overwatch)) return 0;
+  const path = battle.chargePath(u, aim, from, skill);
+  return path ? battle.overwatchDanger(u, path) : 0;
+}
+
 /** Beasts run once they're this hurt. */
 const BEAST_FLEE_AT = 0.4;
 /** Tribal fighters stay within this many tiles of the nearest other member of the group. */
@@ -202,7 +221,7 @@ function bestFrom(
     if (!includeDefensive && skill.shield) continue;
     for (const aim of aimPoints(battle, skill, from)) {
       if (!battle.canAim(u, skill, aim, from)) continue;
-      const score = scoreSkill(battle, u, skill, from, aim);
+      const score = scoreSkill(battle, u, skill, from, aim) - chargeRisk(battle, u, skill, from, aim);
       if (score > 0 && (!best || score > best.score)) best = { action: { id, target: aim }, score };
     }
   }
@@ -352,6 +371,17 @@ export function shouldEscape(battle: Battle, u: Unit): boolean {
   return u.alive && wantsToFlee(battle, u) && battle.onEdge(u);
 }
 
+/**
+ * Tiles `u` can end its move on (just its own tile if it can't move). For units that watch for overwatch, also
+ * works out (once) where it can get to around enemy arcs, for zoneHazard.
+ */
+function reachFor(battle: Battle, u: Unit): Map<string, ReachInfo> {
+  if (!battle.canMove(u)) return new Map([[key(u.x, u.y), { cost: 0, prev: null }]]);
+  const reach = battle.reachable(u);
+  if (watchesForOverwatch(u)) safeReaches.set(reach, battle.safeReach(u) ?? undefined);
+  return reach;
+}
+
 /** Tiles from `p` to the nearest map edge. */
 function edgeDistance(battle: Battle, p: Point): number {
   return Math.min(p.x, p.y, battle.map.width - 1 - p.x, battle.map.height - 1 - p.y);
@@ -359,7 +389,7 @@ function edgeDistance(battle: Battle, p: Point): number {
 
 /** Tiles a unit can end its move on this turn (just its own tile if it can't move). */
 function reachableTiles(battle: Battle, u: Unit): { reach: Map<string, ReachInfo>; tiles: Point[] } {
-  const reach = battle.canMove(u) ? battle.reachable(u) : new Map([[key(u.x, u.y), { cost: 0, prev: null }]]);
+  const reach = reachFor(battle, u);
   const tiles = [...reach.keys()].map((k) => {
     const [x, y] = k.split(',').map(Number);
     return { x, y };
@@ -462,7 +492,7 @@ function leavesOpponent(battle: Battle, u: Unit, opp: Unit, hit: number): boolea
  * others advance on the enemy.
  */
 export function planTurn(battle: Battle, u: Unit): AiPlan {
-  const reach = battle.canMove(u) ? battle.reachable(u) : new Map([[key(u.x, u.y), { cost: 0, prev: null }]]);
+  const reach = reachFor(battle, u);
   const tiles = [...reach.keys()].map((k) => {
     const [x, y] = k.split(',').map(Number);
     return { x, y };
@@ -564,7 +594,7 @@ export function preferredMode(battle: Battle, u: Unit): number | null {
   if (!modes || battle.opponentOf(u) || !battle.skillIds(u).some((id) => SKILLS[id].switchMode)) return null;
   const ranged = modes.map((m, i) => ({ m, i })).filter(({ m }) => !hasTag(SKILLS[m], 'melee')).map(({ i }) => i);
   if (ranged.length === 0) return null;
-  const reach = battle.canMove(u) ? battle.reachable(u) : new Map([[key(u.x, u.y), { cost: 0, prev: null }]]);
+  const reach = reachFor(battle, u);
   const tiles = [...reach.keys()].map((k) => {
     const [x, y] = k.split(',').map(Number);
     return { x, y };
@@ -604,11 +634,20 @@ function formation(battle: Battle, u: Unit, tile: Point): number {
   return Math.max(0, nearest - TRIBE_SPREAD) * 20 + Math.max(0, crowd - 1) * 10;
 }
 
-/** Damage `u` would take from zones walking to `tile` (each zone tile entered) and ending its turn there. */
+/**
+ * Certain damage on the way to `tile`: zones (each zone tile entered, and ending the turn there) and, for units that
+ * watch for it (see watchesForOverwatch), enemy overwatch the walk would set off.
+ */
 function zoneHazard(battle: Battle, u: Unit, reach: Map<string, ReachInfo>, tile: Point): number {
-  if (battle.zones.length === 0) return 0;
-  return battle.zoneDanger(u, tile.x === u.x && tile.y === u.y ? [] : battle.pathTo(reach, tile));
+  const watch = watchesForOverwatch(u) && battle.living().some((w) => w.team !== u.team && w.overwatch);
+  if (battle.zones.length === 0 && !watch) return 0;
+  // The route the move will really take (around overwatch when the unit watches for it and can).
+  const path = battle.routeTo(u, tile, watch, reach, watch ? safeReaches.get(reach) : undefined);
+  return battle.zoneDanger(u, path) + (watch ? battle.overwatchDanger(u, path) : 0);
 }
+
+/** reachable(u) map → the same unit's safe reach around overwatch, worked out once per planning pass. */
+const safeReaches = new WeakMap<Map<string, ReachInfo>, Map<string, ReachInfo> | undefined>();
 
 /** Turns in a row a unit has held back instead of advancing (so it never waits forever). */
 const holdTurns = new WeakMap<Unit, number>();
@@ -628,7 +667,7 @@ export function runAiTurn(battle: Battle, u: Unit): void {
   const mode = preferredMode(battle, u);
   if (mode !== null) battle.setWeaponMode(u, mode);
   const plan = planTurn(battle, u);
-  if (battle.canMove(u) && (plan.moveTo.x !== u.x || plan.moveTo.y !== u.y)) battle.move(u, plan.moveTo);
+  if (battle.canMove(u) && (plan.moveTo.x !== u.x || plan.moveTo.y !== u.y)) battle.move(u, plan.moveTo, watchesForOverwatch(u));
   if (shouldEscape(battle, u)) {
     battle.escape(u);
     return;

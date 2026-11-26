@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { statText } from '../game/battle';
 import { MAX_PARTY_SIZE, SKILLS, WEAPONS, xpToNext } from '../data/content';
 import { ACTIVITIES, FOOD_TIERS, GUILD, INN_TIERS, LODGING_QUALITY, RINGS, foodQuality, isResidence, type Activity, type CityLodging, type FoodTier, trainingXp } from '../data/guild';
 import { TRAITS } from '../data/traits';
@@ -286,7 +287,7 @@ export class PartyScene extends Phaser.Scene {
     }
 
     const st = deriveStats(c);
-    text(this, X + 150, 166, `HP ${st.health}   MP ${st.mana}   P.Atk ${st.pAtk}   M.Atk ${st.mAtk}\nDef ${st.defense}   Resist ${st.resist}   Move ${st.movement}`, { fontSize: '13px', lineSpacing: 4 });
+    text(this, X + 150, 166, `HP ${st.health}   MP ${st.mana}   P.Atk ${st.pAtk}   M.Atk ${st.mAtk}\nDef ${statText('defense', st.defense)}   Res ${statText('resist', st.resist)}   Move ${st.movement}`, { fontSize: '13px', lineSpacing: 4 });
     const w = WEAPONS[c.weaponId];
     talentTag(this, X + 150, 207, c, { fontSize: 11 });
     text(this, X + 150, 226, `${w.name}: ${w.skills.map((s) => SKILLS[s].name).join(', ')}`, { fontSize: '12px', color: COLORS.dim, wordWrap: { width: W - 170 } });

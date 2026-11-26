@@ -184,6 +184,22 @@ export function resistChance(resist: number, scale = STAT_CONFIG.defenseScale): 
 }
 
 /**
+ * What a stat amount does, as a whole percent, for the stats that work on a curve: Defense's damage reduction
+ * (negative Defense: extra damage, shown as a negative %) and Resist's chance to shrug off a debuff. Null for the rest.
+ */
+export function statEffectPct(stat: StatKey, value: number): number | null {
+  if (stat === 'defense') return Math.round((1 - defenseMultiplier(value)) * 100);
+  if (stat === 'resist') return Math.round(resistChance(value) * 100);
+  return null;
+}
+
+/** A stat amount for display: "50 (33%)" for Defense and Resist (amount and effective percent), else just the amount. */
+export function statText(stat: StatKey, value: number): string {
+  const pct = statEffectPct(stat, value);
+  return pct === null ? String(value) : `${value} (${pct}%)`;
+}
+
+/**
  * Battle rules with XCOM-style alternating turns: every player unit may move
  * once and act once, in any order, then every enemy unit does the same.
  */
@@ -584,8 +600,11 @@ export class Battle {
 
   // ---- movement -----------------------------------------------------------------
 
-  /** Tiles the unit can end its move on (including where it stands). Orthogonal steps only. */
-  reachable(u: Unit): Map<string, ReachInfo> {
+  /**
+   * Tiles the unit can end its move on (including where it stands). Orthogonal steps only. `avoid`: tiles it won't
+   * step onto (it may still pass through an ally standing on one), e.g. enemy overwatch arcs (see watchedTiles).
+   */
+  reachable(u: Unit, avoid?: Set<string>): Map<string, ReachInfo> {
     const budget = this.stat(u, 'movement');
     const result = new Map<string, ReachInfo>([[key(u.x, u.y), { cost: 0, prev: null, hazards: 0 }]]);
     const frontier: { x: number; y: number; cost: number; hazards: number }[] = [{ x: u.x, y: u.y, cost: 0, hazards: 0 }];
@@ -598,6 +617,7 @@ export class Battle {
         if (!passable(this.map, nx, ny)) continue;
         const occupant = this.unitAt(nx, ny);
         if (occupant && occupant.team !== u.team) continue; // can't pass through enemies
+        if (!occupant && avoid?.has(key(nx, ny))) continue; // overwatch doesn't fire while passing through an ally
         const cost = cur.cost + (TERRAIN[this.map.tiles[ny][nx]].moveCost ?? 99);
         if (cost > budget) continue;
         const k = key(nx, ny);
@@ -686,8 +706,39 @@ export class Battle {
     return path;
   }
 
-  /** Walk to `dest` with the movement AP. Enemy overwatch can shoot (and an interrupting watch can stop) the unit on the way. */
-  move(u: Unit, dest: Point): MoveResult {
+  /** Tiles where enemy overwatch would fire at `u` if it stepped there (none while it's Stealthed). */
+  watchedTiles(u: Unit): Set<string> {
+    const out = new Set<string>();
+    if (this.isStealthed(u)) return out;
+    for (const w of this.living()) if (w.team !== u.team && w.overwatch) for (const k of w.overwatch.tiles) out.add(k);
+    return out;
+  }
+
+  /**
+   * The path a move to `dest` takes: the cheapest one, or with `avoidWatch` one around every enemy overwatch arc
+   * when there's such a path within the unit's Movement (the cheapest one otherwise). `reach` and `safe` can be
+   * passed in when already worked out (reachable(u), and reachable(u, watchedTiles(u))).
+   */
+  routeTo(u: Unit, dest: Point, avoidWatch = false, reach = this.reachable(u), safe?: Map<string, ReachInfo>): Point[] {
+    if (dest.x === u.x && dest.y === u.y) return [];
+    if (avoidWatch) {
+      const around = safe ?? this.safeReach(u);
+      if (around?.has(key(dest.x, dest.y))) return this.pathTo(around, dest);
+    }
+    return this.pathTo(reach, dest);
+  }
+
+  /** Where `u` can get to without stepping into enemy overwatch; null when nothing is watched. */
+  safeReach(u: Unit): Map<string, ReachInfo> | null {
+    const watched = this.watchedTiles(u);
+    return watched.size ? this.reachable(u, watched) : null;
+  }
+
+  /**
+   * Walk to `dest` with the movement AP. Enemy overwatch can shoot (and an interrupting watch can stop) the unit on
+   * the way. `avoidWatch`: go around enemy overwatch arcs when that's possible (see routeTo).
+   */
+  move(u: Unit, dest: Point, avoidWatch = false): MoveResult {
     if (!this.canMove(u)) throw new Error(`${u.character.name} can't move now`);
     const reach = this.reachable(u);
     if (!reach.has(key(dest.x, dest.y))) throw new Error('Destination not reachable');
@@ -695,7 +746,7 @@ export class Battle {
     u.walked = true;
     u.ap -= 1;
     this.lockTeammates(u);
-    return this.walk(u, this.pathTo(reach, dest));
+    return this.walk(u, this.routeTo(u, dest, avoidWatch, reach));
   }
 
   /** Dash: after the regular move, spend the action AP (and its mana, cooldown) to move again. */
@@ -1028,6 +1079,16 @@ export class Battle {
    * if it is empty), reachable in at most `range` steps (diagonals allowed). Null if impossible.
    */
   chargeDestination(caster: Unit, tile: Point, from: Point = caster, skill?: SkillDef): Point | null {
+    const path = this.chargePath(caster, tile, from, skill);
+    return path ? (path.length ? path[path.length - 1] : { x: from.x, y: from.y }) : null;
+  }
+
+  /**
+   * The tiles a charge travels through to its destination (see chargeDestination), in order, without the start;
+   * empty when the user is already next to the target. A teleport strike's path is just where it appears. Null if
+   * the charge can't land anywhere.
+   */
+  chargePath(caster: Unit, tile: Point, from: Point = caster, skill?: SkillDef): Point[] | null {
     const chargeSkill = skill ?? Object.values(SKILLS).find((x) => x.charge);
     if (!chargeSkill) return null;
     const target = this.occupantFrom(caster, from, tile);
@@ -1035,7 +1096,7 @@ export class Battle {
     const free = (p: Point) => passable(this.map, p.x, p.y) && (!this.occupantFrom(caster, from, p) || (p.x === from.x && p.y === from.y));
     let goals: Point[];
     if (target) {
-      if (dist(from, tile) <= 1.5 + EPS) return { x: from.x, y: from.y };
+      if (dist(from, tile) <= 1.5 + EPS) return [];
       goals = DIRS8.map((d) => ({ x: tile.x + d.x, y: tile.y + d.y })).filter((p) => this.inMap(p) && free(p));
     } else {
       // A teleport strike needs someone to appear next to; a dash can just run to the tile.
@@ -1043,10 +1104,11 @@ export class Battle {
     }
     if (goals.length === 0) return null;
     // Teleport strike (Flicker Strike): appear on the free tile next to the target closest to you.
-    if (chargeSkill.teleport) return goals.reduce((a, b) => (dist(from, b) < dist(from, a) - EPS ? b : a));
+    if (chargeSkill.teleport) return [goals.reduce((a, b) => (dist(from, b) < dist(from, a) - EPS ? b : a))];
     const goalKeys = new Set(goals.map((p) => key(p.x, p.y)));
     const maxSteps = Math.floor(this.skillRange(caster, chargeSkill));
     const seen = new Map<string, number>([[key(from.x, from.y), 0]]);
+    const prev = new Map<string, Point>();
     const queue: Point[] = [{ x: from.x, y: from.y }];
     let best: Point | null = null;
     while (queue.length) {
@@ -1063,10 +1125,14 @@ export class Battle {
         const occ = this.occupantFrom(caster, from, n);
         if (occ && occ.team !== caster.team) continue;
         seen.set(key(n.x, n.y), steps + 1);
+        prev.set(key(n.x, n.y), p);
         queue.push(n);
       }
     }
-    return best;
+    if (!best) return null;
+    const path: Point[] = [];
+    for (let p: Point | undefined = best; p && (p.x !== from.x || p.y !== from.y); p = prev.get(key(p.x, p.y))) path.unshift(p);
+    return path;
   }
 
   // ---- resist ------------------------------------------------------------------------
@@ -1236,6 +1302,37 @@ export class Battle {
     return total;
   }
 
+  /**
+   * Damage `u` would take from enemy overwatch walking (or charging) along `path`: each watch fires once, on the
+   * first tile of the path in its arc where `u` could stop (not while passing through a unit), as in walk().
+   */
+  overwatchDanger(u: Unit, path: Point[]): number {
+    const watchers = this.living().filter((w) => w.team !== u.team && w.overwatch);
+    if (watchers.length === 0 || this.isStealthed(u)) return 0;
+    const fired = new Set<Unit>();
+    let total = 0;
+    const home = { x: u.x, y: u.y };
+    try {
+      for (const p of path) {
+        if (this.units.some((o) => o !== u && o.alive && o.x === p.x && o.y === p.y)) continue;
+        // Stand on the tile for the line checks, as the walk would.
+        u.x = p.x;
+        u.y = p.y;
+        for (const w of watchers) {
+          const ow = w.overwatch!;
+          if (fired.has(w) || !ow.tiles.has(key(p.x, p.y))) continue;
+          if (ow.los && !this.clearLine(w, u, ow.los, w)) continue;
+          fired.add(w);
+          total += ow.hits.reduce((sum, part) => sum + this.hitDamage(w, u, part), 0);
+        }
+      }
+    } finally {
+      u.x = home.x;
+      u.y = home.y;
+    }
+    return total;
+  }
+
   /** The stat bonus a caster-scaled status (Protection) gives when `source` applies it. */
   scaledStatusAmount(source: Unit, statusId: string): number {
     const sc = STATUSES[statusId]?.casterScaled;
@@ -1339,13 +1436,30 @@ export class Battle {
         events.push({ type: 'toggle', target: u.uid, name: def.name, on: true });
       }
     }
-    if (skill.charge) {
+    // Still next to the target after the charge (it can be stopped short)? Melee charges strike only then.
+    let stoppedShort = false;
+    if (skill.charge && skill.teleport) {
       const dest = this.chargeDestination(u, tile, u, skill)!;
       if (dest.x !== u.x || dest.y !== u.y) {
         u.x = dest.x;
         u.y = dest.y;
-        events.push({ type: 'move', target: u.uid, from: origin, to: dest, kind: skill.teleport ? 'teleport' : 'charge' });
+        events.push({ type: 'move', target: u.uid, from: origin, to: dest, kind: 'teleport' });
         events.push(...this.zoneHits(u, dest, 1));
+      }
+    } else if (skill.charge) {
+      // A charge runs there on its own feet, tile by tile like a walk: enemy overwatch fires (and an interrupting
+      // watch or Frozen stops it) and zones hit on the way. Teleports skip all that.
+      const walked = this.walk(u, this.chargePath(u, tile, u, skill)!);
+      let at = origin;
+      walked.path.forEach((step, i) => {
+        events.push({ type: 'move', target: u.uid, from: at, to: step, kind: 'charge' });
+        at = step;
+        for (const t of walked.triggers) if (t.index === i) events.push(...t.events);
+      });
+      stoppedShort = walked.interrupted;
+      if (!u.alive) {
+        this.payFor(u, skillId, true);
+        return events;
       }
     } else if (skill.teleport) {
       u.x = tile.x;
@@ -1374,7 +1488,9 @@ export class Battle {
       events.push({ type: 'overwatch', source: u.uid, skillId });
     }
 
-    const targets = skill.toggleStatus ? [] : aimed ?? this.targetsOf(u, skill, tile);
+    let targets = skill.toggleStatus ? [] : aimed ?? this.targetsOf(u, skill, tile);
+    // Stopped on the way: the strike only lands on targets it still reaches.
+    if (stoppedShort) targets = targets.filter((t) => dist(u, t) <= 1.5 + EPS);
     // Weapon attacks carry on-hit effects (Arcane Weapon): one per swing (Double Strike swings twice).
     const swings = this.isWeaponAttack(u, skill) ? (used.basicAttack ?? 1) : 0;
     for (const t of targets) {

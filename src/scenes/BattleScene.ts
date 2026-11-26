@@ -1,10 +1,10 @@
 import Phaser from 'phaser';
 import { SKILLS, STATUSES, WEAPONS, hasTag, isFree, isSupport, skillStatText } from '../data/content';
-import type { SkillDef } from '../data/types';
+import type { SkillDef, StatKey } from '../data/types';
 import { STAT_INFO } from '../data/types';
-import { bestAction, bestFreeAction, planTurn, preferredMode, shouldDisengage, shouldEscape, shouldSurrender } from '../game/ai';
+import { bestAction, bestFreeAction, planTurn, preferredMode, shouldDisengage, shouldEscape, shouldSurrender, watchesForOverwatch } from '../game/ai';
 import {
-  AP_PER_TURN, Battle, deploymentTiles, generateEnemies, makeUnit,
+  AP_PER_TURN, Battle, deploymentTiles, generateEnemies, makeUnit, statEffectPct, statText,
   type BattleEvent, type MoveResult, type Unit,
 } from '../game/battle';
 import { BAR_PAGE, makeRng, skillBarLayout, swapBarSlots } from '../game/character';
@@ -14,7 +14,10 @@ import { lineupMembers, resolveQuest } from '../game/city';
 import { rankForStage, usualCount } from '../game/board';
 import { DEMO_STAGES, requireDemo, resolveDemoBattle } from '../game/demo';
 import { markDirty, requireState } from '../game/session';
-import { COLORS, HEIGHT, ScrollList, UI_SCALE, WIDTH, bakeGraphics, button, confirmDialog, figure, monsterFigure, panel, setupCamera, text } from '../ui/widgets';
+import {
+  COLORS, HEIGHT, ScrollList, UI_SCALE, WIDTH, bakeGraphics, button, confirmDialog, figure, monsterFigure, panel, setupCamera, statGrid, text,
+  type StatCell,
+} from '../ui/widgets';
 import { ENCOUNTER, ENEMIES } from '../data/enemies';
 
 /** Tile size in layout pixels; set per battle so the map fits the 672x500 board area. */
@@ -38,6 +41,9 @@ const LOG_H = 252;
 /** Hover/skill info panel under the log. */
 const INFO_Y = 482;
 const INFO_H = 150;
+/** The battle stat grid (icon + amount): 3 per row. */
+const STAT_GRID = { cols: 3, cellW: 74, rowH: 15, fontSize: 12, iconSize: 13 };
+const STAT_GRID_H = 3 * STAT_GRID.rowH;
 const HOTKEYS = ['ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE', 'ZERO'];
 /** Where a unit's feet are, relative to its tile center; the HP bar sits just below. */
 let FEET_Y = 14;
@@ -77,6 +83,9 @@ export class BattleScene extends Phaser.Scene {
   private barDrag: { from: number; x: number; y: number; dragging: boolean; ghost?: Phaser.GameObjects.Text; flipped?: number } | null = null;
   private topBar!: Phaser.GameObjects.Container;
   private hoverText!: Phaser.GameObjects.Text;
+  /** A hovered unit's stat grid and status line, under hoverText. */
+  private hoverGrid: Phaser.GameObjects.Container | null = null;
+  private hoverTail!: Phaser.GameObjects.Text;
   private logList!: ScrollList;
   private log: string[] = [];
   private mode: Mode = 'busy';
@@ -159,6 +168,7 @@ export class BattleScene extends Phaser.Scene {
     this.barDrag = null;
     panel(this, SIDE_X, INFO_Y, SIDE_W, INFO_H);
     this.hoverText = text(this, SIDE_X + 10, INFO_Y + 7, '', { fontSize: '12px', wordWrap: { width: SIDE_W - 20 }, lineSpacing: 1 });
+    this.hoverTail = text(this, SIDE_X + 10, INFO_Y + 7, '', { fontSize: '12px', wordWrap: { width: SIDE_W - 20 }, lineSpacing: 1 });
     panel(this, SIDE_X, LOG_Y, SIDE_W, LOG_H);
     this.logList = new ScrollList(this, SIDE_X + 8, LOG_Y + 6, SIDE_W - 14, LOG_H - 12, 1);
 
@@ -477,7 +487,8 @@ export class BattleScene extends Phaser.Scene {
       S.add(text(this, SIDE_X + 52, 46, `Lv ${u.character.level} · ${WEAPONS[u.character.weaponId]?.name ?? (u.character.enemyType ? 'Monster' : '')}${u.team === 'enemy' ? ' (enemy)' : ''}`, {
         color: u.team === 'enemy' ? COLORS.bad : COLORS.dim, fontSize: '12px',
       }));
-      S.add(text(this, SIDE_X + 10, 70, this.unitSummary(u), { fontSize: '12px', lineSpacing: 3, wordWrap: { width: SIDE_W - 20 } }));
+      S.add(statGrid(this, SIDE_X + 10, 66, this.statCells(u, true), STAT_GRID));
+      S.add(text(this, SIDE_X + 10, 66 + STAT_GRID_H + 3, this.unitEffects(u), { fontSize: '12px', lineSpacing: 3, wordWrap: { width: SIDE_W - 20 } }));
       if (u.team === 'player' && b.phase === 'player') {
         const freeLeft = !u.acted && u.ap === 0 && b.usableFreeActions(u).length > 0;
         const done = u.acted || (u.ap === 0 && !freeLeft);
@@ -502,7 +513,7 @@ export class BattleScene extends Phaser.Scene {
           enabled: canAct, fontSize: 14, fill: 0x4a3418,
           onHover: () => {
             const dmg = b.previewHits(opp, b.basicAttack(opp), u).reduce((a, c) => a + c, 0);
-            this.hoverText.setText(`Break away from ${opp.character.name}. They get a free ${b.basicAttack(opp).name} (~${dmg} dmg). You can then move and act normally.`);
+            this.showInfo(`Break away from ${opp.character.name}. They get a free ${b.basicAttack(opp).name} (~${dmg} dmg). You can then move and act normally.`);
           },
         }));
       } else {
@@ -516,7 +527,7 @@ export class BattleScene extends Phaser.Scene {
     const endW = u && u.team === 'player' ? 116 : SIDE_W;
     S.add(button(this, endX, y, endW, 30, 'End Turn', () => this.endPlayerPhase(), {
       enabled: interactive, fill: 0x4a2a22, fontSize: 14, selected: interactive && b.readyUnits().length === 0,
-      onHover: () => this.hoverText.setText('End your turn. Units that have not acted give up their action, and the enemy moves next.'),
+      onHover: () => this.showInfo('End your turn. Units that have not acted give up their action, and the enemy moves next.'),
     }));
   }
 
@@ -606,7 +617,7 @@ export class BattleScene extends Phaser.Scene {
     const why = !interactive || usable ? '' : u.mp < s.mana ? `\nNot enough mana (${u.mp}/${s.mana}).`
       : s.target === 'move' && !u.moved ? '\nUse your regular move first.' : !b.canAct(u) ? '\nThis unit\'s turn is over.' : !b.canPay(u, s) ? '\nNot enough AP.' : '';
     const modeLine = raw.modes ? `\nBow Mode: ${b.modeName(u)} (Switch Mode changes it)` : raw.switchMode && b.modesOf(u) ? `\nNow: ${b.modeName(u)}. Next: ${SKILLS[b.modesOf(u)![(u.weaponMode + 1) % b.modesOf(u)!.length]].modeName}` : '';
-    this.hoverText.setText(`${s.name}\n${skillStatText(s)}${modeLine}${cd > 0 ? `\nReady ${cd === 1 ? 'next turn' : `in ${cd} turns`}.` : ''}${why}\nDrag to another slot to move it.`);
+    this.showInfo(`${s.name}\n${skillStatText(s)}${modeLine}${cd > 0 ? `\nReady ${cd === 1 ? 'next turn' : `in ${cd} turns`}.` : ''}${why}\nDrag to another slot to move it.`);
   }
 
   /** Page up/down. While dragging a skill, ▼ past the last page opens an empty one to drop it on. */
@@ -684,10 +695,9 @@ export class BattleScene extends Phaser.Scene {
     this.renderSkillBar();
   }
 
-  private unitSummary(u: Unit): string {
+  /** Statuses, engagement, bow mode and (enemies) skills: the line under a unit's stat grid. */
+  private unitEffects(u: Unit): string {
     const b = this.battle;
-    const shield = b.shieldOf(u);
-    const terrainDef = TERRAIN[b.map.tiles[u.y][u.x]].defense;
     const effects = u.statuses.map((s) => (s.id === 'shield' ? `Shield ${s.amount} (${s.turns}t)`
       : STATUSES[s.id]?.decay ? `${s.name} (${s.stacks})` // loses a stack each turn
         : `${s.name}${s.stacks > 1 ? ` x${s.stacks}` : ''} (${Number.isFinite(s.turns) ? `${s.turns}t` : 'on'})`));
@@ -697,11 +707,69 @@ export class BattleScene extends Phaser.Scene {
     const mode = b.modeName(u);
     if (mode) effects.push(`Bow Mode: ${mode}${b.activeMode(u) !== u.weaponMode ? ` (${b.modeName(u, b.activeMode(u))} while engaged)` : ''}`);
     if (u.team === 'enemy') effects.push(`Skills: ${b.skillIds(u).map((id) => b.skillFor(u, SKILLS[id]).name).join(', ')}`);
+    return effects.join(', ');
+  }
+
+  /**
+   * A unit's battle stats for the icon grid, always in the same slots: HP, MP, Move / P.Atk, M.Atk, Vision (with fog
+   * of war) / Def, Res. Stats raised by statuses or terrain are green, lowered ones red. `tips`: hovering a cell
+   * explains the stat in the info box.
+   */
+  private statCells(u: Unit, tips: boolean): (StatCell | null)[] {
+    const b = this.battle;
+    const cell = (k: StatKey): StatCell => {
+      const v = b.stat(u, k);
+      const base = u.stats[k];
+      return { stat: k, value: statText(k, v), color: v > base ? COLORS.good : v < base ? COLORS.bad : undefined, onHover: tips ? () => this.showInfo(this.statTip(u, k)) : undefined };
+    };
+    const tip = (k: StatKey) => (tips ? () => this.showInfo(this.statTip(u, k)) : undefined);
+    const shield = b.shieldOf(u);
     return [
-      `HP ${u.hp}/${u.stats.health}${shield ? ` +${shield} Shield` : ''}${u.stats.mana > 0 ? `   MP ${u.mp}/${u.stats.mana}` : ''}   Move ${b.stat(u, 'movement')}`,
-      `P.Atk ${b.stat(u, 'pAtk')}  M.Atk ${b.stat(u, 'mAtk')}  Def ${b.stat(u, 'defense')}${terrainDef ? ' (forest)' : ''}  Res ${b.resistChance(u)}%`,
-      effects.join(', '),
-    ].filter(Boolean).join('\n');
+      { stat: 'health', value: `${u.hp}/${u.stats.health}${shield ? ` +${shield}` : ''}`, color: u.hp < u.stats.health * 0.35 ? COLORS.bad : undefined, onHover: tip('health') },
+      u.stats.mana > 0 ? { stat: 'mana', value: `${u.mp}/${u.stats.mana}`, onHover: tip('mana') } : { stat: 'mana', value: '—', color: COLORS.dim, onHover: tip('mana') },
+      cell('movement'),
+      cell('pAtk'),
+      cell('mAtk'),
+      b.rules.vision.enabled ? cell('vision') : null,
+      cell('defense'),
+      cell('resist'),
+    ];
+  }
+
+  /** What a stat is and where the unit's current amount comes from (base, terrain, statuses). */
+  private statTip(u: Unit, k: StatKey): string {
+    const b = this.battle;
+    const info = STAT_INFO[k];
+    if (k === 'health' || k === 'mana') {
+      const shield = k === 'health' ? b.shieldOf(u) : 0;
+      return `${info.name}: ${k === 'health' ? u.hp : u.mp}/${u.stats[k]}${shield ? ` +${shield} Shield` : ''}\n${info.description}`;
+    }
+    const v = b.stat(u, k);
+    const base = u.stats[k];
+    const terrain = TERRAIN[b.map.tiles[u.y][u.x]];
+    const fromTerrain = k === 'defense' ? terrain.defense : 0;
+    const fromStatuses = v - base - fromTerrain;
+    const signed = (n: number) => `${n > 0 ? '+' : ''}${n}`;
+    const parts = [`Base ${base}`, fromTerrain ? `${terrain.name} ${signed(fromTerrain)}` : '', fromStatuses ? `Statuses ${signed(fromStatuses)}` : ''].filter(Boolean);
+    const pct = statEffectPct(k, v);
+    const effect = pct === null ? '' : k === 'defense'
+      ? `Takes ${Math.abs(pct)}% ${pct >= 0 ? 'less' : 'more'} damage.` : `${pct}% chance to shrug off each debuff.`;
+    return [`${info.name}: ${statText(k, v)}`, parts.length > 1 ? parts.join(' · ') : '', effect, info.description].filter(Boolean).join('\n');
+  }
+
+  /**
+   * Fill the info box: `head` text, then (for a hovered unit) its stat grid and status line. Every info-box update
+   * goes through here so a unit's grid never lingers under other text.
+   */
+  private showInfo(head: string, u?: Unit): void {
+    this.hoverText.setText(head);
+    this.hoverGrid?.destroy();
+    this.hoverGrid = null;
+    this.hoverTail.setText('');
+    if (!u) return;
+    const y = this.hoverText.y + this.hoverText.height + 3;
+    this.hoverGrid = statGrid(this, SIDE_X + 10, y, this.statCells(u, false), STAT_GRID);
+    this.hoverTail.setY(y + STAT_GRID_H + 2).setText(this.unitEffects(u));
   }
 
   private refresh(): void {
@@ -801,7 +869,7 @@ export class BattleScene extends Phaser.Scene {
       : this.action.target === 'move' ? 'click a tile to dash to'
       : this.action.target === 'line' ? 'click a tile to thrust toward'
         : this.action.target === 'self' ? 'click inside the box to use it' : 'click a tile in the box';
-    this.hoverText.setText(`${this.battle.skillFor(u, this.action).name}: ${how} (right-click / Esc to cancel).`);
+    this.showInfo(`${this.battle.skillFor(u, this.action).name}: ${how} (right-click / Esc to cancel).`);
   }
 
   private cancel(): void {
@@ -979,7 +1047,7 @@ export class BattleScene extends Phaser.Scene {
     const label = `${e.character.name} next turn: ${moves}; ${reach}. Click again to hide.`;
     this.threat = { uid: e.uid, move: new Set(t.move.map((p) => key(p.x, p.y))), attack: t.attack, label };
     this.drawOverlay();
-    this.hoverText.setText(label);
+    this.showInfo(label);
   }
 
   private onHover(tile: Point | null): void {
@@ -992,7 +1060,8 @@ export class BattleScene extends Phaser.Scene {
     const target = b.unitAt(tile.x, tile.y);
     const terrain = TERRAIN[b.map.tiles[tile.y][tile.x]];
     let info = `${terrain.name}${terrain.moveCost === null ? ' (impassable)' : ` (move cost ${terrain.moveCost}${terrain.defense ? `, +${terrain.defense} Def` : ''})`}${terrain.blocksSight ? ', Blocks Sight' : ''}`;
-    if (target && b.canSee('player', target)) info = `${target.character.name} — Lv ${target.character.level}\n${this.unitSummary(target)}`;
+    const shown = target && b.canSee('player', target) ? target : undefined;
+    if (shown) info = `${shown.character.name} — Lv ${shown.character.level}`;
     const u = this.selected;
     if (this.mode === 'target' && this.action && u) {
       const blocked = b.blockedTiles(u, this.action).some((p) => p.x === tile.x && p.y === tile.y);
@@ -1012,7 +1081,7 @@ export class BattleScene extends Phaser.Scene {
       if (hits) info = `⚠ Path Crosses ${hits} Zone Tile${hits === 1 ? '' : 's'} (~${b.zoneDanger(u, path)} dmg incl. ending here)\n${info}`;
     }
     if (this.threat && this.mode === 'select') info = `${this.threat.label}\n${info}`;
-    this.hoverText.setText(info);
+    this.showInfo(info, shown);
   }
 
   private preview(u: Unit, s: SkillDef, tile: Point): string {
@@ -1100,7 +1169,7 @@ export class BattleScene extends Phaser.Scene {
       }
       const plan = planTurn(b, u);
       if (b.canMove(u) && (plan.moveTo.x !== u.x || plan.moveTo.y !== u.y)) {
-        const result = b.move(u, plan.moveTo);
+        const result = b.move(u, plan.moveTo, watchesForOverwatch(u));
         await this.animateMove(u, result);
       }
       if (shouldEscape(b, u)) {
@@ -1192,13 +1261,30 @@ export class BattleScene extends Phaser.Scene {
     }
     const summary: string[] = [];
     let n = 0;
+    // Overwatch shots taken on the way (a charge runs like a walk) get their own log line, as on a walk.
+    let reaction: { shooter: string; summary: string[] } | null = null;
+    const flushReaction = async () => {
+      if (!reaction) return;
+      this.addLog(`${reaction.shooter} reacts! ${reaction.summary.join(', ')}`);
+      reaction = null;
+      this.refresh();
+      await this.wait(700);
+    };
     for (const e of events) {
       if (e.type === 'move') {
+        await flushReaction();
         await this.animateDisplacement(e);
         continue;
       }
+      if ('cause' in e && e.cause === 'overwatch') {
+        reaction ??= { shooter: e.source ? this.battle.unit(e.source).character.name : 'Overwatch', summary: [] };
+        this.showEvent(e, reaction.summary, reaction.summary.length);
+        continue;
+      }
+      await flushReaction();
       this.showEvent(e, summary, n++);
     }
+    await flushReaction();
     this.flashArea(s, u, target);
     const detail = summary.length ? `: ${summary.join(', ')}`
       : s.cone ? ' and watches the area.' : s.teleport ? '.' : s.hits?.length ? ' — it hits nothing.' : ' — it has no effect.';
@@ -1216,7 +1302,8 @@ export class BattleScene extends Phaser.Scene {
       view.container.setPosition(to.x, to.y);
       await this.tween({ targets: view.container, alpha: 1, scale: 1, duration: 150 });
     } else {
-      await this.tween({ targets: view.container, x: to.x, y: to.y, duration: e.kind === 'charge' ? 220 : 140, ease: 'Quad.easeOut' });
+      // A charge comes one tile per event (it runs its path like a walk, so overwatch can catch it on the way).
+      await this.tween({ targets: view.container, x: to.x, y: to.y, duration: e.kind === 'charge' ? 80 : 140, ease: e.kind === 'charge' ? 'Linear' : 'Quad.easeOut' });
     }
   }
 

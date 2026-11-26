@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { figureSvg, lookModel } from '../art/unitArt';
 import { DEFAULT_WEAPON, WEAPONS } from '../data/content';
-import { STAT_INFO, type Appearance, type Character, type Look } from '../data/types';
+import { STAT_INFO, type Appearance, type Character, type Look, type StatKey } from '../data/types';
 import { STARTUP_GRAPHICS, uiScaleFor } from '../game/settings';
 import { TALENT_COLORS, overallTalent, overallTalentLabel, talentOf, talentStats } from '../game/talent';
 
@@ -82,6 +82,43 @@ export function fittedList(
   render(names.length);
   for (let n = names.length - 1; n >= 0 && t.height > maxH; n--) render(n);
   return t;
+}
+
+/** Texture key of a stat's icon (art/stats/<stat>.svg, loaded by the Boot scene). */
+export const statIconKey = (stat: StatKey) => `stat-${stat}`;
+/** Size the stat icons are rasterized at (drawn smaller, so they stay crisp). */
+export const STAT_ICON_TEXTURE = 32;
+
+export interface StatCell {
+  stat: StatKey;
+  value: string;
+  color?: string;
+  /** Called when the pointer hovers the cell (for tooltips). */
+  onHover?: () => void;
+}
+
+/**
+ * Stats as a grid of icon + amount, filled row by row (`cols` per row). A null cell leaves its slot empty, so the
+ * same stat stays in the same place from one unit to the next.
+ */
+export function statGrid(
+  scene: Phaser.Scene, x: number, y: number, cells: (StatCell | null)[],
+  opts: { cols: number; cellW: number; rowH: number; fontSize?: number; iconSize?: number },
+): Phaser.GameObjects.Container {
+  const box = scene.add.container(x, y);
+  const icon = opts.iconSize ?? 14;
+  cells.forEach((c, i) => {
+    if (!c) return;
+    const cx = (i % opts.cols) * opts.cellW;
+    const cy = Math.floor(i / opts.cols) * opts.rowH;
+    const hit = scene.add.rectangle(cx, cy, opts.cellW - 2, opts.rowH, 0xffffff, 0).setOrigin(0);
+    if (c.onHover) hit.setInteractive().on('pointerover', c.onHover);
+    box.add(hit);
+    box.add(scene.add.image(cx + icon / 2, cy + opts.rowH / 2, statIconKey(c.stat)).setDisplaySize(icon, icon));
+    box.add(text(scene, cx + icon + 4, cy + opts.rowH / 2, c.value, { fontSize: `${opts.fontSize ?? 12}px`, color: c.color ?? COLORS.text }).setOrigin(0, 0.5));
+  });
+  box.setSize(opts.cols * opts.cellW, Math.ceil(cells.length / opts.cols) * opts.rowH);
+  return box;
 }
 
 export function panel(scene: Phaser.Scene, x: number, y: number, w: number, h: number, fill = COLORS.panel) {

@@ -259,7 +259,8 @@ describe('ranks and the leaderboard', () => {
     expect(lines.join(' ')).toContain(`75% of the enemies defeated`);
     expect(main.level * 1000 + main.xp).toBeGreaterThan(q.stage * 1000); // gained XP
     const bounties = killed.reduce((sum, f) => sum + killBounty(f.level), 0);
-    expect(killBounty(5)).toBe(bounty(5)); // the same as turning in a prisoner
+    expect(killBounty(4)).toBe(bounty(4) / 2); // half of turning in a prisoner
+    expect(killBounty(5)).toBeLessThan(bounty(5));
     expect(lines.join(' ')).toContain(`Bounties: ${bounties} gold for 2 enemies slain`);
     expect(s.gold).toBe(gold + bounties); // bounties paid, no quest pay
     expect(s.prisoners).toHaveLength(0);

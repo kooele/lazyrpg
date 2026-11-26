@@ -110,7 +110,7 @@ export function glossaryEntries(): GlossaryEntry[] {
     `The Quest Board is shared with every rival party, and they take quests from it every day, the best deals first. Nothing is held back for you: in a slow week the rivals may take every quest at your rank.\n\n`
     + `Up to ${G.board.maxPostsPerDay} new quests are posted a day, and each stays up for a few days.`);
   add('Quests & Ranks', 'Bounties',
-    `Every enemy the party kills is worth ${S.bountyPerLevel} gold per level, paid when the party gets back to the city, whether the quest succeeded or not. Turning in a prisoner pays the same.`);
+    `Every enemy the party kills is worth ${S.bountyPerLevel * S.killBountyShare} gold per level (rounded), paid when the party gets back to the city, whether the quest succeeded or not. Turning in a prisoner pays more: ${S.bountyPerLevel} gold per level.`);
 
   // ---- Experience -------------------------------------------------------------------------------
   add('Experience', 'Quest XP',
@@ -195,13 +195,14 @@ export function glossaryEntries(): GlossaryEntry[] {
     `Hitting a unit with an Engage skill locks you both together, unless it's already engaged with someone else. While engaged you can't move, and you can only attack your opponent (and heal or cleanse yourself).\n\n`
     + `Disengage breaks free, but your opponent gets a free basic attack. Disengage skills (like Shadow Step) slip out with no free attack. Knockbacks and falling also end it.`);
   add('Battle', 'Overwatch',
-    `Overwatch ends the turn and watches a 60° arc as far as your weapon reaches. The first enemy to move into it takes your basic attack and keeps moving.`);
+    `Overwatch ends the turn and watches a 60° arc as far as your weapon reaches. The first enemy to move into it takes your basic attack and keeps moving.\n\n`
+    + `Walking, Dash and movement skills that run or leap to their target (Charge, and monsters' Pounce, Dive and Infernal Leap) can all be caught, on any tile of the way. Teleports (Arcane Shift, Shadow Step, Flicker Strike) skip the tiles in between, so they can't.`);
   add('Battle', 'Burn and Chilled Stacks',
     `${burn?.name ?? 'Burn'}: ${burn?.description ?? ''}\n\n${chilled?.name ?? 'Chilled'} (ice skills): ${chilled?.description ?? ''}\n\n`
     + `Stacks don't last a set number of turns: the unit loses one each turn. A unit with 2 stacks is affected just as much as with 1, for one more turn; a status shows its stacks as Burn (2).\n\n`
     + `${slow?.name ?? 'Slow'} (webs, goo and other non-ice effects): ${slow?.description ?? ''} Slow and Chilled are separate: a unit with both moves at 75% × 75% = 56%.`);
   add('Battle', 'Enemy Temperaments',
-    `• Beasts act alone, go for the nearest target and flee when badly hurt.\n• Tribal enemies fight as a group, and the whole group runs once half of it is gone.\n• Humans use cover and pick off the weak; when cornered and badly hurt they may surrender, and you take them prisoner if you win.\n• Evil enemies never flee and go for kills.\n\n`
+    `• Beasts act alone, go for the nearest target and flee when badly hurt.\n• Tribal enemies fight as a group, and the whole group runs once half of it is gone.\n• Humans use cover and pick off the weak; when cornered and badly hurt they may surrender, and you take them prisoner if you win.\n• Evil enemies never flee and go for kills.\n• Humans and tribal enemies steer around your overwatch when they can; beasts and evil run and leap straight through it.\n\n`
     + `Click an enemy to see where it can move and hit next turn.`);
   add('Battle', 'Ranges',
     `Ranges use straight-line distance. Ranges of 2 or more round to the nearest tile, so shapes are roundish. Range 1 is the 4 neighbours; 1.5 adds the diagonals.`);
