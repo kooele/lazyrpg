@@ -622,11 +622,12 @@ export function figureSvg(id, model, weapon, scale = 1) {
   } else if (weapon === 'dagger' || weapon === 'twin_daggers') {
     // Short blades held point-up.
     const blade = (hx, hy, s) => {
-      const k = 2; // dagger size
-      const tx = hx + s * 2 * k;
+      const k = 1.8; // dagger size
+      // A straight blade centred on the grip, with its highlight running up the middle.
+      const tx = hx;
       const ty = hy - 13.5 * k;
-      front.push(path(`M${n(hx - 1.4 * k)} ${n(hy - 2.2 * k)} L${n(tx - 0.2 * k)} ${n(ty)} L${n(hx + 1.4 * k)} ${n(hy - 2.2 * k)} Z`, '#d6dbe2'));
-      front.push(limb([[hx - 0.2 * k, hy - 3 * k], [tx - 0.3 * k, ty + 2.5 * k]], 0.5 * k, '#ffffff'));
+      front.push(path(`M${n(hx - 1.4 * k)} ${n(hy - 2.2 * k)} L${n(tx)} ${n(ty)} L${n(hx + 1.4 * k)} ${n(hy - 2.2 * k)} Z`, '#d6dbe2'));
+      front.push(limb([[hx + 0.35 * k * s, hy - 3 * k], [hx + 0.1 * k * s, ty + 3 * k]], 0.4 * k, '#ffffff'));
       front.push(limb([[hx - 2.8 * k, hy - 2.2 * k], [hx + 2.8 * k, hy - 2.2 * k]], 1.3 * k, model.bandit ? paint('#5a5a5e') : paint('#c9a050')));
       front.push(limb([[hx, hy - 2 * k], [hx, hy + 2 * k]], 1.3 * k, '#5a3a22'));
       gripOver(hx, hy);
