@@ -213,6 +213,70 @@ export function figureSvg(id, model, weapon, scale = 1) {
     parts.push(path(`M${n(32 - 2.2)} ${n(shoulderY + 4.6)} h2.4 v2.4 h-2.4 Z`, paint('#8a8a8a')));
     belt(dark(P.leather, 0.25));
     parts.push(path(`M${n(32 + wW - 3.4)} ${n(waistY + beltH)} h3.4 v3.2 q-1.7 1.2 -3.4 0 Z`, dark(P.leather, 0.1)));
+  } else if (model.outfit === 'leatherArmor') {
+    // Leather armor: a tunic under a stitched leather cuirass with a high collar and shoulder flaps.
+    const skirtY = hipY + (kneeY - hipY) * 0.4;
+    parts.push(torso(skirtY, 1.4));
+    const lth = paint('#7a5232');
+    const cut = (sk) => `M${n(32 - sW + 0.6)} ${n(shoulderY + 0.4)} L${n(32 + sW - 0.6)} ${n(shoulderY + 0.4)} L${n(32 + wW + 0.5)} ${n(waistY)} L${n(32 + hipW + 0.6)} ${n(sk)} L${n(32 - hipW - 0.6)} ${n(sk)} L${n(32 - wW - 0.5)} ${n(waistY)} Z`;
+    parts.push(path(cut(hipY + 1.5), lth));
+    // Stitched panels down the front and a laced chest.
+    parts.push(`<path d="M${n(32 - wW * 0.55)} ${n(shoulderY + 2)} L${n(32 - wW * 0.6)} ${n(hipY + 1)} M${n(32 + wW * 0.55)} ${n(shoulderY + 2)} L${n(32 + wW * 0.6)} ${n(hipY + 1)}" stroke="${light(lth, 0.35)}" stroke-width="0.45" stroke-dasharray="0.9 0.7" fill="none"/>`);
+    for (let i = 0; i < 3; i++) parts.push(limb([[32 - 1.3, shoulderY + 2.4 + i * 2], [32 + 1.3, shoulderY + 3.4 + i * 2]], 0.45, dark(lth, 0.4)));
+    parts.push(path(`M${n(32 - 3)} ${n(shoulderY - 0.6)} L${n(32 + 3)} ${n(shoulderY - 0.6)} L${n(32 + 2.4)} ${n(shoulderY + 1.4)} L${n(32 - 2.4)} ${n(shoulderY + 1.4)} Z`, dark(lth, 0.15)));
+    // Hanging leather strips over the hips.
+    for (const u of [-0.66, -0.22, 0.22, 0.66]) parts.push(path(`M${n(32 + u * hipW * 1.5 - 1.3)} ${n(hipY + 1)} h2.6 v${n((skirtY - hipY) * 0.85)} h-2.6 Z`, dark(lth, 0.08)));
+    for (const s of [-1, 1]) parts.push(path(`M${n(32 + s * (sW - 3.5))} ${n(shoulderY - 0.2)} Q${n(32 + s * (sW + 1.8))} ${n(shoulderY - 0.6)} ${n(32 + s * (sW + 1.4))} ${n(shoulderY + 3.6)} L${n(32 + s * (sW - 2.6))} ${n(shoulderY + 2.6)} Z`, dark(lth, 0.12)));
+    belt(dark(lth, 0.35));
+  } else if (model.outfit === 'mail') {
+    // Mail: a grey hauberk to mid-thigh (ring texture) with a tabard in the unit's colour over it.
+    const skirtY = hipY + (kneeY - hipY) * 0.62;
+    const mail = paint('#8e959e');
+    parts.push(path(`M${n(32 - sW + 1.2)} ${n(shoulderY - 0.3)} Q${n(32 - sW - 0.4)} ${n(shoulderY)} ${n(32 - sW - 0.4)} ${n(shoulderY + 2)} L${n(32 - wW - 0.4)} ${n(waistY)} L${n(32 - hipW - 2.2)} ${n(skirtY)} L${n(32 + hipW + 2.2)} ${n(skirtY)} L${n(32 + wW + 0.4)} ${n(waistY)} L${n(32 + sW + 0.4)} ${n(shoulderY + 2)} Q${n(32 + sW + 0.4)} ${n(shoulderY)} ${n(32 + sW - 1.2)} ${n(shoulderY - 0.3)} Z`, mail));
+    for (let y = shoulderY + 1.2, row = 0; y < skirtY - 0.4; y += 1.3, row++) {
+      const t = (y - shoulderY) / (skirtY - shoulderY);
+      const half = y < waistY ? sW - (sW - wW) * ((y - shoulderY) / (waistY - shoulderY)) : wW + (hipW + 2.2 - wW) * ((y - waistY) / (skirtY - waistY));
+      parts.push(`<path d="M${n(32 - half + 0.3 + (row % 2) * 0.6)} ${n(y)} L${n(32 + half - 0.3)} ${n(y)}" stroke="${dark(mail, 0.3 + t * 0.05)}" stroke-width="0.5" stroke-dasharray="0.7 0.5" fill="none"/>`);
+    }
+    // Tabard.
+    const tw = wW * 0.62;
+    parts.push(path(`M${n(32 - tw - 0.6)} ${n(shoulderY + 0.2)} L${n(32 + tw + 0.6)} ${n(shoulderY + 0.2)} L${n(32 + tw)} ${n(skirtY + 1.5)} L${n(32 - tw)} ${n(skirtY + 1.5)} Z`, P.cloth));
+    parts.push(path(`M${n(32 - 2.2)} ${n(shoulderY + 0.2)} L32 ${n(shoulderY + 2.4)} L${n(32 + 2.2)} ${n(shoulderY + 0.2)} Z`, mail));
+    parts.push(`<path d="M${n(32 - tw)} ${n(skirtY + 0.4)} L${n(32 + tw)} ${n(skirtY + 0.4)}" stroke="${P.accent}" stroke-width="0.9"/>`);
+    // Mail coif collar.
+    parts.push(path(`M${n(32 - hw * 0.75)} ${n(chin - 1.2)} Q32 ${n(chin + 0.6)} ${n(32 + hw * 0.75)} ${n(chin - 1.2)} L${n(32 + sW * 0.7)} ${n(shoulderY + 1.4)} Q32 ${n(shoulderY + 3)} ${n(32 - sW * 0.7)} ${n(shoulderY + 1.4)} Z`, dark(mail, 0.05)));
+    belt(dark(P.legs, 0.2));
+  } else if (model.outfit === 'plate') {
+    // Plate: breastplate, big pauldrons, a fauld and tassets over a cloth skirt, gauntlets and greaves.
+    const skirtY = hipY + (kneeY - hipY) * 0.5;
+    parts.push(torso(skirtY, 2));
+    const bp = sW * 0.9;
+    parts.push(path(`M${n(32 - bp)} ${n(shoulderY + 0.6)} Q32 ${n(shoulderY + 2.6)} ${n(32 + bp)} ${n(shoulderY + 0.6)} L${n(32 + wW * 1.02)} ${n(waistY)} Q32 ${n(waistY + 2.4)} ${n(32 - wW * 1.02)} ${n(waistY)} Z`, metal));
+    parts.push(limb([[32, shoulderY + 2.4], [32, waistY + 1]], 0.6, dark(metal, 0.25)));
+    parts.push(`<path d="M${n(32 - bp * 0.6)} ${n(shoulderY + 3)} Q${n(32 - bp * 0.2)} ${n(shoulderY + 6)} ${n(32 - bp * 0.3)} ${n(waistY - 2)}" stroke="${light(metal, 0.6)}" stroke-width="0.8" fill="none" stroke-linecap="round"/>`);
+    // Gorget.
+    parts.push(path(`M${n(32 - hw * 0.7)} ${n(shoulderY - 1.6)} L${n(32 + hw * 0.7)} ${n(shoulderY - 1.6)} L${n(32 + hw * 0.85)} ${n(shoulderY + 1)} Q32 ${n(shoulderY + 2.2)} ${n(32 - hw * 0.85)} ${n(shoulderY + 1)} Z`, dark(metal, 0.12)));
+    // Fauld (two lames) and tassets.
+    for (let i = 0; i < 2; i++) {
+      const y = waistY + 1.2 + i * 2.2;
+      const w = wW + 0.8 + i * 1.2;
+      parts.push(path(`M${n(32 - w)} ${n(y)} Q32 ${n(y + 1.4)} ${n(32 + w)} ${n(y)} L${n(32 + w + 0.4)} ${n(y + 2.2)} Q32 ${n(y + 3.6)} ${n(32 - w - 0.4)} ${n(y + 2.2)} Z`, i ? dark(metal, 0.08) : metal));
+    }
+    for (const s of [-1, 1]) {
+      const x = 32 + s * hipW * 0.72;
+      parts.push(path(`M${n(x - 2.6)} ${n(hipY + 0.6)} L${n(x + 2.6)} ${n(hipY + 0.6)} L${n(x + 2.8 + s * 0.4)} ${n(skirtY + 0.6)} Q${n(x)} ${n(skirtY + 1.8)} ${n(x - 2.8 + s * 0.4)} ${n(skirtY + 0.6)} Z`, dark(metal, 0.05)));
+      // Pauldrons: three overlapping lames.
+      for (let i = 2; i >= 0; i--) {
+        const y = shoulderY - 1.4 + i * 1.7;
+        parts.push(path(`M${n(32 + s * (sW - 4.2))} ${n(y + 0.4)} Q${n(32 + s * (sW + 3))} ${n(y - 1.4)} ${n(32 + s * (sW + 2.6))} ${n(y + 4)} Q${n(32 + s * (sW - 0.6))} ${n(y + 3)} ${n(32 + s * (sW - 4.2))} ${n(y + 0.4)} Z`, i ? dark(metal, 0.06 * i) : light(metal, 0.08)));
+      }
+      // Greaves and knee cops over the legs.
+      const lx = 32 + s * legX * 1.03;
+      parts.push(path(`M${n(lx - legW * 0.62)} ${n(kneeY + 1)} L${n(lx + legW * 0.62)} ${n(kneeY + 1)} L${n(lx + legW * 0.56)} ${n(bootTop + 2.2)} L${n(lx - legW * 0.56)} ${n(bootTop + 2.2)} Z`, metal));
+      parts.push(circle(lx, kneeY + 0.4, legW * 0.6, light(metal, 0.1)));
+      parts.push(limb([[lx - legW * 0.2, kneeY + 2.6], [lx - legW * 0.25, bootTop + 1.4]], 0.5, light(metal, 0.5)));
+    }
+    belt(dark(P.legs, 0.2));
   } else {
     const hemY = kneeY + (ankleY - kneeY) * 0.3;
     const hemW = sW * 1.2;
@@ -238,7 +302,13 @@ export function figureSvg(id, model, weapon, scale = 1) {
     if (model.outfit === 'robe') {
       parts.push(path(`M${n(ex - armW * 0.8)} ${n(ey - 1)} L${n(ex + armW * 0.8)} ${n(ey - 1)} L${n(ex + armW)} ${n(ey + 1.2)} L${n(ex - armW)} ${n(ey + 1.2)} Z`, P.accent));
     } else {
-      const glove = model.outfit === 'armor' ? metal : model.outfit === 'leather' ? dark(P.leather, 0.1) : dark(P.accent, 0.1);
+      if (model.outfit === 'mail') parts.push(limb([sh, elbow, [elbow[0] + (hand[0] - elbow[0]) * 0.3, elbow[1] + (hand[1] - elbow[1]) * 0.3]], armW + 0.3, paint('#8e959e')));
+      if (model.outfit === 'plate') {
+        parts.push(limb([sh, elbow], armW + 0.4, dark(metal, 0.05)));
+        parts.push(circle(elbow[0], elbow[1], armW * 0.62, light(metal, 0.08)));
+      }
+      const glove = model.outfit === 'armor' || model.outfit === 'plate' ? metal : model.outfit === 'leather' ? dark(P.leather, 0.1)
+        : model.outfit === 'leatherArmor' || model.outfit === 'mail' ? paint('#6a4428') : dark(P.accent, 0.1);
       parts.push(limb([[ex, ey], [hand[0] - (hand[0] - elbow[0]) * 0.08, hand[1] - (hand[1] - elbow[1]) * 0.08]], armW + 0.5, glove));
     }
     parts.push(circle(hand[0], hand[1], handR, P.skin));
