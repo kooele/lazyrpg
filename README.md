@@ -234,14 +234,14 @@ Skills can cost **mana** (`mana` in `skills.json`), which doesn't come back duri
 
 **Damage types**: every hit is split by what it scales with. P.Atk, Defense and missing Health deal **Physical** damage (red numbers); M.Atk deals **Magical** damage (violet numbers), so a hybrid hit like Magic Bolt shows one of each. Both are reduced by Defense, after the attacker's penetration of that type (P.Pen for Physical, M.Pen for Magical); `Battle.mitigation` is also where magic resistance would go. Skills are tagged Physical / Magical to match their hits (a test checks this).
 
-**Basic abilities** (every Adventurer, listed under the weapon skills on the Loadout's Skills page):
+**Basic abilities** (every Adventurer, listed under the weapon skills on the Skills screen):
 
 - **Dash** (1 AP, 20 MP, cooldown 2): only after the regular move. Spends the action AP to move again, up to your Movement. Overwatch can still fire on the way; it can't be undone.
 - **Overwatch** (ends turn): watch a 60° arc in any direction, as far as your weapon reaches (Longbow 6 in Direct mode, 9 in Indirect, 1.5 in Melee; Spear and Staff 2; the rest 1.5). The first enemy to move into it takes your basic attack and keeps moving. It catches anything that crosses the ground on its own feet, on any tile of the way: walking, Dash, and movement skills that run or leap to their target (Charge; monsters' Pounce, Dive and Infernal Leap). Teleports (Arcane Shift, Shadow Step, Flicker Strike) skip the tiles in between and can't be caught. Bow and Spear no longer have their own Overwatch / Intercept.
 
 ### Skill points, skill trees and the Body tab
 
-Adventurers have **skill points**: 2 at level 1 and 1 more every level. Each point either learns a skill-tree skill (mix trees freely) or goes into the **Body** tab, where it trains a stat by twice its base growth per level: +100 Health, +40 Mana, +20 P.Atk or M.Atk, +20 Defense or Resist per point (before weapon multipliers; talent doesn't change it). Each stat takes at most **level / 3 (rounded up)** points: 1 up to level 3, 2 up to level 6, and so on; a loaded save over the cap gets the extra points back. Points can be moved around freely in Customize / Loadout.
+Adventurers have **skill points**: 2 at level 1 and 1 more every level. Each point either learns a skill-tree skill (mix trees freely) or goes into the **Body** tab, where it trains a stat by twice its base growth per level: +100 Health, +40 Mana, +20 P.Atk or M.Atk, +20 Defense or Resist per point (before weapon multipliers; talent doesn't change it). Each stat takes at most **level / 3 (rounded up)** points: 1 up to level 3, 2 up to level 6, and so on; a loaded save over the cap gets the extra points back. Points can be moved around freely in Skills (Manage Party).
 
 
 Some skills need a **minimum level** (`level` in `skills.json`; shown as "Lv 3" in the skill tree). Until then they're greyed out and can't be learned. A loaded save with a skill above the character's level unlearns it and refunds the point. Random adventurers only pick skills their level has unlocked.
@@ -316,7 +316,7 @@ Cleric skills (Heal, Cleanse, Protection, Barrier) work only on your own side, y
 - No line needed: melee skills and the Basic Attack (a Staff or Spear reaches 2 tiles over anyone), Indirect Shot (bow in Indirect mode), Ignite, Freeze, Heal, Cleanse, Arcane Shift.
 - **Ranges** use Euclidean distance. Ranges of 2 or more round the distance to the nearest tile, so range 2 also reaches 2-over-1-up and shapes are rounder. Ranges 1 and 1.5 stay exact: 1 is the 4 neighbours, 1.5 adds the diagonals. Set `rangeRounding.fromRange` in `stats.json` to change the cut-off.
 - Skill tooltips and the Skills page show a **tile diagram** of what each skill covers, with you in gold, rather than describing range in words.
-- The character creator and **Loadout** have two pages: **Customize** (name, look, a big preview, stats and talent; new characters also pick a Crude starting weapon here) and **Skills** (the weapon's skills and the basic abilities, the skill trees and the Body tab, and a details panel for the skill you hover). Gear is changed in Manage Party → Equipment.
+- Manage Party has three buttons for the selected member: **Customize** (name, look, a big preview, stats and talent), **Equipment** (gear and the stash) and **Skills** (the weapon's skills and the basic abilities, the skill trees and the Body tab, and a details panel for the skill you hover; it shows the points left to spend). Creating a character (new game, Quick Battle) shows Customize and Skills as two tabs, and Customize also has the Crude starting weapon.
 - Cooldowns count from the turn a skill is used: cooldown 1 means not again that turn but ready next turn; cooldown 2 skips your next turn. Every skill has a cooldown of at least 1.
 - `vision` (fog of war) is built but switched off in `stats.json`.
 

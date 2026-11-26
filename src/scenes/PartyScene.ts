@@ -412,15 +412,22 @@ export class PartyScene extends Phaser.Scene {
 
     // ---- actions ----
     const by = HEIGHT - 76;
-    button(this, X + 16, by, 130, 44, 'Loadout', () => this.scene.start('CharacterCreator', { mode: 'edit', characterId: c.id }), {
-      enabled: k?.type !== 'mercenary', fontSize: 14, selected: free > 0 && k?.type !== 'mercenary',
+    // The member's own screens (Customize, Equipment, Skills), then contract actions on the right.
+    const merc = k?.type === 'mercenary';
+    const mercTip = (what: string) => (merc ? { onHover: () => this.tip.show(`Mercenaries come as they are: no changes to their ${what}.`), onOut: () => this.tip.hide() } : {});
+    button(this, X + 16, by, 104, 44, 'Customize', () => this.scene.start('CharacterCreator', { mode: 'edit', page: 'customize', characterId: c.id }), {
+      enabled: !merc, fontSize: 14, ...mercTip('look'),
     });
-    button(this, X + W - 146, by, 130, 44, 'Equipment', () => this.scene.start('Equipment', { selected: c.id }), {
-      fontSize: 14, onHover: k?.type === 'mercenary' ? () => this.tip.show('Mercenaries fight with their own gear.') : undefined, onOut: () => this.tip.hide(),
+    button(this, X + 126, by, 104, 44, 'Equipment', () => this.scene.start('Equipment', { selected: c.id }), {
+      fontSize: 14, ...(merc ? { onHover: () => this.tip.show('Mercenaries fight with their own gear.'), onOut: () => this.tip.hide() } : {}),
     });
+    button(this, X + 236, by, 104, 44, free > 0 && !merc ? `Skills (${free})` : 'Skills', () => this.scene.start('CharacterCreator', { mode: 'edit', page: 'skills', characterId: c.id }), {
+      enabled: !merc, fontSize: 14, selected: free > 0 && !merc, ...mercTip('skills'),
+    });
+    const AX = X + 352;
     if (isCompanion(c)) {
       const left = daysLeft(c.contract, state.day);
-      button(this, X + 156, by, 120, 44, 'Renew', () => this.scene.start('Negotiate', { mode: 'renew', id: c.id }), {
+      button(this, AX, by, 100, 44, 'Renew', () => this.scene.start('Negotiate', { mode: 'renew', id: c.id }), {
         enabled: left <= 7, fontSize: 14, selected: left <= 0,
       });
       const wages = proratedWages(c, state.day);
@@ -432,31 +439,31 @@ export class PartyScene extends Phaser.Scene {
         owed ? `${tabLabel('wages')}: ${owed} gold.` : '',
         buyout ? `Breaking the contract early: ${buyout} gold.` : 'Their term is over: no buyout.',
       ].filter(Boolean).join('\n');
-      button(this, X + 286, by, 128, 44, cost ? `Release\n(${cost}g)` : 'Release', () => confirmDialog(this, `Release ${c.name} from their contract?\n${why}`, () => {
+      button(this, AX + 106, by, 110, 44, cost ? `Release\n(${cost}g)` : 'Release', () => confirmDialog(this, `Release ${c.name} from their contract?\n${why}`, () => {
         const err = releaseCompanion(state, c.id);
         if (err) return toast(this, err, COLORS.bad);
         markDirty();
         this.render();
       }, 'Release'), { fontSize: cost ? 12 : 14 });
-      if (left > 7) text(this, X + 156, by - 18, 'Renewal opens in the last week.', { fontSize: '11px', color: COLORS.dim });
+      if (left > 7) text(this, AX, by - 18, 'Renewal opens in the last week.', { fontSize: '11px', color: COLORS.dim });
     } else if (k?.type === 'slave') {
-      button(this, X + 156, by, 140, 44, 'Sell', () => confirmDialog(this, `Sell ${c.name} to the slave market for ${marketBuyPrice(state, c)} gold?${tabOwed(state, c.id) ? `\nTheir ${tabLabel('taxes')}, ${tabOwed(state, c.id)} gold, comes out of it.` : ''}`, () => {
+      button(this, AX, by, 100, 44, 'Sell', () => confirmDialog(this, `Sell ${c.name} to the slave market for ${marketBuyPrice(state, c)} gold?${tabOwed(state, c.id) ? `\nTheir ${tabLabel('taxes')}, ${tabOwed(state, c.id)} gold, comes out of it.` : ''}`, () => {
         const gold = sellSlave(state, c.id);
         markDirty();
         this.render();
         toast(this, `Sold for ${gold} gold.`);
       }, 'Sell'), { fontSize: 14 });
       const punished = isSlave(c) && c.contract.punishedDay === state.day;
-      button(this, X + 306, by, 112, 44, 'Punish', () => confirmDialog(this,
+      button(this, AX + 106, by, 110, 44, 'Punish', () => confirmDialog(this,
         `Punish ${c.name}?\nObedience +${GUILD.slave.punishObedience}, relationship -${GUILD.slave.punishRelationship}.\nObedience will drift back down while relationship stays below ${GUILD.slave.obedienceFallBelow}.`, () => {
           const err = punishSlave(c, state.day);
           if (err) return toast(this, err, COLORS.bad);
           markDirty();
           this.render();
         }, 'Punish'), { fontSize: 14, enabled: !punished });
-      if (punished) text(this, X + 306, by - 18, 'Punished today.', { fontSize: '11px', color: COLORS.dim });
+      if (punished) text(this, AX + 106, by - 18, 'Punished today.', { fontSize: '11px', color: COLORS.dim });
     } else if (k?.type === 'mercenary') {
-      button(this, X + 156, by, 140, 44, 'Dismiss', () => confirmDialog(this, `Dismiss ${c.name}? No refund.`, () => {
+      button(this, AX + 106, by, 110, 44, 'Dismiss', () => confirmDialog(this, `Dismiss ${c.name}? No refund.`, () => {
         leaveParty(state, c);
         markDirty();
         this.render();

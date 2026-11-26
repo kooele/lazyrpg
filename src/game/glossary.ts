@@ -130,7 +130,7 @@ export function glossaryEntries(): GlossaryEntry[] {
     + `It's separate from your party's rank, which comes from renown. A quest of a rank has enemies of that rank's levels.`);
   add('Experience', 'Skill Points and the Body Tab',
     `Adventurers have 2 skill points at level 1 and gain 1 a level. Each point learns a skill-tree skill or goes into the Body tab, where it adds twice a stat's base growth per level (talent doesn't change it).\n\n`
-    + `Each Body stat takes at most level ÷ 3 points (rounded up). Points can be moved freely in Loadout.`);
+    + `Each Body stat takes at most level ÷ 3 points (rounded up). Points can be moved freely in Skills (Manage Party).`);
   add('Experience', 'Talent',
     `Each growing stat has a talent grade that multiplies its growth per level: ${(['S', 'A', 'B', 'C', 'D', 'F'] as const).map((g) => `${g} ${pct(growth[g])}`).join(', ')}. Talent doesn't change level-1 stats, so it shows more the higher an adventurer levels.\n\n`
     + `An adventurer's overall talent is the grade nearest the average of their grades, with + or − when it leans toward the next one.`);

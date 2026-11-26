@@ -21,8 +21,10 @@ import { TALENT_COLORS, growthRate, overallTalent, overallTalentLabel, rollTalen
 import { figureKit, gear, gearBase, gearModifier, weaponName, weaponOf } from '../game/gear';
 
 interface CreatorData {
-  /** main: create the main character for a new game. edit: change a party member's loadout (and the main character's look). */
+  /** main: create the main character for a new game. edit: change a party member's look or skills (Manage Party). */
   mode: 'main' | 'edit' | 'demo' | 'demoEdit';
+  /** edit: which screen (Customize or Skills); there are no page tabs then. */
+  page?: Page;
   characterId?: string;
 }
 
@@ -50,6 +52,8 @@ export class CharacterCreatorScene extends Phaser.Scene {
   private tooltip!: Tooltip;
   /** Which page is showing: name, look and stats, or skills. */
   private page: Page = 'customize';
+  /** In the campaign (Manage Party's Customize / Skills buttons), the one page shown, with no tabs. */
+  private fixedPage: Page | null = null;
   /** The skill shown in the Skills page's details panel (the last one hovered). */
   private focus: string | null = null;
   private detail: Phaser.GameObjects.Container | null = null;
@@ -61,6 +65,7 @@ export class CharacterCreatorScene extends Phaser.Scene {
 
   init(data: CreatorData): void {
     this.mode = data.mode ?? 'main';
+    this.fixedPage = this.mode === 'edit' ? (data.page ?? 'skills') : null;
     if (this.mode === 'edit' || this.mode === 'demoEdit') {
       const list = this.mode === 'edit' ? requireState().party : requireDemo().party;
       const existing = list.find((c) => c.id === data.characterId);
@@ -159,7 +164,7 @@ export class CharacterCreatorScene extends Phaser.Scene {
   create(): void {
     setupCamera(this, 0x111522);
     this.skillList = null;
-    this.page = this.mode === 'edit' || this.mode === 'demoEdit' ? 'skills' : 'customize';
+    this.page = this.fixedPage ?? (this.mode === 'demoEdit' ? 'skills' : 'customize');
     this.focus = null;
 
     // Name field is a real HTML input so typing works everywhere (incl. mobile keyboards).
@@ -220,10 +225,11 @@ export class CharacterCreatorScene extends Phaser.Scene {
     const d = this.draft;
 
     // ---- Title and page tabs ------------------------------------------------------------
-    const title = this.mode === 'main' ? 'Your Character' : this.mode === 'demo' ? 'New Adventurer' : `Loadout: ${d.name.trim() || '(no name)'}`;
+    const who = d.name.trim() || '(no name)';
+    const title = this.mode === 'main' ? 'Your Character' : this.mode === 'demo' ? 'New Adventurer' : this.fixedPage ? `${PAGE_NAMES[this.fixedPage]}: ${who}` : `Loadout: ${who}`;
     L.add(text(this, 24, 14, title, { fontSize: '28px', color: COLORS.gold }));
     const free = freePoints(d);
-    PAGES.forEach((pg, i) => {
+    if (!this.fixedPage) PAGES.forEach((pg, i) => {
       L.add(button(this, 724 + i * 108, 14, 104, 34, pg === 'skills' && free > 0 ? `Skills (${free})` : PAGE_NAMES[pg], () => {
         this.page = pg;
         this.render();
@@ -255,7 +261,6 @@ export class CharacterCreatorScene extends Phaser.Scene {
     L.add(text(this, 342, 96, `Level ${d.level}${this.mode === 'edit' ? ` · ${d.xp}/${xpToNext(d.level)} XP` : ''}`, { color: COLORS.dim, fontSize: '12px' }));
     // A new character picks a Crude starting weapon; after that, gear is changed in Manage Party > Equipment.
     if (this.mode !== 'edit') this.weaponPicker(L, 330, 330);
-    else L.add(text(this, 475, 330, 'Weapons and armor are changed in Manage Party > Equipment.', { color: COLORS.dim, fontSize: '12px', align: 'center', wordWrap: { width: 280 } }).setOrigin(0.5, 0));
 
     // Right: stats and talent.
     const bottom = this.mode === 'main' ? 470 : 548;
