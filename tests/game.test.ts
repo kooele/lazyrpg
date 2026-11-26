@@ -584,6 +584,60 @@ describe('skills', () => {
     expect(v.acted).toBe(false); // 1 AP: the action AP is still there
   });
 
+  it('charges run their path like a walk: enemy overwatch fires on the way; teleports slip past', () => {
+    // A watching archer at (1,3) covers (4,3); the charger starts outside the arc and lands there.
+    const watched = (charger: Character, skillId: string, startX = 7) => {
+      const { battle, units: [archer, target, u] } = setup(openMap(12, 7), [
+        { c: hero('bow'), team: 'player', at: { x: 1, y: 3 } },
+        { c: hero('sword_shield'), team: 'player', at: { x: 3, y: 3 } },
+        { c: charger, team: 'enemy', at: { x: startX, y: 3 } },
+      ]);
+      battle.perform(archer, 'overwatch', { x: 5, y: 3 });
+      expect(archer.overwatch!.tiles.has('4,3')).toBe(true);
+      battle.endPhase();
+      const hp = u.hp;
+      const targetHp = target.hp;
+      const events = battle.perform(u, skillId, { x: 3, y: 3 });
+      return { battle, archer, target, u, events, shot: hp - u.hp, struck: targetHp - target.hp };
+    };
+
+    // Monster Pounce from outside the arc (7,3): shot on the way in, still lands next to its prey and strikes.
+    const pounce = watched(makeEnemy('wolf', 1, makeRng(3)), 'pounce');
+    expect(pounce.shot).toBeGreaterThan(0);
+    expect(pounce.archer.overwatch).toBeNull(); // the watch is spent
+    expect(pounce.u).toMatchObject({ x: 4, y: 3 });
+    expect(pounce.struck).toBeGreaterThan(0);
+    // One move event per tile, with the overwatch shot right after the first step into the arc (6,3).
+    const kinds = pounce.events.map((e) => (e.type === 'damage' ? `damage:${e.cause}` : e.type));
+    expect(kinds.slice(0, 4)).toEqual(['move', 'damage:overwatch', 'move', 'move']);
+    expect(pounce.events[0]).toMatchObject({ type: 'move', to: { x: 6, y: 3 } });
+
+    // The player's Charge works the same way.
+    const charge = watched(hero('sword_shield', ['charge']), 'charge');
+    expect(charge.shot).toBe(100); // Direct Shot: 100 P.Atk on Def 0
+    expect(charge.struck).toBeGreaterThan(0);
+
+    // Teleport strikes don't cross the ground in between: no overwatch.
+    const flicker = watched(hero('sword_shield', ['flicker_strike']), 'flicker_strike', 6); // range 3
+    expect(flicker.u).toMatchObject({ x: 4, y: 3 }); // appeared inside the arc
+    expect(flicker.shot).toBe(0);
+    expect(flicker.archer.overwatch).not.toBeNull();
+
+    // An interrupting watch stops the charge short: no strike if it no longer reaches.
+    const { battle, units: [archer, target, u] } = setup(openMap(12, 7), [
+      { c: hero('bow'), team: 'player', at: { x: 1, y: 3 } },
+      { c: hero('sword_shield'), team: 'player', at: { x: 2, y: 3 } },
+      { c: hero('sword_shield', ['charge']), team: 'enemy', at: { x: 6, y: 3 } },
+    ]);
+    battle.perform(archer, 'overwatch', { x: 5, y: 3 });
+    archer.overwatch!.interrupt = true; // no watch interrupts yet; the rules support it
+    battle.endPhase();
+    battle.perform(u, 'charge', { x: 2, y: 3 });
+    expect(u).toMatchObject({ x: 5, y: 3 }); // stopped at its first step, short of (3,3)
+    expect(target.hp).toBe(500);
+    expect(u.cooldowns.charge).toBeGreaterThan(0); // the charge is still spent
+  });
+
   it('kick is free: the unit can still act afterwards', () => {
     const { battle, units: [k] } = setup(openMap(), [
       { c: hero('sword_shield', ['kick']), team: 'player', at: { x: 1, y: 1 } },

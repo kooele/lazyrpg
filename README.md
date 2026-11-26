@@ -208,7 +208,7 @@ Skills can cost **mana** (`mana` in `skills.json`), which doesn't come back duri
 **Basic abilities** (every Adventurer, listed under the weapon in the creator):
 
 - **Dash** (1 AP, 20 MP, cooldown 2): only after the regular move. Spends the action AP to move again, up to your Movement. Overwatch can still fire on the way; it can't be undone.
-- **Overwatch** (ends turn): watch a 60° arc in any direction, as far as your weapon reaches (Bow 5 in Direct mode, 7.5 in Indirect, 1.5 in Melee; Spear 2; sword and staff 1.5). The first enemy to move into it takes your basic attack and keeps moving. Bow and Spear no longer have their own Overwatch / Intercept.
+- **Overwatch** (ends turn): watch a 60° arc in any direction, as far as your weapon reaches (Bow 5 in Direct mode, 7.5 in Indirect, 1.5 in Melee; Spear 2; sword and staff 1.5). The first enemy to move into it takes your basic attack and keeps moving. It catches anything that crosses the ground on its own feet, on any tile of the way: walking, Dash, and movement skills that run or leap to their target (Charge; monsters' Pounce, Dive and Infernal Leap). Teleports (Arcane Shift, Shadow Step, Flicker Strike) skip the tiles in between and can't be caught. Bow and Spear no longer have their own Overwatch / Intercept.
 
 ### Skill points, skill trees and the Body tab
 

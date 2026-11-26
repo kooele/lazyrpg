@@ -1261,13 +1261,30 @@ export class BattleScene extends Phaser.Scene {
     }
     const summary: string[] = [];
     let n = 0;
+    // Overwatch shots taken on the way (a charge runs like a walk) get their own log line, as on a walk.
+    let reaction: { shooter: string; summary: string[] } | null = null;
+    const flushReaction = async () => {
+      if (!reaction) return;
+      this.addLog(`${reaction.shooter} reacts! ${reaction.summary.join(', ')}`);
+      reaction = null;
+      this.refresh();
+      await this.wait(700);
+    };
     for (const e of events) {
       if (e.type === 'move') {
+        await flushReaction();
         await this.animateDisplacement(e);
         continue;
       }
+      if ('cause' in e && e.cause === 'overwatch') {
+        reaction ??= { shooter: e.source ? this.battle.unit(e.source).character.name : 'Overwatch', summary: [] };
+        this.showEvent(e, reaction.summary, reaction.summary.length);
+        continue;
+      }
+      await flushReaction();
       this.showEvent(e, summary, n++);
     }
+    await flushReaction();
     this.flashArea(s, u, target);
     const detail = summary.length ? `: ${summary.join(', ')}`
       : s.cone ? ' and watches the area.' : s.teleport ? '.' : s.hits?.length ? ' — it hits nothing.' : ' — it has no effect.';
@@ -1285,7 +1302,8 @@ export class BattleScene extends Phaser.Scene {
       view.container.setPosition(to.x, to.y);
       await this.tween({ targets: view.container, alpha: 1, scale: 1, duration: 150 });
     } else {
-      await this.tween({ targets: view.container, x: to.x, y: to.y, duration: e.kind === 'charge' ? 220 : 140, ease: 'Quad.easeOut' });
+      // A charge comes one tile per event (it runs its path like a walk, so overwatch can catch it on the way).
+      await this.tween({ targets: view.container, x: to.x, y: to.y, duration: e.kind === 'charge' ? 80 : 140, ease: e.kind === 'charge' ? 'Linear' : 'Quad.easeOut' });
     }
   }
 

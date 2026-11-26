@@ -1044,6 +1044,16 @@ export class Battle {
    * if it is empty), reachable in at most `range` steps (diagonals allowed). Null if impossible.
    */
   chargeDestination(caster: Unit, tile: Point, from: Point = caster, skill?: SkillDef): Point | null {
+    const path = this.chargePath(caster, tile, from, skill);
+    return path ? (path.length ? path[path.length - 1] : { x: from.x, y: from.y }) : null;
+  }
+
+  /**
+   * The tiles a charge travels through to its destination (see chargeDestination), in order, without the start;
+   * empty when the user is already next to the target. A teleport strike's path is just where it appears. Null if
+   * the charge can't land anywhere.
+   */
+  chargePath(caster: Unit, tile: Point, from: Point = caster, skill?: SkillDef): Point[] | null {
     const chargeSkill = skill ?? Object.values(SKILLS).find((x) => x.charge);
     if (!chargeSkill) return null;
     const target = this.occupantFrom(caster, from, tile);
@@ -1051,7 +1061,7 @@ export class Battle {
     const free = (p: Point) => passable(this.map, p.x, p.y) && (!this.occupantFrom(caster, from, p) || (p.x === from.x && p.y === from.y));
     let goals: Point[];
     if (target) {
-      if (dist(from, tile) <= 1.5 + EPS) return { x: from.x, y: from.y };
+      if (dist(from, tile) <= 1.5 + EPS) return [];
       goals = DIRS8.map((d) => ({ x: tile.x + d.x, y: tile.y + d.y })).filter((p) => this.inMap(p) && free(p));
     } else {
       // A teleport strike needs someone to appear next to; a dash can just run to the tile.
@@ -1059,10 +1069,11 @@ export class Battle {
     }
     if (goals.length === 0) return null;
     // Teleport strike (Flicker Strike): appear on the free tile next to the target closest to you.
-    if (chargeSkill.teleport) return goals.reduce((a, b) => (dist(from, b) < dist(from, a) - EPS ? b : a));
+    if (chargeSkill.teleport) return [goals.reduce((a, b) => (dist(from, b) < dist(from, a) - EPS ? b : a))];
     const goalKeys = new Set(goals.map((p) => key(p.x, p.y)));
     const maxSteps = Math.floor(this.skillRange(caster, chargeSkill));
     const seen = new Map<string, number>([[key(from.x, from.y), 0]]);
+    const prev = new Map<string, Point>();
     const queue: Point[] = [{ x: from.x, y: from.y }];
     let best: Point | null = null;
     while (queue.length) {
@@ -1079,10 +1090,14 @@ export class Battle {
         const occ = this.occupantFrom(caster, from, n);
         if (occ && occ.team !== caster.team) continue;
         seen.set(key(n.x, n.y), steps + 1);
+        prev.set(key(n.x, n.y), p);
         queue.push(n);
       }
     }
-    return best;
+    if (!best) return null;
+    const path: Point[] = [];
+    for (let p: Point | undefined = best; p && (p.x !== from.x || p.y !== from.y); p = prev.get(key(p.x, p.y))) path.unshift(p);
+    return path;
   }
 
   // ---- resist ------------------------------------------------------------------------
@@ -1355,13 +1370,30 @@ export class Battle {
         events.push({ type: 'toggle', target: u.uid, name: def.name, on: true });
       }
     }
-    if (skill.charge) {
+    // Still next to the target after the charge (it can be stopped short)? Melee charges strike only then.
+    let stoppedShort = false;
+    if (skill.charge && skill.teleport) {
       const dest = this.chargeDestination(u, tile, u, skill)!;
       if (dest.x !== u.x || dest.y !== u.y) {
         u.x = dest.x;
         u.y = dest.y;
-        events.push({ type: 'move', target: u.uid, from: origin, to: dest, kind: skill.teleport ? 'teleport' : 'charge' });
+        events.push({ type: 'move', target: u.uid, from: origin, to: dest, kind: 'teleport' });
         events.push(...this.zoneHits(u, dest, 1));
+      }
+    } else if (skill.charge) {
+      // A charge runs there on its own feet, tile by tile like a walk: enemy overwatch fires (and an interrupting
+      // watch or Frozen stops it) and zones hit on the way. Teleports skip all that.
+      const walked = this.walk(u, this.chargePath(u, tile, u, skill)!);
+      let at = origin;
+      walked.path.forEach((step, i) => {
+        events.push({ type: 'move', target: u.uid, from: at, to: step, kind: 'charge' });
+        at = step;
+        for (const t of walked.triggers) if (t.index === i) events.push(...t.events);
+      });
+      stoppedShort = walked.interrupted;
+      if (!u.alive) {
+        this.payFor(u, skillId, true);
+        return events;
       }
     } else if (skill.teleport) {
       u.x = tile.x;
@@ -1390,7 +1422,9 @@ export class Battle {
       events.push({ type: 'overwatch', source: u.uid, skillId });
     }
 
-    const targets = skill.toggleStatus ? [] : aimed ?? this.targetsOf(u, skill, tile);
+    let targets = skill.toggleStatus ? [] : aimed ?? this.targetsOf(u, skill, tile);
+    // Stopped on the way: the strike only lands on targets it still reaches.
+    if (stoppedShort) targets = targets.filter((t) => dist(u, t) <= 1.5 + EPS);
     // Weapon attacks carry on-hit effects (Arcane Weapon): one per swing (Double Strike swings twice).
     const swings = this.isWeaponAttack(u, skill) ? (used.basicAttack ?? 1) : 0;
     for (const t of targets) {

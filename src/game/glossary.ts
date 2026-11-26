@@ -195,7 +195,8 @@ export function glossaryEntries(): GlossaryEntry[] {
     `Hitting a unit with an Engage skill locks you both together, unless it's already engaged with someone else. While engaged you can't move, and you can only attack your opponent (and heal or cleanse yourself).\n\n`
     + `Disengage breaks free, but your opponent gets a free basic attack. Disengage skills (like Shadow Step) slip out with no free attack. Knockbacks and falling also end it.`);
   add('Battle', 'Overwatch',
-    `Overwatch ends the turn and watches a 60° arc as far as your weapon reaches. The first enemy to move into it takes your basic attack and keeps moving.`);
+    `Overwatch ends the turn and watches a 60° arc as far as your weapon reaches. The first enemy to move into it takes your basic attack and keeps moving.\n\n`
+    + `Walking, Dash and movement skills that run or leap to their target (Charge, and monsters' Pounce, Dive and Infernal Leap) can all be caught, on any tile of the way. Teleports (Arcane Shift, Shadow Step, Flicker Strike) skip the tiles in between, so they can't.`);
   add('Battle', 'Burn and Chilled Stacks',
     `${burn?.name ?? 'Burn'}: ${burn?.description ?? ''}\n\n${chilled?.name ?? 'Chilled'} (ice skills): ${chilled?.description ?? ''}\n\n`
     + `Stacks don't last a set number of turns: the unit loses one each turn. A unit with 2 stacks is affected just as much as with 1, for one more turn; a status shows its stacks as Burn (2).\n\n`
