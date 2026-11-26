@@ -600,8 +600,11 @@ export class Battle {
 
   // ---- movement -----------------------------------------------------------------
 
-  /** Tiles the unit can end its move on (including where it stands). Orthogonal steps only. */
-  reachable(u: Unit): Map<string, ReachInfo> {
+  /**
+   * Tiles the unit can end its move on (including where it stands). Orthogonal steps only. `avoid`: tiles it won't
+   * step onto (it may still pass through an ally standing on one), e.g. enemy overwatch arcs (see watchedTiles).
+   */
+  reachable(u: Unit, avoid?: Set<string>): Map<string, ReachInfo> {
     const budget = this.stat(u, 'movement');
     const result = new Map<string, ReachInfo>([[key(u.x, u.y), { cost: 0, prev: null, hazards: 0 }]]);
     const frontier: { x: number; y: number; cost: number; hazards: number }[] = [{ x: u.x, y: u.y, cost: 0, hazards: 0 }];
@@ -614,6 +617,7 @@ export class Battle {
         if (!passable(this.map, nx, ny)) continue;
         const occupant = this.unitAt(nx, ny);
         if (occupant && occupant.team !== u.team) continue; // can't pass through enemies
+        if (!occupant && avoid?.has(key(nx, ny))) continue; // overwatch doesn't fire while passing through an ally
         const cost = cur.cost + (TERRAIN[this.map.tiles[ny][nx]].moveCost ?? 99);
         if (cost > budget) continue;
         const k = key(nx, ny);
@@ -702,8 +706,39 @@ export class Battle {
     return path;
   }
 
-  /** Walk to `dest` with the movement AP. Enemy overwatch can shoot (and an interrupting watch can stop) the unit on the way. */
-  move(u: Unit, dest: Point): MoveResult {
+  /** Tiles where enemy overwatch would fire at `u` if it stepped there (none while it's Stealthed). */
+  watchedTiles(u: Unit): Set<string> {
+    const out = new Set<string>();
+    if (this.isStealthed(u)) return out;
+    for (const w of this.living()) if (w.team !== u.team && w.overwatch) for (const k of w.overwatch.tiles) out.add(k);
+    return out;
+  }
+
+  /**
+   * The path a move to `dest` takes: the cheapest one, or with `avoidWatch` one around every enemy overwatch arc
+   * when there's such a path within the unit's Movement (the cheapest one otherwise). `reach` and `safe` can be
+   * passed in when already worked out (reachable(u), and reachable(u, watchedTiles(u))).
+   */
+  routeTo(u: Unit, dest: Point, avoidWatch = false, reach = this.reachable(u), safe?: Map<string, ReachInfo>): Point[] {
+    if (dest.x === u.x && dest.y === u.y) return [];
+    if (avoidWatch) {
+      const around = safe ?? this.safeReach(u);
+      if (around?.has(key(dest.x, dest.y))) return this.pathTo(around, dest);
+    }
+    return this.pathTo(reach, dest);
+  }
+
+  /** Where `u` can get to without stepping into enemy overwatch; null when nothing is watched. */
+  safeReach(u: Unit): Map<string, ReachInfo> | null {
+    const watched = this.watchedTiles(u);
+    return watched.size ? this.reachable(u, watched) : null;
+  }
+
+  /**
+   * Walk to `dest` with the movement AP. Enemy overwatch can shoot (and an interrupting watch can stop) the unit on
+   * the way. `avoidWatch`: go around enemy overwatch arcs when that's possible (see routeTo).
+   */
+  move(u: Unit, dest: Point, avoidWatch = false): MoveResult {
     if (!this.canMove(u)) throw new Error(`${u.character.name} can't move now`);
     const reach = this.reachable(u);
     if (!reach.has(key(dest.x, dest.y))) throw new Error('Destination not reachable');
@@ -711,7 +746,7 @@ export class Battle {
     u.walked = true;
     u.ap -= 1;
     this.lockTeammates(u);
-    return this.walk(u, this.pathTo(reach, dest));
+    return this.walk(u, this.routeTo(u, dest, avoidWatch, reach));
   }
 
   /** Dash: after the regular move, spend the action AP (and its mana, cooldown) to move again. */
@@ -1264,6 +1299,37 @@ export class Battle {
     const end = path[path.length - 1] ?? u;
     for (const p of path) for (const z of this.zonesAt(p)) total += this.hitDamage(this.unit(z.casterUid), u, z.def.hit);
     for (const z of this.zonesAt(end)) total += z.def.endTurnHits * this.hitDamage(this.unit(z.casterUid), u, z.def.hit);
+    return total;
+  }
+
+  /**
+   * Damage `u` would take from enemy overwatch walking (or charging) along `path`: each watch fires once, on the
+   * first tile of the path in its arc where `u` could stop (not while passing through a unit), as in walk().
+   */
+  overwatchDanger(u: Unit, path: Point[]): number {
+    const watchers = this.living().filter((w) => w.team !== u.team && w.overwatch);
+    if (watchers.length === 0 || this.isStealthed(u)) return 0;
+    const fired = new Set<Unit>();
+    let total = 0;
+    const home = { x: u.x, y: u.y };
+    try {
+      for (const p of path) {
+        if (this.units.some((o) => o !== u && o.alive && o.x === p.x && o.y === p.y)) continue;
+        // Stand on the tile for the line checks, as the walk would.
+        u.x = p.x;
+        u.y = p.y;
+        for (const w of watchers) {
+          const ow = w.overwatch!;
+          if (fired.has(w) || !ow.tiles.has(key(p.x, p.y))) continue;
+          if (ow.los && !this.clearLine(w, u, ow.los, w)) continue;
+          fired.add(w);
+          total += ow.hits.reduce((sum, part) => sum + this.hitDamage(w, u, part), 0);
+        }
+      }
+    } finally {
+      u.x = home.x;
+      u.y = home.y;
+    }
     return total;
   }
 

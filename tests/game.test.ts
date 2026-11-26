@@ -7,7 +7,7 @@ import { ENEMIES, parseEnemies } from '../src/data/enemies';
 import statsJson from '../src/data/stats.json';
 import { STAT_CONFIG, parseStatConfig } from '../src/data/stats';
 import type { Character, SkillDef } from '../src/data/types';
-import { HOLD_FIRM_ODDS, bestAction, caution, holdsFirm, planTurn, preferredMode, runAiTurn, shouldDisengage, shouldSurrender, sideStrength, threatAt, tribeRouted, wantsToFlee } from '../src/game/ai';
+import { HOLD_FIRM_ODDS, bestAction, caution, holdsFirm, planTurn, preferredMode, runAiTurn, shouldDisengage, shouldSurrender, sideStrength, threatAt, tribeRouted, wantsToFlee, watchesForOverwatch } from '../src/game/ai';
 import { Battle, defenseMultiplier, resistChance, deploymentTiles, enemyTypesForStage, generateEnemies, makeEnemy, pickFoes, makeUnit, statEffectPct, statText, type Team } from '../src/game/battle';
 import { allSkills, bodyGain, skillBarLayout, swapBarSlots, bodyPoints as bodyPointsOf, bodyStats, createCharacter, deriveStats, freePoints, grantXp, isUnlocked, makeRng, pointsUsed, sanitizeLoadout } from '../src/game/character';
 import { randomAdventurer } from '../src/game/people';
@@ -1178,6 +1178,66 @@ describe('progression and enemy behaviour', () => {
     w2.hp = 40;
     runAiTurn(b2, bandit);
     expect(w2.alive).toBe(false);
+  });
+
+  it('humans and tribal fighters weigh overwatch before charging through it; beasts and evil charge anyway', () => {
+    // A deadly watch (boosted archer at (1,3)) covers the route to the target at (3,3); the charger starts at (7,3).
+    const choice = (make: () => Character, watched: boolean) => {
+      const { battle, units: [archer, , u] } = setup(openMap(12, 7), [
+        { c: hero('bow'), team: 'player', at: { x: 1, y: 3 } },
+        { c: hero('sword_shield'), team: 'player', at: { x: 3, y: 3 } },
+        { c: make(), team: 'enemy', at: { x: 7, y: 3 } },
+      ]);
+      if (watched) {
+        battle.perform(archer, 'overwatch', { x: 5, y: 3 });
+        archer.stats.pAtk = 5000;
+      }
+      battle.endPhase();
+      return bestAction(battle, u)?.id;
+    };
+    const withCharge = (type: string) => () => {
+      const c = makeEnemy(type, 3, makeRng(1));
+      c.weaponId = 'spear'; // Sellswords with a spear carry Charge
+      return c;
+    };
+    // No tribal kit has a charge yet: lend the orc's spear kit one for this test.
+    const orcSpear = ENEMIES.orc.weaponSkills.spear;
+    ENEMIES.orc.weaponSkills.spear = [...(orcSpear ?? []), 'charge'];
+    try {
+      for (const type of ['sellsword', 'orc']) { // human, tribal
+        expect(choice(withCharge(type), false)).toBe('charge');
+        expect(choice(withCharge(type), true)).not.toBe('charge');
+      }
+    } finally {
+      ENEMIES.orc.weaponSkills.spear = orcSpear;
+    }
+    expect(choice(() => makeEnemy('wolf', 3, makeRng(1)), true)).toBe('pounce'); // beast
+    expect(choice(() => makeEnemy('demon', 8, makeRng(1)), true)).toBe(choice(() => makeEnemy('demon', 8, makeRng(1)), false)); // evil: the watch changes nothing
+  });
+
+  it('humans and tribal fighters walk around an overwatch arc when they can; beasts walk straight through', () => {
+    // The straight way west to the knight at (2,0) runs through the watched arc; there's a way around through row 0.
+    const route = (make: () => Character) => {
+      const map = openMap(12, 7);
+      const { battle, units: [archer, , u] } = setup(map, [
+        { c: hero('bow'), team: 'player', at: { x: 1, y: 3 } },
+        { c: hero('sword_shield'), team: 'player', at: { x: 2, y: 0 } },
+        { c: make(), team: 'enemy', at: { x: 7, y: 3 } },
+      ]);
+      battle.perform(archer, 'overwatch', { x: 5, y: 3 });
+      archer.stats.pAtk = 5000;
+      battle.endPhase();
+      const plan = planTurn(battle, u);
+      const path = battle.routeTo(u, plan.moveTo, watchesForOverwatch(u)); // the route move() will take
+      battle.move(u, plan.moveTo, watchesForOverwatch(u));
+      return { shot: archer.overwatch ? 0 : 1, risk: battle.overwatchDanger(u, path), advanced: 7 - plan.moveTo.x };
+    };
+    for (const type of ['bandit', 'orc']) { // human, tribal: still advance, but around the arc
+      const r = route(() => makeEnemy(type, 3, makeRng(1)));
+      expect(r).toMatchObject({ shot: 0, risk: 0 });
+      expect(r.advanced).toBeGreaterThan(0);
+    }
+    expect(route(() => makeEnemy('wolf', 3, makeRng(1))).shot).toBe(1); // beast: straight through, shot
   });
 
   it('beast: runs once hurt (below 40%), a human of the same health doesn\'t', () => {

@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { SKILLS, STATUSES, WEAPONS, hasTag, isFree, isSupport, skillStatText } from '../data/content';
 import type { SkillDef, StatKey } from '../data/types';
 import { STAT_INFO } from '../data/types';
-import { bestAction, bestFreeAction, planTurn, preferredMode, shouldDisengage, shouldEscape, shouldSurrender } from '../game/ai';
+import { bestAction, bestFreeAction, planTurn, preferredMode, shouldDisengage, shouldEscape, shouldSurrender, watchesForOverwatch } from '../game/ai';
 import {
   AP_PER_TURN, Battle, deploymentTiles, generateEnemies, makeUnit, statEffectPct, statText,
   type BattleEvent, type MoveResult, type Unit,
@@ -1169,7 +1169,7 @@ export class BattleScene extends Phaser.Scene {
       }
       const plan = planTurn(b, u);
       if (b.canMove(u) && (plan.moveTo.x !== u.x || plan.moveTo.y !== u.y)) {
-        const result = b.move(u, plan.moveTo);
+        const result = b.move(u, plan.moveTo, watchesForOverwatch(u));
         await this.animateMove(u, result);
       }
       if (shouldEscape(b, u)) {
