@@ -1,7 +1,8 @@
-import { BASIC_SKILLS, DEFAULT_WEAPON, PALETTE, SKILLS, TREE_SKILLS, WEAPONS, xpToNext, skillPointsForLevel, maxBodyRank } from '../data/content';
+import { ARMORS, BASIC_SKILLS, DEFAULT_WEAPON, PALETTE, QUALITIES, SKILLS, TREE_SKILLS, WEAPONS, xpToNext, skillPointsForLevel, maxBodyRank } from '../data/content';
 import { ENEMIES } from '../data/enemies';
 import { STAT_CONFIG } from '../data/stats';
-import { BODY_MODELS, STAT_KEYS, type BodyModel, type BodyInvestment, type Character, type Look, type StatKey, type Stats, type Talents, type UnitModel } from '../data/types';
+import { BODY_MODELS, STAT_KEYS, type BodyModel, type BodyInvestment, type Character, type Gear, type Look, type StatKey, type Stats, type Talents, type UnitModel } from '../data/types';
+import { applyGear, gear, weaponOf } from './gear';
 import { lookFromModel } from './people';
 import { talentGrowth, talentStats } from './talent';
 
@@ -47,12 +48,14 @@ export function bodyBonus(body: BodyInvestment | undefined): Partial<Stats> {
   return out;
 }
 
-/** Final stats: level stats + Body investments (or the enemy type's stats) x weapon multipliers (rounded). */
+/**
+ * Final stats: level stats + Body investments (or the enemy type's stats) + equipment base stats, then x the
+ * equipment's modifiers (rounded). See applyGear.
+ */
 export function deriveStats(c: Character): Stats {
   const out = c.enemyType ? enemyLevelStats(c.enemyType, c.level) : levelStats(c.level, c.talents);
   if (!c.enemyType) for (const [k, v] of Object.entries(bodyBonus(c.body))) out[k as StatKey] += v ?? 0;
-  const mult = WEAPONS[c.weaponId]?.statMultipliers ?? {};
-  for (const k of STAT_KEYS) out[k] = Math.round(out[k] * (mult[k] ?? 1));
+  applyGear(out, c);
   out.movement = Math.max(1, out.movement);
   out.health = Math.max(1, out.health);
   return out;
@@ -84,18 +87,18 @@ export function skillPoints(c: Character): number {
  * The first skill is always the basic attack.
  */
 export function allSkills(c: Character): string[] {
-  const weaponSkills = WEAPONS[c.weaponId]?.skills ?? [];
+  const weaponSkills = weaponOf(c)?.skills ?? [];
   if (c.enemyType) {
     const def = ENEMIES[c.enemyType];
     const byLevel = Object.entries(def.skillsByLevel).filter(([lvl]) => c.level >= Number(lvl)).flatMap(([, s]) => s);
     // 'basic': only the basic attack (and Switch Mode, so archers can pick their bow mode).
     const fromWeapon = def.weaponSkillUse === 'basic' ? weaponSkills.filter((id, i) => i === 0 || SKILLS[id].switchMode) : weaponSkills;
-    return [...new Set([...fromWeapon, ...def.skills, ...(def.weaponSkills[c.weaponId] ?? []), ...byLevel])];
+    // An enemy's skillIds are its loadout's extra skills (see makeEnemy).
+    return [...new Set([...fromWeapon, ...def.skills, ...c.skillIds, ...byLevel])];
   }
   return [...weaponSkills, ...c.skillIds.slice(0, skillPoints(c)), ...BASIC_SKILLS];
 }
 
-/** A new level-1 Adventurer. Without talents every stat grows at 100% (grade C). */
 // ---- the battle skill bar ------------------------------------------------------------
 
 /** Slots per skill-bar page (hotkeys 1-9, 0). */
@@ -139,14 +142,19 @@ export function swapBarSlots(c: Character, a: number, b: number): void {
   c.skillBar = bar.slice(0, last + 1);
 }
 
-export function createCharacter(name: string, color = PALETTE[0], weaponId = DEFAULT_WEAPON, look?: Look, talents?: Talents): Character {
+/**
+ * A new level-1 Adventurer, with a Crude weapon (`weaponType`, '' = none) and Crude Leather (`armorType`, '' = none).
+ * Without talents every stat grows at 100% (grade C).
+ */
+export function createCharacter(name: string, color = PALETTE[0], weaponType = DEFAULT_WEAPON, look?: Look, talents?: Talents, armorType = 'leather'): Character {
   const id = newId();
   return {
     id,
     name,
     level: 1,
     xp: 0,
-    weaponId,
+    weapon: weaponType ? gear(weaponType) : null,
+    armor: armorType ? gear(armorType) : null,
     skillIds: [],
     appearance: { color, look: look ?? lookFromModel(modelFor(id)) },
     ...(talents ? { talents: { ...talents } } : {}),
@@ -169,9 +177,16 @@ export function cloneCharacter(c: Character): Character {
   return JSON.parse(JSON.stringify(c)) as Character;
 }
 
-/** Ensure weapon/skills are legal for the character's level. */
+/** A weapon or armor that exists, at a quality the party can own; anything else is dropped (null). */
+function validGear(g: Gear | null | undefined, kind: 'weapon' | 'armor'): Gear | null {
+  const def = g && (kind === 'weapon' ? WEAPONS[g.type] : ARMORS[g.type]);
+  return g && def && !def.builtIn && QUALITIES[g.quality] && !QUALITIES[g.quality].enemyOnly ? g : null;
+}
+
+/** Ensure gear/skills are legal for the character's level. */
 export function sanitizeLoadout(c: Character): void {
-  if (!WEAPONS[c.weaponId]) c.weaponId = DEFAULT_WEAPON;
+  c.weapon = validGear(c.weapon, 'weapon');
+  c.armor = validGear(c.armor, 'armor');
   c.skillIds = [...new Set(c.skillIds)].filter((s) => TREE_SKILLS.includes(s) && isUnlocked(c, s)).slice(0, skillPoints(c));
   // Body investments above the level's rank cap are refunded.
   const cap = maxBodyRank(c.level);

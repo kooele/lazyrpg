@@ -1,7 +1,7 @@
 // Shared type definitions for game data. Everything here is plain data so it
 // can be written to and read from human-readable JSON save files.
 
-export const STAT_KEYS = ['health', 'mana', 'pAtk', 'mAtk', 'defense', 'resist', 'movement', 'vision'] as const;
+export const STAT_KEYS = ['health', 'mana', 'pAtk', 'mAtk', 'defense', 'resist', 'movement', 'vision', 'pPen', 'pPenPct', 'mPen', 'mPenPct'] as const;
 export type StatKey = (typeof STAT_KEYS)[number];
 export type Stats = Record<StatKey, number>;
 
@@ -14,7 +14,18 @@ export const STAT_INFO: Record<StatKey, { name: string; short: string; descripti
   resist: { name: 'Resist', short: 'Res', description: 'Chance to shrug off debuffs (Burn, Chilled...): Resist / (100 + Resist), so 50 = 33%, 100 = 50%.' },
   movement: { name: 'Movement', short: 'Move', description: 'Movement points per turn (forest costs 2).' },
   vision: { name: 'Vision', short: 'Vis', description: 'How far the unit can see (when fog of war is enabled).' },
+  pPen: { name: 'Physical Penetration', short: 'P.Pen', description: 'Flat Defense ignored by your Physical damage (after the percent part).' },
+  pPenPct: { name: 'Physical Penetration %', short: 'P.Pen%', description: 'Percent of Defense ignored by your Physical damage.' },
+  mPen: { name: 'Magic Penetration', short: 'M.Pen', description: 'Flat Defense ignored by your Magical damage (after the percent part).' },
+  mPenPct: { name: 'Magic Penetration %', short: 'M.Pen%', description: 'Percent of Defense ignored by your Magical damage.' },
 };
+
+/** Penetration stats: shown together as one line per damage type ("P.Pen: 50% | 10"), not in the usual stat lists. */
+export const PEN_KEYS = ['pPen', 'pPenPct', 'mPen', 'mPenPct'] as const satisfies readonly StatKey[];
+/** Stats with an icon (public/art/stats/<stat>.svg). Penetration shares one icon per damage type. */
+export const STAT_ICONS: readonly StatKey[] = ['health', 'mana', 'pAtk', 'mAtk', 'defense', 'resist', 'movement', 'vision', 'pPen', 'mPen'];
+/** Penetration stats that are whole percents (50 = 50%). */
+export const PEN_PCT_KEYS: readonly StatKey[] = ['pPenPct', 'mPenPct'];
 
 /** Talent grades, worst to best. A stat's talent sets how fast it grows with level. */
 export const TALENT_GRADES = ['F', 'D', 'C', 'B', 'A', 'S'] as const;
@@ -29,21 +40,109 @@ export type BodyInvestment = Partial<Record<StatKey, number>>;
  */
 export type LosRule = 'sight' | 'fire';
 
-export interface WeaponDef {
+/** Equipment quality tier (equipment.json "qualities"). Base stats scale with it; stat modifiers don't. */
+export type QualityId = string;
+
+export interface QualityDef {
+  id: QualityId;
+  name: string;
+  /** Multiplier on the equipment's base stats (Crude 1, Common 2, Fine 4, Masterwork 7). */
+  baseMultiplier: number;
+  /** Gold value of a weapon or armor of this quality. */
+  value: number;
+  /** Only enemies use it (Goblin-Made): can't be equipped by the party. */
+  enemyOnly: boolean;
+}
+
+/** What a weapon or armor gives: flat base stats (x quality), then multipliers on the unit's stats. */
+interface GearStats {
+  /** Flat stats added before the multipliers, times the quality's baseMultiplier. */
+  base: Partial<Stats>;
+  /** Multipliers on the unit's stats (1.2 = 120%), applied after base stats. Penetration % (pPenPct, mPenPct) is added instead. */
+  modifiers: Partial<Stats>;
+}
+
+export interface WeaponDef extends GearStats {
   id: string;
   name: string;
+  /** Weapon class ("Mage", "2 Handed"...). */
+  class: string;
   /** Short tag drawn on battle tokens. */
   tag: string;
   description: string;
-  /** Sprite name: public/art/weapons/<art>.svg */
+  /** Pose and weapon drawn on figures (src/art/unitArt.js). */
   art: string;
-  /** Multipliers on the Adventurer's base stats (1.5 = 150%). Missing stats = 100%. */
-  statMultipliers: Partial<Stats>;
   /** Skills granted by the weapon. The first one is the basic attack. */
   skills: string[];
-  /** The weapon's range in tiles, for skills with a `weaponRange` (the bow's modes). */
-  range?: number;
+  /** The weapon's range in tiles (the Basic Attack's, and skills with a `weaponRange`). */
+  range: number;
+  /** Unarmed: not an item (what a unit without a weapon fights with). */
+  builtIn: boolean;
 }
+
+export interface ArmorDef extends GearStats {
+  id: string;
+  name: string;
+  description: string;
+  /** Outfit drawn on figures (src/art/unitArt.js). */
+  outfit: string;
+  /** No Armor: not an item. */
+  builtIn: boolean;
+}
+
+/** An equipped weapon or armor: its type (equipment.json id) and quality. */
+export interface Gear {
+  type: string;
+  quality: QualityId;
+  /** Handed out from the party's stash: it goes back there if the member leaves the party. */
+  issued?: boolean;
+}
+
+/** Kinds of equipment (and of the slots a character wears them in). */
+export const GEAR_KINDS = ['weapon', 'armor'] as const;
+export type GearKind = (typeof GEAR_KINDS)[number];
+/** Kinds of item in the party's stash: equipment, junk (sold at the marketplace) and trophies (turned in at the city gate). */
+export const ITEM_KINDS = [...GEAR_KINDS, 'junk', 'trophy'] as const;
+export type ItemKind = (typeof ITEM_KINDS)[number];
+
+/** A piece of equipment in the party's stash. */
+export interface GearItem {
+  id: string;
+  kind: GearKind;
+  type: string;
+  quality: QualityId;
+}
+
+/**
+ * Loot that isn't equipment: junk (broken gear, pelts, goblin-made weapons...) to sell, or a trophy (an ear, a fang...)
+ * to turn in at the city gate. Name and value are fixed when it drops.
+ */
+export interface LootItem {
+  id: string;
+  kind: 'junk' | 'trophy';
+  name: string;
+  /** Gold it's worth. */
+  value: number;
+  /** Where it came from: the enemy type, or "broken" for broken gear. */
+  source: string;
+}
+
+export type Item = GearItem | LootItem;
+
+/** A piece of gear ordered from the Smithy (paid up front). */
+export interface SmithyOrder {
+  id: string;
+  kind: GearKind;
+  type: string;
+  quality: QualityId;
+  /** Days of work done so far (it's ready at the quality's orderDays). */
+  worked: number;
+  /** Gold paid (refunded if cancelled before work starts). */
+  paid: number;
+  /** Day it was ordered. */
+  day: number;
+}
+export const isGearItem = (i: Item): i is GearItem => i.kind === 'weapon' || i.kind === 'armor';
 
 export interface TagDef {
   id: string;
@@ -211,7 +310,7 @@ export interface SkillDef {
    * at `atHealth` of max Health and below. Uses Health before the hit; on-hit effects aren't multiplied.
    */
   missingHpBonus?: { max: number; atHealth: number };
-  /** Engage the target (as the Engage tag does) only when it is within this many tiles (Spear Thrust: adjacent = 1.5). */
+  /** Engage the target (as the Engage tag does) only when it is within this many tiles (Basic Attack: adjacent = 1.5). */
   engageWithin?: number;
   /** Statuses put on the user before the skill resolves (never resisted). */
   selfStatus?: { status: string; turns: number }[];
@@ -273,7 +372,7 @@ export interface Look {
 export interface Appearance {
   /** Color of the unit's base (the disc it stands on) and of an adventurer's clothes. */
   color: string;
-  /** Static body art: public/art/units/<model>_<weapon>.svg (enemies). */
+  /** Body model drawn for enemies (src/art/unitArt.js), dressed in its armor. */
   model?: UnitModel;
   /** Custom look (adventurers). Used instead of `model` when present. */
   look?: Look;
@@ -312,12 +411,25 @@ export interface EnemyDef {
   /** First skill = basic attack (for human types with a weapon, the weapon's basic attack comes first). */
   skills: string[];
   skillsByLevel: Record<number, string[]>;
-  /** Human types: possible weapons, their display names, and extra skills per weapon. */
-  weapons: string[];
-  weaponNames: Record<string, string>;
-  weaponSkills: Record<string, string[]>;
+  /** Humanoid types: the gear they can turn up with (one is picked per enemy). Empty = fights with its body. */
+  loadouts: EnemyLoadout[];
+  /** Quality of their gear: 'crude' (with a commonPerLevel chance of Common) or an enemy-only tier (Goblin-Made). */
+  gearQuality: QualityId;
   /** 'basic' = only the weapon's basic attack; 'all' = every weapon skill. */
   weaponSkillUse: 'basic' | 'all';
+  /** Non-human types: the trophy and junk item it drops ("{weapon}" in the junk name = its weapon's name). Humans drop their gear. */
+  drops?: { trophy: string; junk: string };
+}
+
+/** One way a humanoid enemy type can be equipped. */
+export interface EnemyLoadout {
+  /** Display name ("Bandit Thug"). */
+  name: string;
+  weapon: string;
+  /** Armor type; missing = no armor. */
+  armor?: string;
+  /** Extra skills this loadout fights with. */
+  skills: string[];
 }
 
 /** Traits an adventurer can have (see traits.ts). */
@@ -332,8 +444,10 @@ export interface Character {
   xp: number;
   /** Enemies only: the enemies.json type. Their stats and skills come from that type. */
   enemyType?: string;
-  /** Weapon id; empty for monsters that fight with their bodies. */
-  weaponId: string;
+  /** Equipped weapon (missing / null = Unarmed). Monsters fight with their bodies and never have one. */
+  weapon?: Gear | null;
+  /** Equipped armor (missing / null = No Armor). */
+  armor?: Gear | null;
   /** Skills picked from the skill trees (weapon skills are always available). */
   skillIds: string[];
   appearance: Appearance;
@@ -421,6 +535,7 @@ export interface CompanionTerms {
 export interface RivalMember {
   name: string;
   level: number;
+  /** Weapon type (equipment.json id). */
   weaponId: string;
 }
 
@@ -530,13 +645,19 @@ export interface GameState {
    * registered as the party's slave) before the party goes on. The party never keeps prisoners.
    */
   prisoners: Offer[];
+  /** The party's stash: equipment nobody is using (equip it from Manage Party > Equipment). */
+  inventory: Item[];
+  /** Items put up for sale at the Marketplace, top first (sold by members on Marketplace duty). */
+  marketplace: Item[];
+  /** Gear ordered from the Smithy, in queue order (the first few are being worked on). */
+  smithyOrders: SmithyOrder[];
   /** The quest the party has accepted and not yet fought. */
   quest: Quest | null;
   /** Day the party last came back from a quest (one quest a day), and who went. */
   lastQuestDay: number;
   questMembers: string[];
   /** What each member does on days they aren't on a quest (by character id; see activityOf for the default). */
-  schedule: Record<string, 'recover' | 'training' | 'oddJobs' | 'dayOff'>;
+  schedule: Record<string, 'recover' | 'training' | 'oddJobs' | 'dayOff' | 'marketplace'>;
   /** Food quality for each member the party feeds (by character id; missing = food.default in guild.json). */
   food: Record<string, 'poor' | 'common' | 'fine' | 'luxury'>;
   /** Where each housed member sleeps in the city (by character id; missing = their default, see defaultLodging): the stables ('outside'), an inn tier or an owned residence. */

@@ -1,6 +1,7 @@
 // The Adventurer Guild of Arch City: rival parties, the leaderboard and ranks, and the
 // day-by-day simulation of the other adventurers. Pure logic (no Phaser).
-import { WEAPONS } from '../data/content';
+import { WEAPONS, WEAPON_TYPES } from '../data/content';
+import { gear, weaponType } from './gear';
 import { GUILD } from '../data/guild';
 import { RANKS, type AdventurerRank, type FreeAdventurer, type GameState, type GuildState, type Quest, type Rank, type RivalMember, type RivalParty } from '../data/types';
 import { postQuests, questDifficulty, questRenown, usualCount } from './board';
@@ -122,7 +123,7 @@ function rivalMember(level: number, rng: Rng, avoid: Set<string>): RivalMember {
   const sex = rng() < 0.5 ? 'male' : 'female';
   const name = randomName(sex, rng, avoid);
   avoid.add(name);
-  return { name, level, weaponId: Object.keys(WEAPONS)[Math.floor(rng() * Object.keys(WEAPONS).length)] };
+  return { name, level, weaponId: WEAPON_TYPES[Math.floor(rng() * WEAPON_TYPES.length)] };
 }
 
 function partySizeRoll(rng: Rng): number {
@@ -335,7 +336,7 @@ export function simulateGuildDay(state: GameState, rng: Rng): void {
         const m = p.members[0];
         const free = freeAdventurer(m.level, rng);
         free.character.name = m.name;
-        free.character.weaponId = m.weaponId;
+        if (WEAPONS[m.weaponId] && !WEAPONS[m.weaponId].builtIn) free.character.weapon = gear(m.weaponId);
         g.pool.push(free);
         news(`${p.name} disbanded. ${m.name} is looking for a new party.`);
       }
@@ -349,7 +350,7 @@ export function simulateGuildDay(state: GameState, rng: Rng): void {
     if (g.pool.length > 4 && rng() < want && g.pool.some(fits)) {
       g.pool.sort((a, b) => Math.abs(a.character.level - avgLevel) - Math.abs(b.character.level - avgLevel));
       const a = g.pool.shift()!;
-      p.members.push({ name: a.character.name, level: a.character.level, weaponId: a.character.weaponId });
+      p.members.push({ name: a.character.name, level: a.character.level, weaponId: weaponType(a.character) });
       news(`${a.character.name} joined ${p.name}.`);
     }
   }
@@ -377,7 +378,7 @@ export function simulateGuildDay(state: GameState, rng: Rng): void {
       const name = randomPartyName(rng, new Set(g.rivals.map((p) => p.name)));
       g.rivals.push({
         id: newId('p'), name, rank: 'D', renown: 0, founded: day, wins: 0, losses: 0, lastDay: 0, last: `Day ${day}: formed`,
-        members: founders.map((a) => ({ name: a.character.name, level: a.character.level, weaponId: a.character.weaponId })),
+        members: founders.map((a) => ({ name: a.character.name, level: a.character.level, weaponId: weaponType(a.character) })),
       });
       news(`A new party registered: ${name} (${founders.map((a) => a.character.name).join(', ')}).`);
     }

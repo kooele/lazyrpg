@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
-import { figureSvg, lookModel } from '../art/unitArt';
-import { DEFAULT_WEAPON, WEAPONS } from '../data/content';
+import { dressedModel, figureSvg, lookModel } from '../art/unitArt';
 import { STAT_INFO, type Appearance, type Character, type Look, type StatKey } from '../data/types';
+import type { FigureKit } from '../game/gear';
 import { STARTUP_GRAPHICS, uiScaleFor } from '../game/settings';
 import { TALENT_COLORS, overallTalent, overallTalentLabel, talentOf, talentStats } from '../game/talent';
 
@@ -281,17 +281,15 @@ export function overlayText(
 
 // ---- unit art -----------------------------------------------------------------
 
-/** Unit art is a 64x80 SVG canvas with the feet at y = 76: one sprite per body model and weapon. */
+/** Unit art is a 64x80 SVG canvas with the feet at y = 76, drawn at runtime per look (or body model), weapon and armor. */
 export const ART_W = 64;
 export const ART_H = 80;
 const FEET = 76;
 /** Textures are rasterized this many times larger than 64x80 so they stay sharp in big previews. */
 export const ART_TEXTURE_SCALE = 1.6;
 
-/** Weapon art name used in sprite file names (falls back to the default weapon's). */
-export const weaponArt = (weaponId: string) => WEAPONS[weaponId]?.art ?? WEAPONS[DEFAULT_WEAPON].art;
-/** Texture key of a body model holding a weapon (public/art/units/<model>_<art>.svg). */
-export const unitKey = (model: string, weaponArtName: string) => `unit-${model}-${weaponArtName}`;
+/** Texture key of a body model (enemies) holding a weapon and wearing an outfit. */
+export const modelKey = (model: string, kit: FigureKit) => `model-${model}-${kit.art}-${kit.outfit}`;
 
 export interface FigureOptions {
   /** Enemies stand on a dark-rimmed base and face left. */
@@ -301,12 +299,12 @@ export interface FigureOptions {
 }
 
 /**
- * A unit figure (body model holding its weapon) standing on a coloured base.
+ * A unit figure (its look or body model, holding its weapon and wearing its armor: see figureKit) on a coloured base.
  * (x, feetY) is where the feet touch the ground; `height` is the full art height.
  */
 export function figure(
   scene: Phaser.Scene, x: number, feetY: number, height: number,
-  appearance: Appearance, weaponId: string, opts: FigureOptions = {},
+  appearance: Appearance, kit: FigureKit, opts: FigureOptions = {},
 ): Phaser.GameObjects.Container {
   const scale = height / ART_H;
   const parts: Phaser.GameObjects.GameObject[] = [];
@@ -318,8 +316,10 @@ export function figure(
       shadowW: w + 4, shadowH: h + 3, shadowDy: 1.5 * scale, line: Math.max(1.5, 2 * scale),
     }));
   }
-  const art = weaponArt(weaponId);
-  const key = appearance.look ? lookKey(appearance.look, appearance.color, art) : unitKey(appearance.model ?? 'm1', art);
+  const look = appearance.look;
+  const model = appearance.model ?? 'm1';
+  const key = look ? lookKey(look, appearance.color, kit) : modelKey(model, kit);
+  const svg = () => figureSvg(key, look ? lookModel(look, appearance.color, kit.art, kit.outfit) : dressedModel(model, kit.outfit, kit.art), kit.art, ART_TEXTURE_SCALE * UI_SCALE);
   const place = (img: Phaser.GameObjects.Image) => {
     img.setOrigin(0.5, FEET / ART_H).setDisplaySize(ART_W * scale, height);
     if (opts.enemy) img.setFlipX(true);
@@ -328,13 +328,13 @@ export function figure(
     const img = scene.add.image(0, 0, key);
     place(img);
     parts.push(img);
-    if (appearance.look) holdLook(img, key);
-  } else if (appearance.look) {
-    // Custom looks are drawn on first use; show the figure as soon as its texture is ready.
+    holdLook(img, key);
+  } else {
+    // Figures are drawn on first use; show the figure as soon as its texture is ready.
     const img = scene.add.image(0, 0, '__DEFAULT').setVisible(false);
     holdLook(img, key);
     parts.push(img);
-    void lookTexture(scene, key, appearance.look, appearance.color, art).then((ok) => {
+    void svgTexture(scene, key, svg).then((ok) => {
       if (!ok || !img.active) return;
       img.setTexture(key).setVisible(true);
       place(img);
@@ -414,9 +414,9 @@ function baseImage(scene: Phaser.Scene, b: BaseSpec): Phaser.GameObjects.Image |
   return scene.add.image(0, 0, key).setOrigin((halfW * UI_SCALE) / tw, (top * UI_SCALE) / th).setDisplaySize(tw / UI_SCALE, th / UI_SCALE);
 }
 
-/** Texture key of a custom look holding a weapon. */
-export const lookKey = (l: Look, color: string, art: string) =>
-  `look-${l.sex}-${l.skin}-${l.face}-${l.hair}-${l.hairColor}-${color.replace('#', '')}-${art}`;
+/** Texture key of a custom look holding a weapon and wearing an outfit. */
+export const lookKey = (l: Look, color: string, kit: FigureKit) =>
+  `look-${l.sex}-${l.skin}-${l.face}-${l.hair}-${l.hairColor}-${color.replace('#', '')}-${kit.art}-${kit.outfit}`;
 
 const lookLoads = new Map<string, Promise<boolean>>();
 
@@ -442,13 +442,13 @@ function pruneLooks(scene: Phaser.Scene): void {
   }
 }
 
-/** Draw a custom look (src/art/unitArt.js) into a texture, once per look, colour and weapon. */
-export function lookTexture(scene: Phaser.Scene, key: string, look: Look, color: string, art: string): Promise<boolean> {
+/** Draw a figure (src/art/unitArt.js) into a texture, once per key (look or model, colour, weapon and outfit). */
+function svgTexture(scene: Phaser.Scene, key: string, makeSvg: () => string): Promise<boolean> {
   if (scene.textures.exists(key)) return Promise.resolve(true);
   let p = lookLoads.get(key);
   if (!p) {
     const textures = scene.textures;
-    const svg = figureSvg(key, lookModel(look, color, art), art, ART_TEXTURE_SCALE * UI_SCALE);
+    const svg = makeSvg();
     p = new Promise<boolean>((resolve) => {
       const img = new Image();
       const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }));

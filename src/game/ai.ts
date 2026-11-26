@@ -466,8 +466,8 @@ function pinCost(battle: Battle, u: Unit, tile: Point): number {
 /**
  * Would `u`, once broken away from `opp` (and hurt by its opportunity attack), plan a turn that ends
  * out of the opponent's reach? If its best plan is to stay next to it (say, a point-blank shot or a
- * spear thrust from where it stands), breaking away only hands over a free attack, and the unit ends
- * up engaged again (by an Engage skill such as Kick or Spear Thrust) or right back in melee range.
+ * basic attack from where it stands), breaking away only hands over a free attack, and the unit ends
+ * up engaged again (by an Engage skill such as Kick, or a Basic Attack) or right back in melee range.
  * Plans with the engagement lifted for a moment and puts everything back afterwards.
  */
 function leavesOpponent(battle: Battle, u: Unit, opp: Unit, hit: number): boolean {
@@ -572,7 +572,8 @@ function attackPlan(
     const found = bestFrom(battle, u, tile, false, false);
     if (!found) continue;
     const free = bestFrom(battle, u, tile, true)?.score ?? 0;
-    const terrain = TERRAIN[battle.map.tiles[tile.y][tile.x]].defense * 2;
+    // Forest shelters from projectiles (worth as much as the old +20 Defense was at 20% cover).
+    const terrain = TERRAIN[battle.map.tiles[tile.y][tile.x]].projectileCover * 200;
     // Danger that can't be avoided anyway (even the safest reachable tile has it) costs nothing,
     // so a unit that's already in the thick of it still fights instead of freezing.
     const risk = care * (danger.get(key(tile.x, tile.y))! - leastDanger);

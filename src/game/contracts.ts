@@ -2,6 +2,7 @@
 import { GUILD } from '../data/guild';
 import type { Character, CompanionTerms, Contract, FreeAdventurer, GameState, Rank } from '../data/types';
 import { FOOD_TIERS, INN_TIERS } from '../data/guild';
+import { itemName, returnGear } from './inventory';
 import { talentScore } from './talent';
 
 const C = GUILD.companion;
@@ -228,8 +229,16 @@ export function joinParty(state: GameState, a: FreeAdventurer, contract: Contrac
   return c;
 }
 
-/** A member leaves (released, contract over, mercenary job done) and goes back to the guild hall. */
+/**
+ * A member leaves (released, contract over, mercenary job done) and goes back to the guild hall. Gear handed out from
+ * the stash stays with the party; they take what they brought.
+ */
 export function leaveParty(state: GameState, c: Character, greed = 1): void {
+  const back = returnGear(state, c);
+  if (back.length) {
+    state.log.push({ day: state.day, text: `${c.name} handed back the party's ${back.map(itemName).join(' and ')} (in the stash).` });
+    state.log = state.log.slice(-60);
+  }
   state.party = state.party.filter((m) => m.id !== c.id);
   state.lineup = state.lineup.filter((id) => id !== c.id);
   delete state.schedule[c.id];

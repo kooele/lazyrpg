@@ -5,13 +5,16 @@ export type Terrain = 'grass' | 'forest' | 'river' | 'rock' | 'water';
 
 const COSTS = STAT_CONFIG.movementCosts;
 
-/** moveCost = Movement points to enter the tile (null = impassable). Costs come from stats.json. */
-export const TERRAIN: Record<Terrain, { name: string; moveCost: number | null; defense: number; blocksSight: boolean; color: number }> = {
-  grass: { name: 'Grass', moveCost: COSTS.grass, defense: 0, blocksSight: false, color: 0x4f7a3a },
-  forest: { name: 'Forest', moveCost: COSTS.forest, defense: STAT_CONFIG.forestDefense, blocksSight: false, color: 0x2f5a2c },
-  river: { name: 'River', moveCost: COSTS.river, defense: 0, blocksSight: false, color: 0x3f7fb8 },
-  rock: { name: 'Rock', moveCost: null, defense: 0, blocksSight: true, color: 0x6b6b72 },
-  water: { name: 'Deep Water', moveCost: null, defense: 0, blocksSight: false, color: 0x24508a },
+/**
+ * moveCost = Movement points to enter the tile (null = impassable). Costs come from stats.json.
+ * projectileCover = damage reduction (0-1) from projectiles for a unit standing there (forest).
+ */
+export const TERRAIN: Record<Terrain, { name: string; moveCost: number | null; projectileCover: number; blocksSight: boolean; color: number }> = {
+  grass: { name: 'Grass', moveCost: COSTS.grass, projectileCover: 0, blocksSight: false, color: 0x4f7a3a },
+  forest: { name: 'Forest', moveCost: COSTS.forest, projectileCover: STAT_CONFIG.forestProjectileReduction, blocksSight: false, color: 0x2f5a2c },
+  river: { name: 'River', moveCost: COSTS.river, projectileCover: 0, blocksSight: false, color: 0x3f7fb8 },
+  rock: { name: 'Rock', moveCost: null, projectileCover: 0, blocksSight: true, color: 0x6b6b72 },
+  water: { name: 'Deep Water', moveCost: null, projectileCover: 0, blocksSight: false, color: 0x24508a },
 };
 
 /** Movement points that make one "tile" of reach (the grass cost). */

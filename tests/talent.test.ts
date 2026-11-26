@@ -39,7 +39,8 @@ describe('talent', () => {
     expect(levelStats(1, all('S'))).toEqual(levelStats(1)); // talent only affects growth
     const c = createCharacter('T', '#3d7be0', 'sword_shield', undefined, { health: 'A', pAtk: 'D' });
     c.level = 3;
-    expect(deriveStats(c)).toMatchObject({ health: 500 + 140, pAtk: 100 + 16 });
+    // Plus the Crude Leather's 75 Health and the Crude Sword and Shield's 15 P.Atk.
+    expect(deriveStats(c)).toMatchObject({ health: 500 + 140 + 75, pAtk: 100 + 16 + 15 });
   });
 
   it('rolls grades with the configured odds', () => {
@@ -91,7 +92,7 @@ describe('talent', () => {
   });
 
   it('older saves with Accuracy / Evasion talents and Body points still load (those are dropped)', () => {
-    const c = createCharacter('Main', '#3d7be0', 'bow', undefined, { health: 'A' });
+    const c = createCharacter('Main', '#3d7be0', 'longbow', undefined, { health: 'A' });
     const file = JSON.parse(serializeSave(newCampaign(c, 'Testers', makeRng(3))));
     file.party[0].talents = { health: 'A', accuracy: 'S', evasion: 'F' };
     file.party[0].body = { accuracy: 1, evasion: 1 };
@@ -102,7 +103,7 @@ describe('talent', () => {
   });
 
   it('talents survive a save and load; bad grades are rejected; old saves are all C', () => {
-    const main = createCharacter('Main', '#3d7be0', 'bow', undefined, { health: 'S', mana: 'A', pAtk: 'F', mAtk: 'B', defense: 'D', resist: 'B' });
+    const main = createCharacter('Main', '#3d7be0', 'longbow', undefined, { health: 'S', mana: 'A', pAtk: 'F', mAtk: 'B', defense: 'D', resist: 'B' });
     const state = newCampaign(main, 'Testers', makeRng(3));
     const r = parseSave(serializeSave(state));
     expect(r.ok && r.state.party[0].talents).toEqual(main.talents);

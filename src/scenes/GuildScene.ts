@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { MAX_PARTY_SIZE, SKILLS, WEAPONS } from '../data/content';
+import { MAX_PARTY_SIZE, SKILLS } from '../data/content';
 import { GUILD } from '../data/guild';
 import { ENEMIES } from '../data/enemies';
 import type { FreeAdventurer, Quest } from '../data/types';
@@ -11,6 +11,7 @@ import { markDirty, requireState, session } from '../game/session';
 import { PEOPLE_SORTS, QUEST_SORTS, nextSort, sortPeople, sortQuests, type PeopleSort, type QuestSort, type SortDir } from '../game/sorting';
 import { cityHeader, rankBadge } from '../ui/hud';
 import { ART_H, COLORS, HEIGHT, MONSTER_W, ScrollList, WIDTH, bakeGraphics, button, monsterKey, confirmDialog, figure, fittedList, panel, setupCamera, sortBar, talentTag, text, toast, type ScrollItem, clearScene } from '../ui/widgets';
+import { figureKit, weaponName } from '../game/gear';
 
 type Tab = 'board' | 'hall' | 'ranks' | 'news';
 const CARD_H = 132;
@@ -264,12 +265,12 @@ export class GuildScene extends Phaser.Scene {
     const c = a.character;
     const row = this.add.container(0, 0);
     row.add(this.add.rectangle(0, 0, WIDTH - 54, 84, COLORS.panelLight, 0.5).setOrigin(0));
-    row.add(figure(this, 30, 72, 64, c.appearance, c.weaponId, { base: false }));
+    row.add(figure(this, 30, 72, 64, c.appearance, figureKit(c), { base: false }));
     const name = text(this, 64, 6, `${c.name}`, { fontSize: '17px' });
     row.add(name);
     // Talent: a talented adventurer asks more.
     row.add(talentTag(this, 64 + name.width + 12, 10, c, { fontSize: 12, detail: false }));
-    row.add(text(this, 64, 28, `Level ${c.level} (${adventurerRank(c.level)}-rank) · ${WEAPONS[c.weaponId].name}`, { fontSize: '13px', color: COLORS.gold }));
+    row.add(text(this, 64, 28, `Level ${c.level} (${adventurerRank(c.level)}-rank) · ${weaponName(c)}`, { fontSize: '13px', color: COLORS.gold }));
     row.add(talentTag(this, 64, 47, c, { fontSize: 11, overall: false, sep: '   ' }));
     row.add(fittedList(this, 64, 64, c.skillIds.map((s) => SKILLS[s].name), 1, { fontSize: '12px', color: COLORS.dim, wordWrap: { width: 316 } }, undefined, 'No Tree Skills Yet'));
     const rates = mercenaryRates(c.level, a.greed, talentPriceFactor(c));

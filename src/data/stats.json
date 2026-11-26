@@ -2,7 +2,7 @@
   "_readme": "Unit stat tuning. Edit numbers here; the game picks them up on the next build (npm run dev hot-reloads). Keys starting with _ are comments and are ignored.",
 
   "base": {
-    "_comment": "Stats every Adventurer (and enemy) has at level 1. Weapons then multiply these (see weapons.json).",
+    "_comment": "Stats every Adventurer (and enemy) has at level 1. Equipment then adds its base stats and multiplies the total (see equipment.json). pPen / mPen: flat Defense ignored by Physical / Magical damage; pPenPct / mPenPct: percent ignored (whole percents, 50 = 50%), applied before the flat part.",
     "health": 500,
     "mana": 200,
     "pAtk": 100,
@@ -10,7 +10,11 @@
     "defense": 20,
     "resist": 20,
     "movement": 16,
-    "vision": 8
+    "vision": 8,
+    "pPen": 0,
+    "pPenPct": 0,
+    "mPen": 0,
+    "mPenPct": 0
   },
 
   "growthPerLevel": {
@@ -22,7 +26,11 @@
     "defense": 10,
     "resist": 10,
     "movement": 0,
-    "vision": 0
+    "vision": 0,
+    "pPen": 0,
+    "pPenPct": 0,
+    "mPen": 0,
+    "mPenPct": 0
   },
 
   "talent": {
@@ -37,8 +45,8 @@
   "defenseScale": 100,
   "_defenseScale": "Damage taken is multiplied by defenseScale / (defenseScale + Defense). With 100: 100 Defense = 2x effective health, 200 = 3x. Negative Defense increases damage taken. Resist uses the same scale: the chance to shrug off a debuff is Resist / (defenseScale + Resist), so 50 Resist = 33%, 100 = 50%.",
 
-  "forestDefense": 20,
-  "_forestDefense": "Extra Defense for a unit standing in forest.",
+  "forestProjectileReduction": 0.2,
+  "_forestProjectileReduction": "A unit standing in forest takes this much less damage from projectiles (skills tagged projectile or indirect: arrows, bolts, spells you shoot). 0.2 = 20% less.",
 
   "movementCosts": {
     "_comment": "Movement points to enter one tile. Movement 16 = 4 grass tiles. The grass cost also converts Movement into tiles for Movement-scaled skills (Charge).",

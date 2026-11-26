@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import guildJson from '../src/data/guild.json';
 import { FOOD_TIERS, GUILD, parseGuildConfig, trainingXp } from '../src/data/guild';
+import { TRAITS } from '../src/data/traits';
 import type { Character, GameState, Quest } from '../src/data/types';
 import { createCharacter, deriveStats, makeRng } from '../src/game/character';
 import { makeEnemy, makeUnit } from '../src/game/battle';
 import {
   acceptQuest, advanceDay, advanceDays, askingPrice, buyDrinks, isShipmentDay, marketBuyPrice, marketDay, sellSlave, turnInPrisoner, buyResidence, buySlave, makeQuest, sellResidence, endDay, setLodging, boarders, lodgingCost, residents, canTakeQuest, dailyUpkeep, foodCost, departBlock, lineupMembers, mainCharacter, moveMember,
-  killBounty, newCampaign, questMoraleLoss, questXpPool, questXpShares, registerPrisoner, resolveQuest, rewardShares, toggleLineup, weeklyTaxes, setLineupSlot, benchMember, releaseCompanion, moraleDepartures, relationshipDepartures, quitRenown, renewContract, weeklyWages, forecastNight, tabTotal,
+  newCampaign, questMoraleLoss, questXpPool, questXpShares, registerPrisoner, resolveQuest, rewardShares, toggleLineup, weeklyTaxes, setLineupSlot, benchMember, releaseCompanion, moraleDepartures, relationshipDepartures, quitRenown, renewContract, weeklyWages, forecastNight, tabTotal,
 } from '../src/game/city';
 import { activityOf, defaultActivity, lodgingOf, combatPenalty, expectedQuality, foodMorale, healthOf, isInjured, moraleOf, moralePenalty, obediencePenalty } from '../src/game/condition';
 import { parseSave, serializeSave } from '../src/game/save';
@@ -242,7 +243,7 @@ describe('ranks and the leaderboard', () => {
     expect(questXpShares(q, [])).toEqual([]);
   });
 
-  it('a failed quest: no pay, but training XP plus quest XP for the share of enemies defeated, and bounties for kills', () => {
+  it('a failed quest: no pay and no loot, but training XP plus quest XP for the share of enemies defeated', () => {
     const s = start();
     const q = { ...makeQuest('D', s.day, makeRng(5)), days: 1 }; // back the same day: no upkeep on the road
     s.guild.board.push(q);
@@ -251,18 +252,17 @@ describe('ranks and the leaderboard', () => {
     main.level = q.stage; // no level modifier
     main.xp = 0;
     const gold = s.gold;
-    const foe = (level: number) => makeEnemy('bandit', level, makeRng(level));
+    const foe = (level: number) => makeEnemy('wolf', level, makeRng(level));
     const killed = [foe(q.stage), foe(q.stage)];
     // 2 of 4 enemies killed, 1 surrendered (counts as defeated, not captured on a loss): 75% of the pool.
     const lines = resolveQuest(s, 'defeat', makeRng(1), [{ id: main.id, lowestHp: 0.5, fell: false }], [foe(q.stage)], { killed, total: 4 });
     const xp = Math.round(trainingXp(q.stage) + questXpPool(q) * 0.75);
     expect(lines.join(' ')).toContain(`75% of the enemies defeated`);
     expect(main.level * 1000 + main.xp).toBeGreaterThan(q.stage * 1000); // gained XP
-    const bounties = killed.reduce((sum, f) => sum + killBounty(f.level), 0);
-    expect(killBounty(4)).toBe(bounty(4) / 2); // half of turning in a prisoner
-    expect(killBounty(5)).toBeLessThan(bounty(5));
-    expect(lines.join(' ')).toContain(`Bounties: ${bounties} gold for 2 enemies slain`);
-    expect(s.gold).toBe(gold + bounties); // bounties paid, no quest pay
+    // Driven off the field: nothing to loot.
+    expect(s.inventory).toEqual([]);
+    expect(lines.join(' ')).not.toMatch(/Trophies|Junk/);
+    expect(s.gold).toBe(gold); // no quest pay
     expect(s.prisoners).toHaveLength(0);
     expect(questXpShares(q, [{ level: q.stage }], 0.75)).toEqual([xp]);
     expect(questXpShares(q, [{ level: q.stage }], 0)).toEqual([trainingXp(q.stage)]); // nothing defeated: training only
@@ -505,7 +505,7 @@ describe('contracts', () => {
     nightsAt(s, 'luxury', 2, makeRng(1));
     expect(s.gold).toBe(1000 - 2 * GUILD.inns.standard.pricePerPerson - 4 * GUILD.inns.luxury.pricePerPerson - 3 * food);
     expect(c.morale).toBe(60 + 2 * 2 * A); // two nights, two tiers above
-    expect(main.morale).toBe(60 + 2 * 2 * A * 2); // the Protagonist's gains count double
+    expect(main.morale).toBe(Math.round(60 + 2 * 2 * A * TRAITS.protagonist.moraleGain)); // the Protagonist gains more
     expect(s.day).toBe(4);
   });
 
@@ -735,7 +735,7 @@ describe('contracts', () => {
     const cBefore = moraleOf(c);
     expect(buyDrinks(s, 'standard')).toBeNull();
     expect(moraleOf(c)).toBe(cBefore + GUILD.inns.standard.drinksMorale);
-    expect(moraleOf(main)).toBe(before + 2 * GUILD.inns.standard.drinksMorale); // Protagonist: double gains
+    expect(moraleOf(main)).toBe(Math.round(before + TRAITS.protagonist.moraleGain * GUILD.inns.standard.drinksMorale)); // Protagonist: bigger gains
     expect(buyDrinks(s, 'standard')).toMatch(/already/);
     // Day off the next day (the quest day itself doesn't count for those who went).
     nightsAt(s, 'standard', 1, makeRng(1));
@@ -917,7 +917,7 @@ describe('contracts', () => {
     expect(mercenaryRates(5, 1).cutPct).toBeGreaterThan(mercenaryRates(1, 1).cutPct);
   });
 
-  it('enemies who surrendered are taken prisoner after a win (keeping their level and weapon)', () => {
+  it('enemies who surrendered are taken prisoner after a win (keeping their level, but not their gear)', () => {
     const s = start();
     acceptQuest(s, s.guild.board.find((x) => canTakeQuest(s, x))!.id);
     s.quest!.days = 1;
@@ -925,7 +925,8 @@ describe('contracts', () => {
     const lines = resolveQuest(s, 'victory', makeRng(3), [], [foe]);
     expect(s.prisoners).toHaveLength(1);
     expect(lines.some((l) => /city gate/.test(l))).toBe(true);
-    expect(s.prisoners[0].character).toMatchObject({ level: 9, weaponId: foe.weaponId });
+    expect(foe.weapon).toBeTruthy();
+    expect(s.prisoners[0].character).toMatchObject({ level: 9, weapon: null, armor: null });
     expect(s.prisoners[0].character.enemyType).toBeUndefined();
     expect(lines.some((l) => /surrendered and was taken prisoner/.test(l))).toBe(true);
     // No prisoners from a lost battle.
@@ -1186,7 +1187,8 @@ describe('contracts', () => {
     expect(slave.contract.relationship).toBe(rel + GUILD.condition.highMoraleRelationshipPerDay + GUILD.companion.relationshipPerQuest);
   });
 
-  it('the main character is the Protagonist: double injury recovery and double Morale gains', () => {
+  it('the main character is the Protagonist: 1.5x injury recovery and 1.5x Morale gains', () => {
+    expect(TRAITS.protagonist).toMatchObject({ healthRecovery: 1.5, moraleGain: 1.5 });
     const s = start();
     const main = mainCharacter(s);
     expect(main.traits).toEqual(['protagonist']);
@@ -1202,11 +1204,11 @@ describe('contracts', () => {
     }
     neutralFood(s);
     nightsAt(s, 'standard', 1, makeRng(1)); // an inn, as adventurers expect: lodging doesn't move Morale
-    expect(main.health).toBe(50 + 2 * GUILD.condition.healthPerDay);
+    expect(main.health).toBe(Math.round(50 + 1.5 * GUILD.condition.healthPerDay));
     expect(c.health).toBe(50 + GUILD.condition.healthPerDay);
-    expect(main.morale).toBe(50 + 2 * GUILD.schedule.dayOffMorale);
+    expect(main.morale).toBe(Math.round(50 + 1.5 * GUILD.schedule.dayOffMorale));
     expect(c.morale).toBe(50 + GUILD.schedule.dayOffMorale);
-    // Losses aren't doubled.
+    // Losses aren't multiplied.
     const before = main.morale!;
     acceptQuest(s, s.guild.board.find((x) => canTakeQuest(s, x))!.id);
     s.quest!.days = 1;

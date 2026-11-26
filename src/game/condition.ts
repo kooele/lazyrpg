@@ -122,7 +122,16 @@ export const ACTIVITY_INFO: Record<Activity, { name: string; describe: () => str
   training: { name: 'Training', describe: () => `Drills and sparring: +${GUILD.schedule.trainingXp.perLevel} XP per level +${GUILD.schedule.trainingXp.flat} a day.` },
   oddJobs: { name: 'Odd Jobs', describe: () => `Work around the city: +${GUILD.schedule.oddJobsGold} gold a day.` },
   dayOff: { name: 'Day Off', describe: () => `Take it easy: +${GUILD.schedule.dayOffMorale} Morale a day.` },
+  marketplace: {
+    name: 'Marketplace',
+    describe: () => `Mind the party's stall (companions and slaves): sells up to ${GUILD.schedule.marketplaceItemsPerDay} items a day from the Marketplace sale list.`,
+  },
 };
+
+/** Can this member be given this activity? Only companions and slaves mind the Marketplace stall. */
+export function canDoActivity(c: Character, a: Activity): boolean {
+  return a !== 'marketplace' || c.contract?.type === 'companion' || c.contract?.type === 'slave';
+}
 
 /**
  * What an unscheduled member does: Day Off, unless their Health would take longer to heal (at the normal rate) than
@@ -136,5 +145,6 @@ export function defaultActivity(c: Character): Activity {
 
 /** What a member does on days they aren't on a quest: as scheduled, else the default (defaultActivity). */
 export function activityOf(state: GameState, c: Character): Activity {
-  return state.schedule[c.id] ?? defaultActivity(c);
+  const a = state.schedule[c.id];
+  return a && canDoActivity(c, a) ? a : defaultActivity(c);
 }

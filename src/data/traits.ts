@@ -13,8 +13,8 @@ export interface TraitDef {
 export const TRAITS: Record<TraitId, TraitDef> = {
   protagonist: {
     name: 'Protagonist',
-    description: 'The hero of this story. Recovers from injuries twice as fast and gains twice as much Morale.',
-    healthRecovery: 2,
-    moraleGain: 2,
+    description: 'The hero of this story. Recovers from injuries 50% faster and gains 50% more Morale.',
+    healthRecovery: 1.5,
+    moraleGain: 1.5,
   },
 };

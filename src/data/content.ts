@@ -1,19 +1,25 @@
 // Game content loaded from the editable JSON files in this folder:
 //   skills.json  – skills, tags, status effects, skill trees
-//   weapons.json – weapons (stat multipliers + granted skills)
+//   equipment.json – weapons and armor (base stats, stat modifiers, granted skills) and quality tiers
 // Everything is validated on load; a mistake fails with a message naming the field.
 import skillsRaw from './skills.json';
-import weaponsRaw from './weapons.json';
+import equipmentRaw from './equipment.json';
 import { STAT_CONFIG } from './stats';
 import {
   AP_COSTS, STAT_KEYS, STAT_INFO,
   type ApCost,
   type ConeDef, type DamagePart, type LosRule, type SkillDef, type SkillTab, type SkillTarget, type SkillTreeDef,
-  type Stats, type StatusDef, type TagDef, type WeaponDef,
+  type ArmorDef, type QualityDef, type Stats, type StatusDef, type TagDef, type WeaponDef,
 } from './types';
 
 export interface GameContent {
   weapons: Record<string, WeaponDef>;
+  armors: Record<string, ArmorDef>;
+  qualities: Record<string, QualityDef>;
+  /** Enemy gear: chance per level of Common instead of Crude. */
+  enemyGear: { commonChancePerLevel: number };
+  /** The Smithy: the quality it sells on the spot, the days each orderable quality takes, and how many orders it works on at once. */
+  smithy: { buyQuality: string; orderDays: Record<string, number>; workers: number };
   skills: Record<string, SkillDef>;
   tags: Record<string, TagDef>;
   statuses: Record<string, StatusDef>;
@@ -60,7 +66,7 @@ const entries = (o: Record<string, unknown>) => Object.entries(o).filter(([k]) =
 
 // ---- parsing ---------------------------------------------------------------------------
 
-export function parseContent(skillsData: unknown, weaponsData: unknown): GameContent {
+export function parseContent(skillsData: unknown, equipmentData: unknown): GameContent {
   const S = reader('skills.json');
   const root = S.obj(skillsData, '(root)');
 
@@ -277,44 +283,105 @@ export function parseContent(skillsData: unknown, weaponsData: unknown): GameCon
     return skills[id] ? id : fail('skills.json', `basicSkills[${i}]`, `"${id}" is not defined in "skills"`);
   });
 
-  const W = reader('weapons.json');
+  const F = 'equipment.json';
+  const W = reader(F);
+  const eroot = W.obj(equipmentData, '(root)');
+  const qualities: Record<string, QualityDef> = {};
+  for (const [id, raw] of entries(W.obj(eroot.qualities, 'qualities'))) {
+    const p = `qualities.${id}`;
+    const o = W.obj(raw, p);
+    qualities[id] = {
+      id,
+      name: W.str(o.name, `${p}.name`),
+      baseMultiplier: W.num(o.baseMultiplier, `${p}.baseMultiplier`),
+      value: W.num(o.value, `${p}.value`),
+      enemyOnly: W.bool(o.enemyOnly, `${p}.enemyOnly`),
+    };
+  }
+  for (const q of ['crude', 'common']) if (!qualities[q]) fail(F, `qualities.${q}`, 'is required (the game uses it)');
+  const sm = W.obj(eroot.smithy ?? {}, 'smithy');
+  const orderDays: Record<string, number> = {};
+  for (const [q, d] of entries(W.obj(sm.orderDays ?? {}, 'smithy.orderDays'))) {
+    if (!qualities[q] || qualities[q].enemyOnly) fail(F, `smithy.orderDays.${q}`, 'must be a quality the party can own');
+    orderDays[q] = W.num(d, `smithy.orderDays.${q}`);
+  }
+  const smithy = {
+    buyQuality: W.oneOf(sm.buyQuality ?? 'common', 'smithy.buyQuality', Object.keys(qualities)),
+    orderDays,
+    workers: Math.max(1, Math.round(W.num(sm.workers ?? 3, 'smithy.workers'))),
+  };
+  const eg = W.obj(eroot.enemyGear ?? {}, 'enemyGear');
+  const enemyGear = { commonChancePerLevel: W.num(eg.commonChancePerLevel ?? 0, 'enemyGear.commonChancePerLevel') };
+  const gearStats = (o: Record<string, unknown>, p: string) => ({
+    base: W.stats(o.base ?? {}, `${p}.base`),
+    modifiers: W.stats(o.modifiers ?? {}, `${p}.modifiers`),
+  });
   const weapons: Record<string, WeaponDef> = {};
-  for (const [id, raw] of entries(W.obj(W.obj(weaponsData, '(root)').weapons, 'weapons'))) {
+  for (const [id, raw] of entries(W.obj(eroot.weapons, 'weapons'))) {
     const p = `weapons.${id}`;
     const o = W.obj(raw, p);
     const ws = W.arr(o.skills, `${p}.skills`).map((sid, j) => {
-      const s = W.str(sid, `${p}.skills[${j}]`);
-      return skills[s] ? s : fail('weapons.json', `${p}.skills[${j}]`, `"${s}" is not defined in skills.json`);
+      const sk = W.str(sid, `${p}.skills[${j}]`);
+      return skills[sk] ? sk : fail(F, `${p}.skills[${j}]`, `"${sk}" is not defined in skills.json`);
     });
-    if (ws.length === 0) fail('weapons.json', `${p}.skills`, 'needs at least one skill (the first is the basic attack)');
+    if (ws.length === 0) fail(F, `${p}.skills`, 'needs at least one skill (the first is the basic attack)');
     weapons[id] = {
       id,
       name: W.str(o.name, `${p}.name`),
+      class: W.str(o.class, `${p}.class`),
       tag: W.str(o.tag, `${p}.tag`),
       art: W.str(o.art ?? id, `${p}.art`),
       description: W.str(o.description, `${p}.description`),
-      statMultipliers: W.stats(o.statMultipliers ?? {}, `${p}.statMultipliers`),
+      ...gearStats(o, p),
       skills: ws,
-      range: W.optNum(o.range, `${p}.range`),
+      range: W.num(o.range, `${p}.range`),
+      builtIn: W.bool(o.builtIn, `${p}.builtIn`),
     };
-    for (const sid of ws) {
-      const needsRange = [sid, ...(skills[sid].modes ?? [])].some((m) => skills[m].weaponRange !== undefined);
-      if (needsRange && weapons[id].range === undefined) fail('weapons.json', `${p}.range`, `is required: "${sid}" uses the weapon's range`);
-    }
   }
-  if (Object.keys(weapons).length === 0) fail('weapons.json', 'weapons', 'must define at least one weapon');
-  return { weapons, skills, tags, statuses, skillTabs, skillTrees, basicSkills };
+  const armors: Record<string, ArmorDef> = {};
+  for (const [id, raw] of entries(W.obj(eroot.armors, 'armors'))) {
+    const p = `armors.${id}`;
+    const o = W.obj(raw, p);
+    armors[id] = {
+      id,
+      name: W.str(o.name, `${p}.name`),
+      description: W.str(o.description, `${p}.description`),
+      outfit: W.str(o.outfit, `${p}.outfit`),
+      ...gearStats(o, p),
+      builtIn: W.bool(o.builtIn, `${p}.builtIn`),
+    };
+  }
+  const builtIns = (list: { builtIn: boolean }[], what: string) => {
+    if (list.filter((x) => x.builtIn).length !== 1) fail(F, what, 'needs exactly one "builtIn" entry (what a unit has with nothing equipped)');
+  };
+  builtIns(Object.values(weapons), 'weapons');
+  builtIns(Object.values(armors), 'armors');
+  if (!Object.values(weapons).some((w) => !w.builtIn)) fail(F, 'weapons', 'must define at least one weapon');
+  return { weapons, armors, qualities, enemyGear, smithy, skills, tags, statuses, skillTabs, skillTrees, basicSkills };
 }
 
-export const CONTENT: GameContent = parseContent(skillsRaw, weaponsRaw);
+export const CONTENT: GameContent = parseContent(skillsRaw, equipmentRaw);
 export const WEAPONS = CONTENT.weapons;
+export const ARMORS = CONTENT.armors;
+export const QUALITIES = CONTENT.qualities;
+export const ENEMY_GEAR = CONTENT.enemyGear;
+export const SMITHY = CONTENT.smithy;
 export const SKILLS = CONTENT.skills;
 export const TAGS = CONTENT.tags;
 export const STATUSES = CONTENT.statuses;
 export const SKILL_TABS = CONTENT.skillTabs;
 export const SKILL_TREES = CONTENT.skillTrees;
 export const BASIC_SKILLS = CONTENT.basicSkills;
-export const DEFAULT_WEAPON = Object.keys(WEAPONS)[0];
+/** What a unit without a weapon fights with (Unarmed) and wears without armor (No Armor). */
+export const UNARMED = Object.values(WEAPONS).find((w) => w.builtIn)!.id;
+export const NO_ARMOR = Object.values(ARMORS).find((a) => a.builtIn)!.id;
+/** Weapons and armor that exist as items (everything but Unarmed and No Armor). */
+export const WEAPON_TYPES = Object.values(WEAPONS).filter((w) => !w.builtIn).map((w) => w.id);
+export const ARMOR_TYPES = Object.values(ARMORS).filter((a) => !a.builtIn).map((a) => a.id);
+/** The weapon a new Adventurer is offered first. */
+export const DEFAULT_WEAPON = WEAPON_TYPES[0];
+/** Qualities the party can own (not the enemy-only ones). */
+export const PLAYER_QUALITIES = Object.values(QUALITIES).filter((q) => !q.enemyOnly).map((q) => q.id);
 
 /** Every skill that can be picked from a tree. */
 export const TREE_SKILLS: string[] = SKILL_TREES.flatMap((t) => t.skills);
@@ -328,7 +395,7 @@ export const hasTag = (s: SkillDef, tag: string) => s.tags.includes(tag);
 export function resolveWeaponSkill(s: SkillDef, weapon: WeaponDef | undefined, mode = 0): SkillDef {
   let out = s;
   if (out.modes) out = CONTENT.skills[out.modes[((mode % out.modes.length) + out.modes.length) % out.modes.length]];
-  if (out.weaponRange !== undefined && weapon?.range !== undefined) out = { ...out, range: out.weaponRange * weapon.range };
+  if (out.weaponRange !== undefined && weapon) out = { ...out, range: out.weaponRange * weapon.range };
   return out;
 }
 
@@ -388,7 +455,7 @@ export function skillEffect(s: SkillDef): string {
   if (s.hits?.length) parts.push(s.hits.map(damageText).join(', then '));
   if (s.basicAttack) {
     const dmg = s.basicAttackDamage;
-    if (dmg && dmg.some((m) => m !== 1)) parts.push(`Basic attack x${s.basicAttack} (${dmg.map(pct).join(', then ')} damage)`);
+    if (dmg && dmg.some((m) => m !== 1)) parts.push(`Basic attack${s.basicAttack > 1 ? ` x${s.basicAttack}` : ''} (${dmg.map(pct).join(', then ')} damage)`);
     else parts.push(s.basicAttack > 1 ? `Basic attack x${s.basicAttack}` : 'Basic attack');
   }
   if (s.missingHpBonus) parts.push(`x1 to x${s.missingHpBonus.max} damage by the target's missing Health (x${s.missingHpBonus.max} at ${pct(s.missingHpBonus.atHealth)} Health or less)`);
@@ -435,7 +502,7 @@ export function skillStats(s: SkillDef): SkillStat[] {
   const rows: SkillStat[] = [{ label: 'Effect', value: skillEffect(s) }];
   const tags = tagNames(s);
   if (tags.length) rows.push({ label: 'Tags', value: tags.join(', ') });
-  // A moded skill (the Bow Attack) costs what its modes cost.
+  // A moded skill (the bow's Basic Attack) costs what its modes cost.
   const c = s.modes ? SKILLS[s.modes[0]] : s;
   rows.push({ label: 'AP', value: apLabel(c) });
   if (c.mana) rows.push({ label: 'Mana', value: String(c.mana) });

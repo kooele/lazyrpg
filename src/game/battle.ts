@@ -1,10 +1,11 @@
 // Pure battle rules (no rendering). BattleScene drives this and animates the events it returns.
-import { DEFAULT_WEAPON, ENEMY_COLOR, SKILLS, STATUSES, WEAPONS, hasTag, isFree, modeWithTag, resolveWeaponSkill } from '../data/content';
+import { ENEMY_COLOR, SKILLS, STATUSES, hasTag, isFree, modeWithTag, resolveWeaponSkill } from '../data/content';
 import { ENCOUNTER, ENEMIES } from '../data/enemies';
 import { STAT_CONFIG, type StatConfig } from '../data/stats';
-import { DAMAGE_TYPES, type Character, type DamagePart, type DamageType, type LosRule, type SkillDef, type StatKey, type Stats, type ZoneDef } from '../data/types';
+import { DAMAGE_TYPES, PEN_KEYS, type Character, type DamagePart, type DamageType, type LosRule, type SkillDef, type StatKey, type Stats, type ZoneDef } from '../data/types';
 import { allSkills, deriveStats, modelFor, newId, type Rng } from './character';
 import { combatPenalty } from './condition';
+import { enemyGearQuality, gear, weaponOf } from './gear';
 import { losFor, minRangeFor, rangeFor, type ReachContext } from './reach';
 import {
   DIRS, DIRS8, EPS, TERRAIN, coneTiles, dist, hasLineOfSight, inBounds, key, passable, tilesBetween, withinRange,
@@ -36,6 +37,8 @@ export interface Overwatch {
   hits: DamagePart[];
   /** It fires the weapon's basic attack (so weapon on-hit effects like Arcane Weapon apply). */
   weapon?: boolean;
+  /** Its shots are projectiles (a bow's Direct or Indirect mode): forest shelters the target. */
+  projectile?: boolean;
 }
 
 /** Action points every unit gets each turn: one movement AP and one action AP. */
@@ -137,9 +140,10 @@ export interface ReachInfo {
 
 export function makeUnit(character: Character, team: Team, pos: Point): Unit {
   const stats = deriveStats(character);
-  // Party members fight with every stat lowered by injuries, low Morale and (slaves) low Obedience.
+  // Party members fight with every stat lowered by injuries, low Morale and (slaves) low Obedience (not penetration:
+  // that's the weapon's, not the fighter's).
   const penalty = character.enemyType ? 0 : combatPenalty(character);
-  if (penalty > 0) for (const k of Object.keys(stats) as StatKey[]) stats[k] = Math.round(stats[k] * (1 - penalty));
+  if (penalty > 0) for (const k of Object.keys(stats) as StatKey[]) if (!(PEN_KEYS as readonly string[]).includes(k)) stats[k] = Math.round(stats[k] * (1 - penalty));
   return {
     uid: newId('u'),
     team,
@@ -178,6 +182,18 @@ export function defenseMultiplier(defense: number): number {
   return defense >= 0 ? k / (k + defense) : 2 - k / (k - defense);
 }
 
+/**
+ * Defense after penetration: percent first, then flat (100 Defense, 50% and 10 = 40). Penetration only
+ * lowers Defense down to 0, and does nothing to Defense that is already 0 or less.
+ */
+export function penetrate(defense: number, pct: number, flat: number): number {
+  if (defense <= 0) return defense;
+  return Math.max(0, defense * (1 - Math.min(100, Math.max(0, pct)) / 100) - Math.max(0, flat));
+}
+
+/** Does this skill's damage come from a projectile (arrows, bolts, thrown spells)? Forest shelters from those. */
+export const isProjectile = (s: SkillDef) => hasTag(s, 'projectile') || hasTag(s, 'indirect');
+
 /** Chance (0-1) to shrug off a debuff: Resist / (defenseScale + Resist), the same curve as Defense. */
 export function resistChance(resist: number, scale = STAT_CONFIG.defenseScale): number {
   return resist > 0 ? resist / (scale + resist) : 0;
@@ -192,6 +208,16 @@ export function statEffectPct(stat: StatKey, value: number): number | null {
   if (stat === 'resist') return Math.round(resistChance(value) * 100);
   return null;
 }
+
+/** Penetration for display, e.g. "P.Pen: 50% | 10" (percent, then flat); '' when the unit has none of that type. */
+export function penText(stats: Pick<Stats, 'pPen' | 'pPenPct' | 'mPen' | 'mPenPct'>, type: DamageType): string {
+  const [pct, flat, label] = type === 'physical' ? [stats.pPenPct, stats.pPen, 'P.Pen'] : [stats.mPenPct, stats.mPen, 'M.Pen'];
+  return pct || flat ? `${label}: ${pct}% | ${flat}` : '';
+}
+
+/** Both penetration lines that apply, joined ("P.Pen: 50% | 0   M.Pen: 0% | 5"), or ''. */
+export const penLine = (stats: Pick<Stats, 'pPen' | 'pPenPct' | 'mPen' | 'mPenPct'>, sep = '   ') =>
+  [penText(stats, 'physical'), penText(stats, 'magical')].filter(Boolean).join(sep);
 
 /** A stat amount for display: "50 (33%)" for Defense and Resist (amount and effective percent), else just the amount. */
 export function statText(stat: StatKey, value: number): string {
@@ -245,16 +271,13 @@ export class Battle {
     return this.units.find((u) => u.alive && u.x === x && u.y === y);
   }
 
-  /** Current stat including status effects and terrain (forest adds Defense). */
+  /** Current stat including status effects. */
   stat(u: Unit, stat: StatKey): number {
     let value = u.stats[stat];
     for (const s of u.statuses) {
       const mod = STATUSES[s.id]?.statMods?.[stat];
       if (mod) value += mod * statusStrength(s);
       if (STATUSES[s.id]?.casterScaled?.stat === stat) value += s.amount;
-    }
-    if (stat === 'defense') {
-      value += TERRAIN[this.map.tiles[u.y][u.x]].defense;
     }
     // Percentage changes multiply: Slow and Chilled (-25% Movement each) together leave 75% x 75% = 56%.
     for (const s of u.statuses) {
@@ -272,9 +295,9 @@ export class Battle {
     return this.skillFor(u, this.rawBasic(u));
   }
 
-  /** The basic attack as listed (a bow's is 'Bow Attack', whatever its mode). */
+  /** The basic attack as listed (a bow's is its moded Basic Attack, whatever the mode). */
   private rawBasic(u: Unit): SkillDef {
-    return SKILLS[allSkills(u.character)[0] ?? WEAPONS[DEFAULT_WEAPON].skills[0]];
+    return SKILLS[allSkills(u.character)[0] ?? 'basic_attack'];
   }
 
   /**
@@ -309,7 +332,7 @@ export class Battle {
   modeName(u: Unit, mode = u.weaponMode): string | null {
     const raw = this.rawBasic(u);
     if (!raw.modes) return null;
-    const m = resolveWeaponSkill(raw, WEAPONS[u.character.weaponId], mode);
+    const m = resolveWeaponSkill(raw, weaponOf(u.character), mode);
     return m.modeName ?? m.name;
   }
 
@@ -329,7 +352,7 @@ export class Battle {
     if (!perSkill) this.resolved.set(s, (perSkill = new Map()));
     let out = perSkill.get(cacheKey);
     if (!out) {
-      const weapon = WEAPONS[u.character.weaponId];
+      const weapon = weaponOf(u.character);
       out = resolveWeaponSkill(s, weapon, mode);
       if (out.basicAttack || areaFromWeapon) {
         // Circle Swing always swings a bow in Melee mode ('basicMode').
@@ -350,7 +373,7 @@ export class Battle {
   reachContext(u: Unit): ReachContext {
     const basicMode = (tag: string) => {
       const m = modeWithTag(this.rawBasic(u), tag);
-      return m && resolveWeaponSkill(m, WEAPONS[u.character.weaponId]);
+      return m && resolveWeaponSkill(m, weaponOf(u.character));
     };
     return { movement: this.stat(u, 'movement'), basic: this.basicAttack(u), basicMode };
   }
@@ -450,7 +473,7 @@ export class Battle {
     if (!this.isAttack(skill)) return null;
     if (skill.cone) return `Engaged with ${opp.character.name}: can't watch other enemies.`;
     // Area attacks around you (Circle Swing) are fine as long as they hit the opponent;
-    // aimed attacks (incl. Spear Thrust's line) must hit exactly the opponent.
+    // aimed attacks must hit exactly the opponent.
     const ok = skill.target === 'self' ? targets.includes(opp) : targets.length === 1 && targets[0] === opp;
     return ok ? null : busy;
   }
@@ -828,9 +851,9 @@ export class Battle {
       w.overwatch = null;
       for (const part of ow.hits) {
         if (!mover.alive) break;
-        events.push(...this.dealHit(w, mover, part, 'overwatch'));
+        events.push(...this.dealHit(w, mover, part, 'overwatch', ow.projectile));
       }
-      if (ow.weapon) events.push(...this.weaponProcs(w, mover, 'overwatch'));
+      if (ow.weapon) events.push(...this.weaponProcs(w, mover, 'overwatch', ow.projectile));
       if (ow.interrupt) interrupted = true;
     }
     return { events, interrupted };
@@ -1168,34 +1191,45 @@ export class Battle {
   /**
    * One hit split by damage type, after the target's mitigation (before shields):
    * P.Atk, Def and missing Health are Physical, M.Atk is Magical. A hybrid hit
-   * (Empowered Strike) deals one portion of each.
+   * (Magic Bolt) deals one portion of each. `projectile`: the hit comes from a projectile
+   * (a forest tile shelters the target from it).
    */
-  hitPortions(attacker: Unit, target: Unit, part: DamagePart): { type: DamageType; amount: number }[] {
+  hitPortions(attacker: Unit, target: Unit, part: DamagePart, projectile = false): { type: DamageType; amount: number }[] {
     const raw: Record<DamageType, number> = {
       physical: (part.pAtk ?? 0) * this.stat(attacker, 'pAtk') + (part.def ?? 0) * this.stat(attacker, 'defense') + (part.missingHp ?? 0) * (target.stats.health - target.hp),
       magical: (part.mAtk ?? 0) * this.stat(attacker, 'mAtk'),
     };
-    const out = DAMAGE_TYPES.filter((t) => raw[t] > 0).map((type) => ({ type, amount: Math.max(1, Math.round(raw[type] * this.mitigation(attacker, target, type))) }));
+    const cover = projectile ? 1 - this.coverFrom(target) : 1;
+    const out = DAMAGE_TYPES.filter((t) => raw[t] > 0).map((type) => ({ type, amount: Math.max(1, Math.round(raw[type] * this.mitigation(attacker, target, type) * cover)) }));
     return out.length ? out : [{ type: 'physical', amount: 1 }];
   }
 
-  /**
-   * Damage multiplier for a hit of `type` on `target`. Both types use Defense for now;
-   * this is where magic resistance and physical / magic penetration will go.
-   */
-  mitigation(_attacker: Unit, target: Unit, _type: DamageType): number {
-    return defenseMultiplier(this.stat(target, 'defense'));
+  /** Damage reduction (0-1) from projectiles for a unit on its tile: forest shelters it. */
+  coverFrom(target: Unit): number {
+    return TERRAIN[this.map.tiles[target.y][target.x]].projectileCover;
+  }
+
+  /** The target's Defense against the attacker's damage of `type`, after the attacker's penetration. */
+  effectiveDefense(attacker: Unit, target: Unit, type: DamageType): number {
+    const def = this.stat(target, 'defense');
+    const [flat, pct] = type === 'physical' ? ['pPen', 'pPenPct'] as const : ['mPen', 'mPenPct'] as const;
+    return penetrate(def, this.stat(attacker, pct), this.stat(attacker, flat));
+  }
+
+  /** Damage multiplier for a hit of `type` on `target`: Defense (both types), lowered by the attacker's penetration. */
+  mitigation(attacker: Unit, target: Unit, type: DamageType): number {
+    return defenseMultiplier(this.effectiveDefense(attacker, target, type));
   }
 
   /** Total damage of one hit (all damage types). */
-  hitDamage(attacker: Unit, target: Unit, part: DamagePart): number {
-    return this.hitPortions(attacker, target, part).reduce((a, p) => a + p.amount, 0);
+  hitDamage(attacker: Unit, target: Unit, part: DamagePart, projectile = false): number {
+    return this.hitPortions(attacker, target, part, projectile).reduce((a, p) => a + p.amount, 0);
   }
 
   /** Deal one hit: a damage event per damage type in it. */
-  private dealHit(attacker: Unit, target: Unit, part: DamagePart, cause: DamageCause): BattleEvent[] {
+  private dealHit(attacker: Unit, target: Unit, part: DamagePart, cause: DamageCause, projectile = false): BattleEvent[] {
     const events: BattleEvent[] = [];
-    for (const p of this.hitPortions(attacker, target, part)) {
+    for (const p of this.hitPortions(attacker, target, part, projectile)) {
       if (!target.alive) break;
       events.push(this.dealDamage(target, p.amount, attacker.uid, cause, false, p.type));
     }
@@ -1228,7 +1262,7 @@ export class Battle {
     for (const part of skill.hits ?? []) {
       const saved = target.hp;
       target.hp = hp;
-      const amount = this.hitDamage(attacker, target, part);
+      const amount = this.hitDamage(attacker, target, part, isProjectile(skill));
       target.hp = saved;
       out.push(amount);
       const absorbed = Math.min(shield, amount);
@@ -1323,7 +1357,7 @@ export class Battle {
           if (fired.has(w) || !ow.tiles.has(key(p.x, p.y))) continue;
           if (ow.los && !this.clearLine(w, u, ow.los, w)) continue;
           fired.add(w);
-          total += ow.hits.reduce((sum, part) => sum + this.hitDamage(w, u, part), 0);
+          total += ow.hits.reduce((sum, part) => sum + this.hitDamage(w, u, part, ow.projectile), 0);
         }
       }
     } finally {
@@ -1484,6 +1518,7 @@ export class Battle {
         // Without hits of its own, the watch fires the user's basic attack.
         hits: skill.hits ?? this.basicAttack(u).hits ?? [],
         weapon: !skill.hits,
+        projectile: isProjectile(skill.hits ? skill : this.basicAttack(u)),
       };
       events.push({ type: 'overwatch', source: u.uid, skillId });
     }
@@ -1498,9 +1533,9 @@ export class Battle {
       const mult = this.missingHpMultiplier(used, t);
       for (const part of scaleHits(used.hits ?? [], mult)) {
         if (!t.alive) break;
-        events.push(...this.dealHit(u, t, part, 'skill'));
+        events.push(...this.dealHit(u, t, part, 'skill', isProjectile(used)));
       }
-      for (let i = 0; i < swings && t.alive; i++) events.push(...this.weaponProcs(u, t, 'skill'));
+      for (let i = 0; i < swings && t.alive; i++) events.push(...this.weaponProcs(u, t, 'skill', isProjectile(used)));
       // Life-Risking Strike: the user pays if the target is still standing.
       if (skill.recoilIfSurvives && t.alive && u.alive) {
         events.push(...this.dealHit(u, u, skill.recoilIfSurvives, 'skill'));
@@ -1663,7 +1698,7 @@ export class Battle {
    * A weapon attack landed on `t` (one per swing): each active on-hit effect adds its hit, paying its mana.
    * Without the mana for it, the effect switches off.
    */
-  private weaponProcs(u: Unit, t: Unit, cause: DamageCause): BattleEvent[] {
+  private weaponProcs(u: Unit, t: Unit, cause: DamageCause, projectile = false): BattleEvent[] {
     const events: BattleEvent[] = [];
     for (const s of this.weaponOnHits(u)) {
       if (!t.alive || !u.alive) break;
@@ -1674,7 +1709,7 @@ export class Battle {
         continue;
       }
       u.mp -= cost;
-      events.push(...this.dealHit(u, t, def.weaponOnHit!, cause));
+      events.push(...this.dealHit(u, t, def.weaponOnHit!, cause, projectile));
     }
     return events;
   }
@@ -1770,19 +1805,22 @@ export function enemyTypesForStage(stage: number): { type: string; level: number
   return fit.map((d) => ({ type: d.id, level: Math.max(d.levels[0], Math.min(d.levels[1], stage)) }));
 }
 
-/** Build one enemy of a type at a level. Human types pick a weapon. */
+/** Build one enemy of a type at a level. Humanoid types pick a loadout (gear, name and extra skills). */
 export function makeEnemy(type: string, level: number, rng: Rng): Character {
   const def = ENEMIES[type];
-  const weaponId = def.weapons.length ? def.weapons[Math.floor(rng() * def.weapons.length)] : '';
+  const loadout = def.loadouts.length ? def.loadouts[Math.floor(rng() * def.loadouts.length)] : undefined;
   const id = newId('e');
   return {
     id,
-    name: def.weaponNames[weaponId] ?? def.name,
+    name: loadout?.name ?? def.name,
     level,
     xp: 0,
     enemyType: type,
-    weaponId,
-    skillIds: [],
+    ...(loadout ? {
+      weapon: gear(loadout.weapon, enemyGearQuality(def.gearQuality, level, rng)),
+      armor: loadout.armor ? gear(loadout.armor, enemyGearQuality(def.gearQuality, level, rng)) : null,
+    } : {}),
+    skillIds: loadout ? [...loadout.skills] : [],
     appearance: { color: ENEMY_COLOR, model: modelFor(id, def.art.models) },
   };
 }

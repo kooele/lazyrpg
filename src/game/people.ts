@@ -1,5 +1,6 @@
 // Random people for Arch City: names, looks, and ready-to-fight adventurers.
-import { PALETTE, SKILLS, SKILL_TREES, WEAPONS, skillPointsForLevel, maxBodyRank } from '../data/content';
+import { PALETTE, SKILLS, SKILL_TREES, WEAPON_TYPES, skillPointsForLevel, maxBodyRank } from '../data/content';
+import { gear } from './gear';
 import {
   FACE_COUNT, HAIR_COLORS, HAIR_STYLES, SEXES, SKIN_TONES,
   type BodyInvestment, type StatKey, type BodyModel, type Character, type HairColor, type HairStyle, type Look, type Sex, type SkinTone,
@@ -117,10 +118,13 @@ export function randomPartyName(rng: Rng, avoid: ReadonlySet<string> = new Set()
   return `The ${pick(PARTY_ADJ, rng)} ${pick(PARTY_NOUN, rng)} ${randInt(2, 9, rng)}`;
 }
 
-/** A complete adventurer: random look, weapon and skill picks for their level. */
-export function randomAdventurer(level: number, rng: Rng, opts: { name?: string; avoidNames?: ReadonlySet<string> } = {}): Character {
+/**
+ * A complete adventurer: random look, a Crude weapon and Crude Leather, and skill picks for their level.
+ * `unarmed`: no weapon or armor (slaves).
+ */
+export function randomAdventurer(level: number, rng: Rng, opts: { name?: string; avoidNames?: ReadonlySet<string>; unarmed?: boolean } = {}): Character {
   const look = randomLook(rng);
-  const weaponId = pick(Object.keys(WEAPONS), rng);
+  const weaponType = pick(WEAPON_TYPES, rng);
   // Picks lean on one tab (warrior or mage), like a real build.
   const tab = pick([...new Set(SKILL_TREES.map((t) => t.tab))], rng);
   // Only skills their level has unlocked.
@@ -150,7 +154,8 @@ export function randomAdventurer(level: number, rng: Rng, opts: { name?: string;
     name: opts.name ?? randomName(look.sex, rng, opts.avoidNames),
     level,
     xp: 0,
-    weaponId,
+    weapon: opts.unarmed ? null : gear(weaponType),
+    armor: opts.unarmed ? null : gear('leather'),
     skillIds,
     appearance: { color: pick(PALETTE, rng), look },
     talents: rollTalents(rng),

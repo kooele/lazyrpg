@@ -16,14 +16,14 @@
     "level": "Skill-tree skills: the character level needed to learn it (default 1).",
     "modes": "A weapon basic attack with switchable modes (the Bow): list of skill ids, the first is the default. The unit's current mode decides which one is used; Switch Mode cycles them. Overwatch and 'weapon' skills follow the current mode.",
     "modeName": "Short name of a mode skill (Direct, Indirect, Melee)",
-    "weaponRange": "Range as a multiple of the weapon's range (weapons.json \"range\"), e.g. 1.5 = Weapon Range x 1.5",
+    "weaponRange": "Range as a multiple of the weapon's range (equipment.json \"range\"), e.g. 1.5 = Weapon Range x 1.5",
     "basicMode": "For 'basicAttack' skills: use the weapon mode with this tag (e.g. \"melee\") instead of the current one",
     "switchMode": "true = cycles the user's weapon to its next mode",
     "damageTypes": "Each hit is split by what it scales with: P.Atk, Def and missing HP are Physical damage, M.Atk is Magical damage. Tag skills 'physical' / 'magical' to match (a test checks it).",
     "basicAttack": "Hit with the user's weapon basic attack this many times (instead of 'hits'). Used by Double Strike and Circle Swing.",
     "missingHpBonus": "{ max, atHealth }: the skill's hits are multiplied by up to `max`, growing smoothly from 1x at full Health to `max` at `atHealth` of max Health and below (Execute: 2x at 25%). Uses the target's Health before the hit; weapon on-hit effects (Arcane Weapon) aren't multiplied.",
     "basicAttackDamage": "For 'basicAttack' skills: damage multiplier per swing, one per basic attack (Double Strike: [1, 0.5] = full, then half). Omit for full damage.",
-    "engageWithin": "Engage the target (as the Engage tag does) only if it is within this many tiles (Spear Thrust: 1.5 = adjacent, diagonals included). Don't combine with the engage tag.",
+    "engageWithin": "Engage the target (as the Engage tag does) only if it is within this many tiles (Basic Attack: 1.5 = adjacent, diagonals included). Don't combine with the engage tag.",
     "selfStatus": "list of { status, turns } applied to the user before the skill resolves (never resisted)",
     "toggleStatus": "A status with \"toggle\": true. Using the skill switches it on (paying the skill's mana) or, if it's already on, off (free). Toggle statuses can set manaPerTurn (paid at the start of each of the unit's turns), weaponOnHit { pAtk, mAtk } (an extra hit on each target of a weapon attack: basic attacks, Overwatch, opportunity attacks, 'weapon' skills) and manaPerHit (paid per extra hit). Out of mana, the status switches off.",
     "instantDamagePctMaxHp": "Statuses: applying it deals this share of max Health at once, ignoring Defense and shields, and it isn't kept (Explosion, Burn's overflow).",
@@ -72,26 +72,26 @@
   },
 
   "skills": {
-    "sword_slash": {
-      "name": "Sword Slash", "description": "Slash an adjacent enemy.",
-      "tags": ["melee", "engage", "physical"],
-      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 1,
-      "hits": [{ "pAtk": 1 }]
-    },
-    "shield_up": {
-      "name": "Shield Up", "description": "Raise your shield to absorb damage until your next turn.",
-      "tags": ["support"],
-      "target": "self", "affects": "ally", "range": 0, "minRange": 0, "cooldown": 2,
-      "shield": { "maxHpPct": 0.1, "turns": 1 }
-    },
-    "spear_thrust": {
-      "name": "Spear Thrust", "description": "Thrust toward a tile, hitting the first enemy in the way. An adjacent target becomes engaged.",
+    "basic_attack": {
+      "name": "Basic Attack", "description": "Strike an enemy within your weapon's range. An adjacent target becomes engaged.",
       "tags": ["melee", "physical"],
-      "target": "line", "affects": "enemy", "range": 2, "minRange": 1, "cooldown": 1,
+      "target": "unit", "affects": "enemy", "range": 1.5, "weaponRange": 1, "minRange": 1, "cooldown": 1,
       "hits": [{ "pAtk": 1 }], "engageWithin": 1.5
     },
+    "shield_slam": {
+      "name": "Shield Slam", "description": "Slam an enemy within your weapon's range with your shield.",
+      "tags": ["melee", "engage", "physical"],
+      "target": "unit", "affects": "enemy", "range": 1.5, "weaponRange": 1, "minRange": 1, "cooldown": 2, "mana": 30,
+      "hits": [{ "pAtk": 0.6, "def": 1.2 }]
+    },
+    "quick_attack": {
+      "name": "Quick Attack", "description": "A fast weaker basic attack that leaves you an action.",
+      "tags": ["weapon"],
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 2, "mana": 20, "ap": 1,
+      "basicAttack": 1, "basicAttackDamage": [0.8]
+    },
     "bow_attack": {
-      "name": "Bow Attack", "description": "Attacks based on the bow's mode.",
+      "name": "Basic Attack", "description": "Attacks based on the bow's mode.",
       "modes": ["direct_shot", "indirect_shot", "bow_strike"]
     },
     "direct_shot": {
@@ -128,12 +128,6 @@
       "name": "Dash", "description": "Basic ability. After your regular move, spend your other AP to move again.",
       "tags": [],
       "target": "move", "affects": "ally", "range": 0, "cooldown": 2, "ap": 1, "mana": 20
-    },
-    "empowered_strike": {
-      "name": "Empowered Strike", "description": "Strike an adjacent enemy with physical and magical power.",
-      "tags": ["melee", "engage", "physical", "magical"],
-      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 1,
-      "hits": [{ "pAtk": 1, "mAtk": 0.5 }]
     },
     "magic_bolt": {
       "name": "Magic Bolt", "description": "Fire a bolt of physical and magical power at an enemy.",
@@ -285,9 +279,9 @@
       "basicAttack": 1, "missingHpBonus": { "max": 2, "atHealth": 0.25 }
     },
     "circle_swing": {
-      "name": "Circle Swing", "description": "Swing at every unit around you, allies included, and knock them back. A bow always swings in Melee mode.",
+      "name": "Circle Swing", "description": "Swing at every unit next to you, allies included, and knock them back.",
       "tags": ["weapon", "area", "knockback"],
-      "target": "self", "affects": "any", "range": 0, "minRange": 0, "cooldown": 4, "mana": 50, "level": 5,
+      "target": "self", "affects": "any", "range": 0, "minRange": 0, "aoeRadius": 1.5, "cooldown": 4, "mana": 50,
       "basicAttack": 1, "basicMode": "melee", "knockback": 1
     },
 
@@ -460,6 +454,6 @@
     { "id": "vanguard", "name": "Vanguard", "tab": "warrior", "skills": ["engage", "charge"] },
     { "id": "infighter", "name": "Infighter", "tab": "warrior", "skills": ["kick", "pocket_sand"] },
     { "id": "assassin", "name": "Assassin", "tab": "warrior", "skills": ["shadow_step", "flicker_strike", "life_risking_strike"] },
-    { "id": "weapon_master", "name": "Weapon Master", "tab": "warrior", "skills": ["double_strike", "execute", "circle_swing"] }
+    { "id": "weapon_master", "name": "Weapon Master", "tab": "warrior", "skills": ["double_strike", "execute"] }
   ]
 }

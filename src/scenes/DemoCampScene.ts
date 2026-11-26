@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { statText } from '../game/battle';
-import { SKILLS, WEAPONS, xpToNext } from '../data/content';
+import { SKILLS, xpToNext } from '../data/content';
 
 /** Quick Battle keeps 4 recruits (one card each across the camp). */
 const DEMO_PARTY_SIZE = 4;
@@ -8,6 +8,7 @@ import type { Character } from '../data/types';
 import { bodyPoints, deriveStats, freePoints, skillPoints } from '../game/character';
 import { DEMO_STAGES, MOB_MULTIPLIER, newDemo, requireDemo } from '../game/demo';
 import { COLORS, HEIGHT, WIDTH, button, confirmDialog, figure, fittedList, panel, talentTag, text, setupCamera, clearScene } from '../ui/widgets';
+import { figureKit, weaponName, weaponOf } from '../game/gear';
 
 /** Quick Battle (demo) camp: recruit, customize and dismiss up to 4 Adventurers, then fight stages 1 to 5. */
 export class DemoCampScene extends Phaser.Scene {
@@ -109,7 +110,7 @@ export class DemoCampScene extends Phaser.Scene {
     const freeSlots = freePoints(c);
     panel(this, x, y, 216, 440);
     const g = this.add.graphics();
-    figure(this, x + 40, y + 70, 62, c.appearance, c.weaponId);
+    figure(this, x + 40, y + 70, 62, c.appearance, figureKit(c));
     text(this, x + 76, y + 18, c.name, { fontSize: '18px', wordWrap: { width: 134 } });
     text(this, x + 76, y + 44, `Lv ${c.level} Adventurer`, { color: COLORS.dim, fontSize: '14px' });
     talentTag(this, x + 76, y + 62, c, { fontSize: 12, detail: false });
@@ -126,9 +127,9 @@ export class DemoCampScene extends Phaser.Scene {
       `Res ${statText('resist', stats.resist)}`,
     ];
     text(this, x + 14, y + 108, lines.join('\n'), { fontSize: '13px', lineSpacing: 3 });
-    const weapon = WEAPONS[c.weaponId];
+    const weapon = weaponOf(c)!;
     text(this, x + 14, y + 192, 'Weapon', { color: COLORS.dim, fontSize: '12px' });
-    text(this, x + 14, y + 207, weapon.name, { fontSize: '15px' });
+    text(this, x + 14, y + 207, weaponName(c), { fontSize: '15px' });
     text(this, x + 14, y + 226, weapon.skills.map((s) => SKILLS[s].name).join(', '), { fontSize: '12px', color: COLORS.dim, wordWrap: { width: 188 } });
     text(this, x + 14, y + 266, `Skill Points ${skillPoints(c) - freeSlots}/${skillPoints(c)}${bodyPoints(c) ? ` (${bodyPoints(c)} in Body)` : ''}`, { color: COLORS.dim, fontSize: '12px' });
     // Bullets down to the "points to spend" line: at most 3 lines (4 when there's nothing to spend), then "+N more".

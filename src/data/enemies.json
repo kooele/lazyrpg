@@ -1,7 +1,14 @@
 {
-  "_readme": "Enemy types. Each type always fights within its level range. A quest picks one type whose range contains its level as the main foe; types of the same ai category that fit join in. ai sets how the type fights: beast (acts alone, goes for the nearest target, flees when hurt), tribal (fights as a group in a loose formation, and the whole group may flee), human (fights tactically, flees from danger, surrenders when it can't escape; only humans can be taken prisoner) or evil (spirits and demons: no self-preservation, goes for kills). Past the highest range, the toughest types keep appearing at their top level. stats are at the type's lowest level; growthPerLevel is added per level above that. Resist matches each type's Defense. Stats left out (e.g. mana for monsters) are 0. skills: the first one is the basic attack (also used for opportunity attacks). skillsByLevel adds skills from that level up. Monster art is public/art/monsters/<art.kind>.svg (regenerate it with node tools/generate-art.mjs after changing art.color). Human types pick a body model from art.models (bandits have their own: b1-b4) and can use weapons: they get the weapon's stat multipliers and skills (all of them, or only the basic attack with weaponSkillUse = basic), plus weaponSkills for that weapon. threat is how much of the encounter budget one unit uses (the budget comes from the quest: guild.json quests.<rank>.encounter x the quest's threat, whatever the size of the party). questTitle names the quests where the type is the main foe.",
+  "_readme": "Enemy types. Each type always fights within its level range. A quest picks one type whose range contains its level as the main foe; types of the same ai category that fit join in. ai sets how the type fights: beast (acts alone, goes for the nearest target, flees when hurt), tribal (fights as a group in a loose formation, and the whole group may flee), human (fights tactically, flees from danger, surrenders when it can't escape; only humans can be taken prisoner) or evil (spirits and demons: no self-preservation, goes for kills). Past the highest range, the toughest types keep appearing at their top level. stats are at the type's lowest level; growthPerLevel is added per level above that. Resist matches each type's Defense. Stats left out (e.g. mana for monsters) are 0. skills: the first one is the basic attack (also used for opportunity attacks). skillsByLevel adds skills from that level up. Monster art is public/art/monsters/<art.kind>.svg (regenerate it with node tools/generate-art.mjs after changing art.color). Humanoid types pick a body model from art.models (bandits have their own: b1-b4) and one of their loadouts: { name, weapon, armor (optional), skills }. They get the gear's stats like Adventurers do (equipment.json) and the weapon's skills (all of them, or only the basic attack with weaponSkillUse = basic), plus the loadout's skills. gearQuality is the quality of their gear: crude (Common with equipment.json enemyGear.commonChancePerLevel per level) or an enemy-only tier like goblin (Goblin-Made). threat is how much of the encounter budget one unit uses (the budget comes from the quest: guild.json quests.<rank>.encounter x the quest's threat, whatever the size of the party). questTitle names the quests where the type is the main foe.",
   "encounter": {
     "maxEnemies": 12
+  },
+  "loot": {
+    "_comment": "What enemies drop when the party wins (from the Enemy Drops tab of the design sheet). Humans drop the gear they carried (killed or captured): each piece is broken with brokenChance, becoming junk worth brokenValueShare of its value. Every other type drops its trophy (turned in at the city gate) and its junk item (sold at the marketplace), each worth goldPerLevel x the enemy's level, rounded. A junk name with {weapon} is the enemy's own weapon (Goblin {weapon} = Goblin Spear). A failed quest brings nothing home: the battlefield can only be looted once the enemy is driven off.",
+    "trophyGoldPerLevel": 4.5,
+    "junkGoldPerLevel": 4.5,
+    "brokenChance": 0.6667,
+    "brokenValueShare": 0.25
   },
   "enemies": {
     "rat": {
@@ -34,7 +41,11 @@
         "gnaw"
       ],
       "ai": "beast",
-      "questTitle": "Rat Infestation"
+      "questTitle": "Rat Infestation",
+      "drops": {
+        "trophy": "Rat Tail",
+        "junk": "Mangy Rat Pelt"
+      }
     },
     "slime": {
       "name": "Green Slime",
@@ -72,7 +83,11 @@
         ]
       },
       "ai": "beast",
-      "questTitle": "Slime Outbreak"
+      "questTitle": "Slime Outbreak",
+      "drops": {
+        "trophy": "Slime Core",
+        "junk": "Slime Gel"
+      }
     },
     "wolf": {
       "name": "Grey Wolf",
@@ -110,7 +125,11 @@
         ]
       },
       "ai": "beast",
-      "questTitle": "Wolf Pack"
+      "questTitle": "Wolf Pack",
+      "drops": {
+        "trophy": "Wolf Fang",
+        "junk": "Wolf Pelt"
+      }
     },
     "bandit": {
       "name": "Bandit",
@@ -128,18 +147,43 @@
           "b4"
         ]
       },
-      "weapons": [
-        "sword_shield",
-        "spear",
-        "bow",
-        "staff"
+      "loadouts": [
+        {
+          "name": "Bandit Thug",
+          "weapon": "sword_shield",
+          "armor": "leather",
+          "skills": [
+            "shield_slam"
+          ]
+        },
+        {
+          "name": "Bandit Lancer",
+          "weapon": "spear",
+          "armor": "leather",
+          "skills": []
+        },
+        {
+          "name": "Bandit Archer",
+          "weapon": "shortbow",
+          "armor": "leather",
+          "skills": [
+            "execute"
+          ]
+        },
+        {
+          "name": "Bandit Hexer",
+          "weapon": "staff",
+          "skills": [
+            "fireball"
+          ]
+        },
+        {
+          "name": "Bandit Cutthroat",
+          "weapon": "dagger",
+          "armor": "leather",
+          "skills": []
+        }
       ],
-      "weaponNames": {
-        "sword_shield": "Bandit Thug",
-        "spear": "Bandit Lancer",
-        "bow": "Bandit Archer",
-        "staff": "Bandit Hexer"
-      },
       "stats": {
         "health": 560,
         "mana": 260,
@@ -160,17 +204,6 @@
       },
       "weaponSkillUse": "basic",
       "skills": [],
-      "weaponSkills": {
-        "sword_shield": [
-          "shield_up"
-        ],
-        "staff": [
-          "fireball"
-        ],
-        "bow": [
-          "execute"
-        ]
-      },
       "skillsByLevel": {
         "5": [
           "kick"
@@ -194,16 +227,26 @@
           "g2"
         ]
       },
-      "weapons": [
-        "spear",
-        "bow",
-        "staff"
+      "loadouts": [
+        {
+          "name": "Goblin Spearman",
+          "weapon": "spear",
+          "skills": []
+        },
+        {
+          "name": "Goblin Archer",
+          "weapon": "shortbow",
+          "skills": []
+        },
+        {
+          "name": "Goblin Shaman",
+          "weapon": "staff",
+          "skills": [
+            "fireball"
+          ]
+        }
       ],
-      "weaponNames": {
-        "spear": "Goblin Spearman",
-        "bow": "Goblin Archer",
-        "staff": "Goblin Shaman"
-      },
+      "gearQuality": "goblin",
       "stats": {
         "health": 330,
         "pAtk": 102,
@@ -224,17 +267,16 @@
       },
       "weaponSkillUse": "basic",
       "skills": [],
-      "weaponSkills": {
-        "staff": [
-          "fireball"
-        ]
-      },
       "skillsByLevel": {
         "5": [
           "war_cry"
         ]
       },
-      "questTitle": "Goblin Raiders"
+      "questTitle": "Goblin Raiders",
+      "drops": {
+        "trophy": "Goblin Ear",
+        "junk": "Goblin {weapon}"
+      }
     },
     "spider": {
       "name": "Giant Spider",
@@ -267,7 +309,11 @@
         "poison_bite",
         "web"
       ],
-      "questTitle": "Spider Nest"
+      "questTitle": "Spider Nest",
+      "drops": {
+        "trophy": "Spider Fang",
+        "junk": "Spider Silk"
+      }
     },
     "skeleton": {
       "name": "Skeleton",
@@ -284,16 +330,24 @@
           "s2"
         ]
       },
-      "weapons": [
-        "sword_shield",
-        "spear",
-        "bow"
+      "loadouts": [
+        {
+          "name": "Skeleton Warrior",
+          "weapon": "sword_shield",
+          "skills": []
+        },
+        {
+          "name": "Skeleton Spearman",
+          "weapon": "spear",
+          "skills": []
+        },
+        {
+          "name": "Skeleton Archer",
+          "weapon": "longbow",
+          "skills": []
+        }
       ],
-      "weaponNames": {
-        "sword_shield": "Skeleton Warrior",
-        "spear": "Skeleton Spearman",
-        "bow": "Skeleton Archer"
-      },
+      "gearQuality": "rusted",
       "stats": {
         "health": 520,
         "pAtk": 142,
@@ -314,7 +368,11 @@
       },
       "weaponSkillUse": "basic",
       "skills": [],
-      "questTitle": "Restless Dead"
+      "questTitle": "Restless Dead",
+      "drops": {
+        "trophy": "Skeleton Skull",
+        "junk": "Rusted {weapon}"
+      }
     },
     "orc": {
       "name": "Orc",
@@ -331,14 +389,23 @@
           "o2"
         ]
       },
-      "weapons": [
-        "sword_shield",
-        "spear"
+      "loadouts": [
+        {
+          "name": "Orc Warrior",
+          "weapon": "sword_shield",
+          "skills": [
+            "cleave"
+          ]
+        },
+        {
+          "name": "Orc Brute",
+          "weapon": "greatsword",
+          "skills": [
+            "cleave"
+          ]
+        }
       ],
-      "weaponNames": {
-        "sword_shield": "Orc Warrior",
-        "spear": "Orc Brute"
-      },
+      "gearQuality": "orc",
       "stats": {
         "health": 800,
         "pAtk": 176,
@@ -359,20 +426,16 @@
       },
       "weaponSkillUse": "basic",
       "skills": [],
-      "weaponSkills": {
-        "sword_shield": [
-          "cleave"
-        ],
-        "spear": [
-          "cleave"
-        ]
-      },
       "skillsByLevel": {
         "9": [
           "war_cry"
         ]
       },
-      "questTitle": "Orc Warband"
+      "questTitle": "Orc Warband",
+      "drops": {
+        "trophy": "Orc Tusk",
+        "junk": "Orc {weapon}"
+      }
     },
     "sellsword": {
       "name": "Sellsword",
@@ -385,18 +448,46 @@
       "art": {
         "kind": "human"
       },
-      "weapons": [
-        "sword_shield",
-        "spear",
-        "bow",
-        "staff"
+      "loadouts": [
+        {
+          "name": "Sellsword",
+          "weapon": "sword_shield",
+          "armor": "mail",
+          "skills": [
+            "kick"
+          ]
+        },
+        {
+          "name": "Sellsword Lancer",
+          "weapon": "spear",
+          "armor": "mail",
+          "skills": [
+            "charge"
+          ]
+        },
+        {
+          "name": "Sellsword Archer",
+          "weapon": "longbow",
+          "armor": "leather",
+          "skills": [
+            "execute"
+          ]
+        },
+        {
+          "name": "Hedge Mage",
+          "weapon": "staff",
+          "skills": [
+            "fireball",
+            "heal"
+          ]
+        },
+        {
+          "name": "Sellsword Duelist",
+          "weapon": "twin_daggers",
+          "armor": "leather",
+          "skills": []
+        }
       ],
-      "weaponNames": {
-        "sword_shield": "Sellsword",
-        "spear": "Sellsword Lancer",
-        "bow": "Sellsword Archer",
-        "staff": "Hedge Mage"
-      },
       "stats": {
         "health": 850,
         "pAtk": 162,
@@ -417,21 +508,6 @@
       },
       "weaponSkillUse": "all",
       "skills": [],
-      "weaponSkills": {
-        "sword_shield": [
-          "kick"
-        ],
-        "spear": [
-          "charge"
-        ],
-        "bow": [
-          "execute"
-        ],
-        "staff": [
-          "fireball",
-          "heal"
-        ]
-      },
       "questTitle": "Rogue Mercenaries"
     },
     "bear": {
@@ -470,7 +546,11 @@
           "roar"
         ]
       },
-      "questTitle": "Cave Bear Attacks"
+      "questTitle": "Cave Bear Attacks",
+      "drops": {
+        "trophy": "Bear Claw",
+        "junk": "Bear Pelt"
+      }
     },
     "wraith": {
       "name": "Wraith",
@@ -505,7 +585,11 @@
         "chill_touch",
         "wail"
       ],
-      "questTitle": "Haunting"
+      "questTitle": "Haunting",
+      "drops": {
+        "trophy": "Ectoplasm",
+        "junk": "Grave Shroud"
+      }
     },
     "troll": {
       "name": "Troll",
@@ -540,7 +624,11 @@
         "smash",
         "regenerate"
       ],
-      "questTitle": "Troll Trouble"
+      "questTitle": "Troll Trouble",
+      "drops": {
+        "trophy": "Troll Tooth",
+        "junk": "Troll Hide"
+      }
     },
     "renegade": {
       "name": "Renegade",
@@ -553,18 +641,51 @@
       "art": {
         "kind": "human"
       },
-      "weapons": [
-        "sword_shield",
-        "spear",
-        "bow",
-        "staff"
+      "loadouts": [
+        {
+          "name": "Renegade Knight",
+          "weapon": "mace_shield",
+          "armor": "plate",
+          "skills": [
+            "kick",
+            "double_strike"
+          ]
+        },
+        {
+          "name": "Renegade Lancer",
+          "weapon": "spear",
+          "armor": "mail",
+          "skills": [
+            "charge"
+          ]
+        },
+        {
+          "name": "Renegade Ranger",
+          "weapon": "longbow",
+          "armor": "leather",
+          "skills": [
+            "execute",
+            "double_strike"
+          ]
+        },
+        {
+          "name": "Renegade Sorcerer",
+          "weapon": "crystal",
+          "skills": [
+            "fireball",
+            "freeze",
+            "heal"
+          ]
+        },
+        {
+          "name": "Renegade Champion",
+          "weapon": "greatsword",
+          "armor": "plate",
+          "skills": [
+            "kick"
+          ]
+        }
       ],
-      "weaponNames": {
-        "sword_shield": "Renegade Knight",
-        "spear": "Renegade Lancer",
-        "bow": "Renegade Ranger",
-        "staff": "Renegade Sorcerer"
-      },
       "stats": {
         "health": 1210,
         "pAtk": 230,
@@ -585,25 +706,6 @@
       },
       "weaponSkillUse": "all",
       "skills": [],
-      "weaponSkills": {
-        "sword_shield": [
-          "kick",
-          "double_strike"
-        ],
-        "spear": [
-          "charge",
-          "circle_swing"
-        ],
-        "bow": [
-          "execute",
-          "double_strike"
-        ],
-        "staff": [
-          "fireball",
-          "freeze",
-          "heal"
-        ]
-      },
       "questTitle": "Renegade Knights"
     },
     "wyvern": {
@@ -639,7 +741,11 @@
         "dive",
         "tail_sting"
       ],
-      "questTitle": "Wyvern Hunt"
+      "questTitle": "Wyvern Hunt",
+      "drops": {
+        "trophy": "Wyvern Stinger",
+        "junk": "Wyvern Scale"
+      }
     },
     "demon": {
       "name": "Demon",
@@ -674,7 +780,11 @@
         "hellfire",
         "infernal_leap"
       ],
-      "questTitle": "Demonic Incursion"
+      "questTitle": "Demonic Incursion",
+      "drops": {
+        "trophy": "Demon Horn",
+        "junk": "Brimstone Shard"
+      }
     }
   }
 }

@@ -3,6 +3,8 @@
 import { MAX_PARTY_SIZE, STATUSES, xpToNext } from '../data/content';
 import { FOOD_TIERS, GUILD, INN_TIERS, trainingXp } from '../data/guild';
 import { STAT_CONFIG } from '../data/stats';
+import { TRAITS } from '../data/traits';
+import { LOOT } from '../data/enemies';
 import { RANKS, type Rank } from '../data/types';
 import { lodgingName } from './condition';
 
@@ -53,11 +55,11 @@ export function glossaryEntries(): GlossaryEntry[] {
   add('City Life', 'Health (not battle HP)',
     `A member's condition between battles, out of 100. It isn't their HP in battle.\n\n`
     + `Below 100: all battle stats −1% per 3 missing (Health 70 = −10%). At 0: the member dies (the main character pulls through at 1).\n\n`
-    + `Rises (×2 for the Protagonist):\n• +${C.healthPerDay} each night\n• +${C.healthPerDay * G.schedule.recoverMultiplier} for a day on Recover (instead of +${C.healthPerDay})\n\n`
+    + `Rises (×${TRAITS.protagonist.healthRecovery} for the Protagonist):\n• +${C.healthPerDay} each night\n• +${C.healthPerDay * G.schedule.recoverMultiplier} for a day on Recover (instead of +${C.healthPerDay})\n\n`
     + `Falls:\n• Up to −${C.maxHealthLoss} after each battle, the lower their HP fell (−${C.maxHealthLoss} if they fell)`);
   add('City Life', 'Morale',
     `A member's spirits, out of 100. Below 100: all battle stats −${G.combat.percentPer5}% per 5 missing. Above ${C.highMorale}: companions and slaves gain ${C.highMoraleRelationshipPerDay} relationship a day; below ${C.lowMorale}: they lose ${C.lowMoraleRelationshipPerDay}. At 0: the member leaves the party (the main character stays). New members start at ${C.startingMorale}.\n\n`
-    + `Rises (×2 for the Protagonist):\n• +${G.schedule.dayOffMorale} for taking a Day Off\n• +${Math.min(...drinks)} to +${Math.max(...drinks)} for a round of drinks at an inn (once a day)\n• +${G.food.moraleAbovePerStep} a day per level of quality above expected food\n• +${L.moraleAbovePerStep} a night per level of quality above expected lodging\n\n`
+    + `Rises (×${TRAITS.protagonist.moraleGain} for the Protagonist):\n• +${G.schedule.dayOffMorale} for taking a Day Off\n• +${Math.min(...drinks)} to +${Math.max(...drinks)} for a round of drinks at an inn (once a day)\n• +${G.food.moraleAbovePerStep} a day per level of quality above expected food\n• +${L.moraleAbovePerStep} a night per level of quality above expected lodging\n\n`
     + `Falls:\n• −${C.moralePerTurn} per turn in battle\n• −${C.moraleFailedQuest} for failing a quest\n• −1 per ${Math.round(1 / C.moralePerHealthLost)} Health lost\n• −${C.moraleMemberDied} when a party member dies\n• −${G.food.moraleBelowPerStep} a day per level of quality below expected food\n• −${L.moraleBelowPerStep} a night per level of quality below expected lodging`);
   add('City Life', 'Battle Penalties',
     `Injury, Morale and Obedience all weaken a member in battle, and the penalties multiply:\n\n`
@@ -105,12 +107,18 @@ export function glossaryEntries(): GlossaryEntry[] {
   add('Quests & Ranks', 'Failure and Deaths',
     `A failed quest pays nothing and loses ${G.ranks.failedQuestRenown === 1 ? 'that quest\'s renown' : `${G.ranks.failedQuestRenown}× that quest's renown`}. Each member who dies loses another ${pct(G.ranks.deathRenown)} of it, whether the quest succeeded or not.\n\n`
     + `A member who quits on you (Morale 0, or a companion's relationship 0) costs ${G.ranks.quitRenownPerLevel} renown per level. Releasing someone yourself doesn't.\n\n`
-    + `A failed quest still gives XP for the share of enemies you defeated, and bounties for every kill.`);
+    + `A failed quest still gives XP for the share of enemies you defeated, but no loot.`);
   add('Quests & Ranks', 'Shared Quest Board',
     `The Quest Board is shared with every rival party, and they take quests from it every day, the best deals first. Nothing is held back for you: in a slow week the rivals may take every quest at your rank.\n\n`
     + `Up to ${G.board.maxPostsPerDay} new quests are posted a day, and each stays up for a few days.`);
-  add('Quests & Ranks', 'Bounties',
-    `Every enemy the party kills is worth ${S.bountyPerLevel * S.killBountyShare} gold per level (rounded), paid when the party gets back to the city, whether the quest succeeded or not. Turning in a prisoner pays more: ${S.bountyPerLevel} gold per level.`);
+  add('Quests & Ranks', 'Loot, Trophies and Bounties',
+    `Enemies pay no gold themselves: they drop loot.\n\n`
+    + `• Humans drop the gear they carried, killed or captured. Each piece has a ${Math.round(LOOT.brokenChance * 100)}% chance to be broken: junk worth ${Math.round(LOOT.brokenValueShare * 100)}% of its value.\n`
+    + `• Every other enemy drops a trophy (an ear, a fang...) and a junk item (a pelt, its goblin-made weapon...), each worth ${LOOT.trophyGoldPerLevel} gold per level.\n`
+    + `• Trophies are turned in at the city gate for their value.\n`
+    + `• Junk (and spare gear) sells at the Marketplace: put it on the sale list there, and put companions or slaves on Marketplace duty (Schedule). Each sells ${G.schedule.marketplaceItemsPerDay} items a day from the top of the list, at full value.\n`
+    + `• Loot only comes home from a won quest: the battlefield can't be looted until the enemy is driven off. A failed quest still gives XP for the enemies you defeated.\n\n`
+    + `A human taken prisoner is worth more than one killed: the bounty for turning them in is ${S.bountyPerLevel} gold per level.`);
 
   // ---- Experience -------------------------------------------------------------------------------
   add('Experience', 'Quest XP',
@@ -130,7 +138,7 @@ export function glossaryEntries(): GlossaryEntry[] {
     + `It's separate from your party's rank, which comes from renown. A quest of a rank has enemies of that rank's levels.`);
   add('Experience', 'Skill Points and the Body Tab',
     `Adventurers have 2 skill points at level 1 and gain 1 a level. Each point learns a skill-tree skill or goes into the Body tab, where it adds twice a stat's base growth per level (talent doesn't change it).\n\n`
-    + `Each Body stat takes at most level ÷ 3 points (rounded up). Points can be moved freely in Loadout.`);
+    + `Each Body stat takes at most level ÷ 3 points (rounded up). Points can be moved freely in Skills (Manage Party).`);
   add('Experience', 'Talent',
     `Each growing stat has a talent grade that multiplies its growth per level: ${(['S', 'A', 'B', 'C', 'D', 'F'] as const).map((g) => `${g} ${pct(growth[g])}`).join(', ')}. Talent doesn't change level-1 stats, so it shows more the higher an adventurer levels.\n\n`
     + `An adventurer's overall talent is the grade nearest the average of their grades, with + or − when it leans toward the next one.`);
@@ -160,7 +168,7 @@ export function glossaryEntries(): GlossaryEntry[] {
     + `Rises:\n• +${K.relationshipPerQuest} per quest completed together\n• +${C.highMoraleRelationshipPerDay} a day while Morale is above ${C.highMorale}\n\n`
     + `Falls:\n• −2 per failed quest together\n• −${C.lowMoraleRelationshipPerDay} a day while Morale is below ${C.lowMorale}\n• −5 a day the party can't pay food and lodging\n• −${-K.relationshipUnpaid} per missed payday (companions)\n• −${S.punishRelationship} per Punish (slaves)`);
   add('Party Members', 'Protagonist',
-    `Your main character's trait: they recover Health twice as fast and gain Morale twice as fast (drinks, days off). Morale losses aren't doubled.\n\n`
+    `Your main character's trait: they recover Health ${TRAITS.protagonist.healthRecovery}x as fast and gain ${TRAITS.protagonist.moraleGain}x as much Morale (drinks, days off). Morale losses are unchanged.\n\n`
     + `The main character can't be dismissed or die from 0 Health (they pull through at 1), and they don't complain about food or lodging.`);
 
   // ---- Slaves -----------------------------------------------------------------------------------
@@ -191,6 +199,16 @@ export function glossaryEntries(): GlossaryEntry[] {
   add('Battle', 'Defense and Resist',
     `Every attack hits. Defense reduces damage taken to 100 ÷ (100 + Defense): 100 Defense halves it.\n\n`
     + `Resist is a chance to shrug off a debuff: Resist ÷ (100 + Resist), so 100 Resist is 50%. A resisted debuff doesn't apply, but the hit's damage still lands.`);
+  add('Battle', 'Penetration',
+    `P.Pen and M.Pen (from gear) make the target's Defense count for less against your Physical or Magical damage: the percent first, then the flat amount. 50% and 10 P.Pen make 100 Defense count as 40 against Physical damage.\n\n`
+    + `Penetration never takes Defense below 0, and does nothing to Defense that is already 0 or less.`);
+  add('Battle', 'Forest',
+    `Forest costs 6 Movement to enter. A unit standing in forest takes ${Math.round(STAT_CONFIG.forestProjectileReduction * 100)}% less damage from projectiles: arrows and shots (Direct and Indirect) and thrown spells like Magic Bolt and Fireball. Melee attacks, area spells and zones hit it as usual.`);
+  add('Battle', 'Equipment',
+    `Every Adventurer has a weapon and a body armor. Each piece adds base stats, then multiplies the total by its modifiers. Quality multiplies the base stats: Crude x1, Common x2, Fine x4, Masterwork x7.\n\n`
+    + `• Weapons set the Basic Attack's range and add one skill: Magic Bolt (Staff, Crystal), Circle Swing (Greatsword, Spear), Shield Slam (shields), Switch Mode (bows) or Quick Attack (daggers).\n• Mail and Plate are tougher but slower.\n• Without a weapon you fight Unarmed (x0.6 P.Atk); without armor, Defense and Health are x0.9.\n\n`
+    + `The Smithy (Outer City) sells Common gear and makes Fine (5 days) and Masterwork (25 days) gear to order, up to 3 orders at a time.\n\n`
+    + `Manage Party > Equipment swaps gear with the party's stash. Mercenaries use their own. A companion who leaves hands back what the party gave them; a slave who is sold leaves everything with the party.`);
   add('Battle', 'Engagement',
     `Hitting a unit with an Engage skill locks you both together, unless it's already engaged with someone else. While engaged you can't move, and you can only attack your opponent (and heal or cleanse yourself).\n\n`
     + `Disengage breaks free, but your opponent gets a free basic attack. Disengage skills (like Shadow Step) slip out with no free attack. Knockbacks and falling also end it.`);

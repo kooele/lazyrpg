@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { SKILLS, WEAPONS } from '../data/content';
+import { SKILLS } from '../data/content';
 import { GUILD } from '../data/guild';
 import type { Character, Offer } from '../data/types';
 import { askingPrice, buySlave, marketBuyPrice, nextShipmentDay, sellSlave } from '../game/city';
@@ -9,6 +9,7 @@ import { markDirty, requireState, session } from '../game/session';
 import { PEOPLE_SORTS, nextSort, sortPeople, type PeopleSort, type SortDir } from '../game/sorting';
 import { cityHeader } from '../ui/hud';
 import { COLORS, HEIGHT, ScrollList, WIDTH, button, confirmDialog, figure, fittedList, panel, setupCamera, sortBar, talentTag, text, toast, type ScrollItem, clearScene } from '../ui/widgets';
+import { figureKit, weaponName } from '../game/gear';
 
 /** The slave market: buy slaves, and sell your own back. It doesn't take prisoners (they're registered at the city gate). */
 export class MarketScene extends Phaser.Scene {
@@ -78,11 +79,11 @@ export class MarketScene extends Phaser.Scene {
     const c = o.character;
     const row = this.add.container(0, 0);
     row.add(this.add.rectangle(0, 0, w - 10, h, COLORS.panelLight, 0.5).setOrigin(0));
-    row.add(figure(this, 30, compact ? 66 : 74, 60, c.appearance, c.weaponId, { base: false }));
+    row.add(figure(this, 30, compact ? 66 : 74, 60, c.appearance, figureKit(c), { base: false }));
     const name = text(this, 64, 6, c.name, { fontSize: '16px' });
     row.add(name);
     row.add(talentTag(this, 64 + name.width + 12, 9, c, { fontSize: 12, detail: false }));
-    row.add(text(this, 64, 26, `Level ${c.level} (${adventurerRank(c.level)}-rank) · ${WEAPONS[c.weaponId].name}`, { fontSize: '13px', color: COLORS.gold }));
+    row.add(text(this, 64, 26, `Level ${c.level} (${adventurerRank(c.level)}-rank) · ${weaponName(c)}`, { fontSize: '13px', color: COLORS.gold }));
     if (!compact) row.add(talentTag(this, 64, 45, c, { fontSize: 11, overall: false, sep: '   ' }));
     row.add(fittedList(this, 64, compact ? 46 : 62, c.skillIds.map((s) => SKILLS[s].name), 1, {
       fontSize: '12px', color: COLORS.dim, wordWrap: { width: compact ? 260 : w - 240 },

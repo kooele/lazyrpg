@@ -2,7 +2,7 @@
 // Pure logic (no Phaser): scenes call these and show the messages they return.
 import { MAX_PARTY_SIZE } from '../data/content';
 import { GUILD, isResidence, trainingXp, type CityLodging, type InnTier, type Ring } from '../data/guild';
-import { RANKS, type Character, type CompanionTerms, type GameState, type Offer, type Quest, type Rank } from '../data/types';
+import { RANKS, type Character, type CompanionTerms, type GameState, type Item, type Offer, type Quest, type Rank } from '../data/types';
 import { dangerRating, makeQuest, postQuests } from './board';
 import { grantXp, type Rng } from './character';
 import {
@@ -14,6 +14,10 @@ import {
   type BattleCondition,
 } from './condition';
 import { createGuild, nextRank, promotionReady, rankThreshold, renownLoss, simulateGuildDay, updateRanks } from './guild';
+import { itemName, itemValue, returnGear, stacks } from './inventory';
+import { battleLoot } from './loot';
+import { smithyDay } from './smithy';
+import { marketplaceDay, salesPerDay } from './marketplace';
 import { randInt, randomAdventurer } from './people';
 
 // ---- a new campaign -----------------------------------------------------------------------------
@@ -34,6 +38,9 @@ export function newCampaign(main: Character, partyName: string, rng: Rng): GameS
     guild: createGuild(rng),
     market: { slaves: [], priceIndex: 1 },
     prisoners: [],
+    inventory: [],
+    smithyOrders: [],
+    marketplace: [],
     quest: null,
     lastQuestDay: 0,
     questMembers: [],
@@ -249,7 +256,7 @@ export function rewardShares(members: Character[], reward: number): { name: stri
  * Morale, rewards. Nights on the road pass for multi-day trips; the party gets back in the evening and still needs
  * to end the day (everyone sleeps where they lodge). Enemies who `surrendered` are taken prisoner on a win. `turns` is how many turns (rounds) the battle lasted: each costs Morale. Returns report lines.
  */
-/** How the enemies fared in a quest's battle: those killed (each worth a bounty) and how many there were in all. */
+/** How the enemies fared in a quest's battle: those killed (they drop loot) and how many there were in all. */
 export interface FoeTally {
   killed: Character[];
   total: number;
@@ -259,8 +266,6 @@ export interface FoeTally {
 export const questMoraleLoss = (turns: number, outcome: 'victory' | 'defeat') =>
   Math.round(Math.max(0, turns) * GUILD.condition.moralePerTurn) + (outcome === 'defeat' ? GUILD.condition.moraleFailedQuest : 0);
 
-/** The bounty for an enemy killed on a quest: killBountyShare of turning in a prisoner of its level (prisoners are harder to take). */
-export const killBounty = (level: number) => Math.round(bounty(level) * GUILD.slave.killBountyShare);
 
 export function resolveQuest(
   state: GameState, outcome: 'victory' | 'defeat', rng: Rng, conditions: BattleCondition[] = [], surrendered: Character[] = [],
@@ -293,6 +298,9 @@ export function resolveQuest(
     lines.push(`${c.name} is injured: Health ${healthOf(c)}/100 (-${loss}).`);
   }
   for (const c of dead) {
+    // The party brings back what they carried.
+    const back = returnGear(state, c, true);
+    if (back.length) lines.push(`${c.name}'s ${back.map(itemName).join(' and ')} went back to the stash.`);
     state.party = state.party.filter((m) => m !== c);
     state.lineup = state.lineup.filter((id) => id !== c.id);
     delete state.schedule[c.id];
@@ -327,8 +335,8 @@ export function resolveQuest(
     for (const c of members) changeRelationship(c, GUILD.companion.relationshipPerQuest);
     // Enemies who surrendered (only humans do) are taken prisoner, to be registered at the city gate.
     for (const foe of surrendered) {
-      const p = randomAdventurer(foe.level, rng, { avoidNames: new Set(state.party.map((m) => m.name)) });
-      if (foe.weaponId) p.weaponId = foe.weaponId;
+      // Their gear stays on the battlefield: a prisoner comes with nothing.
+      const p = randomAdventurer(foe.level, rng, { avoidNames: new Set(state.party.map((m) => m.name)), unarmed: true });
       state.prisoners.push({ character: p, price: bounty(p.level) });
       lines.push(`${p.name} (Lv ${p.level}, ${foe.name}) surrendered and was taken prisoner. Register them at the city gate.`);
     }
@@ -340,11 +348,18 @@ export function resolveQuest(
     lines.push(...questXpLines(q, members, defeated));
     for (const c of members) changeRelationship(c, -2);
   }
-  // Bounties for every enemy killed, claimed back in the city, win or lose.
-  if (foes?.killed.length) {
-    const gold = foes.killed.reduce((sum, f) => sum + killBounty(f.level), 0);
-    state.gold += gold;
-    lines.push(`Bounties: ${gold} gold for ${foes.killed.length} enem${foes.killed.length > 1 ? 'ies' : 'y'} slain.`);
+  // Loot (wins only: the battlefield can't be looted until the enemy is driven off): the gear of humans killed or
+  // captured, and every other foe's trophy and junk. Trophies are turned in at the city gate; junk sells at the marketplace.
+  const loot = battleLoot(foes?.killed ?? [], surrendered, outcome, rng);
+  if (loot.length) {
+    state.inventory.push(...loot);
+    const list = (kind: (k: Item['kind']) => boolean) => stacks(loot.filter((i) => kind(i.kind))).map((s) => `${itemName(s.item)}${s.count > 1 ? ` ×${s.count}` : ''}`).join(', ');
+    const gear = list((k) => k === 'weapon' || k === 'armor');
+    const junk = list((k) => k === 'junk');
+    const trophyList = list((k) => k === 'trophy');
+    if (trophyList) lines.push(`Trophies: ${trophyList}. Turn them in at the city gate (${loot.filter((i) => i.kind === 'trophy').reduce((s, i) => s + itemValue(i), 0)} gold).`);
+    if (gear) lines.push(`Gear: ${gear} (in the stash).`);
+    if (junk) lines.push(`Junk: ${junk} (in the stash, to sell).`);
   }
   lines.push(`Morale -${questMoraleLoss(turns, outcome)} (${turns} turn${turns === 1 ? '' : 's'} of battle${outcome === 'defeat' ? ', a failed quest' : ''}): ${members.map((c) => `${c.name} ${c.morale}`).join(', ')}.`);
   lines.push(...moraleDepartures(state));
@@ -565,6 +580,8 @@ function runSchedule(state: GameState, away: string[]): string[] {
   }
   const parts = Object.entries(done).map(([a, names]) => `${ACTIVITY_INFO[a as keyof typeof ACTIVITY_INFO].name}: ${names.join(', ')}`);
   if (parts.length) out.unshift(`Today: ${parts.join(' · ')}.`);
+  const sales = marketplaceDay(state, state.party.filter((c) => home.has(c.id) && activityOf(state, c) === 'marketplace'));
+  if (sales) out.push(sales);
   return out;
 }
 
@@ -683,7 +700,8 @@ export interface NightForecast {
  */
 export function forecastNight(state: GameState): NightForecast {
   const day = state.day + 1;
-  const income = scheduledMembers(state).filter((c) => activityOf(state, c) === 'oddJobs').length * GUILD.schedule.oddJobsGold;
+  const { oddJobs, marketplace } = dayIncome(state);
+  const income = oddJobs.gold + marketplace.gold;
   const upkeep = dailyUpkeep(state, 'city');
   let gold = state.gold + income;
   const unfed = upkeep + (state.tab?.upkeep ?? 0) > gold;
@@ -720,6 +738,77 @@ export function forecastNight(state: GameState): NightForecast {
   };
 }
 
+/**
+ * What the party earns at the next End Day: odd jobs (oddJobsGold each) and the Marketplace (the items at the top of
+ * the sale list that today's sellers will sell), with who earns it.
+ */
+export function dayIncome(state: GameState): {
+  oddJobs: { names: string[]; gold: number };
+  marketplace: { names: string[]; items: number; gold: number };
+} {
+  const home = scheduledMembers(state);
+  const doing = (a: string) => home.filter((c) => activityOf(state, c) === a);
+  const jobs = doing('oddJobs');
+  const sellers = doing('marketplace');
+  const sold = state.marketplace.slice(0, salesPerDay(sellers.length));
+  return {
+    oddJobs: { names: jobs.map((c) => c.name), gold: jobs.length * GUILD.schedule.oddJobsGold },
+    marketplace: { names: sellers.map((c) => c.name), items: sold.length, gold: sold.reduce((s, i) => s + itemValue(i), 0) },
+  };
+}
+
+/** One line of the Finances panel: what, who or how many, and the gold (+ income, - expense). */
+export interface FinanceLine {
+  label: string;
+  detail: string;
+  amount: number;
+}
+
+/** The party's money at a glance (the header's Finances panel): the next End Day's income and expenses, and payday's. */
+export interface Finances {
+  income: FinanceLine[];
+  expenses: FinanceLine[];
+  /** Income minus expenses, a day. */
+  net: number;
+  /** Payday's wages and slave tax (every 7th day). */
+  weekly: FinanceLine[];
+  /** Days to the next payday (0 = today). */
+  paydayIn: number;
+  /** What a multi-day quest ran up, due at the next End Day. */
+  tab: number;
+  /** Items on the Marketplace sale list, and what they're worth. */
+  stall: { items: number; gold: number };
+}
+
+export function finances(state: GameState): Finances {
+  const { oddJobs, marketplace } = dayIncome(state);
+  const fed = boarders(state);
+  const lodged = cityBoarders(state, 'city');
+  const income: FinanceLine[] = [
+    { label: 'Odd Jobs', detail: oddJobs.names.length ? oddJobs.names.join(', ') : 'Nobody', amount: oddJobs.gold },
+    {
+      label: 'Marketplace',
+      detail: !marketplace.names.length ? 'Nobody on duty' : !marketplace.items ? `${marketplace.names.join(', ')} · nothing on sale` : `${marketplace.names.join(', ')} · ${marketplace.items} item${marketplace.items === 1 ? '' : 's'}`,
+      amount: marketplace.gold,
+    },
+  ];
+  const expenses: FinanceLine[] = [
+    { label: 'Food', detail: `${fed.length} fed`, amount: -foodCost(state) },
+    { label: 'Lodging', detail: `${lodged.length} housed`, amount: -lodgingCost(state, 'city') },
+  ];
+  const weekly: FinanceLine[] = [
+    { label: 'Wages', detail: `${state.party.filter(isCompanion).length} companion${state.party.filter(isCompanion).length === 1 ? '' : 's'}`, amount: -weeklyWages(state) },
+    { label: 'Slave Tax', detail: `${state.party.filter(isSlave).length} slave${state.party.filter(isSlave).length === 1 ? '' : 's'}`, amount: -weeklyTaxes(state) },
+  ];
+  return {
+    income, expenses, weekly,
+    net: [...income, ...expenses].reduce((s, l) => s + l.amount, 0),
+    paydayIn: (7 - (state.day % 7)) % 7,
+    tab: tabTotal(state),
+    stall: { items: state.marketplace.length, gold: state.marketplace.reduce((s, i) => s + itemValue(i), 0) },
+  };
+}
+
 /** Pass `days` days (nights on the road). Returns the messages for the player. */
 export function advanceDays(state: GameState, days: number, rng: Rng): string[] {
   const out: string[] = [];
@@ -741,6 +830,7 @@ export function advanceDay(state: GameState, rng: Rng, night: 'road' | 'city' = 
   const say = (t: string) => out.push(note(state, t));
   for (const t of runSchedule(state, away ?? [])) say(t);
   state.day += 1;
+  for (const t of smithyDay(state)) say(t);
   const tab = onTab ? (state.tab ??= { upkeep: 0, wages: {}, taxes: {} }) : null;
 
   // Food and lodging (tonight's, and the quest tab's when the party is back).
@@ -891,7 +981,7 @@ const round5 = (v: number) => Math.max(5, Math.round(v / 5) * 5);
 /** A slave for sale: a random adventurer near the party's rank, valued by level and talent. */
 function marketSlave(state: GameState, rng: Rng) {
   const [lo, hi] = MARKET_LEVELS[state.rank];
-  const c = randomAdventurer(randInt(lo, hi, rng), rng);
+  const c = randomAdventurer(randInt(lo, hi, rng), rng, { unarmed: true });
   return { character: c, price: round5(slaveValue(c)) };
 }
 
@@ -970,6 +1060,8 @@ export function sellSlave(state: GameState, id: string): number {
   const gold = Math.max(0, marketBuyPrice(state, c) - tabOwed(state, id));
   if (state.tab) delete state.tab.taxes[id];
   state.gold += gold;
+  // A slave is sold without their gear: it stays in the party's stash.
+  returnGear(state, c, true);
   state.party = state.party.filter((m) => m !== c);
   state.lineup = state.lineup.filter((x) => x !== c.id);
   delete state.schedule[c.id];
@@ -982,6 +1074,7 @@ export function sellSlave(state: GameState, id: string): number {
 
 /** The city takes a slave whose property tax went unpaid; it goes up for sale at the slave market. */
 function seizeSlave(state: GameState, c: Character): void {
+  returnGear(state, c, true);
   state.party = state.party.filter((m) => m !== c);
   state.lineup = state.lineup.filter((x) => x !== c.id);
   delete state.schedule[c.id];

@@ -1,13 +1,13 @@
 import Phaser from 'phaser';
-import { statText } from '../game/battle';
-import { MAX_PARTY_SIZE, SKILLS, WEAPONS, xpToNext } from '../data/content';
+import { penLine, statText } from '../game/battle';
+import { MAX_PARTY_SIZE, SKILLS, xpToNext } from '../data/content';
 import { ACTIVITIES, FOOD_TIERS, GUILD, INN_TIERS, LODGING_QUALITY, RINGS, foodQuality, isResidence, type Activity, type CityLodging, type FoodTier, trainingXp } from '../data/guild';
 import { TRAITS } from '../data/traits';
 import type { Character, GameState } from '../data/types';
 import { bodyPoints, deriveStats, freePoints, skillPoints } from '../game/character';
 import { benchMember, quitRenown, lineupMembers, lodgingPrice, marketBuyPrice, moveMember, releaseCompanion, residents, scheduledMembers, sellSlave, setLineupSlot, setLodging, tabLabel, tabOwed } from '../game/city';
 import {
-  ACTIVITY_INFO, QUALITY_TEXT, activityOf, lodgingOf, lodgingMorale, combatPenalty, expectedQuality, foodOf, foodMorale, healthOf, injuryPenalty, isInjured, moraleGainOf, moraleOf, moralePenalty,
+  ACTIVITY_INFO, QUALITY_TEXT, activityOf, canDoActivity, lodgingOf, lodgingMorale, combatPenalty, expectedQuality, foodOf, foodMorale, healthOf, injuryPenalty, isInjured, moraleGainOf, moraleOf, moralePenalty,
   obediencePenalty, traitFactor,
 } from '../game/condition';
 import { canFight, daysLeft, isCompanion, isHoused, isSlave, leaveParty, proratedWages, punishSlave, releaseCost, slaveTax, slaveValue } from '../game/contracts';
@@ -15,6 +15,7 @@ import { adventurerRank } from '../game/guild';
 import { markDirty, requireState, session } from '../game/session';
 import { MEMBER_COLOR, MEMBER_LABEL, cityHeader, memberStatus } from '../ui/hud';
 import { COLORS, HEIGHT, ScrollList, Tooltip, WIDTH, button, confirmDialog, figure, panel, setupCamera, talentTag, text, toast, clearScene } from '../ui/widgets';
+import { armorName, figureKit, weaponName, weaponOf } from '../game/gear';
 
 const ROW_H = 58;
 const ROW_GAP = 4;
@@ -158,7 +159,7 @@ export class PartyScene extends Phaser.Scene {
       const hit = this.add.rectangle(0, 0, SLOT_W, SLOT_H, 0xffffff, 0.001).setOrigin(0).setInteractive({ useHandCursor: true, draggable: true });
       if (c.id === this.selected) frame.setFillStyle(0x4a3d1c, 1);
       card.add(hit);
-      card.add(figure(this, SLOT_W / 2, SLOT_H - 16, 50, c.appearance, c.weaponId, { base: false }));
+      card.add(figure(this, SLOT_W / 2, SLOT_H - 16, 50, c.appearance, figureKit(c), { base: false }));
       card.add(text(this, 4, 2, `${i + 1}`, { fontSize: '11px', color: COLORS.gold }));
       card.add(text(this, SLOT_W / 2, SLOT_H - 14, c.name, { fontSize: '10px', color: isInjured(c) ? COLORS.bad : COLORS.text, fixedWidth: SLOT_W - 4, align: 'center' }).setOrigin(0.5, 0));
       hit.on('pointerup', () => {
@@ -220,7 +221,7 @@ export class PartyScene extends Phaser.Scene {
       });
       this.dragRow(list, row, bg, c.id);
       row.add(bg);
-      row.add(figure(this, 28, 56, 52, c.appearance, c.weaponId, { base: false }));
+      row.add(figure(this, 28, 56, 52, c.appearance, figureKit(c), { base: false }));
       row.add(text(this, 58, 6, `${c.name}  Lv ${c.level} (${adventurerRank(c.level)})`, { fontSize: '15px' }));
       row.add(text(this, 58, 26, memberStatus(state, c), { fontSize: '11px', color: MEMBER_COLOR[c.contract?.type ?? 'main'], wordWrap: { width: 200 } }));
       if (lineup.has(c.id)) row.add(text(this, 284, 6, `⚔ Slot ${members.findIndex((m) => m.id === c.id) + 1}`, { fontSize: '11px', color: COLORS.gold }).setOrigin(1, 0));
@@ -248,7 +249,7 @@ export class PartyScene extends Phaser.Scene {
     const X = 360;
     const W = WIDTH - X - 16;
     panel(this, X, 76, W, HEIGHT - 92);
-    figure(this, X + 70, 250, 150, c.appearance, c.weaponId);
+    figure(this, X + 70, 250, 150, c.appearance, figureKit(c));
     text(this, X + 150, 90, c.name, { fontSize: '26px' });
     const type = c.contract?.type ?? 'main';
     text(this, X + 150, 124, `Level ${c.level} · ${adventurerRank(c.level)}-Rank · ${MEMBER_LABEL[type]}`, { fontSize: '15px', color: MEMBER_COLOR[type] });
@@ -287,10 +288,11 @@ export class PartyScene extends Phaser.Scene {
     }
 
     const st = deriveStats(c);
-    text(this, X + 150, 166, `HP ${st.health}   MP ${st.mana}   P.Atk ${st.pAtk}   M.Atk ${st.mAtk}\nDef ${statText('defense', st.defense)}   Res ${statText('resist', st.resist)}   Move ${st.movement}`, { fontSize: '13px', lineSpacing: 4 });
-    const w = WEAPONS[c.weaponId];
+    const penStats = penLine(st);
+    text(this, X + 150, 166, `HP ${st.health}   MP ${st.mana}   P.Atk ${st.pAtk}   M.Atk ${st.mAtk}\nDef ${statText('defense', st.defense)}   Res ${statText('resist', st.resist)}   Move ${st.movement}${penStats ? `   ${penStats}` : ''}`, { fontSize: '13px', lineSpacing: 4 });
+    const w = weaponOf(c)!;
     talentTag(this, X + 150, 207, c, { fontSize: 11 });
-    text(this, X + 150, 226, `${w.name}: ${w.skills.map((s) => SKILLS[s].name).join(', ')}`, { fontSize: '12px', color: COLORS.dim, wordWrap: { width: W - 170 } });
+    text(this, X + 150, 226, `${weaponName(c)} · ${armorName(c)}: ${w.skills.map((s) => SKILLS[s].name).join(', ')}`, { fontSize: '12px', color: COLORS.dim, wordWrap: { width: W - 170 } });
     const free = freePoints(c);
     const names = c.skillIds.map((s) => SKILLS[s].name);
     const skillLine = (shown: number) => `Skill Points ${skillPoints(c) - free}/${skillPoints(c)}${free > 0 ? ` (${free} to spend)` : ''}: ${names.slice(0, shown).join(', ') || '—'}${shown < names.length ? ` +${names.length - shown} More` : ''}${bodyPoints(c) ? ` · Body ${bodyPoints(c)}` : ''}`;
@@ -356,6 +358,7 @@ export class PartyScene extends Phaser.Scene {
       effect: activityEffect(c, a),
       color: COLORS.dim,
       selected: a === now,
+      enabled: canDoActivity(c, a),
       pick: () => {
         state.schedule[c.id] = a;
         markDirty();
@@ -410,12 +413,22 @@ export class PartyScene extends Phaser.Scene {
 
     // ---- actions ----
     const by = HEIGHT - 76;
-    button(this, X + 16, by, 130, 44, 'Loadout', () => this.scene.start('CharacterCreator', { mode: 'edit', characterId: c.id }), {
-      enabled: k?.type !== 'mercenary', fontSize: 14, selected: free > 0 && k?.type !== 'mercenary',
+    // The member's own screens (Customize, Equipment, Skills), then contract actions on the right.
+    const merc = k?.type === 'mercenary';
+    const mercTip = (what: string) => (merc ? { onHover: () => this.tip.show(`Mercenaries come as they are: no changes to their ${what}.`), onOut: () => this.tip.hide() } : {});
+    button(this, X + 16, by, 104, 44, 'Customize', () => this.scene.start('CharacterCreator', { mode: 'edit', page: 'customize', characterId: c.id }), {
+      enabled: !merc, fontSize: 14, ...mercTip('look'),
     });
+    button(this, X + 126, by, 104, 44, 'Equipment', () => this.scene.start('Equipment', { selected: c.id }), {
+      fontSize: 14, ...(merc ? { onHover: () => this.tip.show('Mercenaries fight with their own gear.'), onOut: () => this.tip.hide() } : {}),
+    });
+    button(this, X + 236, by, 104, 44, free > 0 && !merc ? `Skills (${free})` : 'Skills', () => this.scene.start('CharacterCreator', { mode: 'edit', page: 'skills', characterId: c.id }), {
+      enabled: !merc, fontSize: 14, selected: free > 0 && !merc, ...mercTip('skills'),
+    });
+    const AX = X + 352;
     if (isCompanion(c)) {
       const left = daysLeft(c.contract, state.day);
-      button(this, X + 156, by, 120, 44, 'Renew', () => this.scene.start('Negotiate', { mode: 'renew', id: c.id }), {
+      button(this, AX, by, 100, 44, 'Renew', () => this.scene.start('Negotiate', { mode: 'renew', id: c.id }), {
         enabled: left <= 7, fontSize: 14, selected: left <= 0,
       });
       const wages = proratedWages(c, state.day);
@@ -427,31 +440,31 @@ export class PartyScene extends Phaser.Scene {
         owed ? `${tabLabel('wages')}: ${owed} gold.` : '',
         buyout ? `Breaking the contract early: ${buyout} gold.` : 'Their term is over: no buyout.',
       ].filter(Boolean).join('\n');
-      button(this, X + 286, by, 128, 44, cost ? `Release\n(${cost}g)` : 'Release', () => confirmDialog(this, `Release ${c.name} from their contract?\n${why}`, () => {
+      button(this, AX + 106, by, 110, 44, cost ? `Release\n(${cost}g)` : 'Release', () => confirmDialog(this, `Release ${c.name} from their contract?\n${why}`, () => {
         const err = releaseCompanion(state, c.id);
         if (err) return toast(this, err, COLORS.bad);
         markDirty();
         this.render();
       }, 'Release'), { fontSize: cost ? 12 : 14 });
-      if (left > 7) text(this, X + 156, by - 18, 'Renewal opens in the last week.', { fontSize: '11px', color: COLORS.dim });
+      if (left > 7) text(this, AX, by - 18, 'Renewal opens in the last week.', { fontSize: '11px', color: COLORS.dim });
     } else if (k?.type === 'slave') {
-      button(this, X + 156, by, 140, 44, 'Sell', () => confirmDialog(this, `Sell ${c.name} to the slave market for ${marketBuyPrice(state, c)} gold?${tabOwed(state, c.id) ? `\nTheir ${tabLabel('taxes')}, ${tabOwed(state, c.id)} gold, comes out of it.` : ''}`, () => {
+      button(this, AX, by, 100, 44, 'Sell', () => confirmDialog(this, `Sell ${c.name} to the slave market for ${marketBuyPrice(state, c)} gold?${tabOwed(state, c.id) ? `\nTheir ${tabLabel('taxes')}, ${tabOwed(state, c.id)} gold, comes out of it.` : ''}`, () => {
         const gold = sellSlave(state, c.id);
         markDirty();
         this.render();
         toast(this, `Sold for ${gold} gold.`);
       }, 'Sell'), { fontSize: 14 });
       const punished = isSlave(c) && c.contract.punishedDay === state.day;
-      button(this, X + 306, by, 112, 44, 'Punish', () => confirmDialog(this,
+      button(this, AX + 106, by, 110, 44, 'Punish', () => confirmDialog(this,
         `Punish ${c.name}?\nObedience +${GUILD.slave.punishObedience}, relationship -${GUILD.slave.punishRelationship}.\nObedience will drift back down while relationship stays below ${GUILD.slave.obedienceFallBelow}.`, () => {
           const err = punishSlave(c, state.day);
           if (err) return toast(this, err, COLORS.bad);
           markDirty();
           this.render();
         }, 'Punish'), { fontSize: 14, enabled: !punished });
-      if (punished) text(this, X + 306, by - 18, 'Punished today.', { fontSize: '11px', color: COLORS.dim });
+      if (punished) text(this, AX + 106, by - 18, 'Punished today.', { fontSize: '11px', color: COLORS.dim });
     } else if (k?.type === 'mercenary') {
-      button(this, X + 156, by, 140, 44, 'Dismiss', () => confirmDialog(this, `Dismiss ${c.name}? No refund.`, () => {
+      button(this, AX + 106, by, 110, 44, 'Dismiss', () => confirmDialog(this, `Dismiss ${c.name}? No refund.`, () => {
         leaveParty(state, c);
         markDirty();
         this.render();
@@ -626,6 +639,7 @@ function activityEffect(c: Character, a: Activity): string {
   if (a === 'recover') return `+${S.recoverMultiplier * GUILD.condition.healthPerDay * traitFactor(c, 'healthRecovery')} Health a Day (instead of +${GUILD.condition.healthPerDay * traitFactor(c, 'healthRecovery')})`;
   if (a === 'training') return `+${trainingXp(c.level)} XP a Day`;
   if (a === 'oddJobs') return `+${S.oddJobsGold} Gold a Day`;
+  if (a === 'marketplace') return canDoActivity(c, a) ? `Sells ${S.marketplaceItemsPerDay} Items a Day` : 'Companions and Slaves Only';
   return `+${S.dayOffMorale * traitFactor(c, 'moraleGain')} Morale a Day`;
 }
 

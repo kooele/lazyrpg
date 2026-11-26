@@ -1,31 +1,16 @@
-// Generates the static unit art in public/art/units as SVG files (crisp at any resolution).
+// Generates the static monster art in public/art/monsters as SVG files (crisp at any resolution).
 //   node tools/generate-art.mjs
 //
-// The drawing code lives in src/art/unitArt.js, which the game also uses to draw
-// adventurers with a custom look (sex, skin, face, hair) at runtime.
-//
-// Each body model (adventurers m1-m4/f1-f4, used by human enemies; bandits b1-b4) is drawn once
-// per weapon (the pose depends on the weapon), as units/<model>_<weapon art>.svg on a 64x80 canvas
-// with the feet at y = 76. Monsters (rat, slime, wolf) are monsters/<kind>.svg on a wider
-// 96x80 canvas, facing right, feet at y = 76; their colours come from src/data/enemies.json.
+// People (adventurers and humanoid enemies) aren't pre-generated: the game draws them at runtime with
+// src/art/unitArt.js, for each look or body model, weapon and armor. Monsters (rat, slime, wolf...) are
+// monsters/<kind>.svg on a 96x80 canvas, facing right, feet at y = 76; their colours come from src/data/enemies.json.
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ART_WEAPONS, BANDITS, HUMANOIDS, MODELS, figureSvg, monsterSvg } from '../src/art/unitArt.js';
+import { monsterSvg } from '../src/art/unitArt.js';
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), '..');
-const root = join(repo, 'public', 'art', 'units');
 const monsterRoot = join(repo, 'public', 'art', 'monsters');
-
-mkdirSync(root, { recursive: true });
-let count = 0;
-for (const [id, model] of Object.entries({ ...MODELS, ...BANDITS, ...HUMANOIDS })) {
-  for (const weapon of ART_WEAPONS) {
-    writeFileSync(join(root, `${id}_${weapon}.svg`), figureSvg(id, model, weapon));
-    count++;
-  }
-}
-console.log(`Wrote ${count} unit sprites to ${root}`);
 
 mkdirSync(monsterRoot, { recursive: true });
 const enemies = JSON.parse(readFileSync(join(repo, 'src', 'data', 'enemies.json'), 'utf8')).enemies;
