@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import guildJson from '../src/data/guild.json';
 import { FOOD_TIERS, GUILD, parseGuildConfig, trainingXp } from '../src/data/guild';
+import { TRAITS } from '../src/data/traits';
 import type { Character, GameState, Quest } from '../src/data/types';
 import { createCharacter, deriveStats, makeRng } from '../src/game/character';
 import { makeEnemy, makeUnit } from '../src/game/battle';
@@ -504,7 +505,7 @@ describe('contracts', () => {
     nightsAt(s, 'luxury', 2, makeRng(1));
     expect(s.gold).toBe(1000 - 2 * GUILD.inns.standard.pricePerPerson - 4 * GUILD.inns.luxury.pricePerPerson - 3 * food);
     expect(c.morale).toBe(60 + 2 * 2 * A); // two nights, two tiers above
-    expect(main.morale).toBe(60 + 2 * 2 * A * 2); // the Protagonist's gains count double
+    expect(main.morale).toBe(Math.round(60 + 2 * 2 * A * TRAITS.protagonist.moraleGain)); // the Protagonist gains more
     expect(s.day).toBe(4);
   });
 
@@ -734,7 +735,7 @@ describe('contracts', () => {
     const cBefore = moraleOf(c);
     expect(buyDrinks(s, 'standard')).toBeNull();
     expect(moraleOf(c)).toBe(cBefore + GUILD.inns.standard.drinksMorale);
-    expect(moraleOf(main)).toBe(before + 2 * GUILD.inns.standard.drinksMorale); // Protagonist: double gains
+    expect(moraleOf(main)).toBe(Math.round(before + TRAITS.protagonist.moraleGain * GUILD.inns.standard.drinksMorale)); // Protagonist: bigger gains
     expect(buyDrinks(s, 'standard')).toMatch(/already/);
     // Day off the next day (the quest day itself doesn't count for those who went).
     nightsAt(s, 'standard', 1, makeRng(1));
@@ -1186,7 +1187,8 @@ describe('contracts', () => {
     expect(slave.contract.relationship).toBe(rel + GUILD.condition.highMoraleRelationshipPerDay + GUILD.companion.relationshipPerQuest);
   });
 
-  it('the main character is the Protagonist: double injury recovery and double Morale gains', () => {
+  it('the main character is the Protagonist: 1.5x injury recovery and 1.5x Morale gains', () => {
+    expect(TRAITS.protagonist).toMatchObject({ healthRecovery: 1.5, moraleGain: 1.5 });
     const s = start();
     const main = mainCharacter(s);
     expect(main.traits).toEqual(['protagonist']);
@@ -1202,11 +1204,11 @@ describe('contracts', () => {
     }
     neutralFood(s);
     nightsAt(s, 'standard', 1, makeRng(1)); // an inn, as adventurers expect: lodging doesn't move Morale
-    expect(main.health).toBe(50 + 2 * GUILD.condition.healthPerDay);
+    expect(main.health).toBe(Math.round(50 + 1.5 * GUILD.condition.healthPerDay));
     expect(c.health).toBe(50 + GUILD.condition.healthPerDay);
-    expect(main.morale).toBe(50 + 2 * GUILD.schedule.dayOffMorale);
+    expect(main.morale).toBe(Math.round(50 + 1.5 * GUILD.schedule.dayOffMorale));
     expect(c.morale).toBe(50 + GUILD.schedule.dayOffMorale);
-    // Losses aren't doubled.
+    // Losses aren't multiplied.
     const before = main.morale!;
     acceptQuest(s, s.guild.board.find((x) => canTakeQuest(s, x))!.id);
     s.quest!.days = 1;

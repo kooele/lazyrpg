@@ -3,6 +3,7 @@
 import { MAX_PARTY_SIZE, STATUSES, xpToNext } from '../data/content';
 import { FOOD_TIERS, GUILD, INN_TIERS, trainingXp } from '../data/guild';
 import { STAT_CONFIG } from '../data/stats';
+import { TRAITS } from '../data/traits';
 import { LOOT } from '../data/enemies';
 import { RANKS, type Rank } from '../data/types';
 import { lodgingName } from './condition';
@@ -54,11 +55,11 @@ export function glossaryEntries(): GlossaryEntry[] {
   add('City Life', 'Health (not battle HP)',
     `A member's condition between battles, out of 100. It isn't their HP in battle.\n\n`
     + `Below 100: all battle stats −1% per 3 missing (Health 70 = −10%). At 0: the member dies (the main character pulls through at 1).\n\n`
-    + `Rises (×2 for the Protagonist):\n• +${C.healthPerDay} each night\n• +${C.healthPerDay * G.schedule.recoverMultiplier} for a day on Recover (instead of +${C.healthPerDay})\n\n`
+    + `Rises (×${TRAITS.protagonist.healthRecovery} for the Protagonist):\n• +${C.healthPerDay} each night\n• +${C.healthPerDay * G.schedule.recoverMultiplier} for a day on Recover (instead of +${C.healthPerDay})\n\n`
     + `Falls:\n• Up to −${C.maxHealthLoss} after each battle, the lower their HP fell (−${C.maxHealthLoss} if they fell)`);
   add('City Life', 'Morale',
     `A member's spirits, out of 100. Below 100: all battle stats −${G.combat.percentPer5}% per 5 missing. Above ${C.highMorale}: companions and slaves gain ${C.highMoraleRelationshipPerDay} relationship a day; below ${C.lowMorale}: they lose ${C.lowMoraleRelationshipPerDay}. At 0: the member leaves the party (the main character stays). New members start at ${C.startingMorale}.\n\n`
-    + `Rises (×2 for the Protagonist):\n• +${G.schedule.dayOffMorale} for taking a Day Off\n• +${Math.min(...drinks)} to +${Math.max(...drinks)} for a round of drinks at an inn (once a day)\n• +${G.food.moraleAbovePerStep} a day per level of quality above expected food\n• +${L.moraleAbovePerStep} a night per level of quality above expected lodging\n\n`
+    + `Rises (×${TRAITS.protagonist.moraleGain} for the Protagonist):\n• +${G.schedule.dayOffMorale} for taking a Day Off\n• +${Math.min(...drinks)} to +${Math.max(...drinks)} for a round of drinks at an inn (once a day)\n• +${G.food.moraleAbovePerStep} a day per level of quality above expected food\n• +${L.moraleAbovePerStep} a night per level of quality above expected lodging\n\n`
     + `Falls:\n• −${C.moralePerTurn} per turn in battle\n• −${C.moraleFailedQuest} for failing a quest\n• −1 per ${Math.round(1 / C.moralePerHealthLost)} Health lost\n• −${C.moraleMemberDied} when a party member dies\n• −${G.food.moraleBelowPerStep} a day per level of quality below expected food\n• −${L.moraleBelowPerStep} a night per level of quality below expected lodging`);
   add('City Life', 'Battle Penalties',
     `Injury, Morale and Obedience all weaken a member in battle, and the penalties multiply:\n\n`
@@ -167,7 +168,7 @@ export function glossaryEntries(): GlossaryEntry[] {
     + `Rises:\n• +${K.relationshipPerQuest} per quest completed together\n• +${C.highMoraleRelationshipPerDay} a day while Morale is above ${C.highMorale}\n\n`
     + `Falls:\n• −2 per failed quest together\n• −${C.lowMoraleRelationshipPerDay} a day while Morale is below ${C.lowMorale}\n• −5 a day the party can't pay food and lodging\n• −${-K.relationshipUnpaid} per missed payday (companions)\n• −${S.punishRelationship} per Punish (slaves)`);
   add('Party Members', 'Protagonist',
-    `Your main character's trait: they recover Health twice as fast and gain Morale twice as fast (drinks, days off). Morale losses aren't doubled.\n\n`
+    `Your main character's trait: they recover Health ${TRAITS.protagonist.healthRecovery}x as fast and gain ${TRAITS.protagonist.moraleGain}x as much Morale (drinks, days off). Morale losses are unchanged.\n\n`
     + `The main character can't be dismissed or die from 0 Health (they pull through at 1), and they don't complain about food or lodging.`);
 
   // ---- Slaves -----------------------------------------------------------------------------------

@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { session } from '../game/session';
 
 /** Shown on the main menu. */
-const GAME_VERSION = '0.1';
+const GAME_VERSION = '0.2.0';
 import { COLORS, HEIGHT, WIDTH, button, confirmDialog, figure, text, setupCamera } from '../ui/widgets';
 
 export class MainMenuScene extends Phaser.Scene {
