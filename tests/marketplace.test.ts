@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { Character, GameState } from '../src/data/types';
 import { makeEnemy } from '../src/game/battle';
 import { createCharacter, makeRng } from '../src/game/character';
-import { advanceDays, newCampaign } from '../src/game/city';
+import { advanceDays, finances, forecastNight, newCampaign } from '../src/game/city';
 import { activityOf, canDoActivity } from '../src/game/condition';
 import { gear } from '../src/game/gear';
 import { addItem, itemName, makeLoot } from '../src/game/inventory';
@@ -102,5 +102,25 @@ describe('the Marketplace', () => {
     delete file.marketplace;
     const old = parseSave(JSON.stringify(file));
     expect(old.ok && old.state.marketplace).toEqual([]);
+  });
+});
+
+describe('Finances', () => {
+  it('shows odd jobs and Marketplace income next to food, lodging, wages and slave tax', () => {
+    const s = start();
+    const sv = slave(s);
+    s.schedule[sv.id] = 'marketplace';
+    listItems(s, [junk(s, 'A', 10), junk(s, 'B', 20), junk(s, 'C', 30)].map((i) => i.id));
+    const f = finances(s);
+    expect(f.income).toEqual([
+      { label: 'Odd Jobs', detail: 'Nobody', amount: 0 },
+      { label: 'Marketplace', detail: `${sv.name} · 2 items`, amount: 30 },
+    ]);
+    expect(f.expenses.map((l) => l.label)).toEqual(['Food', 'Lodging']);
+    expect(f.net).toBe(30 + f.expenses[0].amount + f.expenses[1].amount);
+    expect(f.weekly.find((l) => l.label === 'Slave Tax')!.amount).toBeLessThan(0);
+    expect(f.stall).toEqual({ items: 3, gold: 60 });
+    // The End Day forecast counts the sales too.
+    expect(forecastNight(s).income).toBe(30);
   });
 });

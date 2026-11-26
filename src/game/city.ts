@@ -17,7 +17,7 @@ import { createGuild, nextRank, promotionReady, rankThreshold, renownLoss, simul
 import { itemName, itemValue, returnGear, stacks } from './inventory';
 import { battleLoot } from './loot';
 import { smithyDay } from './smithy';
-import { marketplaceDay } from './marketplace';
+import { marketplaceDay, salesPerDay } from './marketplace';
 import { randInt, randomAdventurer } from './people';
 
 // ---- a new campaign -----------------------------------------------------------------------------
@@ -700,7 +700,8 @@ export interface NightForecast {
  */
 export function forecastNight(state: GameState): NightForecast {
   const day = state.day + 1;
-  const income = scheduledMembers(state).filter((c) => activityOf(state, c) === 'oddJobs').length * GUILD.schedule.oddJobsGold;
+  const { oddJobs, marketplace } = dayIncome(state);
+  const income = oddJobs.gold + marketplace.gold;
   const upkeep = dailyUpkeep(state, 'city');
   let gold = state.gold + income;
   const unfed = upkeep + (state.tab?.upkeep ?? 0) > gold;
@@ -734,6 +735,77 @@ export function forecastNight(state: GameState): NightForecast {
   return {
     gold: state.gold, income, upkeep, tab, payday: isPayday(day), wages, taxes, lapses, total,
     shortfall: Math.max(0, total - state.gold - income), unfed, unpaid, seized, unpaidFinal,
+  };
+}
+
+/**
+ * What the party earns at the next End Day: odd jobs (oddJobsGold each) and the Marketplace (the items at the top of
+ * the sale list that today's sellers will sell), with who earns it.
+ */
+export function dayIncome(state: GameState): {
+  oddJobs: { names: string[]; gold: number };
+  marketplace: { names: string[]; items: number; gold: number };
+} {
+  const home = scheduledMembers(state);
+  const doing = (a: string) => home.filter((c) => activityOf(state, c) === a);
+  const jobs = doing('oddJobs');
+  const sellers = doing('marketplace');
+  const sold = state.marketplace.slice(0, salesPerDay(sellers.length));
+  return {
+    oddJobs: { names: jobs.map((c) => c.name), gold: jobs.length * GUILD.schedule.oddJobsGold },
+    marketplace: { names: sellers.map((c) => c.name), items: sold.length, gold: sold.reduce((s, i) => s + itemValue(i), 0) },
+  };
+}
+
+/** One line of the Finances panel: what, who or how many, and the gold (+ income, - expense). */
+export interface FinanceLine {
+  label: string;
+  detail: string;
+  amount: number;
+}
+
+/** The party's money at a glance (the header's Finances panel): the next End Day's income and expenses, and payday's. */
+export interface Finances {
+  income: FinanceLine[];
+  expenses: FinanceLine[];
+  /** Income minus expenses, a day. */
+  net: number;
+  /** Payday's wages and slave tax (every 7th day). */
+  weekly: FinanceLine[];
+  /** Days to the next payday (0 = today). */
+  paydayIn: number;
+  /** What a multi-day quest ran up, due at the next End Day. */
+  tab: number;
+  /** Items on the Marketplace sale list, and what they're worth. */
+  stall: { items: number; gold: number };
+}
+
+export function finances(state: GameState): Finances {
+  const { oddJobs, marketplace } = dayIncome(state);
+  const fed = boarders(state);
+  const lodged = cityBoarders(state, 'city');
+  const income: FinanceLine[] = [
+    { label: 'Odd Jobs', detail: oddJobs.names.length ? oddJobs.names.join(', ') : 'Nobody', amount: oddJobs.gold },
+    {
+      label: 'Marketplace',
+      detail: !marketplace.names.length ? 'Nobody on duty' : !marketplace.items ? `${marketplace.names.join(', ')} · nothing on sale` : `${marketplace.names.join(', ')} · ${marketplace.items} item${marketplace.items === 1 ? '' : 's'}`,
+      amount: marketplace.gold,
+    },
+  ];
+  const expenses: FinanceLine[] = [
+    { label: 'Food', detail: `${fed.length} fed`, amount: -foodCost(state) },
+    { label: 'Lodging', detail: `${lodged.length} housed`, amount: -lodgingCost(state, 'city') },
+  ];
+  const weekly: FinanceLine[] = [
+    { label: 'Wages', detail: `${state.party.filter(isCompanion).length} companion${state.party.filter(isCompanion).length === 1 ? '' : 's'}`, amount: -weeklyWages(state) },
+    { label: 'Slave Tax', detail: `${state.party.filter(isSlave).length} slave${state.party.filter(isSlave).length === 1 ? '' : 's'}`, amount: -weeklyTaxes(state) },
+  ];
+  return {
+    income, expenses, weekly,
+    net: [...income, ...expenses].reduce((s, l) => s + l.amount, 0),
+    paydayIn: (7 - (state.day % 7)) % 7,
+    tab: tabTotal(state),
+    stall: { items: state.marketplace.length, gold: state.marketplace.reduce((s, i) => s + itemValue(i), 0) },
   };
 }
 

@@ -283,7 +283,7 @@ export class CityScene extends Phaser.Scene {
     const payTaxes = f.taxes - tabTaxes;
     if (f.payday && payWages + payTaxes) lines.push(`Tomorrow is payday: wages ${payWages}${payTaxes ? ` + slave tax ${payTaxes}` : ''} gold.`);
     for (const l of f.lapses) lines.push(`${l.name}'s contract lapses tonight${l.owed ? `: final wages ${l.owed} gold` : ''}.`);
-    if (f.income) lines.push(`Odd jobs bring in ${f.income} gold first.`);
+    if (f.income) lines.push(`Odd jobs and Marketplace sales bring in ${f.income} gold first.`);
     lines.push(short ? `You have ${f.gold} gold of the ${f.total} needed: ${f.shortfall} short.` : `In all: ${f.total} gold of your ${f.gold}.`);
     const effects: string[] = [];
     if (f.unfed) effects.push(`• No food or lodging: your gold goes to 0 and everyone you house loses 5 relationship.`);
