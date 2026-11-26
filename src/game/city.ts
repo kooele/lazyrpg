@@ -259,8 +259,8 @@ export interface FoeTally {
 export const questMoraleLoss = (turns: number, outcome: 'victory' | 'defeat') =>
   Math.round(Math.max(0, turns) * GUILD.condition.moralePerTurn) + (outcome === 'defeat' ? GUILD.condition.moraleFailedQuest : 0);
 
-/** The bounty for an enemy killed on a quest: as much as turning in a prisoner of its level. */
-export const killBounty = (level: number) => bounty(level);
+/** The bounty for an enemy killed on a quest: killBountyShare of turning in a prisoner of its level (prisoners are harder to take). */
+export const killBounty = (level: number) => Math.round(bounty(level) * GUILD.slave.killBountyShare);
 
 export function resolveQuest(
   state: GameState, outcome: 'victory' | 'defeat', rng: Rng, conditions: BattleCondition[] = [], surrendered: Character[] = [],

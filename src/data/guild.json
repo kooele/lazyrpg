@@ -126,6 +126,7 @@
     "pricePerLevel": 100,
     "sellBackShare": 0.8,
     "bountyPerLevel": 9,
+    "killBountyShare": 0.5,
     "weeklyTaxShare": 0.1,
     "obedienceMarket": [40, 80],
     "obedienceCaptive": [0, 40],
@@ -146,7 +147,7 @@
     "drift": 0.04,
     "stockReference": 20
   },
-  "_slave": "Prisoners (human foes who surrender) are registered at the city gate when the party comes back: turned in for bountyPerLevel x level gold, or registered as the party's slave for a fee of its normal market value (priceBase + pricePerLevel x level x talent, at price index 1; talent is the slave's average stat growth rate: all C = 1, all S = 1.6, all F = 0.6) minus its bounty, so at a normal market enslaving and turning in come to the same. Every slave the party owns is taxed weeklyTaxShare of its normal market value each payday, along with companion wages; a slave whose tax can't be paid is seized by the city and goes to the slave market. Slaves have a relationship (like companions: quests together, nights better or worse than they expect, low Morale and missed upkeep move it) and Obedience (0-100). Market slaves start with obedienceMarket, registered captives with obedienceCaptive, both at startingRelationship. Each day Obedience rises by obedienceChangePerDay while relationship is at least obedienceRiseFrom, and falls by it while relationship is below obedienceFallBelow. Punishing a slave (Manage Party, once a day) adds punishObedience but costs punishRelationship.",
+  "_slave": "Prisoners (human foes who surrender) are registered at the city gate when the party comes back: turned in for bountyPerLevel x level gold (an enemy killed on a quest pays killBountyShare of that, rounded: prisoners are harder to take), or registered as the party's slave for a fee of its normal market value (priceBase + pricePerLevel x level x talent, at price index 1; talent is the slave's average stat growth rate: all C = 1, all S = 1.6, all F = 0.6) minus its bounty, so at a normal market enslaving and turning in come to the same. Every slave the party owns is taxed weeklyTaxShare of its normal market value each payday, along with companion wages; a slave whose tax can't be paid is seized by the city and goes to the slave market. Slaves have a relationship (like companions: quests together, nights better or worse than they expect, low Morale and missed upkeep move it) and Obedience (0-100). Market slaves start with obedienceMarket, registered captives with obedienceCaptive, both at startingRelationship. Each day Obedience rises by obedienceChangePerDay while relationship is at least obedienceRiseFrom, and falls by it while relationship is below obedienceFallBelow. Punishing a slave (Manage Party, once a day) adds punishObedience but costs punishRelationship.",
   "combat": {
     "_comment": "Battle stats of party members drop by percentPer5 % for every 5 points of Morale below 100, and (slaves) of Obedience below 100. These multiply with each other and with the injury penalty (1/3 of missing Health).",
     "percentPer5": 1

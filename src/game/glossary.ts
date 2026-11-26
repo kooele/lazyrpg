@@ -110,7 +110,7 @@ export function glossaryEntries(): GlossaryEntry[] {
     `The Quest Board is shared with every rival party, and they take quests from it every day, the best deals first. Nothing is held back for you: in a slow week the rivals may take every quest at your rank.\n\n`
     + `Up to ${G.board.maxPostsPerDay} new quests are posted a day, and each stays up for a few days.`);
   add('Quests & Ranks', 'Bounties',
-    `Every enemy the party kills is worth ${S.bountyPerLevel} gold per level, paid when the party gets back to the city, whether the quest succeeded or not. Turning in a prisoner pays the same.`);
+    `Every enemy the party kills is worth ${S.bountyPerLevel * S.killBountyShare} gold per level (rounded), paid when the party gets back to the city, whether the quest succeeded or not. Turning in a prisoner pays more: ${S.bountyPerLevel} gold per level.`);
 
   // ---- Experience -------------------------------------------------------------------------------
   add('Experience', 'Quest XP',

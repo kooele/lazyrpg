@@ -96,7 +96,7 @@ Promotion quests use the easier half of the rank's levels, its middle group size
 
 **XP** from a quest: every member who comes back gets a day of Training's XP (2 x their level + 20) plus an **equal share of the quest's XP pool**, so smaller parties learn faster. The pool grows with the quest's danger in skulls (D, 0.5 to 10): **20 x D² + 40 x D + 80**. The members' levels don't change it: there is no bonus or penalty for the level gap, because the level-up cost curve already makes easy quests worth little to veterans. A **failed quest** pays no reward, but still gives the training XP plus the pool's share for the fraction of enemies defeated (killed or surrendered): beating 3 of 4 before falling back is worth 75% of it. (`xp` in `guild.json`.)
 
-**Bounties**: every enemy the party kills is worth a bounty of 9 gold per level (the same as turning in a prisoner), claimed when the party gets back to the city, whether the quest succeeded or not.
+**Bounties**: every enemy the party kills is worth a bounty of 4.5 gold per level, rounded (half what turning in a prisoner pays, since prisoners are harder to take), claimed when the party gets back to the city, whether the quest succeeded or not.
 
 | Skulls | XP pool | Each of 4 members (pool share, before training XP) |
 |---|---|---|
