@@ -36,10 +36,10 @@ export function enemyLoot(foe: Character, rng: Rng): Item[] {
 }
 
 /**
- * Everything the party brings home from a battle: from a win, all loot of the enemies killed and taken prisoner;
- * from a defeat, only the trophies of the enemies killed (the rest stays on the battlefield).
+ * Everything the party brings home from a battle: from a win, all loot of the enemies killed and taken prisoner.
+ * A defeat brings nothing: the battlefield can only be looted once the enemy is driven off.
  */
 export function battleLoot(killed: Character[], captured: Character[], outcome: 'victory' | 'defeat', rng: Rng): Item[] {
-  const all = [...killed, ...(outcome === 'victory' ? captured : [])].flatMap((f) => enemyLoot(f, rng));
-  return outcome === 'victory' ? all : all.filter((i) => i.kind === 'trophy');
+  if (outcome !== 'victory') return [];
+  return [...killed, ...captured].flatMap((f) => enemyLoot(f, rng));
 }

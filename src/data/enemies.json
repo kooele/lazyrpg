@@ -4,7 +4,7 @@
     "maxEnemies": 12
   },
   "loot": {
-    "_comment": "What enemies drop when the party wins (from the Enemy Drops tab of the design sheet). Humans drop the gear they carried (killed or captured): each piece is broken with brokenChance, becoming junk worth brokenValueShare of its value. Every other type drops its trophy (turned in at the city gate) and its junk item (sold at the marketplace), each worth goldPerLevel x the enemy's level, rounded. A junk name with {weapon} is the enemy's own weapon (Goblin {weapon} = Goblin Spear). Trophies from enemies killed count even when the quest fails; gear and junk only come home after a win.",
+    "_comment": "What enemies drop when the party wins (from the Enemy Drops tab of the design sheet). Humans drop the gear they carried (killed or captured): each piece is broken with brokenChance, becoming junk worth brokenValueShare of its value. Every other type drops its trophy (turned in at the city gate) and its junk item (sold at the marketplace), each worth goldPerLevel x the enemy's level, rounded. A junk name with {weapon} is the enemy's own weapon (Goblin {weapon} = Goblin Spear). A failed quest brings nothing home: the battlefield can only be looted once the enemy is driven off.",
     "trophyGoldPerLevel": 4.5,
     "junkGoldPerLevel": 4.5,
     "brokenChance": 0.6667,

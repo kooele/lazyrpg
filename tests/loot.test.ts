@@ -62,15 +62,14 @@ describe('enemy loot', () => {
     expect(pieces.filter((i) => i.kind === 'junk').length / pieces.length).toBeCloseTo(2 / 3, 1);
   });
 
-  it('a win brings everything from the dead and the captured; a defeat only the trophies of the dead', () => {
+  it('a win brings everything from the dead and the captured; a defeat brings nothing', () => {
     const wolves = [makeEnemy('wolf', 4, makeRng(1)), makeEnemy('wolf', 4, makeRng(2))];
     const captive = makeEnemy('bandit', 5, makeRng(3));
     const win = battleLoot(wolves, [captive], 'victory', never);
     expect(win.filter((i) => i.kind === 'trophy')).toHaveLength(2);
     expect(win.filter((i) => i.kind === 'junk')).toHaveLength(2);
     expect(win.filter((i) => i.kind === 'weapon')).toHaveLength(1);
-    const loss = battleLoot(wolves, [captive], 'defeat', never);
-    expect(loss.map((i) => i.kind)).toEqual(['trophy', 'trophy']);
+    expect(battleLoot(wolves, [captive], 'defeat', never)).toEqual([]);
   });
 
   it('kills pay no bounty any more: a won quest puts the loot in the stash instead', () => {

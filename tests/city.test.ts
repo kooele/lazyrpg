@@ -242,7 +242,7 @@ describe('ranks and the leaderboard', () => {
     expect(questXpShares(q, [])).toEqual([]);
   });
 
-  it('a failed quest: no pay, but training XP plus quest XP for the share of enemies defeated, and the trophies of kills', () => {
+  it('a failed quest: no pay and no loot, but training XP plus quest XP for the share of enemies defeated', () => {
     const s = start();
     const q = { ...makeQuest('D', s.day, makeRng(5)), days: 1 }; // back the same day: no upkeep on the road
     s.guild.board.push(q);
@@ -258,10 +258,10 @@ describe('ranks and the leaderboard', () => {
     const xp = Math.round(trainingXp(q.stage) + questXpPool(q) * 0.75);
     expect(lines.join(' ')).toContain(`75% of the enemies defeated`);
     expect(main.level * 1000 + main.xp).toBeGreaterThan(q.stage * 1000); // gained XP
-    // Only the trophies of the 2 wolves killed come home (no pelts after a loss), to turn in at the gate.
-    expect(s.inventory.map((i) => i.kind)).toEqual(['trophy', 'trophy']);
-    expect(lines.join(' ')).toContain('Trophies: Wolf Fang ×2');
-    expect(s.gold).toBe(gold); // no quest pay, no bounties
+    // Driven off the field: nothing to loot.
+    expect(s.inventory).toEqual([]);
+    expect(lines.join(' ')).not.toMatch(/Trophies|Junk/);
+    expect(s.gold).toBe(gold); // no quest pay
     expect(s.prisoners).toHaveLength(0);
     expect(questXpShares(q, [{ level: q.stage }], 0.75)).toEqual([xp]);
     expect(questXpShares(q, [{ level: q.stage }], 0)).toEqual([trainingXp(q.stage)]); // nothing defeated: training only

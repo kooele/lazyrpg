@@ -344,8 +344,8 @@ export function resolveQuest(
     lines.push(...questXpLines(q, members, defeated));
     for (const c of members) changeRelationship(c, -2);
   }
-  // Loot: from a win, the gear of humans killed or captured and every other foe's trophy and junk; from a defeat,
-  // only the trophies of the foes killed. Trophies are turned in at the city gate; junk sells at the marketplace.
+  // Loot (wins only: the battlefield can't be looted until the enemy is driven off): the gear of humans killed or
+  // captured, and every other foe's trophy and junk. Trophies are turned in at the city gate; junk sells at the marketplace.
   const loot = battleLoot(foes?.killed ?? [], surrendered, outcome, rng);
   if (loot.length) {
     state.inventory.push(...loot);
