@@ -550,7 +550,7 @@ export function figureSvg(id, model, weapon, scale = 1) {
   const gripOver = (x, y) => front.push(circle(x, y, handR, P.skin));
   if (weapon === 'mace_shield') {
     // Mace: a wooden haft with a flanged iron head.
-    const top_ = ry - 15;
+    const top_ = ry - 22.5; // a 22.5-long haft
     front.push(limb([[rx + 0.3, ry + 3], [rx - 0.6, top_ + 3]], 1.6, '#5a3a22'));
     front.push(circle(rx - 0.7, top_ + 1.2, 3.1, paint('#7d838c')));
     for (const [dx, dy] of [[-3.4, 0], [3.4, 0], [0, -3.4]]) front.push(path(`M${n(rx - 0.7 + dx * 0.6)} ${n(top_ + 1.2 + dy * 0.6)} l${n(dx * 0.5 - dy * 0.25)} ${n(dy * 0.5 - dx * 0.25)} l${n(dy * 0.5)} ${n(dx * 0.5)} Z`, paint('#9aa2ac')));
@@ -622,12 +622,13 @@ export function figureSvg(id, model, weapon, scale = 1) {
   } else if (weapon === 'dagger' || weapon === 'twin_daggers') {
     // Short blades held point-up.
     const blade = (hx, hy, s) => {
-      const tx = hx + s * 2;
-      const ty = hy - 13.5;
-      front.push(path(`M${n(hx - 1.4)} ${n(hy - 2.2)} L${n(tx - 0.2)} ${n(ty)} L${n(hx + 1.4)} ${n(hy - 2.2)} Z`, '#d6dbe2'));
-      front.push(limb([[hx - 0.2, hy - 3], [tx - 0.3, ty + 2.5]], 0.5, '#ffffff'));
-      front.push(limb([[hx - 2.8, hy - 2.2], [hx + 2.8, hy - 2.2]], 1.3, model.bandit ? paint('#5a5a5e') : paint('#c9a050')));
-      front.push(limb([[hx, hy - 2], [hx, hy + 2]], 1.3, '#5a3a22'));
+      const k = 2; // dagger size
+      const tx = hx + s * 2 * k;
+      const ty = hy - 13.5 * k;
+      front.push(path(`M${n(hx - 1.4 * k)} ${n(hy - 2.2 * k)} L${n(tx - 0.2 * k)} ${n(ty)} L${n(hx + 1.4 * k)} ${n(hy - 2.2 * k)} Z`, '#d6dbe2'));
+      front.push(limb([[hx - 0.2 * k, hy - 3 * k], [tx - 0.3 * k, ty + 2.5 * k]], 0.5 * k, '#ffffff'));
+      front.push(limb([[hx - 2.8 * k, hy - 2.2 * k], [hx + 2.8 * k, hy - 2.2 * k]], 1.3 * k, model.bandit ? paint('#5a5a5e') : paint('#c9a050')));
+      front.push(limb([[hx, hy - 2 * k], [hx, hy + 2 * k]], 1.3 * k, '#5a3a22'));
       gripOver(hx, hy);
     };
     blade(rx, ry, -1);
@@ -653,7 +654,7 @@ export function figureSvg(id, model, weapon, scale = 1) {
   } else if (weapon === 'bow' || weapon === 'shortbow') {
     // Bow held out in the left hand, string toward the body.
     const bx = lx - 3.2; // the grip (bx + 3.5) sits in the hand
-    const half = weapon === 'shortbow' ? 12 : 17;
+    const half = (weapon === 'shortbow' ? 12 : 17) * 1.25;
     const tY = ly - half;
     const bY = ly + half;
     front.push(`<path d="M${n(bx - 1.5)} ${n(tY)} Q${n(bx + 9)} ${n(ly)} ${n(bx - 1.5)} ${n(bY)}" fill="none" stroke="${dark(wood, 0.05)}" stroke-width="2" stroke-linecap="round"/>`);
