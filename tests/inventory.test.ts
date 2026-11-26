@@ -28,7 +28,7 @@ describe('the stash', () => {
     addItem(s, 'weapon', gear('spear', 'crude'));
     addItem(s, 'weapon', gear('staff', 'fine'));
     addItem(s, 'weapon', gear('staff', 'masterwork'));
-    expect(sortedInventory(s).map(itemName)).toEqual(['Masterwork Staff', 'Fine Staff', 'Crude Spear', 'Common Plate']);
+    expect(sortedInventory(s).map(itemName)).toEqual(['Crude Spear', 'Masterwork Staff', 'Fine Staff', 'Common Plate']); // equipment.json order: Spear before Staff
     expect(sortedInventory(s, 'armor').map(itemName)).toEqual(['Common Plate']);
     expect(itemValue(s.inventory[0])).toBe(100);
     expect(new Set(s.inventory.map((i) => i.id)).size).toBe(4);

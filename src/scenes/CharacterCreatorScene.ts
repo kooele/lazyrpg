@@ -18,7 +18,7 @@ import { COLORS, ScrollList, Tooltip, button, figure, hex, overlayInput, panel, 
 import { GUILD } from '../data/guild';
 import { skillShape, type ReachContext } from '../game/reach';
 import { TALENT_COLORS, growthRate, overallTalent, overallTalentLabel, rollTalents, talentGrowth, talentOf, talentStats } from '../game/talent';
-import { figureKit, gear, gearBase, gearModifier, weaponName, weaponOf } from '../game/gear';
+import { figureKit, gear, gearBase, gearModifier, gearTooltip, weaponName, weaponOf } from '../game/gear';
 
 interface CreatorData {
   /** main: create the main character for a new game. edit: change a party member's look or skills (Manage Party). */
@@ -103,8 +103,8 @@ export class CharacterCreatorScene extends Phaser.Scene {
       if (enabled) {
         t.setInteractive({ useHandCursor: true });
         t.on('pointerup', () => this.stepTalent(k, delta));
-        t.on('pointerover', () => this.tooltip.show(`${delta > 0 ? 'Raise' : 'Lower'} ${STAT_INFO[k].name} talent (now ${g}).\n${this.gradeTable()}`));
-        t.on('pointerout', () => this.tooltip.hide());
+        t.on('pointerover', () => this.showTip(`${delta > 0 ? 'Raise' : 'Lower'} ${STAT_INFO[k].name} talent (now ${g}).\n${this.gradeTable()}`));
+        t.on('pointerout', () => this.hideTip());
       }
       L.add(t);
     };
@@ -142,7 +142,21 @@ export class CharacterCreatorScene extends Phaser.Scene {
   }
 
   private hoverTip(info: () => string) {
-    return { onHover: () => this.tooltip.show(info()), onOut: () => this.tooltip.hide() };
+    return { onHover: () => this.showTip(info()), onOut: () => this.hideTip() };
+  }
+
+  /**
+   * Show / hide the tooltip. The text fields (name, party name) are HTML laid over the canvas, so they'd cover it:
+   * they're hidden while it shows.
+   */
+  private showTip(value: string): void {
+    this.tooltip.show(value);
+    for (const el of [this.nameInput, this.partyInput]) if (el) el.style.visibility = 'hidden';
+  }
+
+  private hideTip(): void {
+    this.tooltip.hide();
+    for (const el of [this.nameInput, this.partyInput]) if (el) el.style.visibility = '';
   }
 
   /** "S 160% (5%) · A 140% (10%) ..." one grade per line. */
@@ -209,13 +223,13 @@ export class CharacterCreatorScene extends Phaser.Scene {
   /** Make an object show a tooltip while hovered. */
   private tip<T extends Phaser.GameObjects.GameObject>(obj: T, info: () => string): T {
     obj.setInteractive();
-    obj.on('pointerover', () => this.tooltip.show(info()));
-    obj.on('pointerout', () => this.tooltip.hide());
+    obj.on('pointerover', () => this.showTip(info()));
+    obj.on('pointerout', () => this.hideTip());
     return obj;
   }
 
   private render(): void {
-    this.tooltip.hide();
+    this.hideTip();
     // The weapon skill list lives outside the layer (lists place themselves in the scene).
     this.skillList?.destroy();
     this.skillList = null;
@@ -274,10 +288,10 @@ export class CharacterCreatorScene extends Phaser.Scene {
     L.add(text(this, x, y, 'Starting Weapon (Crude)', { color: COLORS.dim, fontSize: '13px' }));
     WEAPON_TYPES.forEach((id, i) => {
       const w = WEAPONS[id];
-      L.add(button(this, x + (i % 3) * 98, y + 22 + Math.floor(i / 3) * 32, 94, 28, w.name, () => {
+      L.add(button(this, x + (i % 2) * 147, y + 22 + Math.floor(i / 2) * 32, 143, 28, w.name, () => {
         d.weapon = gear(w.id, d.weapon?.quality);
         this.render();
-      }, { selected: d.weapon?.type === w.id, fontSize: 11, ...this.hoverTip(() => `${w.name} (${w.class} · Range ${w.range})\n${w.description}\nSkills: ${w.skills.map((sid) => SKILLS[sid].name).join(', ')}`) }));
+      }, { selected: d.weapon?.type === w.id, fontSize: 12, ...this.hoverTip(() => gearTooltip('weapon', w.id, 'crude')) }));
     });
   }
 

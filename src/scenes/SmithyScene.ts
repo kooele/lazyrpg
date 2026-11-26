@@ -2,15 +2,16 @@ import Phaser from 'phaser';
 import { ARMORS, ARMOR_TYPES, QUALITIES, SKILLS, SMITHY, WEAPONS, WEAPON_TYPES } from '../data/content';
 import { GUILD } from '../data/guild';
 import type { GearKind } from '../data/types';
-import { gearName, gearStatLines } from '../game/gear';
+import { gearName, gearStatLines, gearTooltip } from '../game/gear';
 import { markDirty, requireState, session } from '../game/session';
 import { buyGear, buyPrice, cancelOrder, inProgress, orderDays, orderEtas, orderGear, orderOptions } from '../game/smithy';
 import { cityHeader } from '../ui/hud';
-import { COLORS, HEIGHT, ScrollList, WIDTH, button, clearScene, confirmDialog, panel, setupCamera, text, toast, type ScrollItem } from '../ui/widgets';
+import { COLORS, HEIGHT, ScrollList, Tooltip, WIDTH, button, clearScene, confirmDialog, panel, setupCamera, text, toast, type ScrollItem } from '../ui/widgets';
 
 /** The Smithy: buy Common weapons and armor on the spot, or order Fine and Masterwork pieces (paid up front, made in turn). */
 export class SmithyScene extends Phaser.Scene {
   private pick: { kind: GearKind; type: string } = { kind: 'weapon', type: WEAPON_TYPES[0] };
+  private tip!: Tooltip;
 
   constructor() {
     super('Smithy');
@@ -30,6 +31,7 @@ export class SmithyScene extends Phaser.Scene {
     clearScene(this);
     const state = requireState();
     cityHeader(this, state, 'Smithy');
+    this.tip = new Tooltip(this, 300);
     button(this, WIDTH - 176, 74, 160, 34, `Back to ${GUILD.city}`, () => this.scene.start('City'), { fontSize: 14 });
     text(this, 20, 82, `${QUALITIES[SMITHY.buyQuality].name} gear on the spot, or better made to order · works on ${SMITHY.workers} orders at a time`, { fontSize: '12px', color: COLORS.dim });
     this.catalog();
@@ -45,7 +47,10 @@ export class SmithyScene extends Phaser.Scene {
     const pickButton = (kind: GearKind, type: string, name: string, x: number, y: number) => button(this, x, y, 132, 28, name, () => {
       this.pick = { kind, type };
       this.render();
-    }, { selected: this.pick.kind === kind && this.pick.type === type, fontSize: 12 });
+    }, {
+      selected: this.pick.kind === kind && this.pick.type === type, fontSize: 12,
+      onHover: () => this.tip.show(gearTooltip(kind, type, SMITHY.buyQuality)), onOut: () => this.tip.hide(),
+    });
     WEAPON_TYPES.forEach((id, i) => pickButton('weapon', id, WEAPONS[id].name, 28 + (i % 2) * 138, 142 + Math.floor(i / 2) * 32));
     const ay = 142 + Math.ceil(WEAPON_TYPES.length / 2) * 32 + 12;
     text(this, 28, ay, 'Armor', { fontSize: '15px', color: COLORS.gold });

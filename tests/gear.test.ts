@@ -35,7 +35,7 @@ describe('equipment data (Equipment Stats sheet)', () => {
     expect(row('shortbow')).toEqual({ range: 4, base: { pAtk: 20, mAtk: 10 }, modifiers: { mAtk: 0.8, movement: 1.2 }, skills: ['bow_attack', 'switch_mode'] });
     expect(row('dagger')).toEqual({ range: 1.5, base: { pAtk: 15, mAtk: 10, pPen: 5 }, modifiers: { pAtk: 0.8 }, skills: ['basic_attack', 'quick_attack'] });
     expect(row('twin_daggers')).toEqual({ range: 1.5, base: { pAtk: 15, mAtk: 10, pPen: 5 }, modifiers: { mAtk: 0.8 }, skills: ['basic_attack', 'quick_attack'] });
-    expect(row('unarmed')).toEqual({ range: 1.5, base: {}, modifiers: { pAtk: 0.6 }, skills: ['basic_attack'] });
+    expect(row('unarmed')).toEqual({ range: 1.5, base: {}, modifiers: { pAtk: 0.6, movement: 1.25 }, skills: ['basic_attack'] });
   });
 
   it('has the body armors and No Armor', () => {
@@ -64,8 +64,8 @@ describe('stats from gear', () => {
     expect(deriveStats(kit('shortbow', 'mail')).movement).toBe(17);
   });
 
-  it('Unarmed and No Armor are penalties: x0.6 P.Atk; x0.9 Defense and Health', () => {
-    expect(deriveStats(kit('', ''))).toMatchObject({ pAtk: 60, mAtk: 100, defense: 18, health: 450 });
+  it('Unarmed: x0.6 P.Atk but x1.25 Movement; No Armor: x0.9 Defense and Health', () => {
+    expect(deriveStats(kit('', ''))).toMatchObject({ pAtk: 60, mAtk: 100, defense: 18, health: 450, movement: 20 });
     expect(weaponName(kit('', ''))).toBe('Unarmed');
     expect(armorName(kit('', ''))).toBe('No Armor');
   });

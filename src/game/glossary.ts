@@ -197,8 +197,8 @@ export function glossaryEntries(): GlossaryEntry[] {
   add('Battle', 'Mana',
     `Mana is spent by skills and doesn't come back during a battle. Units start each battle with full mana.`);
   add('Battle', 'Defense and Resist',
-    `Every attack hits. Defense reduces damage taken to 100 ÷ (100 + Defense): 100 Defense halves it.\n\n`
-    + `Resist is a chance to shrug off a debuff: Resist ÷ (100 + Resist), so 100 Resist is 50%. A resisted debuff doesn't apply, but the hit's damage still lands.`);
+    `Every attack hits. Defense reduces damage taken: each point of Defense is +1% effective health.\n\n`
+    + `Resist shrugs off debuffs: each point of Resist is +1% effective resistance to debuffs. A resisted debuff doesn't apply, but the hit's damage still lands.`);
   add('Battle', 'Penetration',
     `P.Pen and M.Pen (from gear) make the target's Defense count for less against your Physical or Magical damage: the percent first, then the flat amount. 50% and 10 P.Pen make 100 Defense count as 40 against Physical damage.\n\n`
     + `Penetration never takes Defense below 0, and does nothing to Defense that is already 0 or less.`);
@@ -206,7 +206,7 @@ export function glossaryEntries(): GlossaryEntry[] {
     `Forest costs 6 Movement to enter. A unit standing in forest takes ${Math.round(STAT_CONFIG.forestProjectileReduction * 100)}% less damage from projectiles: arrows and shots (Direct and Indirect) and thrown spells like Magic Bolt and Fireball. Melee attacks, area spells and zones hit it as usual.`);
   add('Battle', 'Equipment',
     `Every Adventurer has a weapon and a body armor. Each piece adds base stats, then multiplies the total by its modifiers. Quality multiplies the base stats: Crude x1, Common x2, Fine x4, Masterwork x7.\n\n`
-    + `• Weapons set the Basic Attack's range and add one skill: Magic Bolt (Staff, Crystal), Circle Swing (Greatsword, Spear), Shield Slam (shields), Switch Mode (bows) or Quick Attack (daggers).\n• Mail and Plate are tougher but slower.\n• Without a weapon you fight Unarmed (x0.6 P.Atk); without armor, Defense and Health are x0.9.\n\n`
+    + `• Weapons set the Basic Attack's range and add one skill: Magic Bolt (Staff, Crystal), Circle Swing (Greatsword, Spear), Shield Slam (shields), Switch Mode (bows) or Quick Attack (daggers).\n• Mail and Plate are tougher but slower.\n• Without a weapon you fight Unarmed (x0.6 P.Atk, but x1.25 Movement); without armor, Defense and Health are x0.9.\n\n`
     + `The Smithy (Outer City) sells Common gear and makes Fine (5 days) and Masterwork (25 days) gear to order, up to 3 orders at a time.\n\n`
     + `Manage Party > Equipment swaps gear with the party's stash. Mercenaries use their own. A companion who leaves hands back what the party gave them; a slave who is sold leaves everything with the party.`);
   add('Battle', 'Engagement',

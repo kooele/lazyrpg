@@ -154,8 +154,8 @@ Tooltips show a formula line generated from the numbers (e.g. "80% P.Atk, then 4
 | Mana | 200 (+20) | Spent by skills; doesn't come back during a battle |
 | P.Atk | 100 (+10) | Physical power; skills deal a % of it |
 | M.Atk | 100 (+10) | Magic power and healing |
-| Defense | 20 (+10) | Damage taken × 100 / (100 + Defense) |
-| Resist | 20 (+10) | Chance to shrug off a debuff: Resist ÷ (100 + Resist) |
+| Defense | 20 (+10) | Reduces damage taken: each point is +1% effective health (damage × 100 / (100 + Defense)) |
+| Resist | 20 (+10) | Shrugs off debuffs: each point is +1% effective resistance to debuffs (chance Resist ÷ (100 + Resist)) |
 | Movement | 16 | Movement points per turn: grass costs 4, forest 6, river 8 (so 16 = 4 grass tiles) |
 | P.Pen / M.Pen | 0 | Penetration, from gear: Defense your Physical / Magical damage ignores. Shown as "P.Pen: 50% \| 10" (percent, then flat) |
 
@@ -174,7 +174,7 @@ A won quest gives each member in the lineup `xpPerVictory` (100, in `stats.json`
 
 ### Equipment
 
-Every Adventurer has a **weapon** and a **body armor** (`src/data/equipment.json`, from the Equipment Stats tab of the design sheet). Each piece gives **base stats**, added to the level stats (and Body points), and **modifiers**, which multiply the total afterwards: a Crude Staff is (100 + 10) × 0.8 = 88 P.Atk. Penetration % is added rather than multiplied. Gear comes in four **qualities**: base stats ×1 at **Crude** (20 gold), ×2 at **Common** (100), ×4 at **Fine** (500) and ×7 at **Masterwork** (2500); modifiers don't change with quality. New Adventurers start with a Crude weapon and Crude Leather; slaves (bought or captured) start with nothing: **Unarmed** (×0.6 P.Atk) and **No Armor** (×0.9 Defense and Health).
+Every Adventurer has a **weapon** and a **body armor** (`src/data/equipment.json`, from the Equipment Stats tab of the design sheet). Each piece gives **base stats**, added to the level stats (and Body points), and **modifiers**, which multiply the total afterwards: a Crude Staff is (100 + 10) × 0.8 = 88 P.Atk. Penetration % is added rather than multiplied. Gear comes in four **qualities**: base stats ×1 at **Crude** (20 gold), ×2 at **Common** (100), ×4 at **Fine** (500) and ×7 at **Masterwork** (2500); modifiers don't change with quality. New Adventurers start with a Crude weapon and Crude Leather; slaves (bought or captured) start with nothing: **Unarmed** (×0.6 P.Atk, ×1.25 Move) and **No Armor** (×0.9 Defense and Health).
 
 | Weapon | Range | Base Stats (Crude) | Modifiers | Skills |
 |---|---|---|---|---|
@@ -188,7 +188,7 @@ Every Adventurer has a **weapon** and a **body armor** (`src/data/equipment.json
 | Shortbow | 4 | 20 P.Atk, 10 M.Atk | ×0.8 M.Atk, ×1.2 Move | Basic Attack (by mode), Switch Mode |
 | Single Dagger | 1.5 | 15 P.Atk, 10 M.Atk, 5 P.Pen | ×0.8 P.Atk | Basic Attack, Quick Attack |
 | Twin Daggers | 1.5 | 15 P.Atk, 10 M.Atk, 5 P.Pen | ×0.8 M.Atk | Basic Attack, Quick Attack |
-| Unarmed | 1.5 | — | ×0.6 P.Atk | Basic Attack |
+| Unarmed | 1.5 | — | ×0.6 P.Atk, ×1.25 Move | Basic Attack |
 
 | Armor | Base Stats (Crude) | Modifiers |
 |---|---|---|
