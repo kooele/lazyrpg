@@ -106,25 +106,25 @@
   "armors": {
     "leather": {
       "name": "Leather", "outfit": "leatherArmor",
-      "description": "Light armor. No penalties.",
+      "description": "Light armor. Provides protection with little compromise.",
       "base": { "defense": 15, "health": 75 },
       "modifiers": {}
     },
     "mail": {
       "name": "Mail", "outfit": "mail",
-      "description": "Sturdier, but slows you down a little.",
+      "description": "Medium armor. Better protection, but slows you down a little.",
       "base": { "defense": 15, "health": 75 },
       "modifiers": { "movement": 0.9, "defense": 1.1, "health": 1.1 }
     },
     "plate": {
       "name": "Plate", "outfit": "plate",
-      "description": "The toughest armor, and the heaviest.",
+      "description": "Heavy Armor. The most protective, and the most cumbersome.",
       "base": { "defense": 15, "health": 75 },
       "modifiers": { "movement": 0.8, "defense": 1.2, "health": 1.2 }
     },
     "none": {
       "name": "No Armor", "outfit": "clothes", "builtIn": true,
-      "description": "Just clothes.",
+      "description": "No Armor. Not recommended for an adventurer.",
       "base": {},
       "modifiers": { "defense": 0.9, "health": 0.9 }
     }
