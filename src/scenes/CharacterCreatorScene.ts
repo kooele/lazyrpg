@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { statEffectPct } from '../game/battle';
 import {
   NAME_MAX_LENGTH, PALETTE, isSupport, SKILLS, SKILL_TABS, SKILL_TREES, WEAPONS, xpToNext, maxBodyRank, modeWithTag, resolveWeaponSkill, skillStatText,
 } from '../data/content';
@@ -431,8 +432,10 @@ export class CharacterCreatorScene extends Phaser.Scene {
       L.add(text(this, 142, y, STAT_INFO[k].short, { fontSize: `${fs}px` }));
       this.grade(L, k, 198, y, fs);
       this.gradeArrows(L, k, 198, y, fs);
-      L.add(text(this, 256, y, String(total[k]), { fontSize: `${fs}px` }).setOrigin(1, 0));
-      if (m !== 1) L.add(text(this, 262, y, mult(m), { fontSize: '12px', color: m > 1 ? COLORS.good : COLORS.bad }));
+      L.add(text(this, 246, y, String(total[k]), { fontSize: `${fs}px` }).setOrigin(1, 0));
+      const pct = statEffectPct(k, total[k]);
+      if (pct !== null) L.add(text(this, 248, y + 1, `(${pct}%)`, { fontSize: '10px', color: COLORS.dim }));
+      if (m !== 1) L.add(text(this, 282, y, mult(m), { fontSize: '12px', color: m > 1 ? COLORS.good : COLORS.bad }));
     });
   }
 
@@ -461,7 +464,9 @@ export class CharacterCreatorScene extends Phaser.Scene {
       L.add(text(this, 40, y, info.name, { fontSize: '15px' }));
       this.grade(L, k, 166, y, 15);
       L.add(text(this, 220, y, String(total[k]), { fontSize: '16px' }).setOrigin(1, 0));
-      if (m !== 1) L.add(text(this, 232, y + 2, mult(m), { fontSize: '13px', color: m > 1 ? COLORS.good : COLORS.bad }));
+      const pct = statEffectPct(k, total[k]);
+      if (pct !== null) L.add(text(this, 224, y + 2, `(${pct}%)`, { fontSize: '13px', color: COLORS.dim }));
+      if (m !== 1) L.add(text(this, 269, y + 2, mult(m), { fontSize: '13px', color: m > 1 ? COLORS.good : COLORS.bad }));
     });
   }
 

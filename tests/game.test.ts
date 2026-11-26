@@ -8,7 +8,7 @@ import statsJson from '../src/data/stats.json';
 import { STAT_CONFIG, parseStatConfig } from '../src/data/stats';
 import type { Character, SkillDef } from '../src/data/types';
 import { HOLD_FIRM_ODDS, bestAction, caution, holdsFirm, planTurn, preferredMode, runAiTurn, shouldDisengage, shouldSurrender, sideStrength, threatAt, tribeRouted, wantsToFlee } from '../src/game/ai';
-import { Battle, defenseMultiplier, resistChance, deploymentTiles, enemyTypesForStage, generateEnemies, makeEnemy, pickFoes, makeUnit, type Team } from '../src/game/battle';
+import { Battle, defenseMultiplier, resistChance, deploymentTiles, enemyTypesForStage, generateEnemies, makeEnemy, pickFoes, makeUnit, statEffectPct, statText, type Team } from '../src/game/battle';
 import { allSkills, bodyGain, skillBarLayout, swapBarSlots, bodyPoints as bodyPointsOf, bodyStats, createCharacter, deriveStats, freePoints, grantXp, isUnlocked, makeRng, pointsUsed, sanitizeLoadout } from '../src/game/character';
 import { randomAdventurer } from '../src/game/people';
 import { dist, generateMap, hasLineOfSight, passable, withinRange, type BattleMap, type Point, type Terrain } from '../src/game/grid';
@@ -2319,5 +2319,17 @@ describe('Arcane Weapon (toggle)', () => {
     expect(start).not.toContainEqual(expect.objectContaining({ type: 'toggle' }));
     expect(b.a.mp).toBe(0);
     expect(b.battle.isToggledOn(b.a, 'arcane_weapon')).toBe(true);
+  });
+});
+
+describe('stat display', () => {
+  it('shows Defense and Resist as amount and effective percent, other stats as the amount', () => {
+    const scale = STAT_CONFIG.defenseScale;
+    expect(statText('defense', scale)).toBe(`${scale} (50%)`); // half the damage
+    expect(statText('resist', scale)).toBe(`${scale} (50%)`); // half the debuffs shrugged off
+    expect(statText('defense', 0)).toBe('0 (0%)');
+    expect(statEffectPct('defense', -scale)).toBe(-50); // takes 50% more damage
+    expect(statText('pAtk', 95)).toBe('95');
+    expect(statEffectPct('movement', 16)).toBeNull();
   });
 });

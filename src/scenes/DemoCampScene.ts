@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { statText } from '../game/battle';
 import { SKILLS, WEAPONS, xpToNext } from '../data/content';
 
 /** Quick Battle keeps 4 recruits (one card each across the camp). */
@@ -121,8 +122,8 @@ export class DemoCampScene extends Phaser.Scene {
     const lines = [
       `HP ${stats.health}   MP ${stats.mana}`,
       `P.Atk ${stats.pAtk}   M.Atk ${stats.mAtk}`,
-      `Def ${stats.defense}   Move ${stats.movement}`,
-      `Resist ${stats.resist}`,
+      `Def ${statText('defense', stats.defense)}   Move ${stats.movement}`,
+      `Res ${statText('resist', stats.resist)}`,
     ];
     text(this, x + 14, y + 108, lines.join('\n'), { fontSize: '13px', lineSpacing: 3 });
     const weapon = WEAPONS[c.weaponId];

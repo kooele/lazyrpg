@@ -184,6 +184,22 @@ export function resistChance(resist: number, scale = STAT_CONFIG.defenseScale): 
 }
 
 /**
+ * What a stat amount does, as a whole percent, for the stats that work on a curve: Defense's damage reduction
+ * (negative Defense: extra damage, shown as a negative %) and Resist's chance to shrug off a debuff. Null for the rest.
+ */
+export function statEffectPct(stat: StatKey, value: number): number | null {
+  if (stat === 'defense') return Math.round((1 - defenseMultiplier(value)) * 100);
+  if (stat === 'resist') return Math.round(resistChance(value) * 100);
+  return null;
+}
+
+/** A stat amount for display: "50 (33%)" for Defense and Resist (amount and effective percent), else just the amount. */
+export function statText(stat: StatKey, value: number): string {
+  const pct = statEffectPct(stat, value);
+  return pct === null ? String(value) : `${value} (${pct}%)`;
+}
+
+/**
  * Battle rules with XCOM-style alternating turns: every player unit may move
  * once and act once, in any order, then every enemy unit does the same.
  */
