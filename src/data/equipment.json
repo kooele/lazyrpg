@@ -24,20 +24,6 @@
   },
 
   "weapons": {
-    "staff": {
-      "name": "Staff", "class": "Mage", "tag": "ST", "art": "staff", "range": 2,
-      "description": "Magic focus with reach. Pairs with Mage skills.",
-      "base": { "pAtk": 10, "mAtk": 20 },
-      "modifiers": { "pAtk": 0.8, "mAtk": 1.2 },
-      "skills": ["basic_attack", "magic_bolt"]
-    },
-    "crystal": {
-      "name": "Crystal", "class": "Mage", "tag": "CR", "art": "crystal", "range": 1.5,
-      "description": "A focusing crystal: its magic cuts through Defense.",
-      "base": { "pAtk": 5, "mAtk": 20, "mPen": 5 },
-      "modifiers": { "pAtk": 0.6, "mPenPct": 50 },
-      "skills": ["basic_attack", "magic_bolt"]
-    },
     "greatsword": {
       "name": "Greatsword", "class": "2 Handed", "tag": "GS", "art": "greatsword", "range": 1.5,
       "description": "Heavy two-handed blade. High P.Atk.",
@@ -66,20 +52,6 @@
       "modifiers": { "pAtk": 0.8, "mAtk": 0.8, "pPenPct": 50 },
       "skills": ["basic_attack", "shield_slam"]
     },
-    "longbow": {
-      "name": "Longbow", "class": "Bow", "tag": "LB", "art": "bow", "range": 6,
-      "description": "Long-ranged bow with three modes:\n• Direct: 100% P.Atk, weapon range\n• Indirect: 70% P.Atk, 1.5x range,\n   arcs over cover\n• Melee: 80% P.Atk, 1.5 tiles\nSwitch Mode is a free action.",
-      "base": { "pAtk": 20, "mAtk": 10 },
-      "modifiers": { "mAtk": 0.8 },
-      "skills": ["bow_attack", "switch_mode"]
-    },
-    "shortbow": {
-      "name": "Shortbow", "class": "Bow", "tag": "SB", "art": "shortbow", "range": 4,
-      "description": "Light bow: shorter range, but you move faster.\nModes as the Longbow (Direct, Indirect, Melee).",
-      "base": { "pAtk": 20, "mAtk": 10 },
-      "modifiers": { "mAtk": 0.8, "movement": 1.2 },
-      "skills": ["bow_attack", "switch_mode"]
-    },
     "dagger": {
       "name": "Single Dagger", "class": "Dagger", "tag": "DG", "art": "dagger", "range": 1.5,
       "description": "Quick blade that slips past armor.",
@@ -93,6 +65,34 @@
       "base": { "pAtk": 15, "mAtk": 10, "pPen": 5 },
       "modifiers": { "mAtk": 0.8 },
       "skills": ["basic_attack", "quick_attack"]
+    },
+    "shortbow": {
+      "name": "Shortbow", "class": "Bow", "tag": "SB", "art": "shortbow", "range": 4,
+      "description": "Light bow: shorter range, but you move faster.\nModes as the Longbow (Direct, Indirect, Melee).",
+      "base": { "pAtk": 20, "mAtk": 10 },
+      "modifiers": { "mAtk": 0.8, "movement": 1.2 },
+      "skills": ["bow_attack", "switch_mode"]
+    },
+    "longbow": {
+      "name": "Longbow", "class": "Bow", "tag": "LB", "art": "bow", "range": 6,
+      "description": "Long-ranged bow with three modes:\n• Direct: 100% P.Atk, weapon range\n• Indirect: 70% P.Atk, 1.5x range,\n   arcs over cover\n• Melee: 80% P.Atk, 1.5 tiles\nSwitch Mode is a free action.",
+      "base": { "pAtk": 20, "mAtk": 10 },
+      "modifiers": { "mAtk": 0.8 },
+      "skills": ["bow_attack", "switch_mode"]
+    },
+    "crystal": {
+      "name": "Crystal", "class": "Mage", "tag": "CR", "art": "crystal", "range": 1.5,
+      "description": "A focusing crystal: its magic cuts through Defense.",
+      "base": { "pAtk": 5, "mAtk": 20, "mPen": 5 },
+      "modifiers": { "pAtk": 0.6, "mPenPct": 50 },
+      "skills": ["basic_attack", "magic_bolt"]
+    },
+    "staff": {
+      "name": "Staff", "class": "Mage", "tag": "ST", "art": "staff", "range": 2,
+      "description": "Magic focus with reach. Pairs with Mage skills.",
+      "base": { "pAtk": 10, "mAtk": 20 },
+      "modifiers": { "pAtk": 0.8, "mAtk": 1.2 },
+      "skills": ["basic_attack", "magic_bolt"]
     },
     "unarmed": {
       "name": "Unarmed", "class": "Unarmed", "tag": "UN", "art": "unarmed", "range": 1.5, "builtIn": true,

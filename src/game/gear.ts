@@ -1,5 +1,5 @@
 // Equipment on a character: what it's wielding and wearing, the stats it gives, and how it's named.
-import { ARMORS, ENEMY_GEAR, NO_ARMOR, QUALITIES, UNARMED, WEAPONS } from '../data/content';
+import { ARMORS, ENEMY_GEAR, NO_ARMOR, QUALITIES, SKILLS, UNARMED, WEAPONS } from '../data/content';
 import { ENEMIES } from '../data/enemies';
 import { PEN_PCT_KEYS, STAT_INFO, STAT_KEYS, type ArmorDef, type Character, type Gear, type QualityId, type Stats, type WeaponDef } from '../data/types';
 import type { Rng } from './character';
@@ -123,4 +123,18 @@ export function gearStatLines(def: WeaponDef | ArmorDef, quality: QualityId = 'c
   const base = Object.entries(baseStats(def, quality)).filter(([, v]) => v).map(([k, v]) => statBonusText(k as keyof Stats, v!, 'base'));
   const mods = Object.entries(def.modifiers).map(([k, v]) => statBonusText(k as keyof Stats, v!, 'modifier'));
   return [`Base: ${base.join(', ') || 'None'}`, `Modifiers: ${mods.join(', ') || 'None'}`];
+}
+
+/** A weapon's or armor's tooltip at a quality: name, kind (weapon class and range), description, base stats, modifiers, skills. */
+export function gearTooltip(kind: 'weapon' | 'armor', type: string, quality: QualityId = 'crude'): string {
+  const def = kind === 'weapon' ? WEAPONS[type] : ARMORS[type];
+  if (!def) return '';
+  const w = kind === 'weapon' ? WEAPONS[type] : null;
+  return [
+    gearName({ type, quality }, kind),
+    w ? `${w.class} · Range ${w.range}` : 'Body Armor',
+    def.description,
+    ...gearStatLines(def, quality),
+    ...(w ? [`Skills: ${w.skills.map((s) => SKILLS[s]?.name ?? s).join(', ')}`] : []),
+  ].join('\n');
 }
