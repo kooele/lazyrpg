@@ -3,6 +3,13 @@
   "encounter": {
     "maxEnemies": 12
   },
+  "loot": {
+    "_comment": "What enemies drop when the party wins (from the Enemy Drops tab of the design sheet). Humans drop the gear they carried (killed or captured): each piece is broken with brokenChance, becoming junk worth brokenValueShare of its value. Every other type drops its trophy (turned in at the city gate) and its junk item (sold at the marketplace), each worth goldPerLevel x the enemy's level, rounded. A junk name with {weapon} is the enemy's own weapon (Goblin {weapon} = Goblin Spear). Trophies from enemies killed count even when the quest fails; gear and junk only come home after a win.",
+    "trophyGoldPerLevel": 4.5,
+    "junkGoldPerLevel": 4.5,
+    "brokenChance": 0.6667,
+    "brokenValueShare": 0.25
+  },
   "enemies": {
     "rat": {
       "name": "Giant Rat",
@@ -34,7 +41,11 @@
         "gnaw"
       ],
       "ai": "beast",
-      "questTitle": "Rat Infestation"
+      "questTitle": "Rat Infestation",
+      "drops": {
+        "trophy": "Rat Tail",
+        "junk": "Mangy Rat Pelt"
+      }
     },
     "slime": {
       "name": "Green Slime",
@@ -72,7 +83,11 @@
         ]
       },
       "ai": "beast",
-      "questTitle": "Slime Outbreak"
+      "questTitle": "Slime Outbreak",
+      "drops": {
+        "trophy": "Slime Core",
+        "junk": "Slime Gel"
+      }
     },
     "wolf": {
       "name": "Grey Wolf",
@@ -110,7 +125,11 @@
         ]
       },
       "ai": "beast",
-      "questTitle": "Wolf Pack"
+      "questTitle": "Wolf Pack",
+      "drops": {
+        "trophy": "Wolf Fang",
+        "junk": "Wolf Pelt"
+      }
     },
     "bandit": {
       "name": "Bandit",
@@ -253,7 +272,11 @@
           "war_cry"
         ]
       },
-      "questTitle": "Goblin Raiders"
+      "questTitle": "Goblin Raiders",
+      "drops": {
+        "trophy": "Goblin Ear",
+        "junk": "Goblin {weapon}"
+      }
     },
     "spider": {
       "name": "Giant Spider",
@@ -286,7 +309,11 @@
         "poison_bite",
         "web"
       ],
-      "questTitle": "Spider Nest"
+      "questTitle": "Spider Nest",
+      "drops": {
+        "trophy": "Spider Fang",
+        "junk": "Spider Silk"
+      }
     },
     "skeleton": {
       "name": "Skeleton",
@@ -341,7 +368,11 @@
       },
       "weaponSkillUse": "basic",
       "skills": [],
-      "questTitle": "Restless Dead"
+      "questTitle": "Restless Dead",
+      "drops": {
+        "trophy": "Skeleton Skull",
+        "junk": "Rusted {weapon}"
+      }
     },
     "orc": {
       "name": "Orc",
@@ -400,7 +431,11 @@
           "war_cry"
         ]
       },
-      "questTitle": "Orc Warband"
+      "questTitle": "Orc Warband",
+      "drops": {
+        "trophy": "Orc Tusk",
+        "junk": "Orc {weapon}"
+      }
     },
     "sellsword": {
       "name": "Sellsword",
@@ -511,7 +546,11 @@
           "roar"
         ]
       },
-      "questTitle": "Cave Bear Attacks"
+      "questTitle": "Cave Bear Attacks",
+      "drops": {
+        "trophy": "Bear Claw",
+        "junk": "Bear Pelt"
+      }
     },
     "wraith": {
       "name": "Wraith",
@@ -546,7 +585,11 @@
         "chill_touch",
         "wail"
       ],
-      "questTitle": "Haunting"
+      "questTitle": "Haunting",
+      "drops": {
+        "trophy": "Ectoplasm",
+        "junk": "Grave Shroud"
+      }
     },
     "troll": {
       "name": "Troll",
@@ -581,7 +624,11 @@
         "smash",
         "regenerate"
       ],
-      "questTitle": "Troll Trouble"
+      "questTitle": "Troll Trouble",
+      "drops": {
+        "trophy": "Troll Tooth",
+        "junk": "Troll Hide"
+      }
     },
     "renegade": {
       "name": "Renegade",
@@ -694,7 +741,11 @@
         "dive",
         "tail_sting"
       ],
-      "questTitle": "Wyvern Hunt"
+      "questTitle": "Wyvern Hunt",
+      "drops": {
+        "trophy": "Wyvern Stinger",
+        "junk": "Wyvern Scale"
+      }
     },
     "demon": {
       "name": "Demon",
@@ -729,7 +780,11 @@
         "hellfire",
         "infernal_leap"
       ],
-      "questTitle": "Demonic Incursion"
+      "questTitle": "Demonic Incursion",
+      "drops": {
+        "trophy": "Demon Horn",
+        "junk": "Brimstone Shard"
+      }
     }
   }
 }

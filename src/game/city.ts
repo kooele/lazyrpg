@@ -2,7 +2,7 @@
 // Pure logic (no Phaser): scenes call these and show the messages they return.
 import { MAX_PARTY_SIZE } from '../data/content';
 import { GUILD, isResidence, trainingXp, type CityLodging, type InnTier, type Ring } from '../data/guild';
-import { RANKS, type Character, type CompanionTerms, type GameState, type Offer, type Quest, type Rank } from '../data/types';
+import { RANKS, type Character, type CompanionTerms, type GameState, type Item, type Offer, type Quest, type Rank } from '../data/types';
 import { dangerRating, makeQuest, postQuests } from './board';
 import { grantXp, type Rng } from './character';
 import {
@@ -14,7 +14,8 @@ import {
   type BattleCondition,
 } from './condition';
 import { createGuild, nextRank, promotionReady, rankThreshold, renownLoss, simulateGuildDay, updateRanks } from './guild';
-import { itemName, returnGear } from './inventory';
+import { itemName, itemValue, returnGear, stacks } from './inventory';
+import { battleLoot } from './loot';
 import { randInt, randomAdventurer } from './people';
 
 // ---- a new campaign -----------------------------------------------------------------------------
@@ -251,7 +252,7 @@ export function rewardShares(members: Character[], reward: number): { name: stri
  * Morale, rewards. Nights on the road pass for multi-day trips; the party gets back in the evening and still needs
  * to end the day (everyone sleeps where they lodge). Enemies who `surrendered` are taken prisoner on a win. `turns` is how many turns (rounds) the battle lasted: each costs Morale. Returns report lines.
  */
-/** How the enemies fared in a quest's battle: those killed (each worth a bounty) and how many there were in all. */
+/** How the enemies fared in a quest's battle: those killed (they drop loot) and how many there were in all. */
 export interface FoeTally {
   killed: Character[];
   total: number;
@@ -261,8 +262,6 @@ export interface FoeTally {
 export const questMoraleLoss = (turns: number, outcome: 'victory' | 'defeat') =>
   Math.round(Math.max(0, turns) * GUILD.condition.moralePerTurn) + (outcome === 'defeat' ? GUILD.condition.moraleFailedQuest : 0);
 
-/** The bounty for an enemy killed on a quest: killBountyShare of turning in a prisoner of its level (prisoners are harder to take). */
-export const killBounty = (level: number) => Math.round(bounty(level) * GUILD.slave.killBountyShare);
 
 export function resolveQuest(
   state: GameState, outcome: 'victory' | 'defeat', rng: Rng, conditions: BattleCondition[] = [], surrendered: Character[] = [],
@@ -345,11 +344,18 @@ export function resolveQuest(
     lines.push(...questXpLines(q, members, defeated));
     for (const c of members) changeRelationship(c, -2);
   }
-  // Bounties for every enemy killed, claimed back in the city, win or lose.
-  if (foes?.killed.length) {
-    const gold = foes.killed.reduce((sum, f) => sum + killBounty(f.level), 0);
-    state.gold += gold;
-    lines.push(`Bounties: ${gold} gold for ${foes.killed.length} enem${foes.killed.length > 1 ? 'ies' : 'y'} slain.`);
+  // Loot: from a win, the gear of humans killed or captured and every other foe's trophy and junk; from a defeat,
+  // only the trophies of the foes killed. Trophies are turned in at the city gate; junk sells at the marketplace.
+  const loot = battleLoot(foes?.killed ?? [], surrendered, outcome, rng);
+  if (loot.length) {
+    state.inventory.push(...loot);
+    const list = (kind: (k: Item['kind']) => boolean) => stacks(loot.filter((i) => kind(i.kind))).map((s) => `${itemName(s.item)}${s.count > 1 ? ` ×${s.count}` : ''}`).join(', ');
+    const gear = list((k) => k === 'weapon' || k === 'armor');
+    const junk = list((k) => k === 'junk');
+    const trophyList = list((k) => k === 'trophy');
+    if (trophyList) lines.push(`Trophies: ${trophyList}. Turn them in at the city gate (${loot.filter((i) => i.kind === 'trophy').reduce((s, i) => s + itemValue(i), 0)} gold).`);
+    if (gear) lines.push(`Gear: ${gear} (in the stash).`);
+    if (junk) lines.push(`Junk: ${junk} (in the stash, to sell).`);
   }
   lines.push(`Morale -${questMoraleLoss(turns, outcome)} (${turns} turn${turns === 1 ? '' : 's'} of battle${outcome === 'defeat' ? ', a failed quest' : ''}): ${members.map((c) => `${c.name} ${c.morale}`).join(', ')}.`);
   lines.push(...moraleDepartures(state));

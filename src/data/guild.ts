@@ -132,7 +132,6 @@ export interface GuildConfig {
     sellBackShare: number;
     bountyPerLevel: number;
     /** An enemy killed on a quest pays this share of a prisoner's bounty (prisoners are harder to take). */
-    killBountyShare: number;
     /** Weekly property tax per slave: this share of its normal market value. */
     weeklyTaxShare: number;
     obedienceMarket: [number, number];
@@ -345,7 +344,7 @@ export function parseGuildConfig(data: unknown): GuildConfig {
     },
     slave: {
       ...numbers<Omit<GuildConfig['slave'], 'obedienceMarket' | 'obedienceCaptive'>>(d.slave, 'slave', ['priceBase', 'pricePerLevel',
-        'sellBackShare', 'bountyPerLevel', 'killBountyShare', 'weeklyTaxShare', 'startingRelationship', 'obedienceRiseFrom', 'obedienceFallBelow',
+        'sellBackShare', 'bountyPerLevel', 'weeklyTaxShare', 'startingRelationship', 'obedienceRiseFrom', 'obedienceFallBelow',
         'obedienceChangePerDay', 'punishObedience', 'punishRelationship']),
       obedienceMarket: range(obj(d.slave, 'slave').obedienceMarket, 'slave.obedienceMarket'),
       obedienceCaptive: range(obj(d.slave, 'slave').obedienceCaptive, 'slave.obedienceCaptive'),

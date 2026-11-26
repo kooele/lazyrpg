@@ -10,6 +10,7 @@ import { markDirty, requireState, session } from '../game/session';
 import { cityHeader, rankBadge } from '../ui/hud';
 import { COLORS, HEIGHT, ScrollList, UI_SCALE, WIDTH, bakeGraphics, button, figure, panel, setupCamera, talentTag, text, toast, clearScene } from '../ui/widgets';
 import { figureKit, weaponName } from '../game/gear';
+import { itemName, stacks, trophies, turnInTrophies } from '../game/inventory';
 
 export const CITY_MAP_KEY = 'city-map';
 
@@ -150,7 +151,7 @@ export class CityScene extends Phaser.Scene {
     button(this, 16, HEIGHT - 60, 296, 46, 'Manage Party', () => this.scene.start('Party'), { fontSize: 16 });
     button(this, 324, HEIGHT - 60, 296, 46, `End Day (${forecastNight(requireState()).total} gold)`, () => this.endDay(), { fontSize: 16, fill: 0x2a3348 });
 
-    if (prisonersAtGate(state)) this.gate();
+    if (prisonersAtGate(state) || trophies(state).length) this.gate();
   }
 
   /**
@@ -163,12 +164,24 @@ export class CityScene extends Phaser.Scene {
     const layer = this.add.container(0, 0).setDepth(1000);
     layer.add(this.add.rectangle(0, 0, WIDTH, HEIGHT, 0x000000, 0.7).setOrigin(0).setInteractive());
     const X = WIDTH / 2 - 330;
+    const hasPrisoners = state.prisoners.length > 0;
+    const loot = trophies(state);
+    // Trophies only: a small window with one button.
+    if (!hasPrisoners) {
+      const box = panel(this, X, 220, 660, 100);
+      layer.add(box);
+      layer.add(text(this, WIDTH / 2, 234, 'City Gate: Turn In Your Trophies', { fontSize: '22px', color: COLORS.gold }).setOrigin(0.5, 0));
+      box.setSize(660, 64 + this.trophyBlock(layer, X + 20, 272));
+      return;
+    }
     layer.add(panel(this, X, 40, 660, HEIGHT - 80));
-    layer.add(text(this, WIDTH / 2, 54, 'City Gate: Register Your Prisoners', { fontSize: '22px', color: COLORS.gold }).setOrigin(0.5, 0));
-    layer.add(text(this, X + 20, 88, `The guards won't let prisoners into ${GUILD.city} unregistered. Turn each one in for the bounty, or register them as your slave: the fee is their market value minus the bounty, and slaves are taxed weekly.${full ? ` Your party is full (${GUILD.maxRoster}), so you can only turn them in.` : ''}  Gold: ${state.gold}.`, {
+    layer.add(text(this, WIDTH / 2, 54, loot.length ? 'City Gate: Prisoners and Trophies' : 'City Gate: Register Your Prisoners', { fontSize: '22px', color: COLORS.gold }).setOrigin(0.5, 0));
+    // Trophies first (one button), then the prisoners below.
+    const dy = loot.length ? this.trophyBlock(layer, X + 20, 88) : 0;
+    layer.add(text(this, X + 20, 88 + dy, `The guards won't let prisoners into ${GUILD.city} unregistered. Turn each one in for the bounty, or register them as your slave: the fee is their market value minus the bounty, and slaves are taxed weekly.${full ? ` Your party is full (${GUILD.maxRoster}), so you can only turn them in.` : ''}  Gold: ${state.gold}.`, {
       fontSize: '13px', wordWrap: { width: 620 }, lineSpacing: 2,
     }));
-    const list = new ScrollList(this, X + 14, 140, 632, HEIGHT - 252, 4);
+    const list = new ScrollList(this, X + 14, 140 + dy, 632, HEIGHT - 252 - dy, 4);
     list.root.setDepth(1001);
     list.setItems(state.prisoners.map((o) => {
       const c = o.character;
@@ -205,6 +218,23 @@ export class CityScene extends Phaser.Scene {
       this.render();
       toast(this, `Bounties: ${gold} gold.`);
     }, { fontSize: 14 }));
+  }
+
+  /** The trophies brought back, and a button to turn them all in. Returns the height used. */
+  private trophyBlock(layer: Phaser.GameObjects.Container, x: number, y: number): number {
+    const state = requireState();
+    const loot = trophies(state);
+    const total = loot.reduce((sum, t) => sum + t.value, 0);
+    const list = stacks(loot).map((s) => `${itemName(s.item)}${s.count > 1 ? ` ×${s.count}` : ''}`).join(', ');
+    const t = text(this, x, y, `The city pays for proof of what you killed. Trophies: ${list}.`, { fontSize: '13px', wordWrap: { width: 440 }, lineSpacing: 2 });
+    layer.add(t);
+    layer.add(button(this, x + 456, y, 164, 40, `Turn In Trophies:\n${total} Gold`, () => {
+      const gold = turnInTrophies(state);
+      markDirty();
+      this.render();
+      toast(this, `Trophies turned in: ${gold} gold.`);
+    }, { fontSize: 13, fill: 0x2c4a2f }));
+    return Math.max(48, t.height + 12);
   }
 
   /** The ☰ menu under the header's menu button: save, load, the guide, settings, or back to the title screen. Click outside to close. */

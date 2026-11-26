@@ -106,6 +106,9 @@ function validateInventory(raw: unknown): Item[] {
     const id = str(o.id, `${path}.id`, 40);
     if (seen.has(id)) bad(`${path}.id`, `"${id}" is used twice`);
     seen.add(id);
+    if (kind === 'junk' || kind === 'trophy') {
+      return { id, kind, name: str(o.name, `${path}.name`, 80), value: int(o.value, `${path}.value`), source: typeof o.source === 'string' ? o.source : '' };
+    }
     const g = validateGear(o, path, kind)!;
     return { id, kind, type: g.type, quality: g.quality };
   });

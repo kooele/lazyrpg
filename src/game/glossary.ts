@@ -3,6 +3,7 @@
 import { MAX_PARTY_SIZE, STATUSES, xpToNext } from '../data/content';
 import { FOOD_TIERS, GUILD, INN_TIERS, trainingXp } from '../data/guild';
 import { STAT_CONFIG } from '../data/stats';
+import { LOOT } from '../data/enemies';
 import { RANKS, type Rank } from '../data/types';
 import { lodgingName } from './condition';
 
@@ -105,12 +106,17 @@ export function glossaryEntries(): GlossaryEntry[] {
   add('Quests & Ranks', 'Failure and Deaths',
     `A failed quest pays nothing and loses ${G.ranks.failedQuestRenown === 1 ? 'that quest\'s renown' : `${G.ranks.failedQuestRenown}× that quest's renown`}. Each member who dies loses another ${pct(G.ranks.deathRenown)} of it, whether the quest succeeded or not.\n\n`
     + `A member who quits on you (Morale 0, or a companion's relationship 0) costs ${G.ranks.quitRenownPerLevel} renown per level. Releasing someone yourself doesn't.\n\n`
-    + `A failed quest still gives XP for the share of enemies you defeated, and bounties for every kill.`);
+    + `A failed quest still gives XP for the share of enemies you defeated, and the trophies of every kill.`);
   add('Quests & Ranks', 'Shared Quest Board',
     `The Quest Board is shared with every rival party, and they take quests from it every day, the best deals first. Nothing is held back for you: in a slow week the rivals may take every quest at your rank.\n\n`
     + `Up to ${G.board.maxPostsPerDay} new quests are posted a day, and each stays up for a few days.`);
-  add('Quests & Ranks', 'Bounties',
-    `Every enemy the party kills is worth ${S.bountyPerLevel * S.killBountyShare} gold per level (rounded), paid when the party gets back to the city, whether the quest succeeded or not. Turning in a prisoner pays more: ${S.bountyPerLevel} gold per level.`);
+  add('Quests & Ranks', 'Loot, Trophies and Bounties',
+    `Enemies pay no gold themselves: they drop loot.\n\n`
+    + `• Humans drop the gear they carried, killed or captured. Each piece has a ${Math.round(LOOT.brokenChance * 100)}% chance to be broken: junk worth ${Math.round(LOOT.brokenValueShare * 100)}% of its value.\n`
+    + `• Every other enemy drops a trophy (an ear, a fang...) and a junk item (a pelt, its goblin-made weapon...), each worth ${LOOT.trophyGoldPerLevel} gold per level.\n`
+    + `• Trophies are turned in at the city gate for their value. Junk sells at the marketplace.\n`
+    + `• A failed quest still brings home the trophies of the enemies you killed, but nothing else.\n\n`
+    + `A human taken prisoner is worth more than one killed: the bounty for turning them in is ${S.bountyPerLevel} gold per level.`);
 
   // ---- Experience -------------------------------------------------------------------------------
   add('Experience', 'Quest XP',

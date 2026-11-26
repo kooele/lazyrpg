@@ -1,10 +1,10 @@
 import Phaser from 'phaser';
 import { ARMORS, SKILLS, WEAPONS } from '../data/content';
-import { STAT_INFO, type Character, type Gear, type Item, type ItemKind } from '../data/types';
+import { STAT_INFO, isGearItem, type Character, type Gear, type GearItem, type GearKind, type Item, type LootItem } from '../data/types';
 import { penLine, statText } from '../game/battle';
 import { deriveStats } from '../game/character';
 import { armorName, armorOf, figureKit, gearStatLines, weaponName, weaponOf } from '../game/gear';
-import { equipBlock, equipItem, itemName, itemValue, sortedInventory, statChanges, unequip } from '../game/inventory';
+import { equipBlock, equipItem, itemName, itemValue, sortedInventory, stacks, statChanges, unequip } from '../game/inventory';
 import { markDirty, requireState, session } from '../game/session';
 import { MEMBER_COLOR, MEMBER_LABEL, cityHeader } from '../ui/hud';
 import { COLORS, HEIGHT, ScrollList, Tooltip, WIDTH, button, clearScene, figure, panel, setupCamera, text, toast, type ScrollItem } from '../ui/widgets';
@@ -13,20 +13,21 @@ import { COLORS, HEIGHT, ScrollList, Tooltip, WIDTH, button, clearScene, figure,
 const QUALITY_COLOR: Record<string, string> = { crude: '#a8adb8', common: COLORS.text, fine: '#6fdc8c', masterwork: '#e0b44c' };
 const qualityColor = (q: string) => QUALITY_COLOR[q] ?? COLORS.text;
 
-const FILTERS: { id: ItemKind | 'all'; name: string }[] = [
+const FILTERS: { id: Item['kind'] | 'all'; name: string }[] = [
   { id: 'all', name: 'All' },
   { id: 'weapon', name: 'Weapons' },
   { id: 'armor', name: 'Armor' },
+  { id: 'junk', name: 'Junk' },
 ];
 
 /** What a piece is: "Bow · Range 6" for weapons, "Body Armor" for armor. */
-function kindLine(kind: ItemKind, type: string): string {
+function kindLine(kind: GearKind, type: string): string {
   const w = WEAPONS[type];
   return kind === 'weapon' && w ? `${w.class} · Range ${w.range}` : 'Body Armor';
 }
 
 /** A piece's full description: kind, value, base stats (at its quality), modifiers and (weapons) skills. */
-function gearLines(kind: ItemKind, g: Pick<Gear, 'type' | 'quality'>): string[] {
+function gearLines(kind: GearKind, g: Pick<Gear, 'type' | 'quality'>): string[] {
   const def = kind === 'weapon' ? WEAPONS[g.type] : ARMORS[g.type];
   if (!def) return [];
   const lines = [`${kindLine(kind, g.type)} · Value: ${itemValue(g)} Gold`, ...gearStatLines(def, g.quality)];
@@ -40,7 +41,7 @@ function gearLines(kind: ItemKind, g: Pick<Gear, 'type' | 'quality'>): string[] 
  */
 export class EquipmentScene extends Phaser.Scene {
   private selected = '';
-  private filter: ItemKind | 'all' = 'all';
+  private filter: Item['kind'] | 'all' = 'all';
   private tip!: Tooltip;
 
   constructor() {
@@ -136,7 +137,7 @@ export class EquipmentScene extends Phaser.Scene {
   }
 
   /** One equipment slot: what's in it and what it gives, with an Unequip button. */
-  private slot(c: Character, kind: ItemKind, x: number, y: number, canChange: boolean): void {
+  private slot(c: Character, kind: GearKind, x: number, y: number, canChange: boolean): void {
     const g = c[kind];
     panel(this, x, y, 316, 160, COLORS.panelLight);
     text(this, x + 10, y + 6, kind === 'weapon' ? 'Weapon' : 'Armor', { fontSize: '12px', color: COLORS.dim });
@@ -171,7 +172,7 @@ export class EquipmentScene extends Phaser.Scene {
     panel(this, X, 110, 352, HEIGHT - 126);
     text(this, X + 12, 118, `Stash (${state.inventory.length})`, { fontSize: '16px', color: COLORS.gold });
     FILTERS.forEach((f, i) => {
-      button(this, X + 130 + i * 72, 116, 68, 24, f.name, () => {
+      button(this, X + 108 + i * 60, 116, 56, 24, f.name, () => {
         this.filter = f.id;
         this.render();
       }, { selected: this.filter === f.id, fontSize: 11 });
@@ -179,15 +180,33 @@ export class EquipmentScene extends Phaser.Scene {
     const items = sortedInventory(state, this.filter === 'all' ? undefined : this.filter);
     const canChange = !equipBlock(c);
     const list = new ScrollList(this, X + 6, 148, 340, HEIGHT - 170, 4);
-    list.setItems(items.map((item): ScrollItem => ({ height: 56, make: () => this.itemRow(item, c, canChange) })), 'keep');
+    // Gear one by one (each can be equipped); junk and trophies stacked ("Wolf Pelt ×3").
+    const gear = items.filter(isGearItem);
+    const loot = stacks(items.filter((i): i is LootItem => !isGearItem(i)));
+    list.setItems([
+      ...gear.map((item): ScrollItem => ({ height: 56, make: () => this.itemRow(item, c, canChange) })),
+      ...loot.map((st): ScrollItem => ({ height: 44, make: () => this.lootRow(st.item as LootItem, st.count) })),
+    ], 'keep');
     if (items.length === 0) {
-      text(this, X + 176, 300, state.inventory.length ? 'Nothing of this kind.' : 'The stash is empty.\nGear you take off ends up here.', {
+      text(this, X + 176, 300, state.inventory.length ? 'Nothing of this kind.' : 'The stash is empty.\nGear you take off and loot from quests end up here.', {
         color: COLORS.dim, align: 'center', fontSize: '13px',
       }).setOrigin(0.5);
     }
   }
 
-  private itemRow(item: Item, c: Character, canChange: boolean): Phaser.GameObjects.Container {
+  /** A stack of junk or trophies: name, count and value. They can't be equipped. */
+  private lootRow(item: LootItem, count: number): Phaser.GameObjects.Container {
+    const row = this.add.container(0, 0);
+    const bg = this.add.rectangle(0, 0, 330, 44, COLORS.panelLight, 0.35).setOrigin(0).setInteractive();
+    const what = item.kind === 'trophy' ? 'Trophy: turn it in at the city gate for its value.' : 'Junk: it can\'t be equipped. Sell it at the marketplace.';
+    bg.on('pointerover', () => this.tip.show(`${item.name}${count > 1 ? ` ×${count}` : ''}\n${what}\nValue: ${item.value} Gold${count > 1 ? ` Each (${item.value * count} in All)` : ''}`)).on('pointerout', () => this.tip.hide());
+    row.add(bg);
+    row.add(text(this, 10, 5, `${item.name}${count > 1 ? `  ×${count}` : ''}`, { fontSize: '14px', color: item.kind === 'trophy' ? COLORS.gold : '#a8adb8' }));
+    row.add(text(this, 10, 25, `${item.kind === 'trophy' ? 'Trophy' : 'Junk'} · ${item.value}g${count > 1 ? ' each' : ''}`, { fontSize: '11px', color: COLORS.dim }));
+    return row;
+  }
+
+  private itemRow(item: GearItem, c: Character, canChange: boolean): Phaser.GameObjects.Container {
     const row = this.add.container(0, 0);
     const bg = this.add.rectangle(0, 0, 330, 56, COLORS.panelLight, 0.5).setOrigin(0).setInteractive();
     bg.on('pointerover', () => this.tip.show(this.itemTip(item, c))).on('pointerout', () => this.tip.hide());
@@ -215,7 +234,7 @@ export class EquipmentScene extends Phaser.Scene {
   }
 
   /** Tooltip: the item in full, and what it would change for the selected member. */
-  private itemTip(item: Item, c: Character): string {
+  private itemTip(item: GearItem, c: Character): string {
     const changes = statChanges(c, item);
     const current = item.kind === 'weapon' ? weaponName(c) : armorName(c);
     return [

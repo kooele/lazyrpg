@@ -6,7 +6,7 @@ import { createCharacter, deriveStats, makeRng } from '../src/game/character';
 import { makeEnemy, makeUnit } from '../src/game/battle';
 import {
   acceptQuest, advanceDay, advanceDays, askingPrice, buyDrinks, isShipmentDay, marketBuyPrice, marketDay, sellSlave, turnInPrisoner, buyResidence, buySlave, makeQuest, sellResidence, endDay, setLodging, boarders, lodgingCost, residents, canTakeQuest, dailyUpkeep, foodCost, departBlock, lineupMembers, mainCharacter, moveMember,
-  killBounty, newCampaign, questMoraleLoss, questXpPool, questXpShares, registerPrisoner, resolveQuest, rewardShares, toggleLineup, weeklyTaxes, setLineupSlot, benchMember, releaseCompanion, moraleDepartures, relationshipDepartures, quitRenown, renewContract, weeklyWages, forecastNight, tabTotal,
+  newCampaign, questMoraleLoss, questXpPool, questXpShares, registerPrisoner, resolveQuest, rewardShares, toggleLineup, weeklyTaxes, setLineupSlot, benchMember, releaseCompanion, moraleDepartures, relationshipDepartures, quitRenown, renewContract, weeklyWages, forecastNight, tabTotal,
 } from '../src/game/city';
 import { activityOf, defaultActivity, lodgingOf, combatPenalty, expectedQuality, foodMorale, healthOf, isInjured, moraleOf, moralePenalty, obediencePenalty } from '../src/game/condition';
 import { parseSave, serializeSave } from '../src/game/save';
@@ -242,7 +242,7 @@ describe('ranks and the leaderboard', () => {
     expect(questXpShares(q, [])).toEqual([]);
   });
 
-  it('a failed quest: no pay, but training XP plus quest XP for the share of enemies defeated, and bounties for kills', () => {
+  it('a failed quest: no pay, but training XP plus quest XP for the share of enemies defeated, and the trophies of kills', () => {
     const s = start();
     const q = { ...makeQuest('D', s.day, makeRng(5)), days: 1 }; // back the same day: no upkeep on the road
     s.guild.board.push(q);
@@ -251,18 +251,17 @@ describe('ranks and the leaderboard', () => {
     main.level = q.stage; // no level modifier
     main.xp = 0;
     const gold = s.gold;
-    const foe = (level: number) => makeEnemy('bandit', level, makeRng(level));
+    const foe = (level: number) => makeEnemy('wolf', level, makeRng(level));
     const killed = [foe(q.stage), foe(q.stage)];
     // 2 of 4 enemies killed, 1 surrendered (counts as defeated, not captured on a loss): 75% of the pool.
     const lines = resolveQuest(s, 'defeat', makeRng(1), [{ id: main.id, lowestHp: 0.5, fell: false }], [foe(q.stage)], { killed, total: 4 });
     const xp = Math.round(trainingXp(q.stage) + questXpPool(q) * 0.75);
     expect(lines.join(' ')).toContain(`75% of the enemies defeated`);
     expect(main.level * 1000 + main.xp).toBeGreaterThan(q.stage * 1000); // gained XP
-    const bounties = killed.reduce((sum, f) => sum + killBounty(f.level), 0);
-    expect(killBounty(4)).toBe(bounty(4) / 2); // half of turning in a prisoner
-    expect(killBounty(5)).toBeLessThan(bounty(5));
-    expect(lines.join(' ')).toContain(`Bounties: ${bounties} gold for 2 enemies slain`);
-    expect(s.gold).toBe(gold + bounties); // bounties paid, no quest pay
+    // Only the trophies of the 2 wolves killed come home (no pelts after a loss), to turn in at the gate.
+    expect(s.inventory.map((i) => i.kind)).toEqual(['trophy', 'trophy']);
+    expect(lines.join(' ')).toContain('Trophies: Wolf Fang ×2');
+    expect(s.gold).toBe(gold); // no quest pay, no bounties
     expect(s.prisoners).toHaveLength(0);
     expect(questXpShares(q, [{ level: q.stage }], 0.75)).toEqual([xp]);
     expect(questXpShares(q, [{ level: q.stage }], 0)).toEqual([trainingXp(q.stage)]); // nothing defeated: training only

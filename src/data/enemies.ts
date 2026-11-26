@@ -7,6 +7,16 @@ export interface EncounterRules {
   maxEnemies: number;
 }
 
+/** What enemies drop (enemies.json "loot"). */
+export interface LootRules {
+  trophyGoldPerLevel: number;
+  junkGoldPerLevel: number;
+  /** Chance (0-1) that a piece of a human's gear is broken (junk). */
+  brokenChance: number;
+  /** A broken piece is worth this share of its value. */
+  brokenValueShare: number;
+}
+
 const fail = (path: string, msg: string): never => {
   throw new Error(`enemies.json: "${path}" ${msg}`);
 };
@@ -21,12 +31,20 @@ const skillList = (v: unknown, p: string) => list(v, p).map((x, i) => {
 });
 const KINDS: MonsterKind[] = ['rat', 'slime', 'wolf', 'spider', 'bear', 'troll', 'wraith', 'wyvern', 'demon', 'human'];
 
-export function parseEnemies(data: unknown): { enemies: Record<string, EnemyDef>; encounter: EncounterRules } {
+export function parseEnemies(data: unknown): { enemies: Record<string, EnemyDef>; encounter: EncounterRules; loot: LootRules } {
   const root = obj(data, '(root)');
   const enc = obj(root.encounter ?? {}, 'encounter');
   const encounter: EncounterRules = {
     maxEnemies: num(enc.maxEnemies ?? 8, 'encounter.maxEnemies'),
   };
+  const L = obj(root.loot ?? {}, 'loot');
+  const loot: LootRules = {
+    trophyGoldPerLevel: num(L.trophyGoldPerLevel ?? 4.5, 'loot.trophyGoldPerLevel'),
+    junkGoldPerLevel: num(L.junkGoldPerLevel ?? 4.5, 'loot.junkGoldPerLevel'),
+    brokenChance: num(L.brokenChance ?? 2 / 3, 'loot.brokenChance'),
+    brokenValueShare: num(L.brokenValueShare ?? 0.25, 'loot.brokenValueShare'),
+  };
+  if (loot.brokenChance < 0 || loot.brokenChance > 1) fail('loot.brokenChance', 'must be from 0 to 1');
   const enemies: Record<string, EnemyDef> = {};
   for (const [id, rawDef] of Object.entries(obj(root.enemies, 'enemies'))) {
     if (id.startsWith('_')) continue;
@@ -80,15 +98,23 @@ export function parseEnemies(data: unknown): { enemies: Record<string, EnemyDef>
       skillsByLevel: byLevel,
       loadouts,
       gearQuality,
+      ...(d.drops !== undefined ? { drops: (() => {
+        const o = obj(d.drops, `${p}.drops`);
+        const junk = str(o.junk, `${p}.drops.junk`);
+        if (junk.includes('{weapon}') && loadouts.length === 0) fail(`${p}.drops.junk`, 'uses {weapon}, but the type has no loadouts');
+        return { trophy: str(o.trophy, `${p}.drops.trophy`), junk };
+      })() } : {}),
       weaponSkillUse: d.weaponSkillUse === undefined ? 'all'
         : d.weaponSkillUse === 'basic' || d.weaponSkillUse === 'all' ? d.weaponSkillUse
           : fail(`${p}.weaponSkillUse`, 'must be "basic" or "all"'),
     };
   }
   if (Object.keys(enemies).length === 0) fail('enemies', 'must define at least one enemy type');
-  return { enemies, encounter };
+  for (const e of Object.values(enemies)) if (e.ai !== 'human' && !e.drops) fail(`enemies.${e.id}.drops`, 'is required for non-human types ({ trophy, junk })');
+  return { enemies, encounter, loot };
 }
 
 const parsed = parseEnemies(raw);
 export const ENEMIES = parsed.enemies;
 export const ENCOUNTER = parsed.encounter;
+export const LOOT = parsed.loot;

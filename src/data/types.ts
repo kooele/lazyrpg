@@ -98,17 +98,37 @@ export interface Gear {
   issued?: boolean;
 }
 
-/** Kinds of item in the party's stash. */
-export const ITEM_KINDS = ['weapon', 'armor'] as const;
+/** Kinds of equipment (and of the slots a character wears them in). */
+export const GEAR_KINDS = ['weapon', 'armor'] as const;
+export type GearKind = (typeof GEAR_KINDS)[number];
+/** Kinds of item in the party's stash: equipment, junk (sold at the marketplace) and trophies (turned in at the city gate). */
+export const ITEM_KINDS = [...GEAR_KINDS, 'junk', 'trophy'] as const;
 export type ItemKind = (typeof ITEM_KINDS)[number];
 
 /** A piece of equipment in the party's stash. */
-export interface Item {
+export interface GearItem {
   id: string;
-  kind: ItemKind;
+  kind: GearKind;
   type: string;
   quality: QualityId;
 }
+
+/**
+ * Loot that isn't equipment: junk (broken gear, pelts, goblin-made weapons...) to sell, or a trophy (an ear, a fang...)
+ * to turn in at the city gate. Name and value are fixed when it drops.
+ */
+export interface LootItem {
+  id: string;
+  kind: 'junk' | 'trophy';
+  name: string;
+  /** Gold it's worth. */
+  value: number;
+  /** Where it came from: the enemy type, or "broken" for broken gear. */
+  source: string;
+}
+
+export type Item = GearItem | LootItem;
+export const isGearItem = (i: Item): i is GearItem => i.kind === 'weapon' || i.kind === 'armor';
 
 export interface TagDef {
   id: string;
@@ -383,6 +403,8 @@ export interface EnemyDef {
   gearQuality: QualityId;
   /** 'basic' = only the weapon's basic attack; 'all' = every weapon skill. */
   weaponSkillUse: 'basic' | 'all';
+  /** Non-human types: the trophy and junk item it drops ("{weapon}" in the junk name = its weapon's name). Humans drop their gear. */
+  drops?: { trophy: string; junk: string };
 }
 
 /** One way a humanoid enemy type can be equipped. */
