@@ -11,6 +11,13 @@
     "rusted": { "name": "Rusted", "baseMultiplier": 0.5, "value": 5, "enemyOnly": true }
   },
 
+  "smithy": {
+    "_comment": "The Smithy (Outer City): buys Common gear on the spot (buyQuality), and takes orders for better quality, paid up front: each quality in orderDays takes that many days of work. It works on up to workers orders at a time; the rest wait in the queue. Prices are the qualities' values.",
+    "buyQuality": "common",
+    "orderDays": { "fine": 5, "masterwork": 25 },
+    "workers": 3
+  },
+
   "enemyGear": {
     "_comment": "Enemies whose gear quality is crude get Common gear instead with this chance per level (0.03 = 3% per level, so 30% at level 10).",
     "commonChancePerLevel": 0.03

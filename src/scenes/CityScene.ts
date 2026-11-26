@@ -42,6 +42,7 @@ const PLACES: Record<District, Place[]> = {
     { name: 'Slums', blurb: 'The poorest quarter, crowded against the outer wall.', at: [470, 765] },
     { name: 'Customs Office', blurb: 'Duties on everything that comes through the harbour.', at: [1335, 525] },
     { name: 'Tailor', blurb: 'Clothes and fittings.', at: [497, 167] },
+    { name: 'Smithy', blurb: 'Common weapons and armor on the spot; Fine and Masterwork made to order.', at: [700, 300], scene: 'Smithy' },
     { name: 'Auction House', blurb: 'Rare goods to the highest bidder.', at: [1010, 173] },
     { name: 'Church', blurb: 'Prayer and healing.', at: [277, 343] },
     { name: GUILD.inns.standard.name, blurb: `Inn: drinks for the party. Members can lodge here for ${GUILD.inns.standard.pricePerPerson} gold a night (Manage Party); what adventurers expect.`, at: [255, 480], scene: 'Inn', data: { tier: 'standard' } },

@@ -128,6 +128,20 @@ export interface LootItem {
 }
 
 export type Item = GearItem | LootItem;
+
+/** A piece of gear ordered from the Smithy (paid up front). */
+export interface SmithyOrder {
+  id: string;
+  kind: GearKind;
+  type: string;
+  quality: QualityId;
+  /** Days of work done so far (it's ready at the quality's orderDays). */
+  worked: number;
+  /** Gold paid (refunded if cancelled before work starts). */
+  paid: number;
+  /** Day it was ordered. */
+  day: number;
+}
 export const isGearItem = (i: Item): i is GearItem => i.kind === 'weapon' || i.kind === 'armor';
 
 export interface TagDef {
@@ -633,6 +647,8 @@ export interface GameState {
   prisoners: Offer[];
   /** The party's stash: equipment nobody is using (equip it from Manage Party > Equipment). */
   inventory: Item[];
+  /** Gear ordered from the Smithy, in queue order (the first few are being worked on). */
+  smithyOrders: SmithyOrder[];
   /** The quest the party has accepted and not yet fought. */
   quest: Quest | null;
   /** Day the party last came back from a quest (one quest a day), and who went. */

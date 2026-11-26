@@ -18,6 +18,8 @@ export interface GameContent {
   qualities: Record<string, QualityDef>;
   /** Enemy gear: chance per level of Common instead of Crude. */
   enemyGear: { commonChancePerLevel: number };
+  /** The Smithy: the quality it sells on the spot, the days each orderable quality takes, and how many orders it works on at once. */
+  smithy: { buyQuality: string; orderDays: Record<string, number>; workers: number };
   skills: Record<string, SkillDef>;
   tags: Record<string, TagDef>;
   statuses: Record<string, StatusDef>;
@@ -297,6 +299,17 @@ export function parseContent(skillsData: unknown, equipmentData: unknown): GameC
     };
   }
   for (const q of ['crude', 'common']) if (!qualities[q]) fail(F, `qualities.${q}`, 'is required (the game uses it)');
+  const sm = W.obj(eroot.smithy ?? {}, 'smithy');
+  const orderDays: Record<string, number> = {};
+  for (const [q, d] of entries(W.obj(sm.orderDays ?? {}, 'smithy.orderDays'))) {
+    if (!qualities[q] || qualities[q].enemyOnly) fail(F, `smithy.orderDays.${q}`, 'must be a quality the party can own');
+    orderDays[q] = W.num(d, `smithy.orderDays.${q}`);
+  }
+  const smithy = {
+    buyQuality: W.oneOf(sm.buyQuality ?? 'common', 'smithy.buyQuality', Object.keys(qualities)),
+    orderDays,
+    workers: Math.max(1, Math.round(W.num(sm.workers ?? 3, 'smithy.workers'))),
+  };
   const eg = W.obj(eroot.enemyGear ?? {}, 'enemyGear');
   const enemyGear = { commonChancePerLevel: W.num(eg.commonChancePerLevel ?? 0, 'enemyGear.commonChancePerLevel') };
   const gearStats = (o: Record<string, unknown>, p: string) => ({
@@ -344,7 +357,7 @@ export function parseContent(skillsData: unknown, equipmentData: unknown): GameC
   builtIns(Object.values(weapons), 'weapons');
   builtIns(Object.values(armors), 'armors');
   if (!Object.values(weapons).some((w) => !w.builtIn)) fail(F, 'weapons', 'must define at least one weapon');
-  return { weapons, armors, qualities, enemyGear, skills, tags, statuses, skillTabs, skillTrees, basicSkills };
+  return { weapons, armors, qualities, enemyGear, smithy, skills, tags, statuses, skillTabs, skillTrees, basicSkills };
 }
 
 export const CONTENT: GameContent = parseContent(skillsRaw, equipmentRaw);
@@ -352,6 +365,7 @@ export const WEAPONS = CONTENT.weapons;
 export const ARMORS = CONTENT.armors;
 export const QUALITIES = CONTENT.qualities;
 export const ENEMY_GEAR = CONTENT.enemyGear;
+export const SMITHY = CONTENT.smithy;
 export const SKILLS = CONTENT.skills;
 export const TAGS = CONTENT.tags;
 export const STATUSES = CONTENT.statuses;

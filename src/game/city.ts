@@ -16,6 +16,7 @@ import {
 import { createGuild, nextRank, promotionReady, rankThreshold, renownLoss, simulateGuildDay, updateRanks } from './guild';
 import { itemName, itemValue, returnGear, stacks } from './inventory';
 import { battleLoot } from './loot';
+import { smithyDay } from './smithy';
 import { randInt, randomAdventurer } from './people';
 
 // ---- a new campaign -----------------------------------------------------------------------------
@@ -37,6 +38,7 @@ export function newCampaign(main: Character, partyName: string, rng: Rng): GameS
     market: { slaves: [], priceIndex: 1 },
     prisoners: [],
     inventory: [],
+    smithyOrders: [],
     quest: null,
     lastQuestDay: 0,
     questMembers: [],
@@ -752,6 +754,7 @@ export function advanceDay(state: GameState, rng: Rng, night: 'road' | 'city' = 
   const say = (t: string) => out.push(note(state, t));
   for (const t of runSchedule(state, away ?? [])) say(t);
   state.day += 1;
+  for (const t of smithyDay(state)) say(t);
   const tab = onTab ? (state.tab ??= { upkeep: 0, wages: {}, taxes: {} }) : null;
 
   // Food and lodging (tonight's, and the quest tab's when the party is back).
