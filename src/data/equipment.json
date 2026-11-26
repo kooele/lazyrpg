@@ -98,7 +98,7 @@
       "name": "Unarmed", "class": "Unarmed", "tag": "UN", "art": "unarmed", "range": 1.5, "builtIn": true,
       "description": "Fists. What you fight with without a weapon.",
       "base": {},
-      "modifiers": { "pAtk": 0.6 },
+      "modifiers": { "pAtk": 0.6, "movement": 1.25 },
       "skills": ["basic_attack"]
     }
   },
