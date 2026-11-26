@@ -327,8 +327,8 @@ export function resolveQuest(
     for (const c of members) changeRelationship(c, GUILD.companion.relationshipPerQuest);
     // Enemies who surrendered (only humans do) are taken prisoner, to be registered at the city gate.
     for (const foe of surrendered) {
-      const p = randomAdventurer(foe.level, rng, { avoidNames: new Set(state.party.map((m) => m.name)) });
-      if (foe.weaponId) p.weaponId = foe.weaponId;
+      // Their gear stays on the battlefield: a prisoner comes with nothing.
+      const p = randomAdventurer(foe.level, rng, { avoidNames: new Set(state.party.map((m) => m.name)), unarmed: true });
       state.prisoners.push({ character: p, price: bounty(p.level) });
       lines.push(`${p.name} (Lv ${p.level}, ${foe.name}) surrendered and was taken prisoner. Register them at the city gate.`);
     }
@@ -891,7 +891,7 @@ const round5 = (v: number) => Math.max(5, Math.round(v / 5) * 5);
 /** A slave for sale: a random adventurer near the party's rank, valued by level and talent. */
 function marketSlave(state: GameState, rng: Rng) {
   const [lo, hi] = MARKET_LEVELS[state.rank];
-  const c = randomAdventurer(randInt(lo, hi, rng), rng);
+  const c = randomAdventurer(randInt(lo, hi, rng), rng, { unarmed: true });
   return { character: c, price: round5(slaveValue(c)) };
 }
 

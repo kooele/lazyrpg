@@ -1,20 +1,24 @@
 // Save / load. Saves are pretty-printed JSON so players can read (and edit!) them.
-import { MAX_PARTY_SIZE, NAME_MAX_LENGTH, SKILLS, TREE_SKILLS, WEAPONS, skillPointsForLevel, maxBodyRank } from '../data/content';
+import { ARMORS, MAX_PARTY_SIZE, NAME_MAX_LENGTH, QUALITIES, SKILLS, TREE_SKILLS, WEAPONS, WEAPON_TYPES, skillPointsForLevel, maxBodyRank } from '../data/content';
 import { ACTIVITIES, FOOD_TIERS, GUILD, type Activity, type FoodTier } from '../data/guild';
 import { ENEMIES } from '../data/enemies';
 import {
   BODY_MODELS, ENEMY_MODELS, FACE_COUNT, HAIR_COLORS, HAIR_STYLES, RANKS, SEXES, SKIN_TONES, STAT_KEYS, TALENT_GRADES, TRAIT_IDS,
-  type BodyInvestment, type Character, type StatKey, type Talents, type Contract, type GameState, type Look, type NewsItem, type Offer, type Quest, type QuestTab, type Rank, type RivalParty,
+  type BodyInvestment, type Character, type Gear, type StatKey, type Talents, type Contract, type GameState, type Look, type NewsItem, type Offer, type Quest, type QuestTab, type Rank, type RivalParty,
 } from '../data/types';
 import { usualCount } from './board';
 import { bodyStats, makeRng, modelFor } from './character';
+import { gear } from './gear';
 import { newCampaign, tidyLineup } from './city';
 import { companionContract, companionDemand, foodLodgingWeekly } from './contracts';
 import { lookFromModel } from './people';
 
 export const SAVE_FORMAT = 'lazyrpg-save';
-/** v1: class + attribute points. v2: classless Adventurers with weapon + skill-tree picks. v3: Arch City (contracts, guild, calendar). */
-export const SAVE_VERSION = 3;
+/**
+ * v1: class + attribute points. v2: classless Adventurers with weapon + skill-tree picks. v3: Arch City (contracts, guild, calendar).
+ * v4: equipment (weapon and armor with a quality, in place of a weapon id); older characters are converted on load.
+ */
+export const SAVE_VERSION = 4;
 export const SLOT_COUNT = 3;
 const SLOT_KEY_PREFIX = 'lazyrpg.save.slot';
 export const PARTY_NAME_MAX_LENGTH = 28;
@@ -71,6 +75,21 @@ function migrateV1Character(raw: unknown): unknown {
   const loadout = V1_CLASS_LOADOUT[String(raw.classId)] ?? V1_CLASS_LOADOUT.knight;
   const { classId: _c, attributes: _a, unspentPoints: _u, ...rest } = raw;
   return { ...rest, weaponId: loadout.weaponId, skillIds: loadout.skillIds };
+}
+
+/** Weapons of older saves, by their old id (the bow became the Longbow). */
+const OLD_WEAPONS: Record<string, string> = { sword_shield: 'sword_shield', spear: 'spear', staff: 'staff', bow: 'longbow' };
+/** A weapon type from an older save or a rival party (unknown ones become the first weapon). */
+const weaponFromOld = (id: unknown) => OLD_WEAPONS[String(id)] ?? (WEAPON_TYPES.includes(String(id)) ? String(id) : WEAPON_TYPES[0]);
+
+/** An equipped weapon or armor (null = none). */
+function validateGear(raw: unknown, path: string, kind: 'weapon' | 'armor'): Gear | null {
+  if (raw === undefined || raw === null) return null;
+  const o = obj(raw, path);
+  const defs = kind === 'weapon' ? WEAPONS : ARMORS;
+  const types = Object.values(defs).filter((d) => !d.builtIn).map((d) => d.id);
+  const qualities = Object.values(QUALITIES).filter((q) => !q.enemyOnly).map((q) => q.id);
+  return { type: oneOf(o.type, types, `${path}.type`), quality: oneOf(o.quality, qualities, `${path}.quality`) };
 }
 
 function validateLook(raw: unknown, path: string): Look {
@@ -152,16 +171,28 @@ function validateBody(raw: unknown, path: string): BodyInvestment {
   return out;
 }
 
-function validateCharacter(raw: unknown, path: string, opts: { member?: boolean } = {}): Character {
+/**
+ * opts.member: a party member (has a contract). opts.slaveForSale: a slave at the market or a prisoner (an older save's
+ * weapon is dropped: they come with nothing).
+ */
+function validateCharacter(raw: unknown, path: string, opts: { member?: boolean; slaveForSale?: boolean } = {}): Character {
   const r = obj(raw, path);
-  const { id, name, level, xp, weaponId, skillIds, appearance } = r;
+  const { id, name, level, xp, skillIds, appearance } = r;
   if (typeof id !== 'string' || !id) bad(`${path}.id`, 'must be a non-empty string');
   if (typeof name !== 'string' || !name.trim()) bad(`${path}.name`, 'must be a non-empty string');
   if ((name as string).length > NAME_MAX_LENGTH) bad(`${path}.name`, `must be at most ${NAME_MAX_LENGTH} characters`);
   int(level, `${path}.level`, 1, 99);
   int(xp, `${path}.xp`, 0);
-  if (typeof weaponId !== 'string' || !WEAPONS[weaponId]) {
-    bad(`${path}.weaponId`, `"${String(weaponId)}" is not a known weapon (allowed: ${Object.keys(WEAPONS).join(', ')})`);
+  // Older saves had a weapon id and no armor: a Crude weapon of that type, and Crude Leather (slaves: none).
+  let weapon: Gear | null;
+  let armor: Gear | null;
+  if (r.weapon === undefined && r.armor === undefined && r.weaponId !== undefined) {
+    const slave = opts.slaveForSale || (isObj(r.contract) && r.contract.type === 'slave');
+    weapon = opts.slaveForSale ? null : gear(weaponFromOld(r.weaponId));
+    armor = slave ? null : gear('leather');
+  } else {
+    weapon = validateGear(r.weapon, `${path}.weapon`, 'weapon');
+    armor = validateGear(r.armor, `${path}.armor`, 'armor');
   }
   const skills = arr(skillIds, `${path}.skillIds`);
   for (const s of skills) {
@@ -190,7 +221,8 @@ function validateCharacter(raw: unknown, path: string, opts: { member?: boolean 
     name: (name as string).trim(),
     level: level as number,
     xp: xp as number,
-    weaponId: weaponId as string,
+    weapon,
+    armor,
     skillIds: [...(skills as string[])],
     appearance: { color: (a.color as string).toLowerCase(), look },
   };
@@ -214,9 +246,10 @@ function validateCharacter(raw: unknown, path: string, opts: { member?: boolean 
   return out;
 }
 
+/** A slave for sale or a prisoner. */
 function validateOffer(raw: unknown, path: string): Offer {
   const o = obj(raw, path);
-  return { character: validateCharacter(o.character, `${path}.character`), price: int(o.price, `${path}.price`) };
+  return { character: validateCharacter(o.character, `${path}.character`, { slaveForSale: true }), price: int(o.price, `${path}.price`) };
 }
 
 function validateQuest(raw: unknown, path: string): Quest {
@@ -253,7 +286,7 @@ function validateRival(raw: unknown, path: string): RivalParty {
       return {
         name: str(mo.name, `${path}.members[${i}].name`, NAME_MAX_LENGTH),
         level: int(mo.level, `${path}.members[${i}].level`, 1, 99),
-        weaponId: oneOf(mo.weaponId, Object.keys(WEAPONS), `${path}.members[${i}].weaponId`),
+        weaponId: weaponFromOld(mo.weaponId),
       };
     }),
     founded: int(o.founded, `${path}.founded`, -100000),

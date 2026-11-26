@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
-import { statText } from '../game/battle';
-import { MAX_PARTY_SIZE, SKILLS, WEAPONS, xpToNext } from '../data/content';
+import { penLine, statText } from '../game/battle';
+import { MAX_PARTY_SIZE, SKILLS, xpToNext } from '../data/content';
 import { ACTIVITIES, FOOD_TIERS, GUILD, INN_TIERS, LODGING_QUALITY, RINGS, foodQuality, isResidence, type Activity, type CityLodging, type FoodTier, trainingXp } from '../data/guild';
 import { TRAITS } from '../data/traits';
 import type { Character, GameState } from '../data/types';
@@ -15,6 +15,7 @@ import { adventurerRank } from '../game/guild';
 import { markDirty, requireState, session } from '../game/session';
 import { MEMBER_COLOR, MEMBER_LABEL, cityHeader, memberStatus } from '../ui/hud';
 import { COLORS, HEIGHT, ScrollList, Tooltip, WIDTH, button, confirmDialog, figure, panel, setupCamera, talentTag, text, toast, clearScene } from '../ui/widgets';
+import { armorName, figureKit, weaponName, weaponOf } from '../game/gear';
 
 const ROW_H = 58;
 const ROW_GAP = 4;
@@ -158,7 +159,7 @@ export class PartyScene extends Phaser.Scene {
       const hit = this.add.rectangle(0, 0, SLOT_W, SLOT_H, 0xffffff, 0.001).setOrigin(0).setInteractive({ useHandCursor: true, draggable: true });
       if (c.id === this.selected) frame.setFillStyle(0x4a3d1c, 1);
       card.add(hit);
-      card.add(figure(this, SLOT_W / 2, SLOT_H - 16, 50, c.appearance, c.weaponId, { base: false }));
+      card.add(figure(this, SLOT_W / 2, SLOT_H - 16, 50, c.appearance, figureKit(c), { base: false }));
       card.add(text(this, 4, 2, `${i + 1}`, { fontSize: '11px', color: COLORS.gold }));
       card.add(text(this, SLOT_W / 2, SLOT_H - 14, c.name, { fontSize: '10px', color: isInjured(c) ? COLORS.bad : COLORS.text, fixedWidth: SLOT_W - 4, align: 'center' }).setOrigin(0.5, 0));
       hit.on('pointerup', () => {
@@ -220,7 +221,7 @@ export class PartyScene extends Phaser.Scene {
       });
       this.dragRow(list, row, bg, c.id);
       row.add(bg);
-      row.add(figure(this, 28, 56, 52, c.appearance, c.weaponId, { base: false }));
+      row.add(figure(this, 28, 56, 52, c.appearance, figureKit(c), { base: false }));
       row.add(text(this, 58, 6, `${c.name}  Lv ${c.level} (${adventurerRank(c.level)})`, { fontSize: '15px' }));
       row.add(text(this, 58, 26, memberStatus(state, c), { fontSize: '11px', color: MEMBER_COLOR[c.contract?.type ?? 'main'], wordWrap: { width: 200 } }));
       if (lineup.has(c.id)) row.add(text(this, 284, 6, `⚔ Slot ${members.findIndex((m) => m.id === c.id) + 1}`, { fontSize: '11px', color: COLORS.gold }).setOrigin(1, 0));
@@ -248,7 +249,7 @@ export class PartyScene extends Phaser.Scene {
     const X = 360;
     const W = WIDTH - X - 16;
     panel(this, X, 76, W, HEIGHT - 92);
-    figure(this, X + 70, 250, 150, c.appearance, c.weaponId);
+    figure(this, X + 70, 250, 150, c.appearance, figureKit(c));
     text(this, X + 150, 90, c.name, { fontSize: '26px' });
     const type = c.contract?.type ?? 'main';
     text(this, X + 150, 124, `Level ${c.level} · ${adventurerRank(c.level)}-Rank · ${MEMBER_LABEL[type]}`, { fontSize: '15px', color: MEMBER_COLOR[type] });
@@ -287,10 +288,11 @@ export class PartyScene extends Phaser.Scene {
     }
 
     const st = deriveStats(c);
-    text(this, X + 150, 166, `HP ${st.health}   MP ${st.mana}   P.Atk ${st.pAtk}   M.Atk ${st.mAtk}\nDef ${statText('defense', st.defense)}   Res ${statText('resist', st.resist)}   Move ${st.movement}`, { fontSize: '13px', lineSpacing: 4 });
-    const w = WEAPONS[c.weaponId];
+    const penStats = penLine(st);
+    text(this, X + 150, 166, `HP ${st.health}   MP ${st.mana}   P.Atk ${st.pAtk}   M.Atk ${st.mAtk}\nDef ${statText('defense', st.defense)}   Res ${statText('resist', st.resist)}   Move ${st.movement}${penStats ? `   ${penStats}` : ''}`, { fontSize: '13px', lineSpacing: 4 });
+    const w = weaponOf(c)!;
     talentTag(this, X + 150, 207, c, { fontSize: 11 });
-    text(this, X + 150, 226, `${w.name}: ${w.skills.map((s) => SKILLS[s].name).join(', ')}`, { fontSize: '12px', color: COLORS.dim, wordWrap: { width: W - 170 } });
+    text(this, X + 150, 226, `${weaponName(c)} · ${armorName(c)}: ${w.skills.map((s) => SKILLS[s].name).join(', ')}`, { fontSize: '12px', color: COLORS.dim, wordWrap: { width: W - 170 } });
     const free = freePoints(c);
     const names = c.skillIds.map((s) => SKILLS[s].name);
     const skillLine = (shown: number) => `Skill Points ${skillPoints(c) - free}/${skillPoints(c)}${free > 0 ? ` (${free} to spend)` : ''}: ${names.slice(0, shown).join(', ') || '—'}${shown < names.length ? ` +${names.length - shown} More` : ''}${bodyPoints(c) ? ` · Body ${bodyPoints(c)}` : ''}`;

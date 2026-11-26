@@ -1,10 +1,10 @@
 import Phaser from 'phaser';
-import { SKILLS, STATUSES, WEAPONS, hasTag, isFree, isSupport, skillStatText } from '../data/content';
-import type { SkillDef, StatKey } from '../data/types';
+import { SKILLS, STATUSES, hasTag, isFree, isSupport, skillStatText } from '../data/content';
+import type { SkillDef, StatKey, Stats } from '../data/types';
 import { STAT_INFO } from '../data/types';
 import { bestAction, bestFreeAction, planTurn, preferredMode, shouldDisengage, shouldEscape, shouldSurrender, watchesForOverwatch } from '../game/ai';
 import {
-  AP_PER_TURN, Battle, deploymentTiles, generateEnemies, makeUnit, statEffectPct, statText,
+  AP_PER_TURN, Battle, deploymentTiles, generateEnemies, makeUnit, penLine, penText, statEffectPct, statText,
   type BattleEvent, type MoveResult, type Unit,
 } from '../game/battle';
 import { BAR_PAGE, makeRng, skillBarLayout, swapBarSlots } from '../game/character';
@@ -19,6 +19,7 @@ import {
   type StatCell,
 } from '../ui/widgets';
 import { ENCOUNTER, ENEMIES } from '../data/enemies';
+import { figureKit, weaponName } from '../game/gear';
 
 /** Tile size in layout pixels; set per battle so the map fits the 672x500 board area. */
 let TILE = 56;
@@ -274,7 +275,7 @@ export class BattleScene extends Phaser.Scene {
     const def = u.character.enemyType ? ENEMIES[u.character.enemyType] : null;
     if (def && def.art.kind !== 'human') return monsterFigure(this, x, feetY, height, def.art.kind);
     // People are slimmer than monsters, so they're drawn a little taller (heads may overlap the tile above).
-    return figure(this, x, feetY, height * 1.2, u.character.appearance, u.character.weaponId, { enemy: u.team === 'enemy' });
+    return figure(this, x, feetY, height * 1.2, u.character.appearance, figureKit(u.character), { enemy: u.team === 'enemy' });
   }
 
   private createUnitView(u: Unit): void {
@@ -461,7 +462,7 @@ export class BattleScene extends Phaser.Scene {
       const x = MAP_X + 190 + i * 52;
       const ready = mine && !u.acted && u.ap > 0;
       if (u.uid === this.selectedUid) this.topBar.add(this.add.rectangle(x, 36, 44, 56, 0xffd166, 0.18).setStrokeStyle(2, 0xffd166));
-      this.topBar.add(figure(this, x, 58, 46, u.character.appearance, u.character.weaponId).setAlpha(ready ? 1 : 0.35));
+      this.topBar.add(figure(this, x, 58, 46, u.character.appearance, figureKit(u.character)).setAlpha(ready ? 1 : 0.35));
       const hit = this.add.zone(x, 36, 44, 56).setInteractive({ useHandCursor: true });
       hit.on('pointerup', () => this.selectUnit(u));
       this.topBar.add(hit);
@@ -484,7 +485,7 @@ export class BattleScene extends Phaser.Scene {
     if (u) {
       S.add(this.unitFigure(u, SIDE_X + 28, 64, 46));
       S.add(text(this, SIDE_X + 52, 24, u.character.name, { fontSize: '17px' }));
-      S.add(text(this, SIDE_X + 52, 46, `Lv ${u.character.level} · ${WEAPONS[u.character.weaponId]?.name ?? (u.character.enemyType ? 'Monster' : '')}${u.team === 'enemy' ? ' (enemy)' : ''}`, {
+      S.add(text(this, SIDE_X + 52, 46, `Lv ${u.character.level} · ${weaponName(u.character) || (u.character.enemyType ? 'Monster' : '')}${u.team === 'enemy' ? ' (enemy)' : ''}`, {
         color: u.team === 'enemy' ? COLORS.bad : COLORS.dim, fontSize: '12px',
       }));
       S.add(statGrid(this, SIDE_X + 10, 66, this.statCells(u, true), STAT_GRID));
@@ -733,7 +734,20 @@ export class BattleScene extends Phaser.Scene {
       b.rules.vision.enabled ? cell('vision') : null,
       cell('defense'),
       cell('resist'),
+      this.penCell(u, tips),
     ];
+  }
+
+  /** Penetration ("50% | 10"), if the unit has any: Physical, else Magical (the tooltip lists both). */
+  private penCell(u: Unit, tips: boolean): StatCell | null {
+    const b = this.battle;
+    const s = Object.fromEntries((['pPen', 'pPenPct', 'mPen', 'mPenPct'] as const).map((k) => [k, b.stat(u, k)])) as Pick<Stats, 'pPen' | 'pPenPct' | 'mPen' | 'mPenPct'>;
+    const physical = penText(s, 'physical');
+    const magical = penText(s, 'magical');
+    if (!physical && !magical) return null;
+    const both = penLine(s, '\n');
+    const tip = `${both}\nPenetration: your damage of that type ignores this much Defense (the percent first, then the flat amount; never below 0 Defense).`;
+    return { stat: physical ? 'pPen' : 'mPen', value: (physical || magical).replace(/^[PM]\.Pen: /, ''), onHover: tips ? () => this.showInfo(tip) : undefined };
   }
 
   /** What a stat is and where the unit's current amount comes from (base, terrain, statuses). */
@@ -746,11 +760,9 @@ export class BattleScene extends Phaser.Scene {
     }
     const v = b.stat(u, k);
     const base = u.stats[k];
-    const terrain = TERRAIN[b.map.tiles[u.y][u.x]];
-    const fromTerrain = k === 'defense' ? terrain.defense : 0;
-    const fromStatuses = v - base - fromTerrain;
+    const fromStatuses = v - base;
     const signed = (n: number) => `${n > 0 ? '+' : ''}${n}`;
-    const parts = [`Base ${base}`, fromTerrain ? `${terrain.name} ${signed(fromTerrain)}` : '', fromStatuses ? `Statuses ${signed(fromStatuses)}` : ''].filter(Boolean);
+    const parts = [`Base ${base}`, fromStatuses ? `Statuses ${signed(fromStatuses)}` : ''].filter(Boolean);
     const pct = statEffectPct(k, v);
     const effect = pct === null ? '' : k === 'defense'
       ? `Takes ${Math.abs(pct)}% ${pct >= 0 ? 'less' : 'more'} damage.` : `${pct}% chance to shrug off each debuff.`;
@@ -1059,7 +1071,7 @@ export class BattleScene extends Phaser.Scene {
     const b = this.battle;
     const target = b.unitAt(tile.x, tile.y);
     const terrain = TERRAIN[b.map.tiles[tile.y][tile.x]];
-    let info = `${terrain.name}${terrain.moveCost === null ? ' (impassable)' : ` (move cost ${terrain.moveCost}${terrain.defense ? `, +${terrain.defense} Def` : ''})`}${terrain.blocksSight ? ', Blocks Sight' : ''}`;
+    let info = `${terrain.name}${terrain.moveCost === null ? ' (impassable)' : ` (move cost ${terrain.moveCost}${terrain.projectileCover ? `, -${Math.round(terrain.projectileCover * 100)}% damage from projectiles` : ''})`}${terrain.blocksSight ? ', Blocks Sight' : ''}`;
     const shown = target && b.canSee('player', target) ? target : undefined;
     if (shown) info = `${shown.character.name} — Lv ${shown.character.level}`;
     const u = this.selected;

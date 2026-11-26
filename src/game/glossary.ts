@@ -191,6 +191,14 @@ export function glossaryEntries(): GlossaryEntry[] {
   add('Battle', 'Defense and Resist',
     `Every attack hits. Defense reduces damage taken to 100 ÷ (100 + Defense): 100 Defense halves it.\n\n`
     + `Resist is a chance to shrug off a debuff: Resist ÷ (100 + Resist), so 100 Resist is 50%. A resisted debuff doesn't apply, but the hit's damage still lands.`);
+  add('Battle', 'Penetration',
+    `P.Pen and M.Pen (from gear) make the target's Defense count for less against your Physical or Magical damage: the percent first, then the flat amount. 50% and 10 P.Pen make 100 Defense count as 40 against Physical damage.\n\n`
+    + `Penetration never takes Defense below 0, and does nothing to Defense that is already 0 or less.`);
+  add('Battle', 'Forest',
+    `Forest costs 6 Movement to enter. A unit standing in forest takes ${Math.round(STAT_CONFIG.forestProjectileReduction * 100)}% less damage from projectiles: arrows and shots (Direct and Indirect) and thrown spells like Magic Bolt and Fireball. Melee attacks, area spells and zones hit it as usual.`);
+  add('Battle', 'Equipment',
+    `Every Adventurer has a weapon and a body armor. Each piece adds base stats, then multiplies the total by its modifiers. Quality multiplies the base stats: Crude x1, Common x2, Fine x4, Masterwork x7.\n\n`
+    + `• Weapons set the Basic Attack's range and add one skill: Magic Bolt (Staff, Crystal), Circle Swing (Greatsword, Spear), Shield Slam (shields), Switch Mode (bows) or Quick Attack (daggers).\n• Mail and Plate are tougher but slower.\n• Without a weapon you fight Unarmed (x0.6 P.Atk); without armor, Defense and Health are x0.9.`);
   add('Battle', 'Engagement',
     `Hitting a unit with an Engage skill locks you both together, unless it's already engaged with someone else. While engaged you can't move, and you can only attack your opponent (and heal or cleanse yourself).\n\n`
     + `Disengage breaks free, but your opponent gets a free basic attack. Disengage skills (like Shadow Step) slip out with no free attack. Knockbacks and falling also end it.`);

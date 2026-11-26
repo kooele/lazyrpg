@@ -53,9 +53,9 @@ export class MainMenuScene extends Phaser.Scene {
     for (let x = 0; x <= WIDTH; x += 48) g.lineBetween(x, 0, x, HEIGHT);
     for (let y = 0; y <= HEIGHT; y += 48) g.lineBetween(0, y, WIDTH, y);
     // A little standoff: two adventurers facing two bandits.
-    figure(this, 140, 470, 120, { color: '#3d7be0', look: { sex: 'male', skin: 'light', face: 1, hair: 'crewCut', hairColor: 'brown' } }, 'sword_shield');
-    figure(this, 230, 560, 110, { color: '#36b37e', look: { sex: 'female', skin: 'fair', face: 2, hair: 'braided', hairColor: 'red' } }, 'staff');
-    figure(this, 820, 470, 120, { color: '#c0392b', model: 'm3' }, 'spear', { enemy: true });
-    figure(this, 730, 560, 110, { color: '#c0392b', model: 'f3' }, 'bow', { enemy: true });
+    figure(this, 140, 470, 120, { color: '#3d7be0', look: { sex: 'male', skin: 'light', face: 1, hair: 'crewCut', hairColor: 'brown' } }, { art: 'sword_shield', outfit: 'plate' });
+    figure(this, 230, 560, 110, { color: '#36b37e', look: { sex: 'female', skin: 'fair', face: 2, hair: 'braided', hairColor: 'red' } }, { art: 'staff', outfit: 'clothes' });
+    figure(this, 820, 470, 120, { color: '#c0392b', model: 'm3' }, { art: 'spear', outfit: 'mail' }, { enemy: true });
+    figure(this, 730, 560, 110, { color: '#c0392b', model: 'f3' }, { art: 'bow', outfit: 'leatherArmor' }, { enemy: true });
   }
 }

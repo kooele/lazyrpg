@@ -917,7 +917,7 @@ describe('contracts', () => {
     expect(mercenaryRates(5, 1).cutPct).toBeGreaterThan(mercenaryRates(1, 1).cutPct);
   });
 
-  it('enemies who surrendered are taken prisoner after a win (keeping their level and weapon)', () => {
+  it('enemies who surrendered are taken prisoner after a win (keeping their level, but not their gear)', () => {
     const s = start();
     acceptQuest(s, s.guild.board.find((x) => canTakeQuest(s, x))!.id);
     s.quest!.days = 1;
@@ -925,7 +925,8 @@ describe('contracts', () => {
     const lines = resolveQuest(s, 'victory', makeRng(3), [], [foe]);
     expect(s.prisoners).toHaveLength(1);
     expect(lines.some((l) => /city gate/.test(l))).toBe(true);
-    expect(s.prisoners[0].character).toMatchObject({ level: 9, weaponId: foe.weaponId });
+    expect(foe.weapon).toBeTruthy();
+    expect(s.prisoners[0].character).toMatchObject({ level: 9, weapon: null, armor: null });
     expect(s.prisoners[0].character.enemyType).toBeUndefined();
     expect(lines.some((l) => /surrendered and was taken prisoner/.test(l))).toBe(true);
     // No prisoners from a lost battle.

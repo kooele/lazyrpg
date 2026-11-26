@@ -51,7 +51,8 @@ export const HUMANOIDS = {
   s1: { bandit: true, female: false, skin: '#e6dcc4', hair: '#e6dcc4', hairStyle: 'bald', skull: true, eyes: '#ff5a3a', outfit: 'leather', bareArms: true, cloth: '#4a4a4e', leather: '#3a3430', accent: '#6a6a6e', legs: '#e6dcc4', boots: '#4a4038' },
   s2: { bandit: true, female: false, skin: '#ddd2b8', hair: '#ddd2b8', hairStyle: 'hood', hood: '#34343a', skull: true, eyes: '#7ad0ff', outfit: 'armor', cloth: '#3a3a40', accent: '#7a7a80', legs: '#ddd2b8', boots: '#3a3430' },
 };
-export const ART_WEAPONS = ['sword_shield', 'spear', 'bow', 'staff'];
+/** Weapon poses (equipment.json "art"). '' or 'unarmed' = empty fists. */
+export const ART_WEAPONS = ['sword_shield', 'mace_shield', 'greatsword', 'spear', 'bow', 'shortbow', 'staff', 'crystal', 'dagger', 'twin_daggers', 'unarmed'];
 const METAL = '#b9c3cf';
 const WOOD = '#8a5a34';
 
@@ -92,12 +93,20 @@ export function figureSvg(id, model, weapon, scale = 1) {
 
   // Hand positions depend on the weapon. "r" = the figure's right hand (viewer's left).
   const relaxed = (s) => [32 + s * (sW + 1.2), hipY + 0.5];
+  const shieldHands = { r: [32 - sW - 3.2, hipY - 1], l: [32 + sW + 2.5, waistY + 1] };
+  const bowHands = { r: relaxed(-1), l: [32 + sW + 4.2, waistY - 0.5] };
   const hands = {
-    sword_shield: { r: [32 - sW - 3.2, hipY - 1], l: [32 + sW + 2.5, waistY + 1] },
+    sword_shield: shieldHands,
+    mace_shield: shieldHands,
+    greatsword: { r: [32 - sW - 2.8, waistY + 2.5], l: relaxed(1) },
     spear: { r: [32 - sW - 2.6, waistY + 1.5], l: relaxed(1) },
     staff: { r: [32 - sW - 2.6, waistY + 1.5], l: relaxed(1) },
-    bow: { r: relaxed(-1), l: [32 + sW + 4.2, waistY - 0.5] },
-  }[weapon];
+    crystal: { r: [32 - sW - 3, waistY - 0.5], l: relaxed(1) },
+    bow: bowHands,
+    shortbow: bowHands,
+    dagger: { r: [32 - sW - 3, hipY - 1], l: relaxed(1) },
+    twin_daggers: { r: [32 - sW - 3, hipY - 1], l: [32 + sW + 3, hipY - 1] },
+  }[weapon] ?? { r: relaxed(-1), l: relaxed(1) };
 
   const back = [];
   const parts = [];
@@ -138,7 +147,7 @@ export function figureSvg(id, model, weapon, scale = 1) {
   if (model.hairStyle === 'permed') {
     for (const [u, v] of [[-1.12, 0.62], [1.12, 0.62]]) back.push(circle(32 + u * hw, top + v * H, H * 0.15, dark(P.hair, 0.12)));
   }
-  if (weapon === 'bow') {
+  if (weapon === 'bow' || weapon === 'shortbow') {
     // Quiver across the back, arrows over the right shoulder.
     back.push(`<g transform="rotate(-22 ${n(32 - sW * 0.3)} ${n(shoulderY + 6)})">
       ${limb([[32 - sW * 0.3, shoulderY - 5], [32 - sW * 0.3, shoulderY - 8.5]], 0.8, '#efe6d2')}
@@ -539,7 +548,16 @@ export function figureSvg(id, model, weapon, scale = 1) {
   const [rx, ry] = hands.r;
   const [lx, ly] = hands.l;
   const gripOver = (x, y) => front.push(circle(x, y, handR, P.skin));
-  if (weapon === 'sword_shield') {
+  if (weapon === 'mace_shield') {
+    // Mace: a wooden haft with a flanged iron head.
+    const top_ = ry - 15;
+    front.push(limb([[rx + 0.3, ry + 3], [rx - 0.6, top_ + 3]], 1.6, '#5a3a22'));
+    front.push(circle(rx - 0.7, top_ + 1.2, 3.1, paint('#7d838c')));
+    for (const [dx, dy] of [[-3.4, 0], [3.4, 0], [0, -3.4]]) front.push(path(`M${n(rx - 0.7 + dx * 0.6)} ${n(top_ + 1.2 + dy * 0.6)} l${n(dx * 0.5 - dy * 0.25)} ${n(dy * 0.5 - dx * 0.25)} l${n(dy * 0.5)} ${n(dx * 0.5)} Z`, paint('#9aa2ac')));
+    front.push(circle(rx - 1.6, top_ + 0.2, 0.9, '#e8ecf0'));
+    gripOver(rx, ry);
+  }
+  if (weapon === 'sword_shield' || weapon === 'mace_shield') {
     const ang = -0.12;
     const dx = Math.sin(ang);
     const dy = -Math.cos(ang);
@@ -551,6 +569,7 @@ export function figureSvg(id, model, weapon, scale = 1) {
     const ty = gy + dy * blade;
     const nx = -dy;
     const ny = dx;
+    if (weapon === 'sword_shield') {
     front.push(path(`M${n(gx + nx * bw)} ${n(gy + ny * bw)} L${n(tx + nx * bw - dx * 3)} ${n(ty + ny * bw - dy * 3)} L${n(tx)} ${n(ty)} L${n(tx - nx * bw - dx * 3)} ${n(ty - ny * bw - dy * 3)} L${n(gx - nx * bw)} ${n(gy - ny * bw)} Z`, '#d6dbe2'));
     front.push(limb([[gx + nx * 0.3, gy + ny * 0.3], [tx + nx * 0.3 - dx * 3, ty + ny * 0.3 - dy * 3]], 0.7, '#ffffff'));
     front.push(limb([[rx - dx * 2.5, ry - dy * 2.5], [gx, gy]], 1.5, '#5a3a22'));
@@ -558,6 +577,7 @@ export function figureSvg(id, model, weapon, scale = 1) {
     front.push(limb([[gx + nx * 4, gy + ny * 4], [gx - nx * 4, gy - ny * 4]], 1.7, guard));
     front.push(circle(rx - dx * 3.4, ry - dy * 3.4, 1.2, guard));
     gripOver(rx, ry);
+    }
     if (model.bandit) {
       // Round wooden shield with an iron rim and boss.
       const r = 8;
@@ -577,6 +597,41 @@ export function figureSvg(id, model, weapon, scale = 1) {
       front.push(path(`M${n(lx - w + 1.5)} ${n(t + 1.2)} Q${n(lx)} ${n(t - 0.6)} ${n(lx + w - 1.5)} ${n(t + 1.2)} L${n(lx + w - 1.5)} ${n(t + ht * 0.4)} Q${n(lx + w * 0.7)} ${n(bt - ht * 0.25)} ${n(lx)} ${n(bt - 2)} Q${n(lx - w * 0.7)} ${n(bt - ht * 0.25)} ${n(lx - w + 1.5)} ${n(t + ht * 0.4)} Z`, paint('#a33b3b')));
       front.push(`<path d="M${n(lx)} ${n(t + 2.5)} L${n(lx)} ${n(bt - 3.5)} M${n(lx - w * 0.55)} ${n(t + ht * 0.3)} L${n(lx + w * 0.55)} ${n(t + ht * 0.3)}" stroke="${paint('#e8c45a')}" stroke-width="1.8" stroke-linecap="round"/>`);
     }
+  } else if (weapon === 'greatsword') {
+    // A long two-handed blade held upright in front of the body.
+    const gx = rx + 0.1;
+    const gy = ry - 2.6;
+    const tipY = top - 4;
+    const bw = 2.7;
+    front.push(limb([[gx, ry + 4.2], [gx, gy]], 1.9, '#5a3a22'));
+    front.push(path(`M${n(gx - bw)} ${n(gy)} L${n(gx - bw)} ${n(tipY + 4)} L${n(gx)} ${n(tipY)} L${n(gx + bw)} ${n(tipY + 4)} L${n(gx + bw)} ${n(gy)} Z`, '#d6dbe2'));
+    front.push(limb([[gx - 0.4, gy - 1], [gx - 0.4, tipY + 4]], 0.7, '#ffffff'));
+    const guard = model.bandit ? paint('#5a5a5e') : paint('#c9a050');
+    front.push(limb([[gx - 5.5, gy], [gx + 5.5, gy]], 2, guard));
+    front.push(circle(gx, ry + 4.6, 1.4, guard));
+    gripOver(rx, ry);
+  } else if (weapon === 'crystal') {
+    // A glowing crystal floating over the raised hand.
+    const cx = rx - 0.4;
+    const cy = ry - 7;
+    const hex = model.bandit ? 'H' : '';
+    front.push(circle(cx, cy, 8, `url(#glow${hex})`));
+    front.push(path(`M${n(cx)} ${n(cy - 6)} L${n(cx + 3.3)} ${n(cy - 0.5)} L${n(cx)} ${n(cy + 4.5)} L${n(cx - 3.3)} ${n(cy - 0.5)} Z`, model.bandit ? paint('#9a6ad0') : paint('#6ab8e8')));
+    front.push(path(`M${n(cx)} ${n(cy - 6)} L${n(cx + 3.3)} ${n(cy - 0.5)} L${n(cx)} ${n(cy + 0.4)} Z`, '#ffffff', 'opacity="0.55"'));
+    gripOver(rx, ry);
+  } else if (weapon === 'dagger' || weapon === 'twin_daggers') {
+    // Short blades held point-up.
+    const blade = (hx, hy, s) => {
+      const tx = hx + s * 2;
+      const ty = hy - 13.5;
+      front.push(path(`M${n(hx - 1.4)} ${n(hy - 2.2)} L${n(tx - 0.2)} ${n(ty)} L${n(hx + 1.4)} ${n(hy - 2.2)} Z`, '#d6dbe2'));
+      front.push(limb([[hx - 0.2, hy - 3], [tx - 0.3, ty + 2.5]], 0.5, '#ffffff'));
+      front.push(limb([[hx - 2.8, hy - 2.2], [hx + 2.8, hy - 2.2]], 1.3, model.bandit ? paint('#5a5a5e') : paint('#c9a050')));
+      front.push(limb([[hx, hy - 2], [hx, hy + 2]], 1.3, '#5a3a22'));
+      gripOver(hx, hy);
+    };
+    blade(rx, ry, -1);
+    if (weapon === 'twin_daggers') blade(lx, ly, 1);
   } else if (weapon === 'spear') {
     const x0 = rx + 0.5;
     const x1 = rx - 0.8;
@@ -595,10 +650,10 @@ export function figureSvg(id, model, weapon, scale = 1) {
     front.push(circle(sx, topY + 2.2, 6, `url(#glow${hex})`));
     front.push(circle(sx, topY + 2.2, 2.6, `url(#orb${hex})`));
     gripOver(rx, ry);
-  } else if (weapon === 'bow') {
+  } else if (weapon === 'bow' || weapon === 'shortbow') {
     // Bow held out in the left hand, string toward the body.
     const bx = lx - 3.2; // the grip (bx + 3.5) sits in the hand
-    const half = 17;
+    const half = weapon === 'shortbow' ? 12 : 17;
     const tY = ly - half;
     const bY = ly + half;
     front.push(`<path d="M${n(bx - 1.5)} ${n(tY)} Q${n(bx + 9)} ${n(ly)} ${n(bx - 1.5)} ${n(bY)}" fill="none" stroke="${dark(wood, 0.05)}" stroke-width="2" stroke-linecap="round"/>`);
@@ -825,15 +880,32 @@ export const HAIR_ART = {
   crewCut: 'crew', bowlCut: 'bowl', permed: 'permed', tied: 'tied',
   bobCut: 'bob', ponytail: 'ponytail', crownBraid: 'crown', downWithBangs: 'bangs', braided: 'braid', bun: 'bun',
 };
-/** Outfit follows the weapon: armour for sword & shield, a tunic for spear and bow, a robe for the staff. */
-const OUTFIT_BY_WEAPON = { sword_shield: 'armor', spear: 'tunic', bow: 'tunic', staff: 'robe' };
+/** Weapons whose wielders wear a robe when they wear no armor. */
+const ROBE_WEAPONS = ['staff', 'crystal'];
+
+/**
+ * The outfit drawn for a body: its armor's outfit (equipment.json; bandits keep their ragged leather for Leather),
+ * or with no armor ('clothes' or ''), its own clothes: a robe for mage weapons, else a tunic, unless the body
+ * model has clothes of its own (bandits, goblins, robed models).
+ */
+export function outfitFor(model, armorOutfit, weapon) {
+  if (armorOutfit && armorOutfit !== 'clothes') return armorOutfit === 'leatherArmor' && model?.outfit === 'leather' ? 'leather' : armorOutfit;
+  if (model?.outfit && model.outfit !== 'armor' && model.outfit !== 'tunic') return model.outfit;
+  return ROBE_WEAPONS.includes(weapon) ? 'robe' : 'tunic';
+}
+
+/** A body model (MODELS, BANDITS, HUMANOIDS) dressed in an outfit (see outfitFor). */
+export function dressedModel(id, armorOutfit, weapon) {
+  const model = MODELS[id] ?? BANDITS[id] ?? HUMANOIDS[id] ?? MODELS.m1;
+  return { ...model, outfit: outfitFor(model, armorOutfit, weapon) };
+}
 const EYES_BY_HAIR = { black: '#3a2418', darkBrown: '#4a3020', brown: '#4a3020', auburn: '#4a7a3a', red: '#4a7a3a', blonde: '#3d6fb8', ash: '#4f6a8a' };
 
 /** A body model for figureSvg from a custom look ({ sex, skin, face, hair, hairColor }) and outfit colour. */
-export function lookModel(look, clothColor, weapon) {
+export function lookModel(look, clothColor, weapon, armorOutfit = '') {
   const female = look.sex === 'female';
   const face = (FACES[look.sex] ?? FACES.male)[Math.max(0, Math.min(3, (look.face ?? 1) - 1))];
-  const outfit = OUTFIT_BY_WEAPON[weapon] ?? 'tunic';
+  const outfit = outfitFor(null, armorOutfit, weapon);
   return {
     female,
     skin: SKIN_TONES[look.skin] ?? SKIN_TONES.light,

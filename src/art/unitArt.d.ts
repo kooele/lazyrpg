@@ -25,4 +25,7 @@ export function lookModel(
   look: { sex: string; skin: string; face: number; hair: string; hairColor: string },
   clothColor: string,
   weapon: string,
+  armorOutfit?: string,
 ): ArtModel;
+export function outfitFor(model: ArtModel | null, armorOutfit: string, weapon: string): string;
+export function dressedModel(id: string, armorOutfit: string, weapon: string): ArtModel;

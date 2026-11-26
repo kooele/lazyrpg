@@ -1,7 +1,7 @@
 // Loads and validates enemies.json (enemy types, their level ranges, stats and skills).
 import raw from './enemies.json';
-import { SKILLS, WEAPONS } from './content';
-import { BODY_MODELS, ENEMY_AIS, ENEMY_MODELS, STAT_KEYS, type EnemyAi, type EnemyDef, type MonsterKind, type Stats, type UnitModel } from './types';
+import { ARMORS, QUALITIES, SKILLS, WEAPONS } from './content';
+import { BODY_MODELS, ENEMY_AIS, ENEMY_MODELS, STAT_KEYS, type EnemyAi, type EnemyDef, type EnemyLoadout, type MonsterKind, type Stats, type UnitModel } from './types';
 
 export interface EncounterRules {
   maxEnemies: number;
@@ -51,18 +51,21 @@ export function parseEnemies(data: unknown): { enemies: Record<string, EnemyDef>
       const id = str(m, `${p}.art.models[${i}]`);
       return allModels.includes(id) ? (id as UnitModel) : fail(`${p}.art.models[${i}]`, `must be one of: ${allModels.join(', ')}`);
     });
-    const weapons = list(d.weapons, `${p}.weapons`).map((w, i) => {
-      const wid = str(w, `${p}.weapons[${i}]`);
-      return WEAPONS[wid] ? wid : fail(`${p}.weapons[${i}]`, `"${wid}" is not defined in weapons.json`);
+    const loadouts = list(d.loadouts, `${p}.loadouts`).map((l, i): EnemyLoadout => {
+      const lp = `${p}.loadouts[${i}]`;
+      const o = obj(l, lp);
+      const weapon = str(o.weapon, `${lp}.weapon`);
+      if (!WEAPONS[weapon] || WEAPONS[weapon].builtIn) fail(`${lp}.weapon`, `"${weapon}" is not a weapon in equipment.json`);
+      const armor = o.armor === undefined ? undefined : str(o.armor, `${lp}.armor`);
+      if (armor !== undefined && (!ARMORS[armor] || ARMORS[armor].builtIn)) fail(`${lp}.armor`, `"${armor}" is not an armor in equipment.json (leave it out for no armor)`);
+      return { name: str(o.name, `${lp}.name`), weapon, ...(armor ? { armor } : {}), skills: skillList(o.skills, `${lp}.skills`) };
     });
+    const gearQuality = d.gearQuality === undefined ? 'crude' : str(d.gearQuality, `${p}.gearQuality`);
+    if (!QUALITIES[gearQuality]) fail(`${p}.gearQuality`, `"${gearQuality}" is not a quality in equipment.json`);
     const skills = skillList(d.skills, `${p}.skills`);
-    if (skills.length === 0 && weapons.length === 0) fail(`${p}.skills`, 'needs at least one skill (or a weapon)');
+    if (skills.length === 0 && loadouts.length === 0) fail(`${p}.skills`, 'needs at least one skill (or a loadout)');
     const byLevel: Record<number, string[]> = {};
     for (const [lvl, v] of Object.entries(obj(d.skillsByLevel ?? {}, `${p}.skillsByLevel`))) byLevel[Number(lvl)] = skillList(v, `${p}.skillsByLevel.${lvl}`);
-    const weaponSkills: Record<string, string[]> = {};
-    for (const [w, v] of Object.entries(obj(d.weaponSkills ?? {}, `${p}.weaponSkills`))) weaponSkills[w] = skillList(v, `${p}.weaponSkills.${w}`);
-    const weaponNames: Record<string, string> = {};
-    for (const [w, v] of Object.entries(obj(d.weaponNames ?? {}, `${p}.weaponNames`))) weaponNames[w] = str(v, `${p}.weaponNames.${w}`);
     enemies[id] = {
       id,
       name: str(d.name, `${p}.name`),
@@ -75,9 +78,8 @@ export function parseEnemies(data: unknown): { enemies: Record<string, EnemyDef>
       growthPerLevel: growth,
       skills,
       skillsByLevel: byLevel,
-      weapons,
-      weaponNames,
-      weaponSkills,
+      loadouts,
+      gearQuality,
       weaponSkillUse: d.weaponSkillUse === undefined ? 'all'
         : d.weaponSkillUse === 'basic' || d.weaponSkillUse === 'all' ? d.weaponSkillUse
           : fail(`${p}.weaponSkillUse`, 'must be "basic" or "all"'),

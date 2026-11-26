@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { GUILD } from '../data/guild';
-import { MAX_PARTY_SIZE, WEAPONS } from '../data/content';
+import { MAX_PARTY_SIZE } from '../data/content';
 import type { Character } from '../data/types';
 import { departBlock, endDay, foodCost, forecastNight, lineupMembers, lodgingCost, prisonersAtGate, registerPrisoner, turnInPrisoner, tabLabel, tabParts, TAB_NAMES, type NightForecast } from '../game/city';
 import { adventurerRank } from '../game/guild';
@@ -9,6 +9,7 @@ import { bondOf, registrationFee, slaveTax } from '../game/contracts';
 import { markDirty, requireState, session } from '../game/session';
 import { cityHeader, rankBadge } from '../ui/hud';
 import { COLORS, HEIGHT, ScrollList, UI_SCALE, WIDTH, bakeGraphics, button, figure, panel, setupCamera, talentTag, text, toast, clearScene } from '../ui/widgets';
+import { figureKit, weaponName } from '../game/gear';
 
 export const CITY_MAP_KEY = 'city-map';
 
@@ -173,11 +174,11 @@ export class CityScene extends Phaser.Scene {
       const c = o.character;
       const row = this.add.container(0, 0);
       row.add(this.add.rectangle(0, 0, 620, 80, COLORS.panelLight, 0.5).setOrigin(0));
-      row.add(figure(this, 30, 72, 60, c.appearance, c.weaponId, { base: false }));
+      row.add(figure(this, 30, 72, 60, c.appearance, figureKit(c), { base: false }));
       const name = text(this, 64, 6, c.name, { fontSize: '16px' });
       row.add(name);
       row.add(talentTag(this, 64 + name.width + 12, 9, c, { fontSize: 12, detail: false }));
-      row.add(text(this, 64, 28, `Level ${c.level} (${adventurerRank(c.level)}-rank) · ${WEAPONS[c.weaponId].name}`, { fontSize: '13px', color: COLORS.gold }));
+      row.add(text(this, 64, 28, `Level ${c.level} (${adventurerRank(c.level)}-rank) · ${weaponName(c)}`, { fontSize: '13px', color: COLORS.gold }));
       row.add(talentTag(this, 64, 48, c, { fontSize: 11, overall: false, sep: '   ' }));
       row.add(button(this, 360, 22, 120, 36, `Bounty: ${o.price}g`, () => {
         const gold = turnInPrisoner(state, c.id);
@@ -433,7 +434,7 @@ export class CityScene extends Phaser.Scene {
         layer.add(text(this, x + SW / 2, top + SH / 2, 'Empty', { fontSize: '11px', color: COLORS.dim }).setOrigin(0.5));
         continue;
       }
-      layer.add(figure(this, x + SW / 2, top + SH - 28, 62, c.appearance, c.weaponId, { base: false }));
+      layer.add(figure(this, x + SW / 2, top + SH - 28, 62, c.appearance, figureKit(c), { base: false }));
       layer.add(text(this, x + SW / 2, top + SH - 26, c.name, { fontSize: '11px', color: isInjured(c) ? COLORS.bad : COLORS.text, fixedWidth: SW - 4, align: 'center' }).setOrigin(0.5, 0));
       layer.add(text(this, x + SW / 2, top + SH - 13, `Lv ${c.level}`, { fontSize: '10px', color: COLORS.dim }).setOrigin(0.5, 0));
     }

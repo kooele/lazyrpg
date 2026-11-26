@@ -6,6 +6,7 @@ import { titleCase } from '../game/titleCase';
 import { markDirty, requireState, session } from '../game/session';
 import { cityHeader } from '../ui/hud';
 import { COLORS, HEIGHT, WIDTH, button, figure, panel, setupCamera, text, clearScene } from '../ui/widgets';
+import { figureKit } from '../game/gear';
 
 type Place = InnTier | Ring;
 
@@ -91,7 +92,7 @@ export class InnScene extends Phaser.Scene {
     text(this, 30, 196, `Residents ${people.length}/${GUILD.residences.capacity}`, { fontSize: '15px', color: COLORS.gold });
     people.forEach((c, i) => {
       const x = 70 + i * 140;
-      figure(this, x, 350, 110, c.appearance, c.weaponId);
+      figure(this, x, 350, 110, c.appearance, figureKit(c));
       text(this, x, 362, c.name, { fontSize: '13px', align: 'center', wordWrap: { width: 130 } }).setOrigin(0.5, 0);
     });
     if (!people.length) text(this, 30, 226, 'Nobody lives here yet.', { fontSize: '13px', color: COLORS.dim });

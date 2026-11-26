@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { SKILLS, WEAPONS } from '../data/content';
+import { SKILLS } from '../data/content';
 import { GUILD } from '../data/guild';
 import { STAT_INFO, type Character, type CompanionTerms, type FreeAdventurer } from '../data/types';
 import { TALENT_COLORS, talentOf, talentStats } from '../game/talent';
@@ -12,6 +12,7 @@ import { adventurerRank } from '../game/guild';
 import { markDirty, requireState, session } from '../game/session';
 import { cityHeader } from '../ui/hud';
 import { COLORS, ScrollList, WIDTH, button, figure, fittedList, panel, setupCamera, talentTag, text, toast, clearScene } from '../ui/widgets';
+import { figureKit, weaponName } from '../game/gear';
 
 interface NegotiateData {
   /** hire: a free adventurer from the guild hall. renew: a companion whose contract is ending. */
@@ -104,10 +105,10 @@ export class NegotiateScene extends Phaser.Scene {
 
     // ---- left: who ----
     panel(this, 16, 76, 300, 488);
-    figure(this, 90, 270, 170, c.appearance, c.weaponId);
+    figure(this, 90, 270, 170, c.appearance, figureKit(c));
     text(this, 170, 96, c.name, { fontSize: '22px', wordWrap: { width: 140 } });
     text(this, 170, 126, `Level ${c.level} · ${adventurerRank(c.level)}-Rank`, { fontSize: '15px', color: COLORS.gold });
-    text(this, 170, 148, WEAPONS[c.weaponId].name, { fontSize: '13px', color: COLORS.dim, wordWrap: { width: 140 } });
+    text(this, 170, 148, weaponName(c), { fontSize: '13px', color: COLORS.dim, wordWrap: { width: 140 } });
     text(this, 170, 170, greedWord(who.greed), { fontSize: '13px', color: COLORS.dim });
     talentTag(this, 170, 192, c, { fontSize: 13, detail: false });
     talentStats().forEach((k, i) => {

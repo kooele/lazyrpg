@@ -1,11 +1,11 @@
 import Phaser from 'phaser';
 import { statEffectPct } from '../game/battle';
 import {
-  NAME_MAX_LENGTH, PALETTE, isSupport, SKILLS, SKILL_TABS, SKILL_TREES, WEAPONS, xpToNext, maxBodyRank, modeWithTag, resolveWeaponSkill, skillStatText,
+  NAME_MAX_LENGTH, PALETTE, isSupport, SKILLS, SKILL_TABS, SKILL_TREES, WEAPONS, WEAPON_TYPES, xpToNext, maxBodyRank, modeWithTag, resolveWeaponSkill, skillStatText,
 } from '../data/content';
 import { STAT_CONFIG, visibleStatKeys } from '../data/stats';
 import {
-  FACE_COUNT, HAIR_COLORS, HAIR_STYLES, SEXES, SKIN_TONES, STAT_INFO, STAT_KEYS, TALENT_GRADES, type Character, type Look, type SkillDef, type SkillTab, type StatKey,
+  FACE_COUNT, HAIR_COLORS, HAIR_STYLES, SEXES, SKIN_TONES, STAT_INFO, TALENT_GRADES, type Character, type Look, type SkillDef, type SkillTab, type StatKey,
 } from '../data/types';
 import { HAIR_COLORS as HAIR_HEX, SKIN_TONES as SKIN_HEX } from '../art/unitArt';
 import { bodyGain, bodyStats, cloneCharacter, createCharacter, deriveStats, freePoints, isUnlocked, levelStats, pointsUsed, skillPoints } from '../game/character';
@@ -18,6 +18,7 @@ import { COLORS, ScrollList, Tooltip, button, figure, hex, overlayInput, panel, 
 import { GUILD } from '../data/guild';
 import { skillShape, type ReachContext } from '../game/reach';
 import { TALENT_COLORS, growthRate, overallTalent, overallTalentLabel, rollTalents, talentGrowth, talentOf, talentStats } from '../game/talent';
+import { armorName, figureKit, gear, gearBase, gearModifier, gearStatLines, weaponName, weaponOf } from '../game/gear';
 
 interface CreatorData {
   /** main: create the main character for a new game. edit: change a party member's loadout (and the main character's look). */
@@ -57,7 +58,7 @@ export class CharacterCreatorScene extends Phaser.Scene {
       this.draft = cloneCharacter(existing);
     } else {
       const look = randomLook(Math.random);
-      const weapons = Object.keys(WEAPONS);
+      const weapons = WEAPON_TYPES;
       const n = this.mode === 'demo' ? requireDemo().party.length : 0;
       this.draft = createCharacter(randomName(look.sex, Math.random), PALETTE[Math.floor(Math.random() * PALETTE.length)], weapons[n % weapons.length], look, rollTalents(Math.random));
       this.partyName = randomPartyName(Math.random);
@@ -102,10 +103,12 @@ export class CharacterCreatorScene extends Phaser.Scene {
     const info = STAT_INFO[k];
     const total = deriveStats(d);
     const fromLevel = levelStats(d.level, d.talents);
-    const m = WEAPONS[d.weaponId].statMultipliers[k] ?? 1;
+    const m = gearModifier(d, k);
+    const fromGear = gearBase(d, k);
     const trained = (d.body?.[k] ?? 0) * bodyGain(k);
-    const before = fromLevel[k] + trained;
-    const lines = [`${info.name} (${info.short})`, info.description, '', `Level ${d.level}: ${fromLevel[k]}${trained ? ` + ${trained} Body = ${before}` : ''}${m !== 1 ? ` ${mult(m)} weapon = ${total[k]}` : ''}`];
+    const before = fromLevel[k] + trained + fromGear;
+    const lines = [`${info.name} (${info.short})`, info.description, '',
+      `Level ${d.level}: ${fromLevel[k]}${trained ? ` + ${trained} Body` : ''}${fromGear ? ` + ${fromGear} Gear` : ''}${trained || fromGear ? ` = ${before}` : ''}${m !== 1 ? ` ${mult(m)} Gear = ${total[k]}` : ''}`];
     if (talentStats().includes(k)) {
       const g = talentOf(d, k);
       const per = talentGrowth(d, k);
@@ -176,7 +179,7 @@ export class CharacterCreatorScene extends Phaser.Scene {
 
   /** What this adventurer's Movement / weapon-scaled skills reach. */
   private reachContext(): ReachContext {
-    const weapon = WEAPONS[this.draft.weaponId];
+    const weapon = weaponOf(this.draft)!;
     const raw = SKILLS[weapon.skills[0]];
     const basicMode = (tag: string) => {
       const m = modeWithTag(raw, tag);
@@ -223,34 +226,32 @@ export class CharacterCreatorScene extends Phaser.Scene {
     else this.previewAndStats(L, 132);
 
     // ---- Middle: weapon -------------------------------------------------------------
-    L.add(text(this, 330, 66, 'Weapon', { color: COLORS.dim }));
-    Object.values(WEAPONS).forEach((w, i) => {
-      L.add(button(this, 330 + (i % 2) * 149, 90 + Math.floor(i / 2) * 40, 141, 34, w.name, () => {
-        d.weaponId = w.id;
+    // A new character picks a Crude weapon; in the campaign, gear can't be swapped here.
+    const pick = this.mode !== 'edit';
+    L.add(text(this, 330, 66, pick ? 'Weapon (Crude)' : 'Weapon', { color: COLORS.dim }));
+    WEAPON_TYPES.forEach((id, i) => {
+      const w = WEAPONS[id];
+      L.add(button(this, 330 + (i % 3) * 98, 88 + Math.floor(i / 3) * 30, 94, 26, w.name, () => {
+        d.weapon = gear(w.id, d.weapon?.quality);
         this.render();
-      }, { selected: d.weaponId === w.id, fontSize: 14, ...hover(() => `${w.name}\n${w.description}`) }));
+      }, { selected: d.weapon?.type === w.id, enabled: pick || d.weapon?.type === w.id, fontSize: 11, ...hover(() => `${w.name} (${w.class})\n${w.description}`) }));
     });
     // Weapon details scroll (wheel or drag the bar) so descriptions can be as long as needed.
-    const w = WEAPONS[d.weaponId];
-    L.add(panel(this, 330, 172, 290, 376));
+    const w = weaponOf(d)!;
+    const panelY = 88 + Math.ceil(WEAPON_TYPES.length / 3) * 30 + 4;
+    L.add(panel(this, 330, panelY, 290, 548 - panelY));
     const items: ScrollItem[] = [];
     {
       const c = this.add.container(0, 0);
-      c.add(text(this, 0, 0, w.name, { fontSize: '18px', color: COLORS.gold }));
-      const wdesc = text(this, 0, 24, w.description, { fontSize: '13px', color: COLORS.dim, wordWrap: { width: 258 } });
+      c.add(text(this, 0, 0, weaponName(d), { fontSize: '18px', color: COLORS.gold }));
+      const wdesc = text(this, 0, 24, `${w.class} · Range ${w.range}\n${w.description}`, { fontSize: '13px', color: COLORS.dim, wordWrap: { width: 258 } });
       c.add(wdesc);
       const my = 24 + wdesc.height + 6;
-      const changed = STAT_KEYS.filter((k) => (w.statMultipliers[k] ?? 1) !== 1);
-      if (changed.length === 0) c.add(text(this, 0, my, 'No Stat Changes', { fontSize: '14px', color: COLORS.dim }));
-      let mx = 0;
-      for (const k of changed) {
-        const m = w.statMultipliers[k]!;
-        const t = text(this, mx, my, `${mult(m)} ${STAT_INFO[k].short}`, { fontSize: '14px', color: m > 1 ? COLORS.good : COLORS.bad });
-        c.add(t);
-        mx += t.width + 16;
-      }
-      c.add(text(this, 0, my + 26, 'Weapon Skills (always equipped)', { fontSize: '12px', color: COLORS.dim }));
-      items.push({ obj: c, height: my + 42 });
+      const gearText = text(this, 0, my, [...gearStatLines(w, d.weapon?.quality), `Armor: ${armorName(d)}`].join('\n'), { fontSize: '13px', wordWrap: { width: 258 }, lineSpacing: 2 });
+      c.add(gearText);
+      const sy = my + gearText.height + 8;
+      c.add(text(this, 0, sy, 'Weapon Skills (always equipped)', { fontSize: '12px', color: COLORS.dim }));
+      items.push({ obj: c, height: sy + 16 });
     }
     const skillItem = (sid: string, note = '') => {
       const s = SKILLS[sid];
@@ -265,9 +266,9 @@ export class CharacterCreatorScene extends Phaser.Scene {
       c.add(mini.container);
       items.push({ obj: c, height: Math.max(28 + stats.height, mini.size + 6) });
     };
-    w.skills.forEach((sid, i) => skillItem(sid, i === 0 ? '  (basic attack)' : ''));
+    w.skills.forEach((sid) => skillItem(sid));
     this.weaponList?.destroy();
-    this.weaponList = new ScrollList(this, 342, 182, 272, 358, 10);
+    this.weaponList = new ScrollList(this, 342, panelY + 10, 272, 548 - panelY - 18, 10);
     this.weaponList.setItems(items, 'top');
     if (this.weaponScroll.weaponId === w.id) this.weaponList.scrollBy(this.weaponScroll.offset);
     this.weaponScroll = { weaponId: w.id, offset: this.weaponList.getOffset() };
@@ -411,9 +412,9 @@ export class CharacterCreatorScene extends Phaser.Scene {
     }, { fontSize: 12 }));
 
     L.add(panel(this, 24, 356, 290, 192));
-    L.add(figure(this, 78, 538, 160, d.appearance, d.weaponId));
+    L.add(figure(this, 78, 538, 160, d.appearance, figureKit(d)));
     L.add(text(this, 140, 366, d.name.trim() || '(no name)', { fontSize: '16px', wordWrap: { width: 168 } }));
-    L.add(text(this, 140, 388, `Level ${d.level} · ${WEAPONS[d.weaponId].name}`, { color: COLORS.dim, fontSize: '12px', wordWrap: { width: 168 } }));
+    L.add(text(this, 140, 388, `Level ${d.level} · ${weaponName(d)}`, { color: COLORS.dim, fontSize: '12px', wordWrap: { width: 168 } }));
     if (this.canReroll) {
       L.add(button(this, 30, 362, 100, 22, 'Reroll Talent', () => this.reroll(), {
         fontSize: 12, ...this.hoverTip(() => `Roll new talent grades (F to S) for every growing stat.\nOr set each one with the ‹ › arrows next to it.\nTalent sets how fast a stat grows with level:\n${this.gradeTable()}\n\nOverall talent now: ${overallTalentLabel(d)}`),
@@ -426,7 +427,7 @@ export class CharacterCreatorScene extends Phaser.Scene {
     const fs = rowH >= 20 ? 14 : 13;
     keys.forEach((k: StatKey, i) => {
       const y = 410 + i * rowH;
-      const m = WEAPONS[d.weaponId].statMultipliers[k] ?? 1;
+      const m = gearModifier(d, k);
       const row = this.add.rectangle(136, y - 1, 172, rowH, 0xffffff, 0).setOrigin(0);
       L.add(this.tip(row, () => this.statInfo(k)));
       L.add(text(this, 142, y, STAT_INFO[k].short, { fontSize: `${fs}px` }));
@@ -443,10 +444,10 @@ export class CharacterCreatorScene extends Phaser.Scene {
   private previewAndStats(L: Phaser.GameObjects.Container, top: number): void {
     const d = this.draft;
     L.add(panel(this, 24, top, 290, 120));
-    L.add(figure(this, 70, top + 108, 100, d.appearance, d.weaponId));
+    L.add(figure(this, 70, top + 108, 100, d.appearance, figureKit(d)));
     L.add(text(this, 124, top + 14, d.name, { fontSize: '18px', wordWrap: { width: 182 } }));
     L.add(text(this, 124, top + 40, `Level ${d.level} · ${d.xp}/${xpToNext(d.level)} XP`, { color: COLORS.dim, fontSize: '13px' }));
-    L.add(text(this, 124, top + 60, WEAPONS[d.weaponId].name, { color: COLORS.dim, fontSize: '13px' }));
+    L.add(text(this, 124, top + 60, weaponName(d), { color: COLORS.dim, fontSize: '13px' }));
     L.add(text(this, 124, top + 84, 'Only your own character\'s look can be changed.', { color: COLORS.dim, fontSize: '11px', wordWrap: { width: 182 } }));
     const y0 = top + 132;
     L.add(panel(this, 24, y0, 290, 548 - y0));
@@ -457,7 +458,7 @@ export class CharacterCreatorScene extends Phaser.Scene {
     shown.forEach((k: StatKey, i) => {
       const y = y0 + 36 + i * rowH;
       const info = STAT_INFO[k];
-      const m = WEAPONS[d.weaponId].statMultipliers[k] ?? 1;
+      const m = gearModifier(d, k);
       const total = deriveStats(d);
       const row = this.add.rectangle(30, y - 4, 278, rowH - 2, 0xffffff, 0).setOrigin(0);
       L.add(this.tip(row, () => this.statInfo(k)));

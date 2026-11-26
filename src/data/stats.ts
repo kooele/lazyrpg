@@ -1,7 +1,7 @@
 // Loads and validates the stat tuning file (stats.json). Validation runs at
 // startup and in the tests, so a typo in the file fails loudly with a clear message.
 import raw from './stats.json';
-import { STAT_KEYS, TALENT_GRADES, type Stats, type Talent } from './types';
+import { PEN_KEYS, STAT_KEYS, TALENT_GRADES, type Stats, type Talent } from './types';
 
 export interface VisionRules {
   /** Off = the whole map is visible (no fog of war). */
@@ -38,7 +38,8 @@ export interface StatConfig {
   growthPerLevel: Stats;
   talent: TalentRules;
   defenseScale: number;
-  forestDefense: number;
+  /** Damage reduction (0-1) from projectiles for a unit in forest. */
+  forestProjectileReduction: number;
   /** XP to go from level L to L + 1: a x L^2 + b x L + c. */
   xpPerLevel: { a: number; b: number; c: number };
   map: MapRules;
@@ -102,7 +103,7 @@ export function parseStatConfig(data: unknown): StatConfig {
       const x = obj(rec.xpPerLevel ?? { a: 5, b: 15, c: 60 }, 'xpPerLevel');
       return { a: num(x.a, 'xpPerLevel.a'), b: num(x.b, 'xpPerLevel.b'), c: num(x.c, 'xpPerLevel.c') };
     })(),
-    forestDefense: num(rec.forestDefense ?? 0, 'forestDefense'),
+    forestProjectileReduction: num(rec.forestProjectileReduction ?? 0, 'forestProjectileReduction'),
     map: { width: Math.round(num(map.width, 'map.width')), height: Math.round(num(map.height, 'map.height')) },
     movementCosts: {
       grass: num(costs.grass, 'movementCosts.grass'),
@@ -114,6 +115,7 @@ export function parseStatConfig(data: unknown): StatConfig {
   };
   if (!(cfg.defenseScale > 0)) throw new Error('stats.json: "defenseScale" must be a positive number');
   if (cfg.base.health <= 0) throw new Error('stats.json: "base.health" must be positive');
+  if (cfg.forestProjectileReduction < 0 || cfg.forestProjectileReduction > 1) throw new Error('stats.json: "forestProjectileReduction" must be from 0 to 1');
   if (cfg.base.movement < 1) throw new Error('stats.json: "base.movement" must be at least 1');
   if (!(cfg.movementCosts.grass > 0)) throw new Error('stats.json: "movementCosts.grass" must be positive');
   if (cfg.map.width < 8 || cfg.map.height < 6) throw new Error('stats.json: "map" must be at least 8 x 6 tiles');
@@ -122,10 +124,11 @@ export function parseStatConfig(data: unknown): StatConfig {
 
 export const STAT_CONFIG: StatConfig = parseStatConfig(raw);
 
-/** Stats shown in the UI: everything but Vision until fog of war is enabled. */
+/** Stats shown in the UI's stat lists: everything but Vision (until fog of war is enabled) and penetration (shown on its own lines). */
 export function visibleStatKeys(cfg: StatConfig = STAT_CONFIG): (typeof STAT_KEYS)[number][] {
   return STAT_KEYS.filter((k) => {
     if (k === 'vision') return cfg.vision.enabled;
+    if ((PEN_KEYS as readonly string[]).includes(k)) return false;
     return true;
   });
 }
