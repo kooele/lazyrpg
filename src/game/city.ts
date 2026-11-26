@@ -14,6 +14,7 @@ import {
   type BattleCondition,
 } from './condition';
 import { createGuild, nextRank, promotionReady, rankThreshold, renownLoss, simulateGuildDay, updateRanks } from './guild';
+import { itemName, returnGear } from './inventory';
 import { randInt, randomAdventurer } from './people';
 
 // ---- a new campaign -----------------------------------------------------------------------------
@@ -34,6 +35,7 @@ export function newCampaign(main: Character, partyName: string, rng: Rng): GameS
     guild: createGuild(rng),
     market: { slaves: [], priceIndex: 1 },
     prisoners: [],
+    inventory: [],
     quest: null,
     lastQuestDay: 0,
     questMembers: [],
@@ -293,6 +295,9 @@ export function resolveQuest(
     lines.push(`${c.name} is injured: Health ${healthOf(c)}/100 (-${loss}).`);
   }
   for (const c of dead) {
+    // The party brings back what they carried.
+    const back = returnGear(state, c, true);
+    if (back.length) lines.push(`${c.name}'s ${back.map(itemName).join(' and ')} went back to the stash.`);
     state.party = state.party.filter((m) => m !== c);
     state.lineup = state.lineup.filter((id) => id !== c.id);
     delete state.schedule[c.id];
@@ -970,6 +975,8 @@ export function sellSlave(state: GameState, id: string): number {
   const gold = Math.max(0, marketBuyPrice(state, c) - tabOwed(state, id));
   if (state.tab) delete state.tab.taxes[id];
   state.gold += gold;
+  // A slave is sold without their gear: it stays in the party's stash.
+  returnGear(state, c, true);
   state.party = state.party.filter((m) => m !== c);
   state.lineup = state.lineup.filter((x) => x !== c.id);
   delete state.schedule[c.id];
@@ -982,6 +989,7 @@ export function sellSlave(state: GameState, id: string): number {
 
 /** The city takes a slave whose property tax went unpaid; it goes up for sale at the slave market. */
 function seizeSlave(state: GameState, c: Character): void {
+  returnGear(state, c, true);
   state.party = state.party.filter((m) => m !== c);
   state.lineup = state.lineup.filter((x) => x !== c.id);
   delete state.schedule[c.id];

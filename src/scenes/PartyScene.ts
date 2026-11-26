@@ -415,6 +415,9 @@ export class PartyScene extends Phaser.Scene {
     button(this, X + 16, by, 130, 44, 'Loadout', () => this.scene.start('CharacterCreator', { mode: 'edit', characterId: c.id }), {
       enabled: k?.type !== 'mercenary', fontSize: 14, selected: free > 0 && k?.type !== 'mercenary',
     });
+    button(this, X + W - 146, by, 130, 44, 'Equipment', () => this.scene.start('Equipment', { selected: c.id }), {
+      fontSize: 14, onHover: k?.type === 'mercenary' ? () => this.tip.show('Mercenaries fight with their own gear.') : undefined, onOut: () => this.tip.hide(),
+    });
     if (isCompanion(c)) {
       const left = daysLeft(c.contract, state.day);
       button(this, X + 156, by, 120, 44, 'Renew', () => this.scene.start('Negotiate', { mode: 'renew', id: c.id }), {

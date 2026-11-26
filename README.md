@@ -205,6 +205,8 @@ Every Adventurer has a **weapon** and a **body armor** (`src/data/equipment.json
 
 **Penetration** lowers the target's Defense against that type of damage: the percent first, then the flat amount, never below 0 (and it does nothing to Defense that is already 0 or less). 10 flat and 50% P.Pen make 100 Defense count as 100 × 0.5 − 10 = 40 against Physical damage.
 
+**The stash and the Equipment screen** (Manage Party → **Equipment**): gear nobody is using sits in the party's stash (`inventory` in the save). Pick a member on the left; the middle shows their weapon and armor in full (base stats at their quality, modifiers, skills) with **Unequip**, and the stash on the right (All / Weapons / Armor) lists every piece with its value and what it would change for that member (hover for the full comparison). **Equip** swaps: the old piece goes to the stash. Mercenaries fight with their own gear and can't be re-equipped. Gear handed out from the stash goes back to it when a member leaves (a companion released or out of contract keeps only what they brought); a slave sold or seized, or a member who dies, leaves everything they carried in the stash.
+
 Enemies use gear too (`loadouts` in `enemies.json`): humans carry Crude gear, Common with a 3% chance per level; goblins, orcs and skeletons carry their own Goblin-Made, Orc-Made and Rusted gear (half of Crude's base stats, enemy only). Monsters fight with their bodies: no gear and no Unarmed / No Armor penalties. A prisoner's gear stays on the battlefield.
 
 ### Action points and mana

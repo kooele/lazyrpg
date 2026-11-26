@@ -94,6 +94,20 @@ export interface ArmorDef extends GearStats {
 export interface Gear {
   type: string;
   quality: QualityId;
+  /** Handed out from the party's stash: it goes back there if the member leaves the party. */
+  issued?: boolean;
+}
+
+/** Kinds of item in the party's stash. */
+export const ITEM_KINDS = ['weapon', 'armor'] as const;
+export type ItemKind = (typeof ITEM_KINDS)[number];
+
+/** A piece of equipment in the party's stash. */
+export interface Item {
+  id: string;
+  kind: ItemKind;
+  type: string;
+  quality: QualityId;
 }
 
 export interface TagDef {
@@ -595,6 +609,8 @@ export interface GameState {
    * registered as the party's slave) before the party goes on. The party never keeps prisoners.
    */
   prisoners: Offer[];
+  /** The party's stash: equipment nobody is using (equip it from Manage Party > Equipment). */
+  inventory: Item[];
   /** The quest the party has accepted and not yet fought. */
   quest: Quest | null;
   /** Day the party last came back from a quest (one quest a day), and who went. */

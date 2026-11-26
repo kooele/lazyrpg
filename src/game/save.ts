@@ -3,8 +3,8 @@ import { ARMORS, MAX_PARTY_SIZE, NAME_MAX_LENGTH, QUALITIES, SKILLS, TREE_SKILLS
 import { ACTIVITIES, FOOD_TIERS, GUILD, type Activity, type FoodTier } from '../data/guild';
 import { ENEMIES } from '../data/enemies';
 import {
-  BODY_MODELS, ENEMY_MODELS, FACE_COUNT, HAIR_COLORS, HAIR_STYLES, RANKS, SEXES, SKIN_TONES, STAT_KEYS, TALENT_GRADES, TRAIT_IDS,
-  type BodyInvestment, type Character, type Gear, type StatKey, type Talents, type Contract, type GameState, type Look, type NewsItem, type Offer, type Quest, type QuestTab, type Rank, type RivalParty,
+  BODY_MODELS, ENEMY_MODELS, FACE_COUNT, HAIR_COLORS, HAIR_STYLES, ITEM_KINDS, RANKS, SEXES, SKIN_TONES, STAT_KEYS, TALENT_GRADES, TRAIT_IDS,
+  type BodyInvestment, type Character, type Gear, type Item, type StatKey, type Talents, type Contract, type GameState, type Look, type NewsItem, type Offer, type Quest, type QuestTab, type Rank, type RivalParty,
 } from '../data/types';
 import { usualCount } from './board';
 import { bodyStats, makeRng, modelFor } from './character';
@@ -89,7 +89,26 @@ function validateGear(raw: unknown, path: string, kind: 'weapon' | 'armor'): Gea
   const defs = kind === 'weapon' ? WEAPONS : ARMORS;
   const types = Object.values(defs).filter((d) => !d.builtIn).map((d) => d.id);
   const qualities = Object.values(QUALITIES).filter((q) => !q.enemyOnly).map((q) => q.id);
-  return { type: oneOf(o.type, types, `${path}.type`), quality: oneOf(o.quality, qualities, `${path}.quality`) };
+  return {
+    type: oneOf(o.type, types, `${path}.type`), quality: oneOf(o.quality, qualities, `${path}.quality`),
+    ...(o.issued === true ? { issued: true } : {}),
+  };
+}
+
+/** The party's stash (older saves have none). */
+function validateInventory(raw: unknown): Item[] {
+  if (raw === undefined) return [];
+  const seen = new Set<string>();
+  return arr(raw, 'inventory').map((r, i) => {
+    const path = `inventory[${i}]`;
+    const o = obj(r, path);
+    const kind = oneOf(o.kind, ITEM_KINDS, `${path}.kind`);
+    const id = str(o.id, `${path}.id`, 40);
+    if (seen.has(id)) bad(`${path}.id`, `"${id}" is used twice`);
+    seen.add(id);
+    const g = validateGear(o, path, kind)!;
+    return { id, kind, type: g.type, quality: g.quality };
+  });
 }
 
 function validateLook(raw: unknown, path: string): Look {
@@ -410,6 +429,7 @@ function validateState(raw: Record<string, unknown>): GameState {
       priceIndex: market.priceIndex === undefined ? 1 : num(market.priceIndex, 'market.priceIndex', 0.01, 10),
     },
     prisoners: arr(raw.prisoners, 'prisoners').map((o, i) => validateOffer(o, `prisoners[${i}]`)),
+    inventory: validateInventory(raw.inventory),
     quest: raw.quest === null || raw.quest === undefined ? null : validateQuest(raw.quest, 'quest'),
     lastQuestDay: raw.lastQuestDay === undefined ? 0 : int(raw.lastQuestDay, 'lastQuestDay'),
     questMembers: raw.questMembers === undefined ? [] : arr(raw.questMembers, 'questMembers').filter((id): id is string => typeof id === 'string'),
