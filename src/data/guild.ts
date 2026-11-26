@@ -50,8 +50,8 @@ export type FoodTier = 'poor' | 'common' | 'fine' | 'luxury';
 export const FOOD_TIERS: readonly FoodTier[] = ['poor', 'common', 'fine', 'luxury'];
 export const foodQuality = (t: FoodTier) => FOOD_TIERS.indexOf(t);
 
-export type Activity = 'recover' | 'training' | 'oddJobs' | 'dayOff';
-export const ACTIVITIES: readonly Activity[] = ['dayOff', 'recover', 'training', 'oddJobs'];
+export type Activity = 'recover' | 'training' | 'oddJobs' | 'dayOff' | 'marketplace';
+export const ACTIVITIES: readonly Activity[] = ['dayOff', 'recover', 'training', 'oddJobs', 'marketplace'];
 
 export interface GuildConfig {
   city: string;
@@ -107,7 +107,7 @@ export interface GuildConfig {
   /** Quest XP: each member gets a day of training XP plus an equal share of the pool (a x skulls^2 + b x skulls + c). */
   xp: { pool: { a: number; b: number; c: number } };
   /** trainingXp: XP for a day of training, perLevel x level + flat (see trainingXp()). */
-  schedule: { recoverMultiplier: number; trainingXp: { perLevel: number; flat: number }; oddJobsGold: number; dayOffMorale: number };
+  schedule: { recoverMultiplier: number; trainingXp: { perLevel: number; flat: number }; oddJobsGold: number; dayOffMorale: number; marketplaceItemsPerDay: number };
   /** Price multiplier from talent: max(min, 1 + weight x (average growth rate - 1)). */
   mercenary: { feePerLevel: number; cutBase: number; cutPerLevel: number };
   companion: {
@@ -330,7 +330,7 @@ export function parseGuildConfig(data: unknown): GuildConfig {
       pool: numbers(obj(d.xp, 'xp').pool, 'xp.pool', ['a', 'b', 'c']),
     },
     schedule: {
-      ...numbers<Omit<GuildConfig['schedule'], 'trainingXp'>>(d.schedule, 'schedule', ['recoverMultiplier', 'oddJobsGold', 'dayOffMorale']),
+      ...numbers<Omit<GuildConfig['schedule'], 'trainingXp'>>(d.schedule, 'schedule', ['recoverMultiplier', 'oddJobsGold', 'dayOffMorale', 'marketplaceItemsPerDay']),
       trainingXp: numbers(obj(d.schedule, 'schedule').trainingXp, 'schedule.trainingXp', ['perLevel', 'flat']),
     },
     mercenary: numbers(d.mercenary, 'mercenary', ['feePerLevel', 'cutBase', 'cutPerLevel']),

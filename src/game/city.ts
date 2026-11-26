@@ -17,6 +17,7 @@ import { createGuild, nextRank, promotionReady, rankThreshold, renownLoss, simul
 import { itemName, itemValue, returnGear, stacks } from './inventory';
 import { battleLoot } from './loot';
 import { smithyDay } from './smithy';
+import { marketplaceDay } from './marketplace';
 import { randInt, randomAdventurer } from './people';
 
 // ---- a new campaign -----------------------------------------------------------------------------
@@ -39,6 +40,7 @@ export function newCampaign(main: Character, partyName: string, rng: Rng): GameS
     prisoners: [],
     inventory: [],
     smithyOrders: [],
+    marketplace: [],
     quest: null,
     lastQuestDay: 0,
     questMembers: [],
@@ -578,6 +580,8 @@ function runSchedule(state: GameState, away: string[]): string[] {
   }
   const parts = Object.entries(done).map(([a, names]) => `${ACTIVITY_INFO[a as keyof typeof ACTIVITY_INFO].name}: ${names.join(', ')}`);
   if (parts.length) out.unshift(`Today: ${parts.join(' · ')}.`);
+  const sales = marketplaceDay(state, state.party.filter((c) => home.has(c.id) && activityOf(state, c) === 'marketplace'));
+  if (sales) out.push(sales);
   return out;
 }
 

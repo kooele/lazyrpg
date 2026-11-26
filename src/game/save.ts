@@ -111,11 +111,11 @@ function validateOrders(raw: unknown, day: unknown): SmithyOrder[] {
 }
 
 /** The party's stash (older saves have none). */
-function validateInventory(raw: unknown): Item[] {
+function validateInventory(raw: unknown, field = 'inventory'): Item[] {
   if (raw === undefined) return [];
   const seen = new Set<string>();
-  return arr(raw, 'inventory').map((r, i) => {
-    const path = `inventory[${i}]`;
+  return arr(raw, field).map((r, i) => {
+    const path = `${field}[${i}]`;
     const o = obj(r, path);
     const kind = oneOf(o.kind, ITEM_KINDS, `${path}.kind`);
     const id = str(o.id, `${path}.id`, 40);
@@ -448,6 +448,7 @@ function validateState(raw: Record<string, unknown>): GameState {
     },
     prisoners: arr(raw.prisoners, 'prisoners').map((o, i) => validateOffer(o, `prisoners[${i}]`)),
     inventory: validateInventory(raw.inventory),
+    marketplace: raw.marketplace === undefined ? [] : validateInventory(raw.marketplace, 'marketplace'),
     smithyOrders: validateOrders(raw.smithyOrders, raw.day),
     quest: raw.quest === null || raw.quest === undefined ? null : validateQuest(raw.quest, 'quest'),
     lastQuestDay: raw.lastQuestDay === undefined ? 0 : int(raw.lastQuestDay, 'lastQuestDay'),

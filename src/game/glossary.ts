@@ -114,7 +114,8 @@ export function glossaryEntries(): GlossaryEntry[] {
     `Enemies pay no gold themselves: they drop loot.\n\n`
     + `• Humans drop the gear they carried, killed or captured. Each piece has a ${Math.round(LOOT.brokenChance * 100)}% chance to be broken: junk worth ${Math.round(LOOT.brokenValueShare * 100)}% of its value.\n`
     + `• Every other enemy drops a trophy (an ear, a fang...) and a junk item (a pelt, its goblin-made weapon...), each worth ${LOOT.trophyGoldPerLevel} gold per level.\n`
-    + `• Trophies are turned in at the city gate for their value. Junk sells at the marketplace.\n`
+    + `• Trophies are turned in at the city gate for their value.\n`
+    + `• Junk (and spare gear) sells at the Marketplace: put it on the sale list there, and put companions or slaves on Marketplace duty (Schedule). Each sells ${G.schedule.marketplaceItemsPerDay} items a day from the top of the list, at full value.\n`
     + `• Loot only comes home from a won quest: the battlefield can't be looted until the enemy is driven off. A failed quest still gives XP for the enemies you defeated.\n\n`
     + `A human taken prisoner is worth more than one killed: the bounty for turning them in is ${S.bountyPerLevel} gold per level.`);
 

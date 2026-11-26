@@ -97,11 +97,12 @@
     "pool": { "a": 20, "b": 40, "c": 80 }
   },
   "schedule": {
-    "_comment": "What members who aren't on a quest do each day (Manage Party). recover: recovers recoverMultiplier x healthPerDay. training: trainingXp.perLevel x level + trainingXp.flat XP (22 at level 1, 70 at level 25). oddJobs: oddJobsGold gold. dayOff: dayOffMorale Morale.",
+    "_comment": "What members who aren't on a quest do each day (Manage Party). recover: recovers recoverMultiplier x healthPerDay. training: trainingXp.perLevel x level + trainingXp.flat XP (22 at level 1, 70 at level 25). oddJobs: oddJobsGold gold. dayOff: dayOffMorale Morale. marketplace (companions and slaves only): sells up to marketplaceItemsPerDay items from the top of the Marketplace sale list, at their full value.",
     "recoverMultiplier": 3,
     "trainingXp": { "perLevel": 2, "flat": 20 },
     "oddJobsGold": 10,
-    "dayOffMorale": 10
+    "dayOffMorale": 10,
+    "marketplaceItemsPerDay": 2
   },
   "mercenary": { "feePerLevel": 30, "cutBase": 8, "cutPerLevel": 2 },
   "_mercenary": "A mercenary is paid the larger of their fee (feePerLevel x level, paid up front when hired) and their cut (cutBase + cutPerLevel x level, % of the quest reward): if the cut of a won quest is worth more than the fee, they take the difference from the reward. Both x greed x talent price.",

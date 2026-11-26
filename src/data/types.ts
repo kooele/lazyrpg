@@ -647,6 +647,8 @@ export interface GameState {
   prisoners: Offer[];
   /** The party's stash: equipment nobody is using (equip it from Manage Party > Equipment). */
   inventory: Item[];
+  /** Items put up for sale at the Marketplace, top first (sold by members on Marketplace duty). */
+  marketplace: Item[];
   /** Gear ordered from the Smithy, in queue order (the first few are being worked on). */
   smithyOrders: SmithyOrder[];
   /** The quest the party has accepted and not yet fought. */
@@ -655,7 +657,7 @@ export interface GameState {
   lastQuestDay: number;
   questMembers: string[];
   /** What each member does on days they aren't on a quest (by character id; see activityOf for the default). */
-  schedule: Record<string, 'recover' | 'training' | 'oddJobs' | 'dayOff'>;
+  schedule: Record<string, 'recover' | 'training' | 'oddJobs' | 'dayOff' | 'marketplace'>;
   /** Food quality for each member the party feeds (by character id; missing = food.default in guild.json). */
   food: Record<string, 'poor' | 'common' | 'fine' | 'luxury'>;
   /** Where each housed member sleeps in the city (by character id; missing = their default, see defaultLodging): the stables ('outside'), an inn tier or an owned residence. */

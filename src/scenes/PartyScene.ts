@@ -7,7 +7,7 @@ import type { Character, GameState } from '../data/types';
 import { bodyPoints, deriveStats, freePoints, skillPoints } from '../game/character';
 import { benchMember, quitRenown, lineupMembers, lodgingPrice, marketBuyPrice, moveMember, releaseCompanion, residents, scheduledMembers, sellSlave, setLineupSlot, setLodging, tabLabel, tabOwed } from '../game/city';
 import {
-  ACTIVITY_INFO, QUALITY_TEXT, activityOf, lodgingOf, lodgingMorale, combatPenalty, expectedQuality, foodOf, foodMorale, healthOf, injuryPenalty, isInjured, moraleGainOf, moraleOf, moralePenalty,
+  ACTIVITY_INFO, QUALITY_TEXT, activityOf, canDoActivity, lodgingOf, lodgingMorale, combatPenalty, expectedQuality, foodOf, foodMorale, healthOf, injuryPenalty, isInjured, moraleGainOf, moraleOf, moralePenalty,
   obediencePenalty, traitFactor,
 } from '../game/condition';
 import { canFight, daysLeft, isCompanion, isHoused, isSlave, leaveParty, proratedWages, punishSlave, releaseCost, slaveTax, slaveValue } from '../game/contracts';
@@ -358,6 +358,7 @@ export class PartyScene extends Phaser.Scene {
       effect: activityEffect(c, a),
       color: COLORS.dim,
       selected: a === now,
+      enabled: canDoActivity(c, a),
       pick: () => {
         state.schedule[c.id] = a;
         markDirty();
@@ -638,6 +639,7 @@ function activityEffect(c: Character, a: Activity): string {
   if (a === 'recover') return `+${S.recoverMultiplier * GUILD.condition.healthPerDay * traitFactor(c, 'healthRecovery')} Health a Day (instead of +${GUILD.condition.healthPerDay * traitFactor(c, 'healthRecovery')})`;
   if (a === 'training') return `+${trainingXp(c.level)} XP a Day`;
   if (a === 'oddJobs') return `+${S.oddJobsGold} Gold a Day`;
+  if (a === 'marketplace') return canDoActivity(c, a) ? `Sells ${S.marketplaceItemsPerDay} Items a Day` : 'Companions and Slaves Only';
   return `+${S.dayOffMorale * traitFactor(c, 'moraleGain')} Morale a Day`;
 }
 

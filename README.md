@@ -209,6 +209,8 @@ Every Adventurer has a **weapon** and a **body armor** (`src/data/equipment.json
 
 **The Smithy** (Outer City; `smithy` in `equipment.json`): buy any weapon or armor at **Common** quality on the spot (100 gold, straight to the stash), or order one at **Fine** (500 gold, 5 days) or **Masterwork** (2500 gold, 25 days), paid up front. The smith works on up to **3 orders at a time**, in the order they were placed; the rest wait in the queue, and the order list shows each one's progress and the day it will be ready. Finished pieces go to the stash at the start of the day (also while the party is away on a quest). An order not yet started can be cancelled for a full refund.
 
+**The Marketplace** (Outer City): the party's stall. Move junk and spare gear (anything but trophies) from the stash onto the **sale list**, and order it (⤒ ▲ ▼; identical items next to each other move as a group); **Take Back** returns items to the stash. Companions and slaves on **Marketplace** duty (a schedule activity in Manage Party) each sell **2 items a day** from the top of the list, at full value (`schedule.marketplaceItemsPerDay` in `guild.json`), so a stall full of cheap junk takes longer to clear than one with a few valuable pieces. The screen shows who is on duty and about how many days the list will take.
+
 **Loot** (`loot` and each type's `drops` in `enemies.json`, from the Enemy Drops tab of the design sheet): enemies pay no gold when killed. Humans killed or taken prisoner drop the gear they carried; each piece is **broken** 2/3 of the time (junk worth 1/4 of its value, e.g. "Broken Crude Longbow"). Every other type drops a **trophy** (Wolf Fang, Goblin Ear...) and a **junk** item (Wolf Pelt, or for goblins, orcs and skeletons the weapon they fought with: "Goblin Spear", "Rusted Longbow"), each worth 4.5 gold per level. Loot goes to the stash. A failed quest brings no loot at all (the battlefield can only be looted once the enemy is driven off), though it still gives XP for the enemies defeated. Trophies are turned in at the **city gate** when the party gets back (alongside registering prisoners); junk is for the marketplace. The stash stacks identical loot (Wolf Pelt ×3), with a Junk filter.
 
 Enemies use gear too (`loadouts` in `enemies.json`): humans carry Crude gear, Common with a 3% chance per level; goblins, orcs and skeletons carry their own Goblin-Made, Orc-Made and Rusted gear (half of Crude's base stats, enemy only). Monsters fight with their bodies: no gear and no Unarmed / No Armor penalties. A prisoner's gear stays on the battlefield.
@@ -383,7 +385,7 @@ public/art/   monster SVGs (tools/generate-art.mjs regenerates them), stat icons
   art/        unitArt.js: draws units as SVG (used by the game for every person, and by tools/generate-art.mjs for monsters)
   game/       pure game logic, no Phaser: character stats, battle rules, AI, map generation, save/load,
               Arch City (city.ts), the guild simulation (guild.ts), contracts (contracts.ts), random people (people.ts)
-  scenes/     Phaser scenes: MainMenu, SaveLoad, CharacterCreator, City, Guild, Negotiate, Market, Inn, Estate, Party, Equipment, Smithy, DemoCamp, Battle
+  scenes/     Phaser scenes: MainMenu, SaveLoad, CharacterCreator, City, Guild, Negotiate, Market, Inn, Estate, Party, Equipment, Smithy, Marketplace, DemoCamp, Battle
   ui/         small UI helpers (buttons, panels, tokens, dialogs)
 tests/        Vitest tests for the game logic and the city simulation
 ```

@@ -37,7 +37,7 @@ const PLACES: Record<District, Place[]> = {
   outer: [
     { name: 'Adventurer Guild', blurb: 'Quest board, hire mercenaries and companions, the party leaderboard.', at: [350, 628], scene: 'Guild' },
     { name: 'Docks', blurb: 'Ships from across the sea.', at: [1360, 660] },
-    { name: 'Marketplace', blurb: 'Stalls and traders by the harbour warehouses.', at: [1240, 235] },
+    { name: 'Marketplace', blurb: 'Your stall: put junk and spare gear up for sale; members on Marketplace duty sell it.', at: [1240, 235], scene: 'Marketplace' },
     { name: 'Slave Market', blurb: 'Buy slaves, or sell your own.', at: [1160, 613], scene: 'Market' },
     { name: 'Slums', blurb: 'The poorest quarter, crowded against the outer wall.', at: [470, 765] },
     { name: 'Customs Office', blurb: 'Duties on everything that comes through the harbour.', at: [1335, 525] },
