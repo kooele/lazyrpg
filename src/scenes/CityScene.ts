@@ -91,14 +91,19 @@ export class CityScene extends Phaser.Scene {
     const state = requireState();
     cityHeader(this, state, GUILD.city, () => this.menu());
 
-    // ---- district tabs and the map -------------------------------------------------------------
-    DISTRICTS.forEach(([id, label], i) => button(this, 16 + i * 294, 72, 286, 30, label, () => {
+    // ---- left column: district tabs, the map, location buttons, then Manage Party / End Day ----------
+    // Everything in it shares the column's edges (LX to LX + LW), top (76, with the right panels) and bottom.
+    const LX = 16;
+    const LW = 580;
+    const GAP = 6;
+    const half = (LW - GAP) / 2;
+    DISTRICTS.forEach(([id, label], i) => button(this, LX + i * (half + GAP), 76, half, 28, label, () => {
       this.district = id;
       this.render();
     }, { selected: this.district === id, fontSize: 15 }));
-    const MX = 16;
-    const MY = 108;
-    const MW = 580;
+    const MX = LX;
+    const MY = 110;
+    const MW = LW;
     const MH = Math.round((MW * 1024) / 1536);
     const view = VIEWS[this.district];
     const k = MW / view.w;
@@ -116,41 +121,44 @@ export class CityScene extends Phaser.Scene {
     }).setDepth(10);
 
     // Every location in the district as a button too (greyed out until it opens).
-    places.forEach((p, i) => button(this, MX + (i % 4) * 145, MY + MH + 6 + Math.floor(i / 4) * 25, 140, 23, p.name,
+    const colW = (LW - GAP * 3) / 4;
+    places.forEach((p, i) => button(this, LX + (i % 4) * (colW + GAP), MY + MH + 6 + Math.floor(i / 4) * 25, colW, 23, p.name,
       () => this.visit(p), { fontSize: p.name.length > 20 ? 10 : 12, enabled: !!p.scene }));
 
     // ---- right: the quest at hand, and recent events -----------------------------------------
-    const RX = 636;
-    panel(this, RX, 76, 308, 160);
+    const RX = LX + LW + 16;
+    const RW = WIDTH - 16 - RX;
+    panel(this, RX, 76, RW, 160);
     text(this, RX + 12, 84, 'Current Quest', { fontSize: '13px', color: COLORS.dim });
     if (state.quest) {
       const q = state.quest;
       rankBadge(this, RX + 12, 106, q.rank, 24);
-      text(this, RX + 44, 106, q.title, { fontSize: '15px', wordWrap: { width: 252 } });
+      text(this, RX + 44, 106, q.title, { fontSize: '15px', wordWrap: { width: RW - 56 } });
       text(this, RX + 12, 150, `${q.reward} Gold · ${q.days} Day${q.days > 1 ? 's' : ''} · Stage ${q.stage}`, { fontSize: '13px', color: COLORS.gold });
-      text(this, RX + 12, 170, `Lineup: ${lineupMembers(state).map((c) => c.name).join(', ')}`, { fontSize: '12px', color: COLORS.dim, wordWrap: { width: 284 } });
+      text(this, RX + 12, 170, `Lineup: ${lineupMembers(state).map((c) => c.name).join(', ')}`, { fontSize: '12px', color: COLORS.dim, wordWrap: { width: RW - 24 } });
       const block = departBlock(state);
-      button(this, RX + 12, 196, 284, 32, !block ? 'Set Out from the City Gate' : state.lastQuestDay === state.day ? 'Back from a Quest Today: Rest First' : 'No Adventurers in the Lineup', () => this.depart(), {
+      button(this, RX + 12, 196, RW - 24, 32, !block ? 'Set Out from the City Gate' : state.lastQuestDay === state.day ? 'Back from a Quest Today: Rest First' : 'No Adventurers in the Lineup', () => this.depart(), {
         fill: 0x4a2a22, fontSize: 14, enabled: !block,
       });
     } else {
       const done = state.lastQuestDay === state.day;
-      text(this, RX + 12, 106, done ? 'Back from a quest today. Accept the next one any time; you can set out tomorrow.' : 'None. Visit the Adventurer Guild\'s quest board (Outer City).', { fontSize: '14px', wordWrap: { width: 284 } });
-      button(this, RX + 12, 196, 284, 32, 'Go to the Adventurer Guild', () => this.scene.start('Guild'), { fontSize: 14 });
+      text(this, RX + 12, 106, done ? 'Back from a quest today. Accept the next one any time; you can set out tomorrow.' : 'None. Visit the Adventurer Guild\'s quest board (Outer City).', { fontSize: '14px', wordWrap: { width: RW - 24 } });
+      button(this, RX + 12, 196, RW - 24, 32, 'Go to the Adventurer Guild', () => this.scene.start('Guild'), { fontSize: 14 });
     }
 
-    panel(this, RX, 246, 308, HEIGHT - 262);
+    panel(this, RX, 246, RW, HEIGHT - 262);
     text(this, RX + 12, 254, 'Recent Events', { fontSize: '13px', color: COLORS.dim });
-    const list = new ScrollList(this, RX + 10, 276, 292, HEIGHT - 300, 6);
+    const list = new ScrollList(this, RX + 10, 276, RW - 16, HEIGHT - 300, 6);
     const entries = [...state.log].reverse();
     list.setItems(entries.map((n) => {
-      const t = text(this, 0, 0, `Day ${n.day}: ${n.text}`, { fontSize: '12px', wordWrap: { width: 278 }, lineSpacing: 1 });
+      const t = text(this, 0, 0, `Day ${n.day}: ${n.text}`, { fontSize: '12px', wordWrap: { width: RW - 30 }, lineSpacing: 1 });
       return { obj: this.add.container(0, 0, [t]), height: t.height };
     }), 'top');
 
     // ---- bottom ---------------------------------------------------------------------------------
-    button(this, 16, HEIGHT - 60, 296, 46, 'Manage Party', () => this.scene.start('Party'), { fontSize: 16 });
-    button(this, 324, HEIGHT - 60, 296, 46, `End Day (${forecastNight(requireState()).total} gold)`, () => this.endDay(), { fontSize: 16, fill: 0x2a3348 });
+    // Bottom edge level with the right panels' (HEIGHT - 16).
+    button(this, LX, HEIGHT - 60, half, 44, 'Manage Party', () => this.scene.start('Party'), { fontSize: 16 });
+    button(this, LX + half + GAP, HEIGHT - 60, half, 44, `End Day (${forecastNight(requireState()).total} gold)`, () => this.endDay(), { fontSize: 16, fill: 0x2a3348 });
 
     if (prisonersAtGate(state) || trophies(state).length) this.gate();
   }
