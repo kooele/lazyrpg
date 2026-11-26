@@ -234,7 +234,7 @@ Skills can cost **mana** (`mana` in `skills.json`), which doesn't come back duri
 
 **Damage types**: every hit is split by what it scales with. P.Atk, Defense and missing Health deal **Physical** damage (red numbers); M.Atk deals **Magical** damage (violet numbers), so a hybrid hit like Magic Bolt shows one of each. Both are reduced by Defense, after the attacker's penetration of that type (P.Pen for Physical, M.Pen for Magical); `Battle.mitigation` is also where magic resistance would go. Skills are tagged Physical / Magical to match their hits (a test checks this).
 
-**Basic abilities** (every Adventurer, listed under the weapon in the creator):
+**Basic abilities** (every Adventurer, listed under the weapon skills on the Loadout's Skills page):
 
 - **Dash** (1 AP, 20 MP, cooldown 2): only after the regular move. Spends the action AP to move again, up to your Movement. Overwatch can still fire on the way; it can't be undone.
 - **Overwatch** (ends turn): watch a 60° arc in any direction, as far as your weapon reaches (Longbow 6 in Direct mode, 9 in Indirect, 1.5 in Melee; Spear and Staff 2; the rest 1.5). The first enemy to move into it takes your basic attack and keeps moving. It catches anything that crosses the ground on its own feet, on any tile of the way: walking, Dash, and movement skills that run or leap to their target (Charge; monsters' Pounce, Dive and Infernal Leap). Teleports (Arcane Shift, Shadow Step, Flicker Strike) skip the tiles in between and can't be caught. Bow and Spear no longer have their own Overwatch / Intercept.
@@ -315,7 +315,8 @@ Cleric skills (Heal, Cleanse, Protection, Barrier) work only on your own side, y
 - *Line of fire* (no rock **or unit** in between): no skill uses it right now; set `"los": "fire"` on a skill to use it.
 - No line needed: melee skills and the Basic Attack (a Staff or Spear reaches 2 tiles over anyone), Indirect Shot (bow in Indirect mode), Ignite, Freeze, Heal, Cleanse, Arcane Shift.
 - **Ranges** use Euclidean distance. Ranges of 2 or more round the distance to the nearest tile, so range 2 also reaches 2-over-1-up and shapes are rounder. Ranges 1 and 1.5 stay exact: 1 is the 4 neighbours, 1.5 adds the diagonals. Set `rangeRounding.fromRange` in `stats.json` to change the cut-off.
-- Skill tooltips and the weapon panel show a **tile diagram** of what each skill covers, with you in gold, rather than describing range in words.
+- Skill tooltips and the Skills page show a **tile diagram** of what each skill covers, with you in gold, rather than describing range in words.
+- The character creator and **Loadout** have two pages: **Customize** (name, look, a big preview, stats and talent; new characters also pick a Crude starting weapon here) and **Skills** (the weapon's skills and the basic abilities, the skill trees and the Body tab, and a details panel for the skill you hover). Gear is changed in Manage Party → Equipment.
 - Cooldowns count from the turn a skill is used: cooldown 1 means not again that turn but ready next turn; cooldown 2 skips your next turn. Every skill has a cooldown of at least 1.
 - `vision` (fog of war) is built but switched off in `stats.json`.
 
@@ -378,7 +379,7 @@ public/art/   monster SVGs (tools/generate-art.mjs regenerates them), stat icons
   art/        unitArt.js: draws units as SVG (used by the game for every person, and by tools/generate-art.mjs for monsters)
   game/       pure game logic, no Phaser: character stats, battle rules, AI, map generation, save/load,
               Arch City (city.ts), the guild simulation (guild.ts), contracts (contracts.ts), random people (people.ts)
-  scenes/     Phaser scenes: MainMenu, SaveLoad, CharacterCreator, City, Guild, Negotiate, Market, Inn, Estate, Party, DemoCamp, Battle
+  scenes/     Phaser scenes: MainMenu, SaveLoad, CharacterCreator, City, Guild, Negotiate, Market, Inn, Estate, Party, Equipment, DemoCamp, Battle
   ui/         small UI helpers (buttons, panels, tokens, dialogs)
 tests/        Vitest tests for the game logic and the city simulation
 ```
