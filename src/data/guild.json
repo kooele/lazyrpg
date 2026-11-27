@@ -8,7 +8,7 @@
   "_partyRankWeights": "How the rival parties are spread over the ranks when a new game starts, as relative weights (a rank's share is its weight over the total: D is 40/126, about 32%); there is always at least one A-rank party. After that, ranks follow renown (see ranks). Quest postings have their own weights (board.rankWeights).",
   "ranks": {
     "_comment": "Party ranks. renown: the renown a party needs for each rank (D needs none): tuned so a party of 2 at D, 3 at C and 4 at B is promoted at about level 6, 11 and 16 (about 4 D quests, 11 C and 18 B). highestPromotion: the highest rank a promotion quest can reach (A for now: no party can be promoted to S; S's renown only matters for rivals that start at S). Reaching the next rank's renown puts a promotion quest of that rank on the board; completing it promotes the party. A party whose renown stays below its own rank's threshold for demotionDays days in a row drops a rank. Renown doesn't fade: a failed quest loses failedQuestRenown x that quest's renown, and each member who dies loses deathRenown x the quest's renown. A member who quits (unpaid wages, or Morale 0) costs quitRenownPerLevel x their level.",
-    "renown": {"C": 50, "B": 600, "A": 2300, "S": 6000},
+    "renown": {"C": 80, "B": 600, "A": 2400, "S": 8000},
     "highestPromotion": "A",
     "demotionDays": 7,
     "failedQuestRenown": 1,
@@ -55,9 +55,9 @@
     "moraleBelowPerStep": 1
   },
   "inns": {
-    "standard": { "name": "Sleeping Griffin Inn", "pricePerPerson": 12, "drinksPerPerson": 4, "drinksMorale": 8 },
-    "highEnd": { "name": "Silver Lantern Inn", "pricePerPerson": 24, "drinksPerPerson": 8, "drinksMorale": 12 },
-    "luxury": { "name": "Gilded Crown Inn", "pricePerPerson": 48, "drinksPerPerson": 12, "drinksMorale": 15 }
+    "standard": { "name": "Sleeping Griffin Inn", "pricePerPerson": 12, "drinksPerPerson": 4, "drinksMorale": 4 },
+    "highEnd": { "name": "Silver Lantern Inn", "pricePerPerson": 24, "drinksPerPerson": 8, "drinksMorale": 6 },
+    "luxury": { "name": "Gilded Crown Inn", "pricePerPerson": 48, "drinksPerPerson": 16, "drinksMorale": 8 }
   },
   "_inns": "pricePerPerson: a night's lodging for one member assigned to the inn (Manage Party). drinksPerPerson / drinksMorale: a round of drinks for the whole party (once a day) costs drinksPerPerson per member and raises everyone's Morale by drinksMorale.",
   "lodging": {
