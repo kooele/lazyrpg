@@ -124,6 +124,30 @@ describe('vision and fog of war', () => {
   });
 });
 
+describe('fleeing', () => {
+  const flee = (archerX: number) => {
+    const { battle, units: [, b] } = setup([
+      { c: hero('longbow', [], 'Archer'), team: 'player', at: { x: archerX, y: 9 } },
+      { c: makeEnemy('bandit', 4, makeRng(5)), team: 'enemy', at: { x: 8, y: 9 } },
+    ], openMap(24, 19)); // edges: west 8 tiles, top and bottom 9, east 15 (it moves 4 a turn)
+    b.hp = Math.round(b.stats.health * 0.2); // badly hurt and alone: it runs
+    battle.endPhase();
+    expect(battle.canMove(b)).toBe(true);
+    return planTurn(battle, b).moveTo;
+  };
+
+  it('a fleeing enemy runs for the edge away from its foes, not the nearest one past them', () => {
+    // The west edge is nearest, but the archer stands by it: it runs another way, never toward the archer.
+    const to = flee(2);
+    expect(to.x).toBeGreaterThanOrEqual(8);
+    expect(Math.hypot(to.x - 2, to.y - 9)).toBeGreaterThan(6);
+  });
+
+  it('with its foes on the far side, it still takes the nearest edge', () => {
+    expect(flee(14).x).toBeLessThan(8);
+  });
+});
+
 describe('Stealth rules', () => {
   it('Scout: Stealthed from the start of the battle until the first attack', () => {
     const { battle, units: [a, e] } = setup([
