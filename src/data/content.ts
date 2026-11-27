@@ -554,7 +554,7 @@ export function skillEffect(s: SkillDef): string {
     const hit = onHit ? `Weapon attacks ${onHit} per hit${st.manaPerHit ? ` (${st.manaPerHit} mana each)` : ''}`
       : st.quickCast ? 'your next Mage spell of 2 AP or Ends Turn costs 1 AP' : st.name;
     if (st.thisTurnOnly) {
-      parts.push(`Toggle: ${hit}; ends with your turn if unused (use again to cancel)`);
+      parts.push(`Toggle: ${hit}; use again to cancel for a refund of its mana and cooldown (also refunded if the turn ends unused)`);
       return parts.join(', ');
     }
     parts.push(`Toggle: ${hit}${st.manaPerTurn ? `; ${st.manaPerTurn} mana a turn while on` : ''}`);

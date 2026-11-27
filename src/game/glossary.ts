@@ -192,7 +192,7 @@ export function glossaryEntries(): GlossaryEntry[] {
   // ---- Battle -----------------------------------------------------------------------------------
   add('Battle', 'Action Points',
     `Every unit gets 2 AP a turn: a movement AP and an action AP.\n\n`
-    + `• Free skills cost nothing and work until the turn ends.\n• 1 AP skills use the movement AP if it's unspent, otherwise the action AP.\n• 2 AP skills use both, so they can't follow a move.\n• Ends-turn skills (most attacks) use whatever is left.\n• Quick Cast makes your next 2 AP or Ends-turn Mage spell this turn cost 1 AP (use it again to cancel); In the Zone makes two basic attacks free.\n\n`
+    + `• Free skills cost nothing and work until the turn ends.\n• 1 AP skills use the movement AP if it's unspent, otherwise the action AP.\n• 2 AP skills use both, so they can't follow a move.\n• Ends-turn skills (most attacks) use whatever is left.\n• Quick Cast makes your next 2 AP or Ends-turn Mage spell this turn cost 1 AP (use it again to cancel for a refund); In the Zone makes two basic attacks free.\n\n`
     + `Undo move works until that unit acts or another unit on your team moves.`);
   add('Battle', 'Mana',
     `Mana is spent by skills and doesn't come back during a battle. Units start each battle with full mana.`);

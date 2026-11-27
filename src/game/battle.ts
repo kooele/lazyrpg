@@ -266,8 +266,9 @@ export class Battle {
    */
   readonly lastSeen: Record<Team, Map<string, Point>> = { player: new Map(), enemy: new Map() };
   /**
-   * Where each unit stood when its side's last turn began (not Stealthed ones). The other side learns these when its own
-   * turn begins: a rough, one-turn-old idea of where units out of sight are (see beginPhase).
+   * Where each party member stood when the party's last turn began (not Stealthed ones). The enemy AI learns these when
+   * its own turn begins: a rough, one-turn-old idea of where units out of sight are (see beginPhase). The player gets
+   * no such information about the enemy.
    */
   private turnStart = new Map<string, Point>();
   /** visibleTiles results per team, valid while its units stand where they did (see sightKey). */
@@ -1750,6 +1751,8 @@ export class Battle {
     // Toggles: switch the status on (paying the mana) or off again (free). A weapon holds one enchantment at a time.
     if (skill.toggleStatus) {
       if (this.isToggledOn(u, skill.toggleStatus)) {
+        // Cancelling a this-turn-only toggle (Quick Cast) before it's used refunds its mana and cooldown.
+        if (STATUSES[skill.toggleStatus].thisTurnOnly) this.refundToggle(u, skill.toggleStatus);
         events.push(this.toggleOff(u, skill.toggleStatus));
       } else {
         const def = STATUSES[skill.toggleStatus];
@@ -2093,8 +2096,11 @@ export class Battle {
       const def = STATUSES[s.id];
       if (def?.damagePctMaxHpPerStack && u.alive) events.push(this.statusDamage(u, def.damagePctMaxHpPerStack * statusStrength(s), def.mitigated));
       this.tickStatus(s);
-      // Quick Cast unused at the end of the turn: it switches off.
-      if (def?.thisTurnOnly && !this.stillActive(s)) events.push({ type: 'toggle', target: u.uid, name: s.name, on: false, reason: 'turn' });
+      // Quick Cast unused at the end of the turn: it switches off, refunded like a cancel.
+      if (def?.thisTurnOnly && !this.stillActive(s)) {
+        this.refundToggle(u, s.id);
+        events.push({ type: 'toggle', target: u.uid, name: s.name, on: false, reason: 'turn' });
+      }
     }
     u.statuses = u.statuses.filter((s) => this.stillActive(s));
     return events;
@@ -2122,6 +2128,19 @@ export class Battle {
   isWeaponAttack(u: Unit, s: SkillDef): boolean {
     const raw = this.rawBasic(u);
     return s.id === raw.id || !!raw.modes?.includes(s.id) || (hasTag(s, 'weapon') && !s.cone);
+  }
+
+  /** A cancellable toggle (Quick Cast) is off unused: the skill's mana comes back and its cooldown is cleared. */
+  private refundToggle(u: Unit, statusId: string): void {
+    const id = this.skillIds(u).find((sid) => SKILLS[sid].toggleStatus === statusId);
+    if (!id) return;
+    u.mp = Math.min(u.stats.mana, u.mp + SKILLS[id].mana);
+    delete u.cooldowns[id];
+  }
+
+  /** Is this skill a toggle that's on and can be cancelled for a refund (Quick Cast, before it's used)? */
+  isCancellable(u: Unit, s: SkillDef): boolean {
+    return !!s.toggleStatus && !!STATUSES[s.toggleStatus]?.thisTurnOnly && this.isToggledOn(u, s.toggleStatus);
   }
 
   /** Switch a toggle status off (out of mana, or the unit used the skill again). */
@@ -2181,15 +2200,19 @@ export class Battle {
   private beginPhase(team: Team): BattleEvent[] {
     this.phase = team;
     const events: BattleEvent[] = [];
-    // The side whose turn it is learns where its enemies stood when their last turn began (a turn out of date, and
-    // never where Stealthed units were). Units it can see now are noted where they really are (updateSightings below).
-    for (const f of this.living()) {
-      const at = f.team !== team ? this.turnStart.get(f.uid) : undefined;
-      if (at) this.lastSeen[team].set(f.uid, at);
-    }
-    for (const u of this.living(team)) {
-      if (this.isStealthed(u)) this.turnStart.delete(u.uid);
-      else this.turnStart.set(u.uid, { x: u.x, y: u.y });
+    // The enemy AI (only: the player gets nothing it can't see) learns where the party stood when its last turn began:
+    // a turn out of date, and never where Stealthed units were. Units it can see now are noted where they really are
+    // (updateSightings below).
+    if (team === 'enemy') {
+      for (const f of this.living('player')) {
+        const at = this.turnStart.get(f.uid);
+        if (at) this.lastSeen.enemy.set(f.uid, at);
+      }
+    } else {
+      for (const u of this.living('player')) {
+        if (this.isStealthed(u)) this.turnStart.delete(u.uid);
+        else this.turnStart.set(u.uid, { x: u.x, y: u.y });
+      }
     }
     for (const z of this.zones) if (z.team === team) z.turnsLeft -= 1;
     this.zones = this.zones.filter((z) => z.turnsLeft > 0);

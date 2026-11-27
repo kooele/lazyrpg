@@ -587,7 +587,9 @@ export class BattleScene extends Phaser.Scene {
       const id = layout[index];
       const s = id ? (u ? b.skillFor(u, SKILLS[id]) : SKILLS[id]) : null;
       const { x, y } = this.slotRect(i);
-      const cd = u && id ? u.cooldowns[id] ?? 0 : 0;
+      // Quick Cast switched on and unused: it shows Cancel (a refund) instead of its cooldown.
+      const cancellable = !!(u && id && b.isCancellable(u, SKILLS[id]));
+      const cd = u && id && !cancellable ? u.cooldowns[id] ?? 0 : 0;
       const usable = !!(u && id && interactive && b.canUseSkill(u, id) && cd <= 0);
       // A toggle that's on (Arcane Weapon) stays highlighted.
       const toggledOn = !!(u && s?.toggleStatus && b.isToggledOn(u, s.toggleStatus));
@@ -603,7 +605,7 @@ export class BattleScene extends Phaser.Scene {
         // AP along the bottom ("Ends Turn" for turn-ending skills), mana at the top between the hotkey and the cooldown.
         // What it costs this unit now (Quick Cast and In the Zone lower it).
         const cost = b.apCost(u, s);
-        const ap = toggledOn ? 'ON · Free' : cost === 0 ? 'Free' : cost === 'end' ? 'Ends Turn' : `${cost}AP`;
+        const ap = cancellable ? 'Cancel' : toggledOn ? 'ON · Free' : cost === 0 ? 'Free' : cost === 'end' ? 'Ends Turn' : `${cost}AP`;
         B.add(text(this, x + SLOT_W / 2, y + SLOT_H - 4, ap, { fontSize: '10px', color: COLORS.dim }).setOrigin(0.5, 1));
         if (s.mana && !toggledOn) B.add(text(this, x + SLOT_W / 2, y + 3, `${s.mana}MP`, { fontSize: '10px', color: u.mp < s.mana ? COLORS.bad : COLORS.dim }).setOrigin(0.5, 0));
         if (cd > 0) B.add(text(this, x + SLOT_W - 5, y + 2, String(cd), { fontSize: '13px', color: COLORS.bad, fontStyle: 'bold' }).setOrigin(1, 0));
@@ -646,7 +648,8 @@ export class BattleScene extends Phaser.Scene {
     const why = !interactive || usable ? '' : u.mp < s.mana ? `\nNot enough mana (${u.mp}/${s.mana}).`
       : s.target === 'move' && !u.moved ? '\nUse your regular move first.' : !b.canAct(u) ? '\nThis unit\'s turn is over.' : !b.canPay(u, s) ? '\nNot enough AP.' : '';
     const modeLine = raw.modes ? `\nBow Mode: ${b.modeName(u)} (Switch Mode changes it)` : raw.switchMode && b.modesOf(u) ? `\nNow: ${b.modeName(u)}. Next: ${SKILLS[b.modesOf(u)![(u.weaponMode + 1) % b.modesOf(u)!.length]].modeName}` : '';
-    this.showInfo(`${s.name}\n${skillStatText(s)}${modeLine}${cd > 0 ? `\nReady ${cd === 1 ? 'next turn' : `in ${cd} turns`}.` : ''}${why}\nDrag to another slot to move it.`);
+    const cancel = b.isCancellable(u, raw) ? `\nOn this turn. Use again to cancel: refunds ${raw.mana} mana and the cooldown.` : '';
+    this.showInfo(`${s.name}\n${skillStatText(s)}${modeLine}${cancel || (cd > 0 ? `\nReady ${cd === 1 ? 'next turn' : `in ${cd} turns`}.` : '')}${why}\nDrag to another slot to move it.`);
   }
 
   /** Page up/down. While dragging a skill, ▼ past the last page opens an empty one to drop it on. */

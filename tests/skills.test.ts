@@ -95,7 +95,11 @@ describe('vision and fog of war', () => {
     battle.endPhase();
     battle.endPhase();
     expect(battle.lastSeen.enemy.has(s.uid)).toBe(false);
-    expect(e.alive).toBe(true);
+    // Not symmetric: the player learns nothing about enemies out of sight (only where they deployed, at the start).
+    e.y = 0;
+    battle.endPhase();
+    battle.endPhase();
+    expect(battle.lastSeen.player.get(e.uid)).toEqual({ x: 16, y: 3 });
   });
 
   it('Revelation reveals every enemy within 15 tiles through fog and strips their Stealth for a turn', () => {
@@ -200,23 +204,33 @@ describe('Arcanist', () => {
     expect(m.acted).toBe(true);
   });
 
-  it('Quick Cast can be cancelled (no refund, cooldown kept) and wears off unused at the end of the turn', () => {
-    const { battle, units: [m] } = setup([{ c: hero('staff', ['quick_cast', 'fireball'], 'M', 5), team: 'player', at: { x: 1, y: 3 } }]);
+  it('Quick Cast can be cancelled for a full refund, and wears off unused (refunded) at the end of the turn', () => {
+    const { battle, units: [m] } = setup([
+      { c: hero('staff', ['quick_cast', 'fireball'], 'M', 5), team: 'player', at: { x: 1, y: 3 } },
+      { c: hero(), team: 'enemy', at: { x: 3, y: 3 } },
+    ]);
+    const full = m.mp;
     battle.perform(m, 'quick_cast', m);
+    expect(m.mp).toBe(full - 30);
+    expect(battle.isCancellable(m, SKILLS.quick_cast)).toBe(true);
     expect(battle.canUseSkill(m, 'quick_cast')).toBe(true); // to cancel it, despite the cooldown
-    const mp = m.mp;
     expect(battle.perform(m, 'quick_cast', m)).toContainEqual(expect.objectContaining({ type: 'toggle', on: false }));
-    expect(m.mp).toBe(mp);
+    expect(m.mp).toBe(full);
+    expect(m.cooldowns.quick_cast ?? 0).toBe(0);
     expect(battle.apCost(m, SKILLS.fireball)).toBe('end');
-    expect(m.cooldowns.quick_cast).toBe(3);
-    expect(battle.canUseSkill(m, 'quick_cast')).toBe(false); // on cooldown once off
-    // Switched on and left unused: gone when the turn ends.
-    m.cooldowns.quick_cast = 0;
+    // Switched on and left unused: gone (and refunded) when the turn ends.
     battle.perform(m, 'quick_cast', m);
     const end = battle.endPhase();
     expect(end).toContainEqual({ type: 'toggle', target: m.uid, name: 'Quick Cast', on: false, reason: 'turn' });
+    expect(m.mp).toBe(full);
     battle.endPhase();
     expect(battle.apCost(m, SKILLS.fireball)).toBe('end');
+    expect(battle.canUseSkill(m, 'quick_cast')).toBe(true);
+    // Used: no refund, and the cooldown runs.
+    battle.perform(m, 'quick_cast', m);
+    battle.perform(m, 'fireball', { x: 3, y: 3 });
+    expect(battle.isCancellable(m, SKILLS.quick_cast)).toBe(false);
+    expect(m.cooldowns.quick_cast).toBe(3);
   });
 });
 
