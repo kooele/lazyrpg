@@ -148,6 +148,50 @@ describe('fleeing', () => {
   });
 });
 
+describe('Undo Move with fog of war', () => {
+  it('a move that spots an enemy can\'t be undone', () => {
+    const { battle, units: [p, e] } = setup([
+      { c: hero(), team: 'player', at: { x: 1, y: 3 } },
+      { c: hero(), team: 'enemy', at: { x: 10, y: 3 } },
+    ], openMap(14, 7));
+    expect(battle.canSee('player', e)).toBe(false);
+    battle.move(p, { x: 4, y: 3 }); // 6 tiles away from the enemy: in sight now
+    expect(battle.canSee('player', e)).toBe(true);
+    expect(p.undoBlock).toBe('spotted');
+    expect(battle.canUndoMove(p)).toBe(false);
+    expect(battle.undoBlockReason(p)).toMatch(/spotted an enemy/);
+  });
+
+  it('a move that reveals more than 8 new tiles can\'t be undone; a small one can', () => {
+    const { battle, units: [p] } = setup([
+      { c: hero(), team: 'player', at: { x: 1, y: 3 } },
+      { c: hero(), team: 'enemy', at: { x: 20, y: 3 } },
+    ], openMap(22, 7));
+    battle.move(p, { x: 1, y: 4 }); // one step down: barely any new ground
+    expect(p.undoBlock).toBeUndefined();
+    expect(battle.canUndoMove(p)).toBe(true);
+    battle.undoMove(p);
+    battle.move(p, { x: 5, y: 3 }); // 4 tiles forward: a whole new strip of map
+    expect(p.undoBlock).toBe('scouted');
+    expect(battle.canUndoMove(p)).toBe(false);
+  });
+
+  it('each side gets 3 undos per battle', () => {
+    const { battle, units: [p] } = setup([
+      { c: hero(), team: 'player', at: { x: 1, y: 3 } },
+      { c: hero(), team: 'enemy', at: { x: 20, y: 3 } },
+    ], openMap(22, 7));
+    for (let i = 0; i < 3; i++) {
+      battle.move(p, { x: 1, y: 4 });
+      battle.undoMove(p);
+    }
+    expect(battle.undosLeft.player).toBe(0);
+    battle.move(p, { x: 1, y: 4 });
+    expect(battle.canUndoMove(p)).toBe(false);
+    expect(battle.undoBlockReason(p)).toMatch(/No undos left/);
+  });
+});
+
 describe('Stealth rules', () => {
   it('Scout: Stealthed from the start of the battle until the first attack', () => {
     const { battle, units: [a, e] } = setup([

@@ -1434,7 +1434,7 @@ describe('battles', () => {
       { c: hero(), team: 'player', at: { x: 1, y: 1 } },
       { c: hero('staff', ['arcane_pulse']), team: 'player', at: { x: 1, y: 3 } },
       { c: hero(), team: 'enemy', at: { x: 9, y: 6 } },
-    ]);
+    ], NO_FOG); // (fog of war has its own undo rules: see skills.test.ts)
     // An ally moving locks it in (no stepping aside to let it through, then stepping back).
     const moved = make();
     const [a, b] = moved.units;
@@ -1461,7 +1461,7 @@ describe('battles', () => {
       { c: hero(), team: 'player', at: { x: 0, y: 0 } },
       { c: hero('bow'), team: 'player', at: { x: 0, y: 2 } },
       { c: hero(), team: 'enemy', at: { x: 9, y: 6 } },
-    ]);
+    ], NO_FOG);
     expect(battle.canAct(e)).toBe(false);
     battle.move(b, { x: 2, y: 2 });
     battle.undoMove(b);

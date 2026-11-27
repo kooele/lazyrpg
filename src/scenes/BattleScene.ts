@@ -4,7 +4,7 @@ import type { SkillDef, StatKey, Stats } from '../data/types';
 import { STAT_INFO } from '../data/types';
 import { bestAction, bestFreeAction, planTurn, preferredMode, shouldDisengage, shouldEscape, shouldSurrender, watchesForOverwatch } from '../game/ai';
 import {
-  AP_PER_TURN, Battle, deploymentTiles, generateEnemies, makeUnit, penLine, penText, statEffectPct, statText,
+  AP_PER_TURN, Battle, UNDO_LIMIT, UNDO_REVEAL_TILES, deploymentTiles, generateEnemies, makeUnit, penLine, penText, statEffectPct, statText,
   type BattleEvent, type MoveResult, type Unit,
 } from '../game/battle';
 import { BAR_PAGE, makeRng, skillBarLayout, swapBarSlots } from '../game/character';
@@ -557,8 +557,12 @@ export class BattleScene extends Phaser.Scene {
           },
         }));
       } else {
-        S.add(button(this, SIDE_X, y, 116, 30, 'Undo Move', () => this.undoMove(), {
+        S.add(button(this, SIDE_X, y, 116, 30, `Undo Move (${b.undosLeft.player})`, () => this.undoMove(), {
           enabled: interactive && b.canUndoMove(u), fontSize: 14,
+          onHover: () => {
+            const why = b.undoBlockReason(u);
+            this.showInfo(`Take back this unit's move (${b.undosLeft.player} of ${UNDO_LIMIT} undos left this battle).${why ? `\nCan't undo: ${why}` : ''}\nA move that spots an enemy or reveals more than ${UNDO_REVEAL_TILES} new tiles can't be undone.`);
+          },
         }));
       }
     }
@@ -1144,6 +1148,7 @@ export class BattleScene extends Phaser.Scene {
       this.refresh();
       await this.animateMove(u, result);
       this.reach = new Map();
+      if (u.undoBlock) this.addLog(`${u.character.name} ${u.undoBlock === 'spotted' ? 'spots the enemy' : 'scouts new ground'}: this move can't be undone.`);
       if (!u.alive) {
         this.selectedUid = null;
         this.afterUnitDone();
