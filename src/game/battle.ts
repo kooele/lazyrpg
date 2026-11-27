@@ -107,7 +107,7 @@ export type BattleEvent =
   | { type: 'surrender'; target: string }
   | { type: 'mode'; target: string; name: string }
   /** A toggle (Arcane Weapon) switched on or off; `reason` says why it went off on its own. */
-  | { type: 'toggle'; target: string; name: string; on: boolean; reason?: 'mana' }
+  | { type: 'toggle'; target: string; name: string; on: boolean; reason?: 'mana' | 'turn' }
   /** A zone (Firestorm) was placed on these tiles. */
   | { type: 'zone'; source: string; name: string; tiles: Point[] }
   /** A unit is caught by a zone (followed by its damage and status events). */
@@ -265,6 +265,11 @@ export class Battle {
    * positions of units hidden in fog of war. Starts with where the enemies were deployed.
    */
   readonly lastSeen: Record<Team, Map<string, Point>> = { player: new Map(), enemy: new Map() };
+  /**
+   * Where each unit stood when its side's last turn began (not Stealthed ones). The other side learns these when its own
+   * turn begins: a rough, one-turn-old idea of where units out of sight are (see beginPhase).
+   */
+  private turnStart = new Map<string, Point>();
   /** visibleTiles results per team, valid while its units stand where they did (see sightKey). */
   private sight: Partial<Record<Team, { key: string; tiles: Set<string> }>> = {};
   /** Ground effects in play (Firestorm, Blizzard). */
@@ -280,7 +285,8 @@ export class Battle {
       const def = STATUSES.stealth;
       u.statuses.push({ id: def.id, name: def.name, debuff: false, stacks: 1, amount: 0, turns: Infinity, tick: def.tick });
     }
-    for (const u of units) for (const f of units) if (f.team !== u.team) this.lastSeen[u.team].set(f.uid, { x: f.x, y: f.y });
+    // Each side starts out knowing where the other deployed (not where Stealthed units are).
+    for (const u of units) for (const f of units) if (f.team !== u.team && !this.isStealthed(f)) this.lastSeen[u.team].set(f.uid, { x: f.x, y: f.y });
     this.beginPhase('player');
   }
 
@@ -608,6 +614,9 @@ export class Battle {
 
   isReady(u: Unit, skillId: string): boolean {
     if ((u.cooldowns[skillId] ?? 0) <= 0) return true;
+    // A toggle that's on can always be switched off (Quick Cast is on cooldown from the moment it's switched on).
+    const toggle = SKILLS[skillId]?.toggleStatus;
+    if (toggle && this.isToggledOn(u, toggle)) return true;
     // In the Zone: free basic attacks ignore the cooldown.
     return this.isBasic(u, SKILLS[skillId]) && !!this.statusWith(u, 'freeBasicAttacks');
   }
@@ -868,7 +877,7 @@ export class Battle {
    * Spend a skill's AP (`ap`: its cost worked out before it was used, see apCost), mana and cooldown, and use up
    * what lowered the cost (a free basic attack doesn't start the cooldown). Using a skill can't be undone.
    */
-  private payFor(u: Unit, skillId: string, noMana = false, ap: ApCost = this.apCost(u, SKILLS[skillId])): void {
+  private payFor(u: Unit, skillId: string, noMana = false, ap: ApCost = this.apCost(u, SKILLS[skillId]), noCooldown = false): void {
     const skill = SKILLS[skillId];
     this.spendAp(u, ap);
     if (!noMana) u.mp -= skill.mana;
@@ -878,7 +887,7 @@ export class Battle {
     if (free || quick) u.statuses = u.statuses.filter((s) => s !== quick && s.stacks > 0);
     // Cooldown N counts from the current turn: the counter ticks at the start of each of
     // the unit's turns, so 1 = not again this turn, usable next turn.
-    else if (skill.cooldown > 0) u.cooldowns[skillId] = skill.cooldown;
+    else if (skill.cooldown > 0 && !noCooldown) u.cooldowns[skillId] = skill.cooldown;
     if (quick && skill.cooldown > 0) u.cooldowns[skillId] = skill.cooldown;
     u.locked = true;
     this.lockTeammates(u);
@@ -1745,7 +1754,8 @@ export class Battle {
       } else {
         const def = STATUSES[skill.toggleStatus];
         if (def.enchantment) for (const s of [...u.statuses]) if (s.id !== def.id && STATUSES[s.id]?.enchantment) events.push(this.toggleOff(u, s.id));
-        u.statuses.push({ id: def.id, name: def.name, debuff: def.debuff, stacks: 1, amount: 0, turns: Infinity, tick: def.tick });
+        // Most toggles stay on until switched off; Quick Cast only lasts the turn.
+        u.statuses.push({ id: def.id, name: def.name, debuff: def.debuff, stacks: 1, amount: 0, turns: def.thisTurnOnly ? 1 : Infinity, tick: def.thisTurnOnly ? 'end' : def.tick });
         events.push({ type: 'toggle', target: u.uid, name: def.name, on: true });
       }
     }
@@ -1824,7 +1834,8 @@ export class Battle {
     // Attacking gives a Stealthed unit away.
     if (this.isAttack(used) && used.affects !== 'ally') u.statuses = u.statuses.filter((st) => !STATUSES[st.id]?.stealth);
     if (!u.alive) u.acted = true;
-    this.payFor(u, skillId, true, ap); // mana was paid up front (none when switching a toggle off)
+    // Mana was paid up front (none when switching a toggle off); switching a toggle off doesn't restart its cooldown.
+    this.payFor(u, skillId, true, ap, switchingOff);
     this.updateSightings();
     return events;
   }
@@ -2042,7 +2053,7 @@ export class Battle {
       return this.applyStatus(source, t, def.overflow.status, def.overflow.turns, 1, true);
     }
     // Decaying statuses (Burn, Chilled) last until their stacks run out, not a number of turns; Quick Cast until used.
-    const lasts = def.decay || def.untilUsed ? Infinity : turns;
+    const lasts = def.decay ? Infinity : turns;
     if (existing) {
       if (def.stacking) existing.stacks += stacks;
       existing.turns = Math.max(existing.turns, lasts);
@@ -2082,6 +2093,8 @@ export class Battle {
       const def = STATUSES[s.id];
       if (def?.damagePctMaxHpPerStack && u.alive) events.push(this.statusDamage(u, def.damagePctMaxHpPerStack * statusStrength(s), def.mitigated));
       this.tickStatus(s);
+      // Quick Cast unused at the end of the turn: it switches off.
+      if (def?.thisTurnOnly && !this.stillActive(s)) events.push({ type: 'toggle', target: u.uid, name: s.name, on: false, reason: 'turn' });
     }
     u.statuses = u.statuses.filter((s) => this.stillActive(s));
     return events;
@@ -2168,6 +2181,16 @@ export class Battle {
   private beginPhase(team: Team): BattleEvent[] {
     this.phase = team;
     const events: BattleEvent[] = [];
+    // The side whose turn it is learns where its enemies stood when their last turn began (a turn out of date, and
+    // never where Stealthed units were). Units it can see now are noted where they really are (updateSightings below).
+    for (const f of this.living()) {
+      const at = f.team !== team ? this.turnStart.get(f.uid) : undefined;
+      if (at) this.lastSeen[team].set(f.uid, at);
+    }
+    for (const u of this.living(team)) {
+      if (this.isStealthed(u)) this.turnStart.delete(u.uid);
+      else this.turnStart.set(u.uid, { x: u.x, y: u.y });
+    }
     for (const z of this.zones) if (z.team === team) z.turnsLeft -= 1;
     this.zones = this.zones.filter((z) => z.turnsLeft > 0);
     for (const u of this.living(team)) {

@@ -76,7 +76,7 @@
     "revealed": { "name": "Revealed", "debuff": true, "stacking": false, "tick": "end", "unresisted": true, "reveals": true, "description": "Seen by the other side through fog of war, and can't be Stealthed (Stealth is removed). Can't be resisted." },
     "unyielding": { "name": "Unyielding", "debuff": false, "stacking": false, "tick": "start", "debuffImmune": true, "description": "Immune to debuffs (status effects) until the start of your next turn." },
     "staggered": { "name": "Staggered", "debuff": true, "stacking": false, "tick": "end", "apLoss": 1, "description": "Loses 1 AP at the start of its next turn: the movement AP if it still has it." },
-    "quick_cast": { "name": "Quick Cast", "debuff": false, "stacking": false, "tick": "start", "quickCast": true, "untilUsed": true, "description": "Your next Mage spell that costs 2 AP or ends your turn costs 1 AP instead. Lasts until used." },
+    "quick_cast": { "name": "Quick Cast", "debuff": false, "stacking": false, "tick": "end", "toggle": true, "thisTurnOnly": true, "quickCast": true, "description": "Your next Mage spell this turn that costs 2 AP or ends your turn costs 1 AP instead. Wears off at the end of your turn if unused; using Quick Cast again cancels it." },
     "in_the_zone": { "name": "In the Zone", "debuff": false, "stacking": true, "tick": "end", "freeBasicAttacks": true, "description": "Your basic attacks cost no AP and ignore their cooldown, one stack per attack." },
     "poison": { "name": "Poison", "debuff": true, "stacking": true, "tick": "start", "damagePctMaxHpPerStack": 0.03, "description": "Lose 3% of max Health per stack at the start of each turn. Ignores Defense and shields." }
   },
@@ -176,10 +176,10 @@
       "target": "passive", "affects": "ally", "range": 0, "level": 5
     },
     "quick_cast": {
-      "name": "Quick Cast", "description": "Your next Mage spell that would cost 2 AP or end your turn costs 1 AP instead.",
-      "tags": ["free"],
+      "name": "Quick Cast", "description": "Your next Mage spell this turn that would cost 2 AP or end your turn costs 1 AP instead. Use it again to cancel; it ends with your turn if unused.",
+      "tags": ["free", "toggle"],
       "target": "self", "affects": "ally", "range": 0, "minRange": 0, "ap": 0, "cooldown": 3, "mana": 30, "level": 5,
-      "selfStatus": [{ "status": "quick_cast", "turns": 1 }]
+      "toggleStatus": "quick_cast"
     },
     "fire_weapon": {
       "name": "Fire Weapon", "description": "Wreathe your weapon in flame. Use it again to switch it off. Switching it on ends Arcane Weapon or Ice Weapon.",
@@ -228,10 +228,10 @@
       "shape": "cross", "hits": [{ "mAtk": 0.5 }], "shiftStatus": [{ "status": "burn", "stacks": 1 }], "spreadFire": 1.5
     },
     "rain": {
-      "name": "Rain", "description": "Call down rain on a 3x3 area for 3 turns. Enemies in it hit weaker; walking through it chills the chilled further and dampens burning.",
+      "name": "Rain", "description": "Call down rain on a 3x3 area for 3 turns. Anyone attacking from inside it hits weaker; walking through it chills the chilled further and dampens burning. Allies included.",
       "tags": ["area", "debuff"],
-      "target": "ground", "affects": "enemy", "range": 5, "minRange": 0, "cooldown": 3, "mana": 40, "level": 4,
-      "zone": { "element": "water", "radius": 1.5, "turns": 3, "affects": "enemy", "statPct": { "pAtk": -0.25, "mAtk": -0.25 }, "shiftStatus": [{ "status": "chilled", "stacks": 1 }, { "status": "burn", "stacks": -1 }], "endTurnHits": 0 }
+      "target": "ground", "affects": "any", "range": 5, "minRange": 0, "cooldown": 3, "mana": 40, "level": 4,
+      "zone": { "element": "water", "radius": 1.5, "turns": 3, "statPct": { "pAtk": -0.25, "mAtk": -0.25 }, "shiftStatus": [{ "status": "chilled", "stacks": 1 }, { "status": "burn", "stacks": -1 }], "endTurnHits": 0 }
     },
     "sonic_boom": {
       "name": "Sonic Boom", "description": "Blast an enemy with wind and push it 2 tiles in the direction you choose. Being pushed out of an engagement or through fire and ice hurts as usual.",

@@ -156,7 +156,7 @@ export function parseContent(skillsData: unknown, equipmentData: unknown): GameC
       debuffImmune: S.bool(st.debuffImmune, `${p}.debuffImmune`) || undefined,
       apLoss: S.optNum(st.apLoss, `${p}.apLoss`),
       quickCast: S.bool(st.quickCast, `${p}.quickCast`) || undefined,
-      untilUsed: S.bool(st.untilUsed, `${p}.untilUsed`) || undefined,
+      thisTurnOnly: S.bool(st.thisTurnOnly, `${p}.thisTurnOnly`) || undefined,
       freeBasicAttacks: S.bool(st.freeBasicAttacks, `${p}.freeBasicAttacks`) || undefined,
       casterScaled: st.casterScaled === undefined ? undefined : (() => {
         const o = S.obj(st.casterScaled, `${p}.casterScaled`);
@@ -551,7 +551,12 @@ export function skillEffect(s: SkillDef): string {
   if (s.toggleStatus) {
     const st = STATUSES[s.toggleStatus];
     const onHit = [st.weaponOnHit ? `+${damageText(st.weaponOnHit)}` : '', ...(st.weaponOnHitStatus ?? []).map(statusText)].filter(Boolean).join(' and ');
-    const hit = onHit ? `Weapon attacks ${onHit} per hit${st.manaPerHit ? ` (${st.manaPerHit} mana each)` : ''}` : st.name;
+    const hit = onHit ? `Weapon attacks ${onHit} per hit${st.manaPerHit ? ` (${st.manaPerHit} mana each)` : ''}`
+      : st.quickCast ? 'your next Mage spell of 2 AP or Ends Turn costs 1 AP' : st.name;
+    if (st.thisTurnOnly) {
+      parts.push(`Toggle: ${hit}; ends with your turn if unused (use again to cancel)`);
+      return parts.join(', ');
+    }
     parts.push(`Toggle: ${hit}${st.manaPerTurn ? `; ${st.manaPerTurn} mana a turn while on` : ''}`);
   }
   if (s.teleport) parts.push(s.charge ? 'Teleport next to the target' : 'Teleport');

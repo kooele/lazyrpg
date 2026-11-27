@@ -1488,7 +1488,7 @@ export class BattleScene extends Phaser.Scene {
     }
     if (e.type === 'toggle') {
       const label = `${e.name} ${e.on ? 'On' : 'Off'}`;
-      summary.push(e.reason === 'mana' ? `${e.name} fades (out of mana)` : `${e.name} ${e.on ? 'on' : 'off'}`);
+      summary.push(e.reason === 'mana' ? `${e.name} fades (out of mana)` : e.reason === 'turn' ? `${e.name} fades (unused)` : `${e.name} ${e.on ? 'on' : 'off'}`);
       this.floatText(this.battle.unit(e.target), label, '#c18cff', index * 120);
       return;
     }

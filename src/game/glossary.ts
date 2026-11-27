@@ -192,7 +192,7 @@ export function glossaryEntries(): GlossaryEntry[] {
   // ---- Battle -----------------------------------------------------------------------------------
   add('Battle', 'Action Points',
     `Every unit gets 2 AP a turn: a movement AP and an action AP.\n\n`
-    + `• Free skills cost nothing and work until the turn ends.\n• 1 AP skills use the movement AP if it's unspent, otherwise the action AP.\n• 2 AP skills use both, so they can't follow a move.\n• Ends-turn skills (most attacks) use whatever is left.\n• Quick Cast makes your next 2 AP or Ends-turn Mage spell cost 1 AP; In the Zone makes two basic attacks free.\n\n`
+    + `• Free skills cost nothing and work until the turn ends.\n• 1 AP skills use the movement AP if it's unspent, otherwise the action AP.\n• 2 AP skills use both, so they can't follow a move.\n• Ends-turn skills (most attacks) use whatever is left.\n• Quick Cast makes your next 2 AP or Ends-turn Mage spell this turn cost 1 AP (use it again to cancel); In the Zone makes two basic attacks free.\n\n`
     + `Undo move works until that unit acts or another unit on your team moves.`);
   add('Battle', 'Mana',
     `Mana is spent by skills and doesn't come back during a battle. Units start each battle with full mana.`);
@@ -205,7 +205,7 @@ export function glossaryEntries(): GlossaryEntry[] {
     + `Penetration never takes Defense below 0, and does nothing to Defense that is already 0 or less.`);
   add('Battle', 'Fog of War',
     `Each side sees only the tiles within its units' Vision (${STAT_CONFIG.base.vision} tiles) that they have line of sight to: rocks block it. Enemies outside that are hidden, and the map shows those tiles darkened.\n\n`
-    + `• You can't aim at a unit you can't see, but area attacks and zones still hit it.\n• Overwatch only fires on units its side can see.\n• Walking into an unseen enemy stops you in front of it.\n• Enemies play by the same rules: they go where they last saw you.\n\n`
+    + `• You can't aim at a unit you can't see, but area attacks and zones still hit it.\n• Overwatch only fires on units its side can see.\n• Walking into an unseen enemy stops you in front of it.\n• Enemies play by the same rules: they go where they last saw you, and each turn they learn where your units stood at the start of your last turn (not Stealthed ones).\n\n`
     + `Revelation (Cleric) reveals every enemy within 15 tiles for a turn.`);
   add('Battle', 'Stealth',
     `A Stealthed unit can't be targeted directly or set off overwatch; area attacks still hit it. It stays hidden until it attacks.\n\n`
@@ -213,7 +213,7 @@ export function glossaryEntries(): GlossaryEntry[] {
     + `Shadow Step stealths you for a turn; Scout (passive) starts every battle Stealthed.`);
   add('Battle', 'Fire, Ice and Rain on the Ground',
     `Firestorm, Blizzard and Rain cover the ground for a few turns, and an Explosion (Burn's 3rd stack) leaves 2 turns of Burning Ground under its target.\n\n`
-    + `• A tile holds one of these at a time: a new one replaces the old there.\n• Firestorm, Blizzard and Burning Ground hit anyone who enters or ends a turn on them.\n• Rain only acts on the caster's enemies: −25% P.Atk and M.Atk while inside, and walking in adds a Chilled stack (if chilled) and removes a Burn stack.\n• Draft fans the flames: fire on the tiles it hits spreads 1.5 tiles around, with the same turns left.`);
+    + `• A tile holds one of these at a time: a new one replaces the old there.\n• Firestorm, Blizzard and Burning Ground hit anyone who enters or ends a turn on them.\n• Rain acts on everyone: −25% P.Atk and M.Atk while standing in it (not after leaving), and walking in adds a Chilled stack (if chilled) and removes a Burn stack.\n• Draft fans the flames: fire on the tiles it hits spreads 1.5 tiles around, with the same turns left.`);
   add('Battle', 'Passive Skills',
     `Passive skills are always in effect once learned and never go on the skill bar.\n\n`
     + `• Spellblade: your weapon's M.Atk penalty doesn't apply.\n• Fighting Spirit: whenever you become engaged, a free basic attack at 50%.\n• Tooth for Tooth: when your engaged opponent attacks you, a free basic attack back at 50%.\n• Scout: Stealthed from the start of each battle until you attack.\n\n`

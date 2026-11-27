@@ -77,6 +77,27 @@ describe('vision and fog of war', () => {
     expect(plan.moveTo.x).toBeLessThan(16); // it advances toward where it last saw them
   });
 
+  it('each turn the AI learns where out-of-sight units stood when their last turn began (not Stealthed ones)', () => {
+    const { battle, units: [p, s, e] } = setup([
+      { c: hero(), team: 'player', at: { x: 1, y: 3 } },
+      { c: hero('dagger', ['scout'], 'S', 3), team: 'player', at: { x: 1, y: 5 } },
+      { c: hero(), team: 'enemy', at: { x: 16, y: 3 } },
+    ], openMap(18, 7));
+    battle.move(p, { x: 1, y: 0 }); // out of sight, the enemy saw it at (1,3) at the start
+    battle.endPhase();
+    expect(battle.lastSeen.enemy.get(p.uid)).toEqual({ x: 1, y: 3 }); // where this turn began: a turn out of date
+    battle.endPhase(); // the player's next turn begins at (1,0)...
+    p.x = 4; // ...and it moves on
+    battle.endPhase(); // the AI learns of (1,0), where that turn began
+    expect(battle.lastSeen.enemy.get(p.uid)).toEqual({ x: 1, y: 0 });
+    // The Scout was never seen and never reported, not even where it deployed.
+    s.x = 3;
+    battle.endPhase();
+    battle.endPhase();
+    expect(battle.lastSeen.enemy.has(s.uid)).toBe(false);
+    expect(e.alive).toBe(true);
+  });
+
   it('Revelation reveals every enemy within 15 tiles through fog and strips their Stealth for a turn', () => {
     expect(SKILLS.revelation).toMatchObject({ ap: 2, mana: 60, cooldown: 4, level: 7, aoeRadius: 15 });
     const { battle, units: [c, far, sneaky] } = setup([
@@ -162,8 +183,8 @@ describe('Arcanist', () => {
     expect(battle.canUseSkill(u, 'spellblade')).toBe(false);
   });
 
-  it('Quick Cast: the next Mage spell of 2 AP or Ends Turn costs 1 AP instead', () => {
-    expect(SKILLS.quick_cast).toMatchObject({ ap: 0, mana: 30, cooldown: 3, level: 5 });
+  it('Quick Cast: the next Mage spell of 2 AP or Ends Turn this turn costs 1 AP instead', () => {
+    expect(SKILLS.quick_cast).toMatchObject({ ap: 0, mana: 30, cooldown: 3, level: 5, toggleStatus: 'quick_cast' });
     const { battle, units: [m, e] } = setup([
       { c: hero('staff', ['quick_cast', 'fireball', 'arcane_bolt'], 'M', 5), team: 'player', at: { x: 1, y: 3 } },
       { c: hero(), team: 'enemy', at: { x: 4, y: 3 } },
@@ -177,6 +198,25 @@ describe('Arcanist', () => {
     expect(battle.apCost(m, SKILLS.arcane_bolt)).toBe('end'); // used up
     battle.perform(m, 'arcane_bolt', e);
     expect(m.acted).toBe(true);
+  });
+
+  it('Quick Cast can be cancelled (no refund, cooldown kept) and wears off unused at the end of the turn', () => {
+    const { battle, units: [m] } = setup([{ c: hero('staff', ['quick_cast', 'fireball'], 'M', 5), team: 'player', at: { x: 1, y: 3 } }]);
+    battle.perform(m, 'quick_cast', m);
+    expect(battle.canUseSkill(m, 'quick_cast')).toBe(true); // to cancel it, despite the cooldown
+    const mp = m.mp;
+    expect(battle.perform(m, 'quick_cast', m)).toContainEqual(expect.objectContaining({ type: 'toggle', on: false }));
+    expect(m.mp).toBe(mp);
+    expect(battle.apCost(m, SKILLS.fireball)).toBe('end');
+    expect(m.cooldowns.quick_cast).toBe(3);
+    expect(battle.canUseSkill(m, 'quick_cast')).toBe(false); // on cooldown once off
+    // Switched on and left unused: gone when the turn ends.
+    m.cooldowns.quick_cast = 0;
+    battle.perform(m, 'quick_cast', m);
+    const end = battle.endPhase();
+    expect(end).toContainEqual({ type: 'toggle', target: m.uid, name: 'Quick Cast', on: false, reason: 'turn' });
+    battle.endPhase();
+    expect(battle.apCost(m, SKILLS.fireball)).toBe('end');
   });
 });
 
@@ -230,7 +270,7 @@ describe('Elementalist', () => {
     expect(fire.tiles.size).toBe(9);
   });
 
-  it('Rain: enemies inside hit 25% weaker; walking in deepens a Chill and dampens a Burn; allies are untouched', () => {
+  it('Rain: anyone inside (allies too) hits 25% weaker, only while inside; walking in deepens a Chill and dampens a Burn', () => {
     expect(SKILLS.rain).toMatchObject({ level: 4, zone: { turns: 3, radius: 1.5, element: 'water' } });
     const { battle, units: [m, e, ally] } = setup([
       { c: caster(['rain']), team: 'player', at: { x: 1, y: 3 } },
@@ -240,9 +280,14 @@ describe('Elementalist', () => {
     const atk = battle.stat(e, 'pAtk');
     battle.perform(m, 'rain', { x: 5, y: 3 }); // x 4-6, y 2-4
     expect(battle.stat(e, 'pAtk')).toBe(Math.round(atk * 0.75));
-    expect(battle.stat(ally, 'pAtk')).toBe(ally.stats.pAtk);
+    expect(battle.stat(ally, 'pAtk')).toBe(Math.round(ally.stats.pAtk * 0.75)); // Rain affects everyone, like Blizzard
     battle.endPhase();
+    // An attack from inside the rain is weaker...
+    const wet = battle.previewHits(e, battle.basicAttack(e), ally)[0];
     e.x = 3;
+    // ...and nothing carries over once out of it.
+    expect(battle.stat(e, 'pAtk')).toBe(atk);
+    expect(wet).toBe(Math.round(battle.previewHits(e, battle.basicAttack(e), ally)[0] * 0.75));
     const walk = battle.move(e, { x: 3, y: 2 }); // around the rain: nothing happens
     expect(walk.triggers).toHaveLength(0);
     battle.endPhase();

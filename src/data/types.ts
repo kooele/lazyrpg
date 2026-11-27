@@ -206,8 +206,8 @@ export interface StatusDef {
   apLoss?: number;
   /** The next Mage spell that costs 2 AP or ends the turn costs 1 AP instead; used up by it (Quick Cast). */
   quickCast?: boolean;
-  /** Lasts until used up, however many turns pass (Quick Cast). */
-  untilUsed?: boolean;
+  /** A toggle that only lasts the turn it's switched on: it switches off by itself when the unit's turn ends (Quick Cast). */
+  thisTurnOnly?: boolean;
   /** Basic attacks cost no AP and ignore their cooldown, one stack per attack (In the Zone). */
   freeBasicAttacks?: boolean;
   /** Leaves a zone on the unit's tile when applied (Explosion: Burning Ground), from the applier's stats. */
