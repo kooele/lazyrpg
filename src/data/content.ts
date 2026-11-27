@@ -165,6 +165,10 @@ export function parseContent(skillsData: unknown, equipmentData: unknown): GameC
       debuffImmune: S.bool(st.debuffImmune, `${p}.debuffImmune`) || undefined,
       apLoss: S.optNum(st.apLoss, `${p}.apLoss`),
       failChance: S.optNum(st.failChance, `${p}.failChance`),
+      weaponSwap: st.weaponSwap === undefined ? undefined : (() => {
+        const o = S.obj(st.weaponSwap, `${p}.weaponSwap`);
+        return { range: S.num(o.range, `${p}.weaponSwap.range`), pPenPct: S.num(o.pPenPct ?? 0, `${p}.weaponSwap.pPenPct`) };
+      })(),
       quickCast: S.bool(st.quickCast, `${p}.quickCast`) || undefined,
       thisTurnOnly: S.bool(st.thisTurnOnly, `${p}.thisTurnOnly`) || undefined,
       freeBasicAttacks: S.bool(st.freeBasicAttacks, `${p}.freeBasicAttacks`) || undefined,
@@ -281,6 +285,7 @@ export function parseContent(skillsData: unknown, equipmentData: unknown): GameC
       pierce: S.optNum(r.pierce, `${p}.pierce`),
       weaponRangeBonus: S.optNum(r.weaponRangeBonus, `${p}.weaponRangeBonus`),
       cooldownAfterOff: S.bool(r.cooldownAfterOff, `${p}.cooldownAfterOff`) || undefined,
+      cooldownWhenSpent: S.bool(r.cooldownWhenSpent, `${p}.cooldownWhenSpent`) || undefined,
       selfStatusPerUnitHit: r.selfStatusPerUnitHit === undefined ? undefined : statusList([r.selfStatusPerUnitHit], `${p}.selfStatusPerUnitHit`)[0],
       stealthVision: S.optNum(r.stealthVision, `${p}.stealthVision`),
     };
@@ -296,6 +301,7 @@ export function parseContent(skillsData: unknown, equipmentData: unknown): GameC
     if (skill.followUp && !skill.charge) fail('skills.json', `${p}.followUp`, 'needs "charge" (the follow-up is a second charge)');
     if ((skillTags.includes('movement') || skillTags.includes('leap')) && skill.rangeScale === undefined) fail('skills.json', `${p}.rangeScale`, 'is required for "movement" and "leap" skills');
     if (skillTags.includes('movement') && skillTags.includes('leap')) fail('skills.json', `${p}.tags`, 'a skill is either "movement" or "leap", not both');
+    if (skill.cooldownWhenSpent && !skill.toggleStatus) fail('skills.json', `${p}.cooldownWhenSpent`, 'goes with "toggleStatus"');
     if (skill.cooldownAfterOff && !skill.toggleStatus) fail('skills.json', `${p}.cooldownAfterOff`, 'goes with "toggleStatus"');
     if (skill.selfStatusPerUnitHit && !statuses[skill.selfStatusPerUnitHit.status].stacking) fail('skills.json', `${p}.selfStatusPerUnitHit`, 'needs a stacking status (a stack per unit hit)');
     if (skill.zone?.hitPerMana && !skill.zone.hit) fail('skills.json', `${p}.zone.hitPerMana`, 'goes with "hit"');
@@ -593,6 +599,7 @@ export function skillEffect(s: SkillDef): string {
     const onHit = [st.weaponOnHit ? `+${damageText(st.weaponOnHit)}` : '', ...(st.weaponOnHitStatus ?? []).map(statusText)].filter(Boolean).join(' and ');
     const hit = onHit ? `Weapon attacks ${onHit} per hit${st.manaPerHit ? ` (${st.manaPerHit} mana each)` : ''}`
       : st.quickCast ? 'your next Mage spell of 2 AP or Ends Turn costs 1 AP'
+        : st.weaponSwap ? `your next weapon attack is a shot: range ${tiles(st.weaponSwap.range)}, +${st.weaponSwap.pPenPct}% P.Pen, needs line of sight`
         : st.statPct ? Object.entries(st.statPct).map(([k, v]) => `${(v ?? 0) > 0 ? '+' : ''}${pct(v ?? 0)} ${STAT_INFO[k as keyof Stats].short}`).join(', ') : st.name;
     if (st.thisTurnOnly) {
       parts.push(`Toggle: ${hit}; use again to cancel for a refund of its mana and cooldown (also refunded if the turn ends unused)`);
@@ -601,6 +608,7 @@ export function skillEffect(s: SkillDef): string {
     const upkeep = [st.manaPerTurn ? `${st.manaPerTurn} mana` : '', st.hpPctPerTurn ? `${pct(st.hpPctPerTurn)} of max HP` : ''].filter(Boolean).join(' and ');
     parts.push(`Toggle: ${hit}${upkeep ? `; ${upkeep} a turn while on${st.hpPctPerTurn ? ' (paid on switching on too)' : ''}` : ''}`);
     if (s.cooldownAfterOff) parts.push('Cooldown starts when it switches off');
+    if (s.cooldownWhenSpent) parts.push('Cooldown starts once it is used up');
   }
   if (s.applyStatus?.some((a) => STATUSES[a.status].bonusMove)) parts.push('The next time you use up your last AP this turn: a free move (walk, or a Movement, Leap or Teleport skill); refunded if the turn ends without it');
   if (s.teleport) parts.push(s.charge ? 'Teleport next to the target' : 'Teleport');

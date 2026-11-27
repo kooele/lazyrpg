@@ -176,7 +176,7 @@ A won quest gives each member in the lineup `xpPerVictory` (100, in `stats.json`
 
 ### Equipment
 
-Every Adventurer has a **weapon** and a **body armor** (`src/data/equipment.json`, from the Equipment Stats tab of the design sheet). Each piece gives **base stats**, added to the level stats (and Body points), and **modifiers**, which multiply the total afterwards: a Crude Staff is (100 + 10) × 0.8 = 88 P.Atk. Penetration % from different sources multiplies (50% and 25% make 62.5%: each ignores its share of the Defense the others leave). Gear comes in four **qualities**: base stats ×1 at **Crude** (20 gold), ×2 at **Common** (100), ×4 at **Fine** (500) and ×7 at **Masterwork** (2500); modifiers don't change with quality. New Adventurers start with a Crude weapon and Crude Leather; slaves (bought or captured) start with nothing: **Unarmed** (×0.6 P.Atk, ×1.25 Move) and **No Armor** (×0.9 Defense and Health).
+Every Adventurer has a **weapon** and a **body armor** (`src/data/equipment.json`, from the Equipment Stats tab of the design sheet). Each piece gives **base stats**, added to the level stats (and Body points), and **modifiers**, which multiply the total afterwards: a Crude Staff is (100 + 10) × 0.8 = 88 P.Atk. Penetration % from different sources multiplies (50% and 25% make 62.5%: each ignores its share of the Defense the others leave). Gear comes in four **qualities**: base stats ×1 at **Crude** (20 gold), ×2 at **Common** (100), ×4 at **Fine** (500) and ×7 at **Masterwork** (2500); modifiers don't change with quality. New Adventurers start with a Crude weapon and Crude Leather; slaves (bought or captured) start with nothing: **Unarmed** (×0.6 P.Atk) and **No Armor** (×0.8 Defense and Health). Armor costs **mana**, not Movement: the heavier it is, the less max mana.
 
 | Weapon | Range | Base Stats (Crude) | Modifiers | Skills |
 |---|---|---|---|---|
@@ -186,24 +186,25 @@ Every Adventurer has a **weapon** and a **body armor** (`src/data/equipment.json
 | Spear | 2 | 20 P.Atk, 10 M.Atk | ×0.8 M.Atk | Basic Attack, Circle Swing (Spear) |
 | Sword and Shield | 1.5 | 15 P.Atk, 10 M.Atk, 10 Def | ×0.8 M.Atk | Basic Attack, Shield Slam |
 | Mace and Shield | 1.5 | 15 P.Atk, 10 M.Atk, 10 Def | ×0.8 P.Atk, ×0.8 M.Atk, 50% P.Pen | Basic Attack, Shield Slam |
-| Longbow | 6 | 20 P.Atk, 10 M.Atk | ×0.8 M.Atk | Basic Attack (by mode), Switch Mode |
-| Shortbow | 4 | 20 P.Atk, 10 M.Atk | ×0.8 M.Atk, ×1.2 Move | Basic Attack (by mode), Switch Mode |
-| Single Dagger | 1.5 | 15 P.Atk, 10 M.Atk, 5 P.Pen | ×0.8 P.Atk | Basic Attack, Quick Attack |
+| Longbow | 6 | 20 P.Atk, 10 M.Atk | ×0.8 M.Atk, ×0.8 Move, 25% P.Pen | Basic Attack (by mode), Switch Mode |
+| Shortbow | 5 | 15 P.Atk, 10 M.Atk, 5 P.Pen | ×0.8 M.Atk | Basic Attack (by mode), Switch Mode |
+| Dagger and Hand Crossbow | 1.5 | 15 P.Atk, 10 M.Atk, 5 P.Pen | ×0.8 M.Atk | Basic Attack, Swap to Crossbow |
 | Twin Daggers | 1.5 | 15 P.Atk, 10 M.Atk, 5 P.Pen | ×0.8 M.Atk | Basic Attack, Quick Attack |
-| Unarmed | 1.5 | — | ×0.6 P.Atk, ×1.25 Move | Basic Attack |
+| Unarmed | 1.5 | — | ×0.6 P.Atk | Basic Attack |
 
 | Armor | Base Stats (Crude) | Modifiers |
 |---|---|---|
-| Leather | 15 Def, 75 Health | — |
-| Mail | 15 Def, 75 Health | ×0.9 Move, ×1.1 Def, ×1.1 Health |
-| Plate | 15 Def, 75 Health | ×0.8 Move, ×1.2 Def, ×1.2 Health |
-| No Armor | — | ×0.9 Def, ×0.9 Health |
+| Leather | 15 Def, 75 Health | ×0.9 Mana |
+| Mail | 15 Def, 75 Health | ×0.7 Mana, ×1.2 Def, ×1.2 Health |
+| Plate | 15 Def, 75 Health | ×0.5 Mana, ×1.4 Def, ×1.4 Health |
+| No Armor | — | ×0.8 Def, ×0.8 Health |
 
 - **Basic Attack** (every weapon but the bows): 100% P.Atk at the weapon's range, ends the turn, engages an adjacent target. It needs no line, so a Staff or Spear reaches 2 tiles past anyone in the way. The bows' Basic Attack follows their mode (below).
 - **Magic Bolt** (Staff, Crystal): 50% P.Atk + 50% M.Atk, range 5, line of sight.
 - **Circle Swing** (Greatsword; 50 mana, 4-turn cooldown): the Basic Attack on every unit within the weapon's range (1.5 tiles), allies included, with a 1-tile knockback. **Circle Swing (Spear)**: the same at the weapon's range − 0.5 (1.5 tiles) and 125% damage.
 - **Shield Slam** (shields; 30 mana, 2-turn cooldown, ends the turn): 60% P.Atk + 120% Def at the weapon's range; engages.
-- **Quick Attack** (daggers; 20 mana, 2-turn cooldown, **1 AP**): the Basic Attack at 80% damage, leaving you your other AP.
+- **Quick Attack** (Twin Daggers; 20 mana, 2-turn cooldown, **1 AP**): the Basic Attack at 80% damage, leaving you your other AP.
+- **Swap to Crossbow** (Dagger and Hand Crossbow; free toggle, no mana, 3-turn cooldown): readies the hand crossbow until your next weapon attack (Basic Attack, a Weapon skill such as Double Strike, or Overwatch), which becomes a shot: 4 tiles of range, needs line of sight, a projectile (forest cover applies), +50% P.Pen on top of your own, and no engaging. Firing puts it away and starts the cooldown; switching it on or off by hand is free and starts no cooldown.
 
 **Penetration** lowers the target's Defense against that type of damage: the percent first, then the flat amount, never below 0 (and it does nothing to Defense that is already 0 or less). 10 flat and 50% P.Pen make 100 Defense count as 100 × 0.5 − 10 = 40 against Physical damage.
 
@@ -236,8 +237,8 @@ Skills can cost **mana** (`mana` in `skills.json`), which doesn't come back duri
 
 | Mode | Skill | Range | Damage |
 |---|---|---|---|
-| Direct | Direct Shot | Weapon range (Longbow 6, Shortbow 4), needs line of sight | 100% P.Atk |
-| Indirect | Indirect Shot | Weapon range x 1.5 (9 or 6), arcs over cover | 70% P.Atk |
+| Direct | Direct Shot | Weapon range (Longbow 6, Shortbow 5), needs line of sight | 100% P.Atk |
+| Indirect | Indirect Shot | Weapon range x 1.5 (9 or 7.5), arcs over cover | 70% P.Atk |
 | Melee | Bow Strike | 1.5 | 80% P.Atk |
 
 **Damage types**: every hit is split by what it scales with. P.Atk, Defense and missing Health deal **Physical** damage (red numbers); M.Atk deals **Magical** damage (violet numbers), so a hybrid hit like Magic Bolt shows one of each. Both are reduced by Defense, after the attacker's penetration of that type (P.Pen for Physical, M.Pen for Magical); `Battle.mitigation` is also where magic resistance would go. Skills are tagged Physical / Magical to match their hits (a test checks this).

@@ -31,19 +31,19 @@ describe('equipment data (Equipment Stats sheet)', () => {
     expect(row('spear')).toEqual({ range: 2, base: { pAtk: 20, mAtk: 10 }, modifiers: { mAtk: 0.8 }, skills: ['basic_attack', 'circle_swing_spear'] });
     expect(row('sword_shield')).toEqual({ range: 1.5, base: { pAtk: 15, mAtk: 10, defense: 10 }, modifiers: { mAtk: 0.8 }, skills: ['basic_attack', 'shield_slam'] });
     expect(row('mace_shield')).toEqual({ range: 1.5, base: { pAtk: 15, mAtk: 10, defense: 10 }, modifiers: { pAtk: 0.8, mAtk: 0.8, pPenPct: 50 }, skills: ['basic_attack', 'shield_slam'] });
-    expect(row('longbow')).toEqual({ range: 6, base: { pAtk: 20, mAtk: 10 }, modifiers: { mAtk: 0.8 }, skills: ['bow_attack', 'switch_mode'] });
-    expect(row('shortbow')).toEqual({ range: 4, base: { pAtk: 20, mAtk: 10 }, modifiers: { mAtk: 0.8, movement: 1.2 }, skills: ['bow_attack', 'switch_mode'] });
-    expect(row('dagger')).toEqual({ range: 1.5, base: { pAtk: 15, mAtk: 10, pPen: 5 }, modifiers: { pAtk: 0.8 }, skills: ['basic_attack', 'quick_attack'] });
+    expect(row('longbow')).toEqual({ range: 6, base: { pAtk: 20, mAtk: 10 }, modifiers: { mAtk: 0.8, movement: 0.8, pPenPct: 25 }, skills: ['bow_attack', 'switch_mode'] });
+    expect(row('shortbow')).toEqual({ range: 5, base: { pAtk: 15, mAtk: 10, pPen: 5 }, modifiers: { mAtk: 0.8 }, skills: ['bow_attack', 'switch_mode'] });
+    expect(row('dagger')).toEqual({ range: 1.5, base: { pAtk: 15, mAtk: 10, pPen: 5 }, modifiers: { mAtk: 0.8 }, skills: ['basic_attack', 'swap_crossbow'] });
     expect(row('twin_daggers')).toEqual({ range: 1.5, base: { pAtk: 15, mAtk: 10, pPen: 5 }, modifiers: { mAtk: 0.8 }, skills: ['basic_attack', 'quick_attack'] });
-    expect(row('unarmed')).toEqual({ range: 1.5, base: {}, modifiers: { pAtk: 0.6, movement: 1.25 }, skills: ['basic_attack'] });
+    expect(row('unarmed')).toEqual({ range: 1.5, base: {}, modifiers: { pAtk: 0.6 }, skills: ['basic_attack'] });
   });
 
   it('has the body armors and No Armor', () => {
     const row = (id: string) => ({ base: ARMORS[id].base, modifiers: ARMORS[id].modifiers });
-    expect(row('leather')).toEqual({ base: { defense: 15, health: 75 }, modifiers: {} });
-    expect(row('mail')).toEqual({ base: { defense: 15, health: 75 }, modifiers: { movement: 0.9, defense: 1.1, health: 1.1 } });
-    expect(row('plate')).toEqual({ base: { defense: 15, health: 75 }, modifiers: { movement: 0.8, defense: 1.2, health: 1.2 } });
-    expect(row('none')).toEqual({ base: {}, modifiers: { defense: 0.9, health: 0.9 } });
+    expect(row('leather')).toEqual({ base: { defense: 15, health: 75 }, modifiers: { mana: 0.9 } });
+    expect(row('mail')).toEqual({ base: { defense: 15, health: 75 }, modifiers: { mana: 0.7, defense: 1.2, health: 1.2 } });
+    expect(row('plate')).toEqual({ base: { defense: 15, health: 75 }, modifiers: { mana: 0.5, defense: 1.4, health: 1.4 } });
+    expect(row('none')).toEqual({ base: {}, modifiers: { defense: 0.8, health: 0.8 } });
   });
 
   it('quality multiplies base stats 1 / 2 / 4 / 7 and sets the value', () => {
@@ -58,14 +58,17 @@ describe('stats from gear', () => {
   it('adds base stats (x quality) first, then applies the modifiers', () => {
     // Staff: (100 + 10) x 0.8 P.Atk, (100 + 20) x 1.2 M.Atk. Leather: 500 + 75 Health, 20 + 15 Defense.
     expect(deriveStats(kit('staff'))).toMatchObject({ pAtk: 88, mAtk: 144, health: 575, defense: 35, movement: 16 });
-    // Masterwork: base x7. Sword and Shield 15 x 7 = 105 P.Atk; Plate (20 + 70 shield + 105) x 1.2 Defense, (500 + 525) x 1.2 Health, 16 x 0.8 Move.
-    expect(deriveStats(kit('sword_shield', 'plate', 'masterwork'))).toMatchObject({ pAtk: 205, defense: 234, health: 1230, movement: 13 });
-    // Shortbow and Mail: 16 x 1.2 x 0.9 Movement.
-    expect(deriveStats(kit('shortbow', 'mail')).movement).toBe(17);
+    // Masterwork: base x7. Sword and Shield 15 x 7 = 105 P.Atk; Plate (20 + 70 shield + 105) x 1.4 Defense, (500 + 525) x 1.4 Health; armor costs mana, not Movement.
+    expect(deriveStats(kit('sword_shield', 'plate', 'masterwork'))).toMatchObject({ pAtk: 205, defense: 273, health: 1435, movement: 16 });
+    const mana = deriveStats(kit('staff', '')).mana;
+    expect(['leather', 'mail', 'plate'].map((a) => deriveStats(kit('staff', a)).mana)).toEqual([0.9, 0.7, 0.5].map((m) => Math.round(mana * m)));
+    // Shortbow: no Movement bonus any more; Longbow: x0.8 Movement and 25% P.Pen.
+    expect(deriveStats(kit('shortbow', 'mail')).movement).toBe(16);
+    expect(deriveStats(kit('longbow'))).toMatchObject({ movement: 13, pPenPct: 25 });
   });
 
-  it('Unarmed: x0.6 P.Atk but x1.25 Movement; No Armor: x0.9 Defense and Health', () => {
-    expect(deriveStats(kit('', ''))).toMatchObject({ pAtk: 60, mAtk: 100, defense: 18, health: 450, movement: 20 });
+  it('Unarmed: x0.6 P.Atk, no Movement bonus; No Armor: x0.8 Defense and Health, no mana penalty', () => {
+    expect(deriveStats(kit('', ''))).toMatchObject({ pAtk: 60, mAtk: 100, defense: 16, health: 400, movement: 16 });
     expect(weaponName(kit('', ''))).toBe('Unarmed');
     expect(armorName(kit('', ''))).toBe('No Armor');
   });
@@ -119,7 +122,7 @@ describe('penetration and forest', () => {
     const fighter = makeUnit(kit('spear'), 'player', { x: 5, y: 3 });
     const target = makeUnit(kit('spear', ''), 'enemy', { x: 6, y: 3 });
     const battle = new Battle(map, [archer, mage, fighter, target], makeRng(1));
-    expect(battle.stat(target, 'defense')).toBe(18); // forest no longer adds Defense
+    expect(battle.stat(target, 'defense')).toBe(16); // forest no longer adds Defense
     const shot = SKILLS.direct_shot;
     expect(isProjectile(shot)).toBe(true);
     expect(isProjectile(SKILLS.indirect_shot)).toBe(true);
@@ -127,9 +130,9 @@ describe('penetration and forest', () => {
     expect(isProjectile(SKILLS.basic_attack)).toBe(false);
     const open = battle.hitDamage(archer, target, { pAtk: 1 });
     const sheltered = battle.hitDamage(archer, target, { pAtk: 1 }, true);
-    // Crude Longbow: 120 P.Atk; 18 Defense = x100/118; forest x0.8 (rounded once, at the end).
-    expect(open).toBe(Math.round((120 * 100) / 118));
-    expect(sheltered).toBe(Math.round(((120 * 100) / 118) * 0.8));
+    // Crude Longbow: 120 P.Atk, 25% P.Pen; 16 Defense - 25% = 12 = x100/112; forest x0.8 (rounded once, at the end).
+    expect(open).toBe(Math.round((120 * 100) / 112));
+    expect(sheltered).toBe(Math.round(((120 * 100) / 112) * 0.8));
     expect(battle.previewHits(archer, SKILLS.bow_attack, target)).toEqual([sheltered]);
     expect(battle.previewHits(fighter, SKILLS.basic_attack, target)).toEqual([battle.hitDamage(fighter, target, { pAtk: 1 })]);
     const hp = target.hp;
@@ -144,8 +147,8 @@ describe('weapon skills', () => {
     const e = makeUnit(kit('spear', ''), 'enemy', { x: 4, y: 3 });
     const battle = new Battle(openMap(), [u, e], makeRng(1));
     const want = battle.hitDamage(u, e, { pAtk: 0.6, def: 1.2 });
-    // Crude Sword and Shield + Leather: P.Atk 115, Defense 20 + 10 + 15 = 45; the target (No Armor) has 18 Defense.
-    expect(want).toBe(Math.round((0.6 * 115 + 1.2 * 45) * 100 / 118));
+    // Crude Sword and Shield + Leather: P.Atk 115, Defense 20 + 10 + 15 = 45; the target (No Armor) has 16 Defense.
+    expect(want).toBe(Math.round((0.6 * 115 + 1.2 * 45) * 100 / 116));
     const hp = e.hp;
     battle.perform(u, 'shield_slam', { x: 4, y: 3 });
     expect(hp - e.hp).toBe(want);
@@ -156,7 +159,7 @@ describe('weapon skills', () => {
   });
 
   it('Quick Attack: 80% of the Basic Attack for 1 AP, so the turn goes on', () => {
-    const u = makeUnit(kit('dagger'), 'player', { x: 3, y: 3 });
+    const u = makeUnit(kit('twin_daggers'), 'player', { x: 3, y: 3 });
     const e = makeUnit(kit('spear', ''), 'enemy', { x: 4, y: 3 });
     const battle = new Battle(openMap(), [u, e], makeRng(1));
     const full = battle.previewHits(u, SKILLS.basic_attack, e)[0];
@@ -187,13 +190,44 @@ describe('weapon skills', () => {
     expect(new Battle(openMap(), [gs], makeRng(1)).skillFor(gs, SKILLS.circle_swing).aoeRadius).toBe(WEAPONS.greatsword.range);
   });
 
+  it('Swap to Crossbow (Dagger and Hand Crossbow): free; the next weapon attack shoots 4 tiles with +50% P.Pen, then the 3-turn cooldown starts', () => {
+    expect(WEAPONS.dagger.name).toBe('Dagger and Hand Crossbow');
+    expect(SKILLS.swap_crossbow).toMatchObject({ ap: 0, cooldown: 3, mana: 0, toggleStatus: 'hand_crossbow' });
+    const map = openMap();
+    const u = makeUnit(kit('dagger'), 'player', { x: 1, y: 3 });
+    const e = makeUnit(kit('spear', ''), 'enemy', { x: 5, y: 3 });
+    const hidden = makeUnit(kit('spear', ''), 'enemy', { x: 1, y: 6 });
+    map.tiles[5][1] = 'rock'; // blocks the shot at (1,6)
+    const battle = new Battle(map, [u, e, hidden], makeRng(1));
+    expect(battle.canAim(u, SKILLS.basic_attack, e)).toBe(false);
+    // Switching it on and off by hand costs nothing and starts no cooldown.
+    battle.perform(u, 'swap_crossbow', u);
+    battle.perform(u, 'swap_crossbow', u);
+    expect(u.cooldowns.swap_crossbow ?? 0).toBe(0);
+    expect(u.ap).toBe(2);
+    battle.perform(u, 'swap_crossbow', u);
+    expect(battle.skillRange(u, SKILLS.basic_attack)).toBe(4);
+    expect(battle.canAim(u, SKILLS.basic_attack, e)).toBe(true);
+    expect(battle.canAim(u, SKILLS.basic_attack, hidden)).toBe(false); // needs line of sight
+    // 50% P.Pen on top of the dagger's own: 16 Defense - 50% - 5 flat = 3.
+    const want = battle.hitDamage(u, e, { pAtk: 1 }, true, 50);
+    expect(battle.previewHits(u, SKILLS.basic_attack, e)).toEqual([want]);
+    const hp = e.hp;
+    battle.perform(u, 'basic_attack', e);
+    expect(hp - e.hp).toBe(want);
+    expect(e.engagedWith).toBeFalsy();
+    expect(battle.isToggledOn(u, 'hand_crossbow')).toBe(false);
+    expect(u.cooldowns.swap_crossbow).toBe(3);
+    expect(battle.skillRange(u, SKILLS.basic_attack)).toBe(1.5);
+  });
+
   it('every weapon class has its skill', () => {
     const second = (id: string) => WEAPONS[id].skills[1];
     expect(['staff', 'crystal'].map(second)).toEqual(['magic_bolt', 'magic_bolt']);
     expect(['greatsword', 'spear'].map(second)).toEqual(['circle_swing', 'circle_swing_spear']);
     expect(['sword_shield', 'mace_shield'].map(second)).toEqual(['shield_slam', 'shield_slam']);
     expect(['longbow', 'shortbow'].map(second)).toEqual(['switch_mode', 'switch_mode']);
-    expect(['dagger', 'twin_daggers'].map(second)).toEqual(['quick_attack', 'quick_attack']);
+    expect(['dagger', 'twin_daggers'].map(second)).toEqual(['swap_crossbow', 'quick_attack']);
     for (const removed of ['shield_up', 'empowered_strike', 'sword_slash', 'spear_thrust']) expect(SKILLS[removed]).toBeUndefined();
   });
 });

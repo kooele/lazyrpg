@@ -223,6 +223,8 @@ export interface StatusDef {
   zone?: ZoneDef;
   /** Mana each weapon attack's extra hit costs; without it the status switches off. */
   manaPerHit?: number;
+  /** Toggles: the next weapon attack becomes a projectile shot with this range and extra P.Pen % (Hand Crossbow). */
+  weaponSwap?: { range: number; pPenPct: number };
   /** Each move (walk, Dash) and skill the unit uses, toggles aside, fails with this chance (0-1); its AP, mana and cooldown are still spent (Shocked). */
   failChance?: number;
 }
@@ -393,6 +395,8 @@ export interface SkillDef {
   toggleStatus?: string;
   /** Toggles: the cooldown starts when it switches off, not when it's switched on (Soul Ignition). */
   cooldownAfterOff?: boolean;
+  /** Toggles: no cooldown for switching on or off; it starts when the toggle's effect is used up (Swap to Crossbow). */
+  cooldownWhenSpent?: boolean;
   /** The user gets a stack of this status per unit the skill hit, allies included (Heroic Leap: Heroic Guard). */
   selfStatusPerUnitHit?: { status: string; turns: number };
   /** Passives: extra Vision while Stealthed (Scout). */

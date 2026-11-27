@@ -450,7 +450,41 @@ export class Battle {
       }
       perSkill.set(cacheKey, out);
     }
-    return out;
+    return this.withWeaponSwap(u, s, out);
+  }
+
+  /** The unit's weapon swap (Hand Crossbow), if it has one ready. */
+  weaponSwap(u: Unit): { range: number; pPenPct: number } | undefined {
+    for (const st of u.statuses) if (STATUSES[st.id]?.weaponSwap) return STATUSES[st.id].weaponSwap;
+    return undefined;
+  }
+
+  /**
+   * Hand Crossbow ready: weapon attacks aimed at a unit (the Basic Attack, Weapon skills; `s` as listed) become a shot:
+   * the swap's range, line of sight, a projectile, extra P.Pen %, and no engaging. Overwatch follows through the
+   * basic attack's range and line.
+   */
+  private withWeaponSwap(u: Unit, s: SkillDef, out: SkillDef): SkillDef {
+    const sw = this.weaponSwap(u);
+    if (!sw || out.target !== 'unit' || !this.isWeaponAttack(u, s)) return out;
+    return {
+      ...out,
+      range: sw.range,
+      minRange: 1,
+      los: 'sight',
+      tags: [...out.tags.filter((t) => t !== 'melee' && t !== 'engage' && t !== 'indirect'), 'projectile'],
+      engageWithin: undefined,
+      pPenPct: combinePenPct(out.pPenPct ?? 0, sw.pPenPct),
+    };
+  }
+
+  /** The weapon swap was fired: it switches off, and its skill's cooldown starts (cooldownWhenSpent). */
+  private spendWeaponSwap(u: Unit): void {
+    const st = u.statuses.find((x) => STATUSES[x.id]?.weaponSwap);
+    if (!st) return;
+    u.statuses = u.statuses.filter((x) => x !== st);
+    const sid = this.skillIds(u).find((x) => SKILLS[x].toggleStatus === st.id);
+    if (sid && SKILLS[sid].cooldownWhenSpent) u.cooldowns[sid] = SKILLS[sid].cooldown;
   }
 
   /** What the unit's tag-dependent skills scale from (Movement, weapon). */
@@ -1908,6 +1942,8 @@ export class Battle {
       return events;
     }
     const origin = { x: u.x, y: u.y };
+    // Hand Crossbow: this weapon attack (or Overwatch) is the shot, and puts it away.
+    const firesSwap = !!this.weaponSwap(u) && (this.isWeaponAttack(u, skill) || (!!skill.cone && hasTag(skill, 'weapon')));
     // Aim first (Flicker Strike picks its victim before it moves), then resolve.
     const aimed = skill.charge ? this.targetsOf(u, skill, tile) : null;
     const used = this.skillFor(u, skill);
@@ -2020,11 +2056,12 @@ export class Battle {
     }
 
     events.push(...this.separationEvents());
+    if (firesSwap) this.spendWeaponSwap(u);
     // Attacking gives a Stealthed unit away.
     if (this.isAttack(used) && used.affects !== 'ally') u.statuses = u.statuses.filter((st) => !STATUSES[st.id]?.stealth);
     if (!u.alive) u.acted = true;
     // Mana was paid up front (none when switching a toggle off); switching a toggle off doesn't restart its cooldown.
-    events.push(...this.payFor(u, skillId, true, ap, switchingOff || !!skill.cooldownAfterOff));
+    events.push(...this.payFor(u, skillId, true, ap, switchingOff || !!skill.cooldownAfterOff || !!skill.cooldownWhenSpent));
     this.updateSightings();
     return events;
   }

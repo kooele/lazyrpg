@@ -53,7 +53,7 @@ describe('the stash', () => {
     expect(main.armor).toBeNull();
     expect(s.inventory.map(itemName)).toEqual(['Crude Leather']);
     expect(unequip(s, main.id, 'armor')).toMatch(/no armor/);
-    expect(deriveStats(main).health).toBe(450); // No Armor: 500 x 0.9
+    expect(deriveStats(main).health).toBe(400); // No Armor: 500 x 0.8
   });
 
   it("mercenaries keep their own gear", () => {

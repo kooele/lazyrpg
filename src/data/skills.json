@@ -41,6 +41,8 @@
     "allMana": "true = the skill spends all the user's remaining mana; \"mana\" is then the least it needs (Explosion!).",
     "hitPerMana": "Zones: extra Magical damage per hit for each point of mana the skill spent (Explosion!: 1.5 per mana).",
     "edgeDamage": "Zones: the hit falls off with distance from the aimed tile, down to this share at the zone's edge (Explosion!: 1/3).",
+    "weaponSwap": "Toggle statuses: { range, pPenPct }: the unit's next weapon attack (Basic Attack, Weapon skills, Overwatch) becomes a projectile shot with this range, line of sight and extra P.Pen %; it switches off once used (Hand Crossbow).",
+    "cooldownWhenSpent": "Toggles: no cooldown for switching on or off; it starts when the toggle's effect is used up (Swap to Crossbow).",
     "failChance": "Statuses: each move (walk, Dash) and skill the unit uses, toggles aside, fails with this chance; its AP, mana and cooldown are still spent (Shocked).",
     "stealthVision": "Passives: extra Vision (tiles) while the unit is Stealthed (Scout).",
     "basicSkills": "abilities every Adventurer has on top of weapon and tree skills"
@@ -96,6 +98,7 @@
     "heroic_guard": { "name": "Heroic Guard", "debuff": false, "stacking": true, "tick": "start", "statPct": { "defense": 0.2 }, "description": "+20% Defense per stack (one per unit hit by Heroic Leap), until the start of your next turn." },
     "hit_and_run": { "name": "Hit and Run", "debuff": false, "stacking": false, "tick": "end", "bonusMove": true, "refundIfUnused": true, "description": "The next time you use up your last AP this turn (a turn-ending attack included), you get a free movement action: walk, or use a Movement, Leap or Teleport skill. Engagement still holds you in place. If the turn ends without it (Wait, Overwatch or End Turn), its mana and cooldown are refunded." },
     "in_the_zone": { "name": "In the Zone", "debuff": false, "stacking": true, "tick": "end", "freeBasicAttacks": true, "description": "Your basic attacks cost no AP and ignore their cooldown, one stack per attack." },
+    "hand_crossbow": { "name": "Hand Crossbow", "debuff": false, "stacking": false, "tick": "start", "toggle": true, "weaponSwap": { "range": 4, "pPenPct": 50 }, "description": "Your next weapon attack (Basic Attack, a Weapon skill or Overwatch) is a crossbow shot: 4 tiles of range, +50% P.Pen, needs line of sight. Firing puts the crossbow away." },
     "poison": { "name": "Poison", "debuff": true, "stacking": true, "tick": "start", "damagePctMaxHpPerStack": 0.03, "description": "Lose 3% of max Health per stack at the start of each turn. Ignores Defense and shields." }
   },
 
@@ -427,6 +430,12 @@
       "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 4, "mana": 40, "level": 5,
       "selfStatus": [{ "status": "exposed", "turns": 1 }],
       "hits": [{ "pAtk": 2.5 }], "pPenPct": 25, "recoilIfSurvives": { "pAtk": 1 }
+    },
+    "swap_crossbow": {
+      "name": "Swap to Crossbow", "description": "Ready the hand crossbow: your next weapon attack is a long-range, armor-piercing shot. Use it again to put it away for free; the cooldown only starts once you fire.",
+      "tags": ["free", "toggle"],
+      "target": "self", "affects": "ally", "range": 0, "minRange": 0, "ap": 0, "cooldown": 3, "cooldownWhenSpent": true,
+      "toggleStatus": "hand_crossbow"
     },
     "double_strike": {
       "name": "Double Strike", "description": "Hit an enemy with your basic attack twice, the second time at half strength.",

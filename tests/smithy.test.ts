@@ -52,7 +52,7 @@ describe('the Smithy', () => {
     const etas = orderEtas(s);
     expect(s.smithyOrders.map((o) => etas[o.id])).toEqual([5, 5, 5, 10, 30]);
     for (let d = 0; d < 5; d++) smithyDay(s);
-    expect(s.inventory.map(itemName)).toEqual(['Fine Staff', 'Fine Spear', 'Fine Single Dagger']);
+    expect(s.inventory.map(itemName)).toEqual(['Fine Staff', 'Fine Spear', 'Fine Dagger and Hand Crossbow']);
     expect(s.smithyOrders.map((o) => o.worked)).toEqual([0, 0]);
     smithyDay(s);
     expect(s.smithyOrders.map((o) => o.worked)).toEqual([1, 1]);
