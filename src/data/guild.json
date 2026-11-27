@@ -111,7 +111,7 @@
     "pool": { "a": 20, "b": 40, "c": 80 }
   },
   "schedule": {
-    "_comment": "What members who aren't on a quest do each day (Manage Party). recover: recovers recoverMultiplier x healthPerDay. training: trainingXp.perLevel x level + trainingXp.flat XP (22 at level 1, 70 at level 25). oddJobs: oddJobsGold gold. dayOff: dayOffMorale Morale. marketplace (companions and slaves only): sells up to marketplaceItemsPerDay items from the top of the Marketplace sale list, at their full value.",
+    "_comment": "What members who aren't on a quest do each day (Manage Party). recover: recovers recoverMultiplier x healthPerDay. training: trainingXp.perLevel x level + trainingXp.flat XP (22 at level 1, 70 at level 25). oddJobs: oddJobsGold gold. dayOff: dayOffMorale Morale. marketplace (anyone but mercenaries): sells up to marketplaceItemsPerDay items from the top of the Marketplace sale list, at their full value.",
     "recoverMultiplier": 3,
     "trainingXp": { "perLevel": 2, "flat": 20 },
     "oddJobsGold": 10,
@@ -127,6 +127,8 @@
     "termDemand": { "2": 1.1, "4": 1.0, "8": 0.95, "12": 0.9 },
     "expectedWeeklyLoot": { "D": 150, "C": 400, "B": 900, "A": 2000, "S": 4500 },
     "patience": 3,
+    "_patience": "Offers a candidate hears before walking away: patience, plus 1 for every patiencePerRelationship relationship (renewals: 3 more at 90).",
+    "patiencePerRelationship": 30,
     "startingRelationship": 10,
     "relationshipPerQuest": 6,
     "relationshipUnpaid": -20,
@@ -167,9 +169,9 @@
     "percentPer5": 1
   },
   "simulation": {
-    "targetAdventurers": 100,
+    "targetAdventurers": 105,
     "targetParties": 20,
-    "poolTarget": 10,
+    "poolTarget": 15,
     "partySize": [3, 6],
     "questChancePerDay": 0.25,
     "successPerLevel": 0.18,

@@ -1,20 +1,34 @@
 // The Marketplace (Outer City): the party's stall. Items put up for sale (moved out of the stash) are sold, top of the
 // list first, by members on Marketplace duty: each sells up to schedule.marketplaceItemsPerDay a day, at full value.
 import { GUILD } from '../data/guild';
-import type { Character, GameState, Item } from '../data/types';
+import { isGearItem, type Character, type GameState, type Item } from '../data/types';
 import { itemName, itemValue } from './inventory';
 
 /** Can this item go up for sale? Everything but trophies (those are turned in at the city gate). */
 export const canSell = (item: Item) => item.kind !== 'trophy';
 
-/** Put stash items up for sale, at the bottom of the list. Returns an error or null. */
+/** Put the sale list in order of value: the most valuable items first (ties by name, so identical items stay together). */
+export function sortSaleList(state: GameState): void {
+  state.marketplace.sort((a, b) => itemValue(b) - itemValue(a) || itemName(a).localeCompare(itemName(b)) || a.kind.localeCompare(b.kind));
+}
+
+/** Put stash items up for sale; the sale list is then sorted by value (see sortSaleList). Returns an error or null. */
 export function listItems(state: GameState, ids: string[]): string | null {
   const items = ids.map((id) => state.inventory.find((i) => i.id === id));
   if (items.some((i) => !i)) return 'That item is no longer in the stash.';
   if (items.some((i) => !canSell(i!))) return 'Trophies are turned in at the city gate, not sold.';
   state.inventory = state.inventory.filter((i) => !ids.includes(i.id));
   state.marketplace.push(...(items as Item[]));
+  sortSaleList(state);
   return null;
+}
+
+/** Groups of stash items the Marketplace can list in one go: all junk, all Crude gear, or everything that can be sold. */
+export type ListAllGroup = 'junk' | 'crude' | 'all';
+export function listAllIds(state: GameState, group: ListAllGroup): string[] {
+  return state.inventory
+    .filter((i) => canSell(i) && (group === 'all' || (group === 'junk' ? i.kind === 'junk' : isGearItem(i) && i.quality === 'crude')))
+    .map((i) => i.id);
 }
 
 /** Take items off sale, back to the stash. */

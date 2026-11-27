@@ -329,6 +329,25 @@ describe('skills', () => {
     expect(archer.battle.skillRange(archer.units[0], SKILLS.double_strike)).toBe(5);
   });
 
+  it('double strike engages an adjacent target like the basic attack does (spear too), not one 2 tiles away', () => {
+    const near = setup(openMap(), [
+      { c: hero('spear', ['double_strike']), team: 'player', at: { x: 1, y: 1 } },
+      { c: hero('bow'), team: 'enemy', at: { x: 2, y: 1 } },
+    ]);
+    near.battle.perform(near.units[0], 'double_strike', { x: 2, y: 1 });
+    expect(near.units[0].engagedWith).toBe(near.units[1].uid);
+    const far = setup(openMap(), [
+      { c: hero('spear', ['double_strike']), team: 'player', at: { x: 1, y: 1 } },
+      { c: hero('bow'), team: 'enemy', at: { x: 3, y: 1 } },
+    ]);
+    far.battle.perform(far.units[0], 'double_strike', { x: 3, y: 1 });
+    expect(far.units[0].engagedWith).toBeNull();
+  });
+
+  it("a bear's Rend engages", () => {
+    expect(SKILLS.rend.tags).toContain('engage');
+  });
+
   it('cooldown 1 means the skill cannot be used on the next turn', () => {
     const { battle, units: [a] } = setup(openMap(), [
       { c: hero('sword_shield'), team: 'player', at: { x: 1, y: 1 } },
@@ -600,16 +619,16 @@ describe('skills', () => {
       return { battle, archer, target, u, events, shot: hp - u.hp, struck: targetHp - target.hp };
     };
 
-    // Monster Pounce from outside the arc (7,3): shot on the way in, still lands next to its prey and strikes.
+    // Monster Pounce (a Leap) from outside the arc (7,3): shot as it flies through, still lands next to its prey and strikes.
     const pounce = watched(makeEnemy('wolf', 1, makeRng(3)), 'pounce');
     expect(pounce.shot).toBeGreaterThan(0);
     expect(pounce.archer.overwatch).toBeNull(); // the watch is spent
     expect(pounce.u).toMatchObject({ x: 4, y: 3 });
     expect(pounce.struck).toBeGreaterThan(0);
-    // One move event per tile, with the overwatch shot right after the first step into the arc (6,3).
+    // One leap, with the overwatch shot it flew through right after.
     const kinds = pounce.events.map((e) => (e.type === 'damage' ? `damage:${e.cause}` : e.type));
-    expect(kinds.slice(0, 4)).toEqual(['move', 'damage:overwatch', 'move', 'move']);
-    expect(pounce.events[0]).toMatchObject({ type: 'move', to: { x: 6, y: 3 } });
+    expect(kinds.slice(0, 2)).toEqual(['move', 'damage:overwatch']);
+    expect(pounce.events[0]).toMatchObject({ type: 'move', kind: 'leap', from: { x: 7, y: 3 }, to: { x: 4, y: 3 } });
 
     // The player's Charge works the same way.
     const charge = watched(hero('sword_shield', ['charge']), 'charge');
@@ -2483,5 +2502,202 @@ describe('stat display', () => {
     expect(statEffectPct('defense', -scale)).toBe(-50); // takes 50% more damage
     expect(statText('pAtk', 95)).toBe('95');
     expect(statEffectPct('movement', 16)).toBeNull();
+  });
+});
+
+describe('new skills: Emergency Heal, Soul Ignition, Heroic Leap, Brutal Strike, Hit and Run, Scout vision', () => {
+  it('Emergency Heal is free and heals 80% M.Atk + 20% of the missing HP', () => {
+    const { battle, units: [cleric, ally] } = setup(openMap(), [
+      { c: hero('staff', ['emergency_heal']), team: 'player', at: { x: 1, y: 1 } },
+      { c: hero('sword_shield'), team: 'player', at: { x: 3, y: 1 } },
+    ]);
+    ally.hp = 100;
+    const expected = Math.round(0.8 * battle.stat(cleric, 'mAtk') + 0.2 * (ally.stats.health - 100));
+    battle.perform(cleric, 'emergency_heal', { x: 3, y: 1 });
+    expect(ally.hp).toBe(100 + expected);
+    expect(cleric.ap).toBe(2); // 0 AP
+    expect(cleric.cooldowns.emergency_heal).toBe(5);
+    expect(skillEffect(SKILLS.emergency_heal)).toBe("Heal 80% M.Atk + 20% of target's missing HP");
+  });
+
+  it('Soul Ignition costs HP and mana on and every turn, buffs Movement and M.Atk, and its cooldown starts when it goes off', () => {
+    const { battle, units: [u] } = setup(openMap(), [
+      { c: hero('staff', ['soul_ignition']), team: 'player', at: { x: 1, y: 1 } },
+      { c: hero(), team: 'enemy', at: { x: 8, y: 5 } },
+    ]);
+    const move = battle.stat(u, 'movement');
+    const mAtk = battle.stat(u, 'mAtk');
+    const cost = Math.round(u.stats.health * 0.1);
+    battle.perform(u, 'soul_ignition', { x: 1, y: 1 });
+    expect(u.hp).toBe(u.stats.health - cost);
+    expect(u.mp).toBe(u.stats.mana - 25);
+    expect(battle.stat(u, 'movement')).toBe(Math.round(move * 1.5));
+    expect(battle.stat(u, 'mAtk')).toBe(Math.round(mAtk * 1.25));
+    expect(u.cooldowns.soul_ignition ?? 0).toBe(0); // no cooldown while it's on
+    battle.endPhase();
+    battle.endPhase();
+    expect(u.hp).toBe(u.stats.health - 2 * cost);
+    expect(u.mp).toBe(u.stats.mana - 50);
+    battle.perform(u, 'soul_ignition', { x: 1, y: 1 }); // off
+    expect(battle.isToggledOn(u, 'soul_ignition')).toBe(false);
+    expect(u.cooldowns.soul_ignition).toBe(3);
+    // Not enough HP: it can't be switched on, and it switches off by itself.
+    u.cooldowns = {};
+    u.hp = cost;
+    expect(battle.isUsable(u, 'soul_ignition')).toBe(false);
+    u.hp = cost + 1;
+    battle.perform(u, 'soul_ignition', { x: 1, y: 1 });
+    expect(u.hp).toBe(1);
+    battle.endPhase();
+    const events = battle.endPhase();
+    expect(events).toContainEqual(expect.objectContaining({ type: 'toggle', name: 'Soul Ignition', on: false, reason: 'health' }));
+    expect(u.hp).toBe(1);
+    expect(u.cooldowns.soul_ignition).toBe(3);
+  });
+
+  it('Heroic Leap flies over rocks, slams everyone around the landing (allies too) and gives +20% Def per unit hit', () => {
+    const map = openMap();
+    for (let y = 0; y < map.height; y++) map.tiles[y][3] = 'rock'; // a wall nobody can walk through
+    const { battle, units: [u, ally, e1, e2] } = setup(map, [
+      { c: hero('sword_shield', ['heroic_leap']), team: 'player', at: { x: 1, y: 3 } },
+      { c: hero('bow'), team: 'player', at: { x: 5, y: 2 } },
+      { c: hero('bow'), team: 'enemy', at: { x: 5, y: 4 } },
+      { c: hero('bow'), team: 'enemy', at: { x: 6, y: 3 } },
+    ]);
+    expect(battle.skillRange(u, SKILLS.heroic_leap)).toBe(Math.floor(battle.stat(u, 'movement') / 4));
+    const def = battle.stat(u, 'defense');
+    const events = battle.perform(u, 'heroic_leap', { x: 5, y: 3 });
+    expect(u).toMatchObject({ x: 5, y: 3, acted: true });
+    expect(events[0]).toMatchObject({ type: 'move', kind: 'leap', to: { x: 5, y: 3 } });
+    for (const t of [ally, e1, e2]) expect(t.hp).toBeLessThan(t.stats.health);
+    expect(u.statuses.find((s) => s.id === 'heroic_guard')?.stacks).toBe(3); // the ally counts too
+    expect(battle.stat(u, 'defense')).toBe(Math.round(def * 1.6));
+    expect(u.mp).toBe(u.stats.mana - 80);
+  });
+
+  it("Heroic Leap can't be used while engaged, and enemy overwatch fires as it flies past", () => {
+    const { battle, units: [archer, u, e] } = setup(openMap(12, 7), [
+      { c: hero('bow'), team: 'enemy', at: { x: 5, y: 0 } },
+      { c: hero('sword_shield', ['heroic_leap']), team: 'player', at: { x: 1, y: 3 } },
+      { c: hero('bow'), team: 'enemy', at: { x: 10, y: 6 } },
+    ]);
+    archer.overwatch = { skillId: 'overwatch', tiles: new Set(['3,3']), interrupt: true, hits: [{ pAtk: 1 }] };
+    const hp = u.hp;
+    battle.perform(u, 'heroic_leap', { x: 5, y: 3 });
+    expect(u.hp).toBe(hp - 100); // shot in the air (and an interrupting watch doesn't stop a leap)
+    expect(u).toMatchObject({ x: 5, y: 3 });
+    const b2 = setup(openMap(), [
+      { c: hero('sword_shield', ['heroic_leap']), team: 'player', at: { x: 1, y: 3 } },
+      { c: hero('bow'), team: 'enemy', at: { x: 2, y: 3 } },
+    ]);
+    b2.units[0].engagedWith = b2.units[1].uid;
+    b2.units[1].engagedWith = b2.units[0].uid;
+    expect(b2.battle.engagementBlock(b2.units[0], SKILLS.heroic_leap, { x: 4, y: 3 })).toMatch(/disengage before moving/);
+    void e;
+  });
+
+  it('Brutal Strike lands at the start of your next turn on anyone still on the tile; engaged enemies break away from it', () => {
+    const { battle, units: [u, e] } = setup(openMap(), [
+      { c: hero('sword_shield', ['brutal_strike']), team: 'player', at: { x: 1, y: 3 } },
+      { c: hero('bow'), team: 'enemy', at: { x: 2, y: 3 } },
+    ]);
+    u.engagedWith = e.uid;
+    e.engagedWith = u.uid;
+    battle.perform(u, 'brutal_strike', { x: 2, y: 3 });
+    expect(u.acted).toBe(true);
+    expect(e.hp).toBe(e.stats.health); // nothing yet
+    // The engaged foe would rather take the free hit than the blow.
+    battle.endPhase();
+    expect(shouldDisengage(battle, e)).toBe(true);
+    // It stays: the blow lands as the party's turn begins (200% of 100 P.Atk on Def 0), and the wind-up is gone.
+    const events = battle.endPhase();
+    expect(e.hp).toBe(e.stats.health - 200);
+    expect(events).toContainEqual(expect.objectContaining({ type: 'zoneHit', name: 'Brutal Strike' }));
+    expect(battle.zones).toHaveLength(0);
+    // Stepping off in time: nothing.
+    const b2 = setup(openMap(), [
+      { c: hero('sword_shield', ['brutal_strike']), team: 'player', at: { x: 1, y: 3 } },
+      { c: hero('bow'), team: 'enemy', at: { x: 2, y: 3 } },
+    ]);
+    b2.battle.perform(b2.units[0], 'brutal_strike', { x: 2, y: 3 });
+    expect(b2.battle.zoneDanger(b2.units[1], [])).toBe(200);
+    b2.battle.endPhase();
+    b2.battle.move(b2.units[1], { x: 4, y: 3 });
+    b2.battle.endPhase();
+    expect(b2.units[1].hp).toBe(b2.units[1].stats.health);
+    // Anyone on the tile gets hit, allies included.
+    const b3 = setup(openMap(), [
+      { c: hero('sword_shield', ['brutal_strike']), team: 'player', at: { x: 1, y: 3 } },
+      { c: hero('bow'), team: 'player', at: { x: 2, y: 3 } },
+    ]);
+    b3.battle.perform(b3.units[0], 'brutal_strike', { x: 2, y: 3 });
+    b3.battle.endPhase();
+    b3.battle.endPhase();
+    expect(b3.units[1].hp).toBe(b3.units[1].stats.health - 200);
+  });
+
+  it('Hit and Run: spending the last AP gives one free movement action (walk or a movement skill only)', () => {
+    const rogue = hero('sword_shield', ['hit_and_run', 'shadow_step', 'kick']);
+    rogue.level = 5; // enough skill points for all three
+    const { battle, units: [u, e] } = setup(openMap(), [
+      { c: rogue, team: 'player', at: { x: 1, y: 3 } },
+      { c: tank(), team: 'enemy', at: { x: 2, y: 3 } },
+    ]);
+    battle.perform(u, 'hit_and_run', { x: 1, y: 3 });
+    expect(u.ap).toBe(2);
+    const events = battle.perform(u, 'basic_attack', { x: 2, y: 3 }); // turn-ending basic attack
+    expect(events).toContainEqual({ type: 'bonusMove', target: u.uid });
+    expect(u).toMatchObject({ acted: false, ap: 1, bonusMove: true });
+    // Engaged by the basic attack: no walking off, but a disengage teleport works; attacks don't.
+    expect(battle.canMove(u)).toBe(false);
+    expect(battle.canUseSkill(u, 'kick')).toBe(false);
+    expect(() => battle.perform(u, 'kick', { x: 2, y: 3 })).toThrow(/moving only/);
+    expect(battle.canUseSkill(u, 'shadow_step')).toBe(true);
+    battle.perform(u, 'shadow_step', { x: 1, y: 2 });
+    expect(u).toMatchObject({ x: 1, y: 2, ap: 0 });
+    expect(u.statuses.some((s) => s.id === 'hit_and_run')).toBe(false);
+    void e;
+    // Walking: move, then the action AP on a 1-AP skill hits 0 AP and the free move lets it walk again.
+    const b2 = setup(openMap(), [
+      { c: hero('sword_shield', ['hit_and_run', 'pocket_sand']), team: 'player', at: { x: 1, y: 3 } },
+      { c: tank(), team: 'enemy', at: { x: 4, y: 3 } },
+    ]);
+    const w = b2.units[0];
+    b2.battle.perform(w, 'hit_and_run', { x: 1, y: 3 });
+    b2.battle.move(w, { x: 2, y: 3 });
+    expect(w.ap).toBe(1);
+    b2.battle.perform(w, 'pocket_sand', { x: 4, y: 3 }); // 1 AP: the last one
+    expect(w).toMatchObject({ ap: 1, bonusMove: true });
+    expect(b2.battle.canMove(w)).toBe(true);
+    b2.battle.move(w, { x: 1, y: 1 });
+    expect(w).toMatchObject({ x: 1, y: 1, ap: 0 });
+    expect(b2.battle.canUndoMove(w)).toBe(false);
+    // Wait and Overwatch don't count: the turn ends with it unused, and its mana and cooldown come back.
+    for (const end of ['wait', 'overwatch'] as const) {
+      const b3 = setup(openMap(), [{ c: hero('sword_shield', ['hit_and_run']), team: 'player', at: { x: 1, y: 3 } }]);
+      const r = b3.units[0];
+      b3.battle.perform(r, 'hit_and_run', { x: 1, y: 3 });
+      expect(r.mp).toBe(r.stats.mana - 20);
+      if (end === 'wait') b3.battle.wait(r);
+      else b3.battle.perform(r, 'overwatch', { x: 2, y: 3 });
+      expect(r.bonusMove).toBeFalsy();
+      const events = b3.battle.endPhase();
+      expect(events).toContainEqual({ type: 'toggle', target: r.uid, name: 'Hit and Run', on: false, reason: 'turn' });
+      expect(r.mp).toBe(r.stats.mana);
+      expect(r.cooldowns.hit_and_run ?? 0).toBe(0);
+    }
+    // Used: no refund.
+    expect(w.cooldowns.hit_and_run).toBe(3);
+  });
+
+  it('Scout sees 2 tiles further while Stealthed', () => {
+    const { battle, units: [s, other] } = setup(openMap(), [
+      { c: hero('sword_shield', ['scout']), team: 'player', at: { x: 1, y: 3 } },
+      { c: hero('sword_shield'), team: 'player', at: { x: 1, y: 5 } },
+    ]);
+    expect(battle.isStealthed(s)).toBe(true);
+    expect(battle.stat(s, 'vision')).toBe(battle.stat(other, 'vision') + 2);
+    s.statuses = [];
+    expect(battle.stat(s, 'vision')).toBe(battle.stat(other, 'vision'));
   });
 });

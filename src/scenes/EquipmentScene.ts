@@ -3,8 +3,8 @@ import { ARMORS, SKILLS, WEAPONS } from '../data/content';
 import { STAT_INFO, isGearItem, type Character, type Gear, type GearItem, type GearKind, type Item, type LootItem } from '../data/types';
 import { penLine, statText } from '../game/battle';
 import { deriveStats } from '../game/character';
-import { armorName, armorOf, figureKit, gearStatLines, weaponName, weaponOf } from '../game/gear';
-import { equipBlock, equipItem, itemName, itemValue, sortedInventory, stacks, statChanges, unequip } from '../game/inventory';
+import { armorName, armorOf, figureKit, gearName, gearStatLines, weaponName, weaponOf } from '../game/gear';
+import { equipBlock, equipItem, equipOwn, itemName, keepsOwnGear, itemValue, sortedInventory, stacks, statChanges, unequip } from '../game/inventory';
 import { markDirty, requireState, session } from '../game/session';
 import { MEMBER_COLOR, MEMBER_LABEL, cityHeader } from '../ui/hud';
 import { COLORS, HEIGHT, ScrollList, Tooltip, WIDTH, button, clearScene, figure, panel, setupCamera, text, toast, type ScrollItem } from '../ui/widgets';
@@ -141,20 +141,33 @@ export class EquipmentScene extends Phaser.Scene {
     const g = c[kind];
     panel(this, x, y, 316, 160, COLORS.panelLight);
     text(this, x + 10, y + 6, kind === 'weapon' ? 'Weapon' : 'Armor', { fontSize: '12px', color: COLORS.dim });
+    // A companion's own piece, taken off for one from the stash: it's theirs, kept in their pack.
+    const own = c.ownGear?.[kind];
+    if (own) {
+      const tip = `${gearName(own, kind)} (their own)\n${gearLines(kind, own).join('\n')}\n\nIt stays in ${c.name}'s pack: the party can't take it. They put it back on when they leave.`;
+      button(this, x + 96, y + 4, 116, 26, 'Wear Their Own', () => {
+        const err = equipOwn(requireState(), c.id, kind);
+        if (err) return toast(this, err, COLORS.bad);
+        markDirty();
+        this.tip.hide();
+        this.render();
+      }, { fontSize: 12, enabled: canChange, onHover: () => this.tip.show(tip), onOut: () => this.tip.hide() });
+      text(this, x + 10, y + 140, `In Their Pack: ${gearName(own, kind)}`, { fontSize: '10px', color: COLORS.dim });
+    }
     if (!g) {
       const def = kind === 'weapon' ? weaponOf(c) : armorOf(c);
       text(this, x + 10, y + 24, def?.name ?? '', { fontSize: '16px', color: COLORS.dim });
       text(this, x + 10, y + 48, [...(def ? gearStatLines(def).slice(1) : []), kind === 'weapon' ? 'Skills: Basic Attack' : ''].filter(Boolean).join('\n'), {
         fontSize: '12px', color: COLORS.dim, lineSpacing: 2, wordWrap: { width: 296 },
       });
-      text(this, x + 10, y + 132, 'Equip one from the stash.', { fontSize: '11px', color: COLORS.dim });
+      if (!own) text(this, x + 10, y + 132, 'Equip one from the stash.', { fontSize: '11px', color: COLORS.dim });
       return;
     }
     text(this, x + 10, y + 24, kind === 'weapon' ? weaponName(c) : armorName(c), { fontSize: '16px', color: qualityColor(g.quality) });
     text(this, x + 10, y + 48, gearLines(kind, g).join('\n'), { fontSize: '12px', lineSpacing: 2, wordWrap: { width: 296 } });
-    // A companion leaves with what they brought; once it's in the stash, it's the party's.
-    if (!g.issued && c.contract?.type === 'companion') {
-      text(this, x + 10, y + 140, 'Their own (once taken off, it stays in the stash).', { fontSize: '10px', color: COLORS.dim });
+    // A companion leaves with what they brought; taken off, it goes into their own pack.
+    if (!g.issued && keepsOwnGear(c)) {
+      text(this, x + 10, y + 140, 'Their own (taken off, it stays in their pack).', { fontSize: '10px', color: COLORS.dim });
     }
     button(this, x + 216, y + 4, 92, 26, 'Unequip', () => {
       const err = unequip(requireState(), c.id, kind);

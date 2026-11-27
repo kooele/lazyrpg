@@ -190,6 +190,15 @@ export interface StatusDef {
   toggle?: boolean;
   /** Mana the unit pays at the start of each of its turns to keep it; it switches off when it can't. */
   manaPerTurn?: number;
+  /**
+   * Toggles: a share of max HP (ignoring Defense and shields) paid when switched on and at the start of each turn
+   * (Soul Ignition). It can't be switched on, and switches off, when the unit has no more HP than that.
+   */
+  hpPctPerTurn?: number;
+  /** The next time the unit spends its last AP this turn, it gets one free movement action (Hit and Run). */
+  bonusMove?: boolean;
+  /** Runs out unused at the end of the turn: the skill that gave it refunds its mana and cooldown (Hit and Run). */
+  refundIfUnused?: boolean;
   /** Weapon attacks (basic attacks, Overwatch, opportunity attacks, 'weapon' skills) add this hit to each target they hit. */
   weaponOnHit?: DamagePart;
   /** Statuses each weapon on-hit adds to the target (Fire Weapon: a stack of Burn). */
@@ -274,6 +283,11 @@ export interface ZoneDef {
   affects?: 'any' | 'enemy';
   /** Percent stat changes for affected units standing in it (Rain: -25% P.Atk and M.Atk). */
   statPct?: Partial<Stats>;
+  /**
+   * A wind-up (Brutal Strike): harmless to walk through or end a turn on; at the start of the caster's next turn it hits
+   * every unit it affects standing on it once, then it's gone.
+   */
+  delayed?: boolean;
 }
 
 export const ELEMENTS = ['fire', 'ice', 'water'] as const;
@@ -323,13 +337,14 @@ export interface SkillDef {
   rangeScale?: number;
   /** Damage hits, applied in order. */
   hits?: DamagePart[];
-  heal?: { mAtk: number };
+  /** Heals mAtk x the caster's M.Atk, plus missingHp x the target's missing HP (Emergency Heal). */
+  heal?: { mAtk: number; missingHp?: number };
   /** Shield points: a fraction of the target's max HP and/or of the caster's M.Atk. */
   shield?: { maxHpPct?: number; mAtk?: number; turns: number };
   applyStatus?: { status: string; turns: number; stacks?: number }[];
   knockback?: number;
   cleanse?: boolean;
-  /** For target 'self': affect units within this distance of the caster. */
+  /** For target 'self': affect units within this distance of the caster. For 'emptyTile' (Heroic Leap): of the tile it lands on. */
   aoeRadius?: number;
   cone?: ConeDef;
   /** For target 'ground': the zone it places. */
@@ -366,6 +381,12 @@ export interface SkillDef {
   switchMode?: boolean;
   /** Switch this status on (paying the skill's mana) or, if it's on, off again (free). */
   toggleStatus?: string;
+  /** Toggles: the cooldown starts when it switches off, not when it's switched on (Soul Ignition). */
+  cooldownAfterOff?: boolean;
+  /** The user gets a stack of this status per unit the skill hit, allies included (Heroic Leap: Heroic Guard). */
+  selfStatusPerUnitHit?: { status: string; turns: number };
+  /** Passives: extra Vision while Stealthed (Scout). */
+  stealthVision?: number;
   /** For target 'ground' without a zone: the tiles it hits around the aimed tile ('cross' = the tile and its 4 neighbours). */
   shape?: 'cross';
   /** Damage multiplier against units with a unit tag (Smite: x2 against Evil). */
@@ -508,6 +529,11 @@ export interface Character {
   weapon?: Gear | null;
   /** Equipped armor (missing / null = No Armor). */
   armor?: Gear | null;
+  /**
+   * A companion's own gear they took off for a piece from the party's stash: it stays in their own pack (the party
+   * can't take it), and they put it back on when they leave.
+   */
+  ownGear?: { weapon?: Gear; armor?: Gear };
   /** Skills picked from the skill trees (weapon skills are always available). */
   skillIds: string[];
   appearance: Appearance;

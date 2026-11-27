@@ -86,7 +86,19 @@ export function equipBlock(c: Character | undefined): string | null {
   return null;
 }
 
-/** Equip a stash item on a party member; what they had in that slot goes to the stash. Returns an error or null. */
+/** Companions own the gear they brought: taken off, it goes into their own pack (ownGear), not the stash. */
+export const keepsOwnGear = (c: Character) => c.contract?.type === 'companion';
+
+/** Take the piece in a slot off: the member's own (a companion's) into their pack, anything else into the stash. */
+function takeOff(state: GameState, c: Character, kind: GearKind): void {
+  const g = c[slotOf(kind)];
+  if (!g) return;
+  if (!g.issued && keepsOwnGear(c) && !c.ownGear?.[kind]) c.ownGear = { ...c.ownGear, [kind]: { type: g.type, quality: g.quality } };
+  else addItem(state, kind, { type: g.type, quality: g.quality });
+  c[slotOf(kind)] = null;
+}
+
+/** Equip a stash item on a party member; what they had in that slot goes to the stash (or their own pack). Returns an error or null. */
 export function equipItem(state: GameState, memberId: string, itemId: string): string | null {
   const c = state.party.find((m) => m.id === memberId);
   const block = equipBlock(c);
@@ -94,38 +106,61 @@ export function equipItem(state: GameState, memberId: string, itemId: string): s
   const item = state.inventory.find((i) => i.id === itemId);
   if (!item) return 'That item is no longer in the stash.';
   if (!isGearItem(item)) return `${item.name} can't be equipped.`;
-  const slot = slotOf(item.kind);
-  const old = c![slot];
   state.inventory = state.inventory.filter((i) => i !== item);
-  if (old) addItem(state, item.kind, old);
-  c![slot] = { type: item.type, quality: item.quality, issued: true };
+  takeOff(state, c!, item.kind);
+  c![slotOf(item.kind)] = { type: item.type, quality: item.quality, issued: true };
   return null;
 }
 
-/** Take a member's weapon or armor off and put it in the stash. Returns an error or null. */
+/** A companion puts their own piece back on (from their pack); a stash piece in that slot goes back to the stash. */
+export function equipOwn(state: GameState, memberId: string, kind: GearKind): string | null {
+  const c = state.party.find((m) => m.id === memberId);
+  const block = equipBlock(c);
+  if (block) return block;
+  const own = c!.ownGear?.[kind];
+  if (!own) return `${c!.name} has no ${kind} of their own in their pack.`;
+  takeOff(state, c!, kind);
+  c![slotOf(kind)] = { type: own.type, quality: own.quality };
+  dropOwn(c!, kind);
+  return null;
+}
+
+function dropOwn(c: Character, kind: GearKind): void {
+  if (!c.ownGear) return;
+  delete c.ownGear[kind];
+  if (!c.ownGear.weapon && !c.ownGear.armor) delete c.ownGear;
+}
+
+/** Take a member's weapon or armor off: into the stash, or (a companion's own) into their pack. Returns an error or null. */
 export function unequip(state: GameState, memberId: string, kind: GearKind): string | null {
   const c = state.party.find((m) => m.id === memberId);
   const block = equipBlock(c);
   if (block) return block;
-  const slot = slotOf(kind);
-  const g = c![slot];
-  if (!g) return `${c!.name} has no ${kind} to take off.`;
-  addItem(state, kind, g);
-  c![slot] = null;
+  if (!c![slotOf(kind)]) return `${c!.name} has no ${kind} to take off.`;
+  takeOff(state, c!, kind);
   return null;
 }
 
 /**
- * A member is leaving the party: gear handed out from the stash goes back to it (`all`: everything they carry, for
- * slaves sold or seized and members who died). Returns the items returned.
+ * A member is leaving the party: gear handed out from the stash goes back to it, and they put their own gear (ownGear)
+ * back on. `all`: everything they carry goes to the stash, own gear too (slaves sold or seized, members who died).
+ * Returns the items returned.
  */
 export function returnGear(state: GameState, c: Character, all = false): GearItem[] {
   const out: GearItem[] = [];
   for (const kind of GEAR_KINDS) {
     const g = c[slotOf(kind)];
-    if (!g || !(all || g.issued)) continue;
-    out.push(addItem(state, kind, g));
-    c[slotOf(kind)] = null;
+    const own = c.ownGear?.[kind];
+    if (g && (all || g.issued)) {
+      out.push(addItem(state, kind, { type: g.type, quality: g.quality }));
+      c[slotOf(kind)] = null;
+    }
+    if (own) {
+      if (all) out.push(addItem(state, kind, own));
+      else if (!c[slotOf(kind)]) c[slotOf(kind)] = { type: own.type, quality: own.quality };
+      else continue;
+      dropOwn(c, kind);
+    }
   }
   return out;
 }

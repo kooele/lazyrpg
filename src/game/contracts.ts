@@ -122,6 +122,12 @@ export function evaluateOffer(
   return { verdict: 'reject', ratio, counterPay, message: `"Is that a joke?" ${who.name} looks offended.` };
 }
 
+/** Patience a candidate starts a negotiation with: the base, plus 1 per patiencePerRelationship relationship. */
+export function maxPatience(relationship = 0): number {
+  const K = GUILD.companion;
+  return K.patience + Math.floor(Math.max(0, relationship) / Math.max(1, K.patiencePerRelationship));
+}
+
 /** Patience an offer costs. */
 export const patienceCost = (r: NegotiationResult) => (r.verdict === 'counter' ? 1 : r.verdict === 'accept' ? 0 : 2);
 

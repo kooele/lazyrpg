@@ -130,6 +130,8 @@ export interface GuildConfig {
     termDemand: Record<string, number>;
     expectedWeeklyLoot: Record<Rank, number>;
     patience: number;
+    /** +1 patience in negotiations for every this much relationship. */
+    patiencePerRelationship: number;
     startingRelationship: number;
     relationshipPerQuest: number;
     relationshipUnpaid: number;
@@ -370,7 +372,7 @@ export function parseGuildConfig(data: unknown): GuildConfig {
     mercenary: numbers(d.mercenary, 'mercenary', ['feePerLevel', 'cutBase', 'cutPerLevel']),
     companion: {
       ...numbers<Omit<GuildConfig['companion'], 'terms' | 'termDemand' | 'expectedWeeklyLoot' | 'relationshipUnpaid'>>(c, 'companion',
-        ['wageBase', 'wagePerLevel', 'patience', 'startingRelationship', 'relationshipPerQuest', 'renewalDiscountAtMax', 'graceDays', 'releaseMinWeeks', 'releaseShareOfRemaining']),
+        ['wageBase', 'wagePerLevel', 'patience', 'patiencePerRelationship', 'startingRelationship', 'relationshipPerQuest', 'renewalDiscountAtMax', 'graceDays', 'releaseMinWeeks', 'releaseShareOfRemaining']),
       relationshipUnpaid: num(c.relationshipUnpaid, 'companion.relationshipUnpaid', -100, 0),
       terms,
       termDemand: termDemand as Record<string, number>,

@@ -639,7 +639,7 @@ function activityEffect(c: Character, a: Activity): string {
   if (a === 'recover') return `+${S.recoverMultiplier * GUILD.condition.healthPerDay * traitFactor(c, 'healthRecovery')} Health a Day (instead of +${GUILD.condition.healthPerDay * traitFactor(c, 'healthRecovery')})`;
   if (a === 'training') return `+${trainingXp(c.level)} XP a Day`;
   if (a === 'oddJobs') return `+${S.oddJobsGold} Gold a Day`;
-  if (a === 'marketplace') return canDoActivity(c, a) ? `Sells ${S.marketplaceItemsPerDay} Items a Day` : 'Companions and Slaves Only';
+  if (a === 'marketplace') return canDoActivity(c, a) ? `Sells ${S.marketplaceItemsPerDay} Items a Day` : 'Not for Mercenaries';
   return `+${S.dayOffMorale * traitFactor(c, 'moraleGain')} Morale a Day`;
 }
 

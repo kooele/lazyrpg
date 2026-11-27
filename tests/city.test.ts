@@ -1604,6 +1604,32 @@ describe('quick battle (demo)', () => {
   });
 });
 
+describe('negotiation patience and hall gear', () => {
+  it('a candidate has 1 more patience per 30 relationship', async () => {
+    const { maxPatience } = await import('../src/game/contracts');
+    const base = GUILD.companion.patience;
+    expect(maxPatience(0)).toBe(base);
+    expect(maxPatience(29)).toBe(base);
+    expect(maxPatience(30)).toBe(base + 1);
+    expect(maxPatience(95)).toBe(base + 3);
+  });
+
+  it('guild hall adventurers sometimes bring Common gear, more often at higher levels', async () => {
+    const { randomAdventurer } = await import('../src/game/people');
+    const rng = makeRng(4);
+    const share = (level: number) => {
+      let common = 0;
+      for (let i = 0; i < 400; i++) {
+        const c = randomAdventurer(level, rng);
+        common += +(c.weapon!.quality === 'common') + +(c.armor!.quality === 'common');
+      }
+      return common / 800;
+    };
+    expect(share(1)).toBeLessThan(0.08);
+    expect(Math.abs(share(10) - 0.3)).toBeLessThan(0.07);
+  });
+});
+
 describe('churches', () => {
   it('donations bless the party for the next quest: bigger replaces smaller, and it fades when the quest ends', () => {
     const s = start();

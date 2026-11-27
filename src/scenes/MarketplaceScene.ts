@@ -4,7 +4,7 @@ import { isGearItem, type Item } from '../data/types';
 import { activityOf } from '../game/condition';
 import { scheduledMembers } from '../game/city';
 import { itemName, itemValue, sortedInventory, stacks } from '../game/inventory';
-import { canSell, listItems, moveGroup, saleGroups, salesPerDay, unlistItems } from '../game/marketplace';
+import { canSell, listAllIds, listItems, moveGroup, saleGroups, salesPerDay, unlistItems, type ListAllGroup } from '../game/marketplace';
 import { markDirty, requireState, session } from '../game/session';
 import { cityHeader } from '../ui/hud';
 import { COLORS, HEIGHT, ScrollList, WIDTH, button, clearScene, panel, setupCamera, text, toast, type ScrollItem } from '../ui/widgets';
@@ -47,7 +47,7 @@ export class MarketplaceScene extends Phaser.Scene {
     text(this, 20, 78, `${who} · sells ${perDay} item${perDay === 1 ? '' : 's'} a day${state.marketplace.length && perDay ? ` · about ${days} day${days === 1 ? '' : 's'} to sell the list` : ''}`, {
       fontSize: '12px', color: all.length ? COLORS.text : COLORS.bad, wordWrap: { width: WIDTH - 220 },
     });
-    text(this, 20, 94, `Companions and slaves can be put on Marketplace duty in Manage Party (Schedule). Each sells ${GUILD.schedule.marketplaceItemsPerDay} items a day, at full value.`, {
+    text(this, 20, 94, `Members can be put on Marketplace duty in Manage Party (Schedule). Each sells ${GUILD.schedule.marketplaceItemsPerDay} items a day, at full value. The list is sorted by value as items go up for sale.`, {
       fontSize: '11px', color: COLORS.dim, wordWrap: { width: WIDTH - 220 },
     });
     this.stash();
@@ -61,7 +61,19 @@ export class MarketplaceScene extends Phaser.Scene {
     panel(this, 16, 118, 456, HEIGHT - 134);
     const sellable = sortedInventory(state).filter(canSell);
     text(this, 28, 126, `Stash (${sellable.length} to Sell)`, { fontSize: '16px', color: COLORS.gold });
-    const list = new ScrollList(this, 22, 152, 444, HEIGHT - 174, 4);
+    const sell = (ids: string[]) => {
+      const err = listItems(state, ids);
+      if (err) return toast(this, err, COLORS.bad);
+      markDirty();
+      this.render();
+    };
+    // List a whole group at once.
+    const groups: [ListAllGroup, string][] = [['junk', 'List All Junk'], ['crude', 'List All Crude'], ['all', 'List All']];
+    groups.forEach(([g, label], i) => {
+      const ids = listAllIds(state, g);
+      button(this, 28 + i * 146, 150, 140, 28, label, () => sell(ids), { fontSize: 12, enabled: ids.length > 0 });
+    });
+    const list = new ScrollList(this, 22, 186, 444, HEIGHT - 208, 4);
     list.setItems(stacks(sellable).map((st): ScrollItem => ({
       height: 46,
       make: () => {
@@ -69,12 +81,6 @@ export class MarketplaceScene extends Phaser.Scene {
         row.add(this.add.rectangle(0, 0, 434, 46, COLORS.panelLight, 0.4).setOrigin(0));
         row.add(text(this, 10, 5, `${itemName(st.item)}${st.count > 1 ? `  ×${st.count}` : ''}`, { fontSize: '14px', color: colorOf(st.item) }));
         row.add(text(this, 10, 26, `${kindName(st.item)} · ${itemValue(st.item)}g${st.count > 1 ? ' each' : ''}`, { fontSize: '11px', color: COLORS.dim }));
-        const sell = (ids: string[]) => {
-          const err = listItems(state, ids);
-          if (err) return toast(this, err, COLORS.bad);
-          markDirty();
-          this.render();
-        };
         if (st.count > 1) row.add(button(this, 272, 9, 76, 28, 'List All', () => sell(st.ids), { fontSize: 12 }));
         row.add(button(this, 354, 9, 72, 28, 'List 1', () => sell([st.ids[0]]), { fontSize: 12 }));
         return row;

@@ -1,4 +1,4 @@
-// The Marketplace: the party's stall, sold from the top by companions and slaves on Marketplace duty.
+// The Marketplace: the party's stall, sold from the top by members on Marketplace duty.
 import { describe, expect, it } from 'vitest';
 import type { Character, GameState } from '../src/data/types';
 import { makeEnemy } from '../src/game/battle';
@@ -8,7 +8,7 @@ import { activityOf, canDoActivity } from '../src/game/condition';
 import { gear } from '../src/game/gear';
 import { addItem, itemName, makeLoot } from '../src/game/inventory';
 import { enemyLoot } from '../src/game/loot';
-import { listItems, marketplaceDay, moveGroup, saleGroups, unlistItems } from '../src/game/marketplace';
+import { listAllIds, listItems, marketplaceDay, moveGroup, saleGroups, unlistItems } from '../src/game/marketplace';
 import { randomAdventurer } from '../src/game/people';
 import { parseSave, serializeSave } from '../src/game/save';
 
@@ -26,14 +26,34 @@ const junk = (s: GameState, name: string, value: number) => {
 };
 
 describe('the Marketplace', () => {
-  it('only companions and slaves can mind the stall', () => {
+  it('anyone but a mercenary can mind the stall', () => {
     const s = start();
     const main = s.party[0];
     const sv = slave(s);
-    expect(canDoActivity(main, 'marketplace')).toBe(false);
+    expect(canDoActivity(main, 'marketplace')).toBe(true);
     expect(canDoActivity(sv, 'marketplace')).toBe(true);
-    s.schedule[main.id] = 'marketplace'; // e.g. a hand-edited save: falls back to the default
-    expect(activityOf(s, main)).not.toBe('marketplace');
+    s.schedule[main.id] = 'marketplace';
+    expect(activityOf(s, main)).toBe('marketplace');
+    const merc = randomAdventurer(3, makeRng(9));
+    merc.contract = { type: 'mercenary', fee: 50, cutPct: 10 };
+    s.party.push(merc);
+    expect(canDoActivity(merc, 'marketplace')).toBe(false);
+    s.schedule[merc.id] = 'marketplace'; // e.g. a hand-edited save: falls back to the default
+    expect(activityOf(s, merc)).not.toBe('marketplace');
+  });
+
+  it('List All Junk / Crude / All pick the matching stash items (never trophies)', () => {
+    const s = start();
+    s.inventory = [];
+    const pelt = junk(s, 'Wolf Pelt', 18);
+    const crude = addItem(s, 'weapon', gear('longbow'));
+    const common = addItem(s, 'armor', gear('plate', 'common'));
+    s.inventory.push(makeLoot('trophy', 'Wolf Fang', 5, 'test'));
+    expect(listAllIds(s, 'junk')).toEqual([pelt.id]);
+    expect(listAllIds(s, 'crude')).toEqual([crude.id]);
+    expect(listAllIds(s, 'all').sort()).toEqual([pelt.id, crude.id, common.id].sort());
+    expect(listItems(s, listAllIds(s, 'all'))).toBeNull();
+    expect(s.inventory.map(itemName)).toEqual(['Wolf Fang']);
   });
 
   it('items move from the stash to the sale list and back; trophies stay out', () => {
@@ -44,7 +64,8 @@ describe('the Marketplace', () => {
     s.inventory.push(trophy);
     expect(listItems(s, [trophy.id])).toMatch(/Trophies/);
     expect(listItems(s, [a.id, bow.id])).toBeNull();
-    expect(s.marketplace.map(itemName)).toEqual(['Wolf Pelt', 'Common Longbow']);
+    // Sorted by value: the Longbow is worth more.
+    expect(s.marketplace.map(itemName)).toEqual(['Common Longbow', 'Wolf Pelt']);
     expect(s.inventory.map(itemName)).toEqual(['Wolf Fang']);
     unlistItems(s, [bow.id]);
     expect(s.marketplace.map(itemName)).toEqual(['Wolf Pelt']);
@@ -56,11 +77,12 @@ describe('the Marketplace', () => {
     const ids = [junk(s, 'Wolf Pelt', 18), junk(s, 'Wolf Pelt', 18), junk(s, 'Goblin Spear', 23), junk(s, 'Slime Gel', 9)].map((i) => i.id);
     listItems(s, ids);
     const names = () => saleGroups(s).map((g) => `${itemName(g.item)} x${g.ids.length}`);
-    expect(names()).toEqual(['Wolf Pelt x2', 'Goblin Spear x1', 'Slime Gel x1']);
-    moveGroup(s, 0, 1);
+    // Listing sorts by value.
     expect(names()).toEqual(['Goblin Spear x1', 'Wolf Pelt x2', 'Slime Gel x1']);
+    moveGroup(s, 0, 1);
+    expect(names()).toEqual(['Wolf Pelt x2', 'Goblin Spear x1', 'Slime Gel x1']);
     moveGroup(s, 2, 'top');
-    expect(names()).toEqual(['Slime Gel x1', 'Goblin Spear x1', 'Wolf Pelt x2']);
+    expect(names()).toEqual(['Slime Gel x1', 'Wolf Pelt x2', 'Goblin Spear x1']);
     moveGroup(s, 0, -1); // already at the top
     expect(names()[0]).toBe('Slime Gel x1');
   });
@@ -71,9 +93,10 @@ describe('the Marketplace', () => {
     const b = slave(s);
     listItems(s, [junk(s, 'A', 10), junk(s, 'B', 20), junk(s, 'C', 30), junk(s, 'D', 40), junk(s, 'E', 50)].map((i) => i.id));
     const gold = s.gold;
-    expect(marketplaceDay(s, [a])).toBe('Sold at the Marketplace for 30 gold: A, B.');
-    expect(s.gold).toBe(gold + 30);
-    expect(marketplaceDay(s, [a, b])).toBe('Sold at the Marketplace for 120 gold: C, D, E. The stall is empty now.');
+    // The most valuable first.
+    expect(marketplaceDay(s, [a])).toBe('Sold at the Marketplace for 90 gold: E, D.');
+    expect(s.gold).toBe(gold + 90);
+    expect(marketplaceDay(s, [a, b])).toBe('Sold at the Marketplace for 60 gold: C, B, A. The stall is empty now.');
     expect(marketplaceDay(s, [a])).toMatch(/minded an empty stall/);
     expect(marketplaceDay(s, [])).toBeNull();
   });
@@ -84,13 +107,13 @@ describe('the Marketplace', () => {
     s.schedule[sv.id] = 'marketplace';
     listItems(s, [junk(s, 'A', 10), junk(s, 'B', 20), junk(s, 'C', 30)].map((i) => i.id));
     const lines = advanceDays(s, 1, makeRng(2));
-    expect(lines.join(' ')).toContain('Sold at the Marketplace for 30 gold: A, B.');
-    expect(s.marketplace.map(itemName)).toEqual(['C']);
+    expect(lines.join(' ')).toContain('Sold at the Marketplace for 50 gold: C, B.');
+    expect(s.marketplace.map(itemName)).toEqual(['A']);
     // Away on a quest: no sales that day.
     s.lastQuestDay = s.day;
     s.questMembers = [sv.id];
     expect(advanceDays(s, 1, makeRng(3)).join(' ')).not.toMatch(/Sold at the Marketplace/);
-    expect(s.marketplace.map(itemName)).toEqual(['C']);
+    expect(s.marketplace.map(itemName)).toEqual(['A']);
   });
 
   it('the sale list survives a save and load', () => {
@@ -114,13 +137,13 @@ describe('Finances', () => {
     const f = finances(s);
     expect(f.income).toEqual([
       { label: 'Odd Jobs', detail: 'Nobody', amount: 0 },
-      { label: 'Marketplace', detail: `${sv.name} · 2 items`, amount: 30 },
+      { label: 'Marketplace', detail: `${sv.name} · 2 items`, amount: 50 },
     ]);
     expect(f.expenses.map((l) => l.label)).toEqual(['Food', 'Lodging']);
-    expect(f.net).toBe(30 + f.expenses[0].amount + f.expenses[1].amount);
+    expect(f.net).toBe(50 + f.expenses[0].amount + f.expenses[1].amount);
     expect(f.weekly.find((l) => l.label === 'Slave Tax')!.amount).toBeLessThan(0);
     expect(f.stall).toEqual({ items: 3, gold: 60 });
     // The End Day forecast counts the sales too.
-    expect(forecastNight(s).income).toBe(30);
+    expect(forecastNight(s).income).toBe(50);
   });
 });

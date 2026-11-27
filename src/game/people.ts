@@ -1,5 +1,5 @@
 // Random people for Arch City: names, looks, and ready-to-fight adventurers.
-import { PALETTE, SKILLS, SKILL_TREES, WEAPON_TYPES, skillPointsForLevel, maxBodyRank } from '../data/content';
+import { ADVENTURER_GEAR, PALETTE, SKILLS, SKILL_TREES, WEAPON_TYPES, skillPointsForLevel, maxBodyRank } from '../data/content';
 import { gear } from './gear';
 import {
   FACE_COUNT, HAIR_COLORS, HAIR_STYLES, SEXES, SKIN_TONES,
@@ -119,7 +119,8 @@ export function randomPartyName(rng: Rng, avoid: ReadonlySet<string> = new Set()
 }
 
 /**
- * A complete adventurer: random look, a Crude weapon and Crude Leather, and skill picks for their level.
+ * A complete adventurer: random look, a Crude weapon and Crude Leather (each Common with adventurerGear.commonChancePerLevel
+ * per level), and skill picks for their level.
  * `unarmed`: no weapon or armor (slaves).
  */
 export function randomAdventurer(level: number, rng: Rng, opts: { name?: string; avoidNames?: ReadonlySet<string>; unarmed?: boolean } = {}): Character {
@@ -149,13 +150,15 @@ export function randomAdventurer(level: number, rng: Rng, opts: { name?: string;
       body[k] = (body[k] ?? 0) + 1;
     }
   }
+  // Crude gear, each piece Common now and then (more often at higher levels).
+  const quality = () => (rng() < ADVENTURER_GEAR.commonChancePerLevel * level ? 'common' : 'crude');
   return {
     id: newId(),
     name: opts.name ?? randomName(look.sex, rng, opts.avoidNames),
     level,
     xp: 0,
-    weapon: opts.unarmed ? null : gear(weaponType),
-    armor: opts.unarmed ? null : gear('leather'),
+    weapon: opts.unarmed ? null : gear(weaponType, quality()),
+    armor: opts.unarmed ? null : gear('leather', quality()),
     skillIds,
     appearance: { color: pick(PALETTE, rng), look },
     talents: rollTalents(rng),

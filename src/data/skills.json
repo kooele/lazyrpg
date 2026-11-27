@@ -30,6 +30,15 @@
     "recoilIfSurvives": "{ pAtk, mAtk, ... } damage the user takes (after its own Defense) if the target survives the hits",
     "optional": "heal { mAtk }, shield { maxHpPct and/or mAtk, turns }, knockback (tiles), cleanse, teleport, charge (with teleport: appear next to the target instead of dashing), aoeRadius (a 'weapon' self skill without one uses the weapon's range), cone { angle, radius, interrupt, los } (radius defaults to the skill's range, so 'weapon' cones reach as far as the weapon; a cone skill without hits attacks with the user's basic attack)",
     "zone": "For target 'ground': { radius (1.5 = 3x3), turns (the caster's team's turns it lasts), hit { pAtk, mAtk } per hit, applyStatus per hit, endTurnHits }. Each tile a unit enters inside it = 1 hit; ending a turn inside = endTurnHits hits. Hits everyone, allies included.",
+    "heal": "{ mAtk, missingHp }: heals mAtk x the caster's M.Atk plus missingHp x the target's missing HP (Emergency Heal).",
+    "cooldownAfterOff": "Toggles: the cooldown starts when the toggle switches off (by hand or because it can't be paid), not when it's switched on (Soul Ignition).",
+    "hpPctPerTurn": "Toggle statuses: like manaPerTurn, but a share of max HP (ignores Defense and shields), paid when switched on and at the start of each turn. It can't be switched on, and switches off, when the unit has no more HP than that.",
+    "aoeRadius (emptyTile)": "For 'emptyTile' skills (Heroic Leap): the skill's hits land on every unit within this distance of the tile it lands on.",
+    "selfStatusPerUnitHit": "{ status, turns }: the user gets one stack of a stacking status per unit the skill hit, allies included (Heroic Leap: Heroic Guard).",
+    "delayed": "Zones: harmless to walk through; strikes once, with `hit`, every unit it affects standing on it at the start of the caster's next turn, then it's gone (Brutal Strike).",
+    "bonusMove": "Statuses: the next time the unit spends its last AP (not with Wait or a reaction), it gets one free movement action: walk, or a Movement, Leap or Teleport skill (Hit and Run).",
+    "refundIfUnused": "Statuses: if it runs out unused at the end of the turn, the skill that gave it refunds its mana and cooldown (Hit and Run).",
+    "stealthVision": "Passives: extra Vision (tiles) while the unit is Stealthed (Scout).",
     "basicSkills": "abilities every Adventurer has on top of weapon and tree skills"
   },
 
@@ -47,6 +56,7 @@
     "stealth": { "name": "Stealth", "description": "Makes you Stealthed: enemies can't target you directly." },
     "teleport": { "name": "Teleport", "description": "Moves you instantly, ignoring terrain and units in the way." },
     "movement": { "name": "Movement", "description": "Range scales with your Movement: every 4 Movement (one grass tile) = 1 tile, rounded down. Slow shortens it." },
+    "leap": { "name": "Leap", "description": "Jumps in a straight line: range scales with your Movement like a Movement skill, and it flies over terrain and units (no terrain costs, rocks and water don't block). Enemy overwatch still fires as you pass through its arc. Can't be used while engaged or Frozen." },
     "weapon": { "name": "Weapon", "description": "Uses your weapon's basic-attack range and line rules. Unusable while your weapon is disabled." },
     "free": { "name": "Free Action", "description": "Costs 0 AP. Usable any time until the unit's turn ends." },
     "debuff": { "name": "Debuff", "description": "Applies a harmful effect that Cleanse can remove." },
@@ -77,6 +87,9 @@
     "unyielding": { "name": "Unyielding", "debuff": false, "stacking": false, "tick": "start", "debuffImmune": true, "description": "Immune to debuffs (status effects) until the start of your next turn." },
     "staggered": { "name": "Staggered", "debuff": true, "stacking": false, "tick": "end", "apLoss": 1, "description": "Loses 1 AP at the start of its next turn: the movement AP if it still has it." },
     "quick_cast": { "name": "Quick Cast", "debuff": false, "stacking": false, "tick": "end", "toggle": true, "thisTurnOnly": true, "quickCast": true, "description": "Your next Mage spell this turn that costs 2 AP or ends your turn costs 1 AP instead. Using Quick Cast again cancels it, refunding its mana and cooldown; it also switches off (refunded) at the end of your turn if unused." },
+    "soul_ignition": { "name": "Soul Ignition", "debuff": false, "stacking": false, "tick": "start", "toggle": true, "manaPerTurn": 25, "hpPctPerTurn": 0.1, "statPct": { "movement": 0.5, "mAtk": 0.25 }, "description": "+50% Movement and +25% M.Atk. Costs 25 mana and 10% of max HP at the start of each turn; switches off when you can't pay either." },
+    "heroic_guard": { "name": "Heroic Guard", "debuff": false, "stacking": true, "tick": "start", "statPct": { "defense": 0.2 }, "description": "+20% Defense per stack (one per unit hit by Heroic Leap), until the start of your next turn." },
+    "hit_and_run": { "name": "Hit and Run", "debuff": false, "stacking": false, "tick": "end", "bonusMove": true, "refundIfUnused": true, "description": "The next time you use up your last AP this turn (a turn-ending attack included), you get a free movement action: walk, or use a Movement, Leap or Teleport skill. Engagement still holds you in place. If the turn ends without it (Wait, Overwatch or End Turn), its mana and cooldown are refunded." },
     "in_the_zone": { "name": "In the Zone", "debuff": false, "stacking": true, "tick": "end", "freeBasicAttacks": true, "description": "Your basic attacks cost no AP and ignore their cooldown, one stack per attack." },
     "poison": { "name": "Poison", "debuff": true, "stacking": true, "tick": "start", "damagePctMaxHpPerStack": 0.03, "description": "Lose 3% of max Health per stack at the start of each turn. Ignores Defense and shields." }
   },
@@ -275,6 +288,18 @@
       "target": "unit", "affects": "ally", "range": 5, "minRange": 0, "cooldown": 2, "mana": 40, "level": 3,
       "shield": { "mAtk": 0.8, "turns": 1 }
     },
+    "emergency_heal": {
+      "name": "Emergency Heal", "description": "A desperate burst of healing that works best on the badly hurt.",
+      "tags": ["support", "free"],
+      "target": "unit", "affects": "ally", "range": 5, "minRange": 0, "cooldown": 5, "mana": 120, "level": 5,
+      "heal": { "mAtk": 0.8, "missingHp": 0.2 }
+    },
+    "soul_ignition": {
+      "name": "Soul Ignition", "description": "Burn your own life force for speed and power. Use it again to switch it off; its cooldown starts when it goes off.",
+      "tags": ["free", "toggle"],
+      "target": "self", "affects": "ally", "range": 0, "minRange": 0, "ap": 0, "cooldown": 3, "cooldownAfterOff": true, "mana": 25, "level": 7,
+      "toggleStatus": "soul_ignition"
+    },
     "smite": {
       "name": "Smite", "description": "Strike a cross of tiles with holy light. Evil foes take double.",
       "tags": ["area", "magical"],
@@ -310,6 +335,12 @@
       "target": "unit", "affects": "enemy", "range": 3, "minRange": 1, "cooldown": 3, "mana": 50, "level": 5,
       "hits": [{ "pAtk": 0.8 }], "charge": true, "followUp": true
     },
+    "heroic_leap": {
+      "name": "Heroic Leap", "description": "Leap to a tile and slam down, striking everyone around where you land. Each unit hit hardens your guard.",
+      "tags": ["leap", "area", "physical"],
+      "target": "emptyTile", "affects": "any", "range": 4, "rangeScale": 1, "minRange": 1, "cooldown": 4, "mana": 80, "level": 5,
+      "aoeRadius": 1.5, "hits": [{ "pAtk": 1 }], "selfStatusPerUnitHit": { "status": "heroic_guard", "turns": 1 }
+    },
     "fighting_spirit": {
       "name": "Fighting Spirit", "description": "Whenever you become engaged with an enemy (whoever started it), you hit them with a free basic attack at 50% damage.",
       "tags": ["passive"],
@@ -332,6 +363,12 @@
       "tags": ["melee", "physical", "engage", "debuff"],
       "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 3, "ap": 2, "mana": 40, "level": 4,
       "hits": [{ "pAtk": 0.8 }], "applyStatus": [{ "status": "staggered", "turns": 1 }]
+    },
+    "brutal_strike": {
+      "name": "Brutal Strike", "description": "Wind up a devastating blow on an adjacent tile. It lands at the start of your next turn on whoever stands there, friend or foe.",
+      "tags": ["physical"],
+      "target": "ground", "affects": "any", "range": 1.5, "minRange": 1, "cooldown": 2, "mana": 50, "level": 7,
+      "zone": { "radius": 0, "turns": 1, "hit": { "pAtk": 2 }, "endTurnHits": 0, "delayed": true }
     },
     "tooth_for_tooth": {
       "name": "Tooth for Tooth", "description": "When the enemy you're engaged with attacks you, you hit back with a free basic attack at 50% damage.",
@@ -357,9 +394,15 @@
       "hits": [{ "pAtk": 1.5 }], "pPenPct": 25, "backstab": true
     },
     "scout": {
-      "name": "Scout", "description": "You start every battle Stealthed, and stay hidden until you first attack.",
+      "name": "Scout", "description": "You start every battle Stealthed, and stay hidden until you first attack. While Stealthed you see 2 tiles further.",
       "tags": ["passive", "stealth"],
-      "target": "passive", "affects": "ally", "range": 0, "level": 3
+      "target": "passive", "affects": "ally", "range": 0, "level": 3, "stealthVision": 2
+    },
+    "hit_and_run": {
+      "name": "Hit and Run", "description": "Strike, then slip away: the next time you use up your last AP this turn, you get a free movement action. Refunded if the turn ends without it (Wait, Overwatch or End Turn).",
+      "tags": ["free"],
+      "target": "self", "affects": "ally", "range": 0, "minRange": 0, "ap": 0, "cooldown": 3, "mana": 20, "level": 4,
+      "applyStatus": [{ "status": "hit_and_run", "turns": 1 }]
     },
     "life_risking_strike": {
       "name": "Life-Risking Strike", "description": "Drop your guard for a devastating strike. If the enemy survives, the blow hurts you too.",
@@ -433,7 +476,7 @@
     },
     "pounce": {
       "name": "Pounce", "description": "Leap next to an enemy and strike it.",
-      "tags": ["monster", "movement", "melee", "engage", "physical"],
+      "tags": ["monster", "leap", "melee", "engage", "physical"],
       "target": "unit", "affects": "enemy", "range": 4, "rangeScale": 1, "minRange": 1, "cooldown": 3,
       "hits": [{ "pAtk": 0.9 }], "charge": true
     },
@@ -475,7 +518,7 @@
     },
     "rend": {
       "name": "Rend", "description": "Tear into an adjacent enemy with both claws.",
-      "tags": ["monster", "melee", "physical"],
+      "tags": ["monster", "melee", "engage", "physical"],
       "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 3,
       "hits": [{ "pAtk": 1.6 }]
     },
@@ -511,7 +554,7 @@
     },
     "dive": {
       "name": "Dive", "description": "Swoop down next to an enemy and strike it.",
-      "tags": ["monster", "movement", "melee", "engage", "physical"],
+      "tags": ["monster", "leap", "melee", "engage", "physical"],
       "target": "unit", "affects": "enemy", "range": 4, "rangeScale": 1, "minRange": 1, "cooldown": 3,
       "hits": [{ "pAtk": 1.1 }], "charge": true
     },
@@ -553,7 +596,7 @@
     },
     "infernal_leap": {
       "name": "Infernal Leap", "description": "Leap through the air to land next to an enemy and strike.",
-      "tags": ["monster", "movement", "melee", "engage", "physical"],
+      "tags": ["monster", "leap", "melee", "engage", "physical"],
       "target": "unit", "affects": "enemy", "range": 4, "rangeScale": 1, "minRange": 1, "cooldown": 4,
       "hits": [{ "pAtk": 1 }], "charge": true
     }
@@ -570,10 +613,10 @@
   "skillTrees": [
     { "id": "arcanist", "name": "Arcanist", "tab": "mage", "skills": ["arcane_bolt", "arcane_pulse", "arcane_shift", "arcane_weapon", "spellblade", "quick_cast"] },
     { "id": "elementalist", "name": "Elementalist", "tab": "mage", "skills": ["ignite", "freeze", "fireball", "iceblast", "fire_weapon", "ice_weapon", "draft", "rain", "sonic_boom", "firestorm", "blizzard"] },
-    { "id": "cleric", "name": "Cleric", "tab": "mage", "skills": ["heal", "cleanse", "protection", "barrier", "smite", "revelation"] },
-    { "id": "vanguard", "name": "Vanguard", "tab": "warrior", "skills": ["engage", "charge", "tough_it_out", "blitz", "fighting_spirit"] },
-    { "id": "infighter", "name": "Infighter", "tab": "warrior", "skills": ["kick", "pocket_sand", "sucker_punch", "tooth_for_tooth"] },
-    { "id": "assassin", "name": "Assassin", "tab": "warrior", "skills": ["shadow_step", "backstab", "flicker_strike", "scout", "life_risking_strike"] },
+    { "id": "cleric", "name": "Cleric", "tab": "mage", "skills": ["heal", "cleanse", "protection", "barrier", "emergency_heal", "smite", "soul_ignition", "revelation"] },
+    { "id": "vanguard", "name": "Vanguard", "tab": "warrior", "skills": ["engage", "charge", "tough_it_out", "blitz", "heroic_leap", "fighting_spirit"] },
+    { "id": "infighter", "name": "Infighter", "tab": "warrior", "skills": ["kick", "pocket_sand", "sucker_punch", "tooth_for_tooth", "brutal_strike"] },
+    { "id": "assassin", "name": "Assassin", "tab": "warrior", "skills": ["shadow_step", "backstab", "flicker_strike", "scout", "hit_and_run", "life_risking_strike"] },
     { "id": "weapon_master", "name": "Weapon Master", "tab": "warrior", "skills": ["double_strike", "execute", "power_strike", "in_the_zone"] }
   ]
 }

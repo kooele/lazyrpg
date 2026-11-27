@@ -5,7 +5,7 @@ import { STAT_INFO, type Character, type CompanionTerms, type FreeAdventurer } f
 import { TALENT_COLORS, talentOf, talentStats } from '../game/talent';
 import { renewContract, toggleLineup } from '../game/city';
 import {
-  companionContract, evaluateOffer, talentPriceFactor, foodLodgingWeekly, isCompanion, joinParty, leaveParty, lootValue, openingTerms, patienceCost, rosterFull,
+  companionContract, evaluateOffer, talentPriceFactor, foodLodgingWeekly, isCompanion, joinParty, leaveParty, lootValue, maxPatience, openingTerms, patienceCost, rosterFull,
   type CompanionContract,
 } from '../game/contracts';
 import { adventurerRank } from '../game/guild';
@@ -43,9 +43,9 @@ export class NegotiateScene extends Phaser.Scene {
     this.id = data.id;
     this.done = false;
     this.last = null;
-    this.renewPatience = GUILD.companion.patience;
     const state = requireState();
     const who = this.who();
+    this.renewPatience = maxPatience(who?.relationship);
     if (!who) return;
     if (this.mode === 'renew' && isCompanion(who.character)) {
       const k = who.character.contract;
@@ -123,7 +123,7 @@ export class NegotiateScene extends Phaser.Scene {
       const g = this.add.graphics();
       g.fillStyle(0x0b0d14).fillRect(30, 372, 272, 10);
       g.fillStyle(0xe05a9b).fillRect(30, 372, 2.72 * who.relationship, 10);
-      text(this, 30, 386, 'Quests together raise it. A good relationship lowers what they ask on renewal.', { fontSize: '11px', color: COLORS.dim, wordWrap: { width: 272 } });
+      text(this, 30, 386, `Quests together raise it. A good relationship lowers what they ask on renewal, and gives them 1 more patience per ${GUILD.companion.patiencePerRelationship}.`, { fontSize: '11px', color: COLORS.dim, wordWrap: { width: 272 } });
     }
     text(this, 30, 420, 'How They Value Things', { fontSize: '13px', color: COLORS.dim });
     text(this, 30, 440, [
@@ -133,7 +133,7 @@ export class NegotiateScene extends Phaser.Scene {
       'Longer terms: they ask a bit less per week.',
     ].join('\n'), { fontSize: '12px', lineSpacing: 3, wordWrap: { width: 272 } });
     const p = this.patience();
-    text(this, 30, 528, `Patience: ${'●'.repeat(Math.max(0, p))}${'○'.repeat(Math.max(0, GUILD.companion.patience - p))}`, { fontSize: '16px', color: p > 1 ? COLORS.text : COLORS.bad });
+    text(this, 30, 528, `Patience: ${'●'.repeat(Math.max(0, p))}${'○'.repeat(Math.max(0, maxPatience(who.relationship) - p))}`, { fontSize: '16px', color: p > 1 ? COLORS.text : COLORS.bad });
 
     // ---- middle: terms ----
     const X = 332;

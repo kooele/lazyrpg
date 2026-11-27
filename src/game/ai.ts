@@ -509,7 +509,8 @@ function canGetAway(battle: Battle, u: Unit, opp: Unit): boolean {
  * Should an engaged unit break away? Ranged fighters do, and so does anyone badly
  * hurt, as long as the opponent's free opportunity attack won't finish them off
  * and they can actually get away (see canGetAway). It also has to mean it: the turn
- * it would play once free must end out of the opponent's reach (see leavesOpponent).
+ * it would play once free must end out of the opponent's reach (see leavesOpponent). Anyone standing where a Brutal
+ * Strike will land breaks away if that blow would hurt more than the free attack.
  */
 export function shouldDisengage(battle: Battle, u: Unit): boolean {
   const opp = battle.opponentOf(u);
@@ -517,6 +518,9 @@ export function shouldDisengage(battle: Battle, u: Unit): boolean {
   if (!canGetAway(battle, u, opp)) return false;
   const ranged = isRanged(battle, u);
   const hit = battle.previewHits(opp, battle.basicAttack(opp), u).reduce((a, b) => a + b, 0);
+  // A wind-up (Brutal Strike) where it stands: worth taking the free hit to get off that tile.
+  const windUp = battle.zonesAt(u).some((z) => z.def.delayed) ? battle.zoneDanger(u, []) : 0;
+  if (windUp > hit && u.hp - hit > 0) return true;
   let wants: boolean;
   if (wantsToFlee(battle, u)) wants = u.hp - hit > 0;
   else if (ranged) wants = u.hp - hit > u.stats.health * 0.3;

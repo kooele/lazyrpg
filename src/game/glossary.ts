@@ -124,7 +124,7 @@ export function glossaryEntries(): GlossaryEntry[] {
     + `• Humans drop the gear they carried, killed or captured. Each piece has a ${Math.round(LOOT.brokenChance * 100)}% chance to be broken: junk worth ${Math.round(LOOT.brokenValueShare * 100)}% of its value.\n`
     + `• Every other enemy drops a trophy (an ear, a fang...) and a junk item (a pelt, its goblin-made weapon...), each worth ${LOOT.trophyGoldPerLevel} gold per level.\n`
     + `• Trophies are turned in at the city gate for their value.\n`
-    + `• Junk (and spare gear) sells at the Marketplace: put it on the sale list there, and put companions or slaves on Marketplace duty (Schedule). Each sells ${G.schedule.marketplaceItemsPerDay} items a day from the top of the list, at full value.\n`
+    + `• Junk (and spare gear) sells at the Marketplace: put it on the sale list there, and put members on Marketplace duty (Schedule). Each sells ${G.schedule.marketplaceItemsPerDay} items a day from the top of the list, at full value.\n`
     + `• Loot only comes home from a won quest: the battlefield can't be looted until the enemy is driven off. A failed quest still gives XP for the enemies you defeated.\n\n`
     + `A human taken prisoner is worth more than one killed: the bounty for turning them in is ${S.bountyPerLevel} gold per level.`);
 
@@ -165,7 +165,7 @@ export function glossaryEntries(): GlossaryEntry[] {
     `A companion candidate wants a total of about ${K.wageBase} + ${K.wagePerLevel} × level × talent gold a week, raised by greed and a little more for short contracts.\n\n`
     + `Everything in your offer counts toward that total: base pay, the loot cut and food & lodging. Food & lodging is worth what their expected food and inn would cost you (${n((food(adventurerQ) + night(adventurerQ)) * 7)} a week), and a loot cut is worth that share of what a party of your rank usually earns. So a loot cut or food & lodging lowers the base pay they need.`);
   add('Party Members', 'Negotiation',
-    `An offer close to what a candidate wants gets a counter-offer; a low one offends them. Each rejected offer uses up patience (counters cost 1, insults 2). Once it runs out they walk away and won't talk to you for a week.`);
+    `An offer close to what a candidate wants gets a counter-offer; a low one offends them. Each rejected offer uses up patience (counters cost 1, insults 2); a companion renewing has 1 more patience for every ${G.companion.patiencePerRelationship} relationship. Once it runs out they walk away and won't talk to you for a week.`);
   add('Party Members', 'Contracts and Renewal',
     `Contracts run ${K.terms.join(', ')} weeks. Base pay is due every payday, by the day: a companion hired midweek gets only the days they've worked, and so does one whose term ends midweek. Renewing carries the wages earned under the old terms over to the next payday. When a contract ends, the companion sits out of quests and you have ${K.graceDays} days to renew it in Manage Party; if you don't, they leave at the End Day after, paid the days of their term since payday. If you can't pay those final wages, they leave without them and it costs renown, as if they'd quit.\n\n`
     + `A good relationship lowers their demands on renewal, by up to ${pct(K.renewalDiscountAtMax)} at 100. Walking out of a renewal ends the contract on the spot.\n\n`
@@ -240,14 +240,16 @@ export function glossaryEntries(): GlossaryEntry[] {
     `Every Adventurer has a weapon and a body armor. Each piece adds base stats, then multiplies the total by its modifiers. Quality multiplies the base stats: Crude x1, Common x2, Fine x4, Masterwork x7.\n\n`
     + `• Weapons set the Basic Attack's range and add one skill: Magic Bolt (Staff, Crystal), Circle Swing (Greatsword, Spear), Shield Slam (shields), Switch Mode (bows) or Quick Attack (daggers).\n• Mail and Plate are tougher but slower.\n• Without a weapon you fight Unarmed (x0.6 P.Atk, but x1.25 Movement); without armor, Defense and Health are x0.9.\n\n`
     + `The Smithy (Outer City) sells Common gear and makes Fine (5 days) and Masterwork (25 days) gear to order, up to 3 orders at a time.\n\n`
-    + `Manage Party > Equipment swaps gear with the party's stash. Mercenaries use their own. A companion who leaves hands back what the party gave them; a slave who is sold leaves everything with the party.`);
+    + `Manage Party > Equipment swaps gear with the party's stash. Mercenaries use their own. A companion keeps the gear they brought: swapped out, it goes into their own pack (the party can't take it), and they put it back on when they leave, handing back what the party gave them; a slave who is sold leaves everything with the party.`);
   add('Battle', 'Engagement',
     `Hitting a unit with an Engage skill locks you both together, unless it's already engaged with someone else. While engaged you can't move, and you can only attack your opponent (and heal or cleanse yourself).\n\n`
     + `Disengage breaks free, but your opponent gets a free basic attack. Disengage skills (like Shadow Step) slip out with no free attack. Knockbacks, pushes (Sonic Boom) and falling also end it.\n\n`
     + `An engaged unit has its back to the 3 tiles on the far side from its opponent: Backstab strikes from there.`);
   add('Battle', 'Overwatch',
     `Overwatch ends the turn and watches a 60° arc as far as your weapon reaches. The first enemy to move into it takes your basic attack and keeps moving.\n\n`
-    + `Walking, Dash and movement skills that run or leap to their target (Charge, Blitz, and monsters' Pounce, Dive and Infernal Leap) can all be caught, on any tile of the way, and so can a unit knocked back or pushed (Sonic Boom) through the arc. Teleports (Arcane Shift, Shadow Step, Flicker Strike) skip the tiles in between, so they can't.`);
+    + `Walking, Dash and movement skills that run to their target (Charge, Blitz) can all be caught, on any tile of the way, and so can a unit knocked back or pushed (Sonic Boom) through the arc. Leaps (Heroic Leap, and monsters' Pounce, Dive and Infernal Leap) fly over terrain and units, but are still shot at as they pass over the arc; a watch can't stop a leap in the air. Teleports (Arcane Shift, Shadow Step, Flicker Strike) skip the tiles in between, so they can't be caught.`);
+  add('Battle', 'Wind-Ups',
+    `Brutal Strike marks an adjacent tile in red. At the start of your next turn the blow lands on anyone still standing there, allies included. Walking across the tile is safe; it's where a unit is when the blow comes that counts. Enemies know this: they step off it, even breaking away from an engagement to do it.`);
   add('Battle', 'Burn and Chilled Stacks',
     `${burn?.name ?? 'Burn'}: ${burn?.description ?? ''}\n\n${chilled?.name ?? 'Chilled'} (ice skills): ${chilled?.description ?? ''}\n\n`
     + `Stacks don't last a set number of turns: the unit loses one each turn. A unit with 2 stacks is affected just as much as with 1, for one more turn; a status shows its stacks as Burn (2).\n\n`

@@ -66,7 +66,8 @@ interface UnitView {
 }
 
 /** Map tint for a zone by its element: fire orange, ice pale blue, water (Rain) deep blue. */
-function zoneColor(element: string | undefined): number {
+function zoneColor(element: string | undefined, delayed?: boolean): number {
+  if (delayed) return 0xff3b3b;
   if (element === 'fire') return 0xff7a2e;
   if (element === 'ice') return 0x7fc8ff;
   if (element === 'water') return 0x3b6fe0;
@@ -395,7 +396,7 @@ export class BattleScene extends Phaser.Scene {
 
     // Ground zones (Firestorm, Blizzard): tinted by their status (fire orange, ice blue).
     for (const z of b.zones) {
-      const color = zoneColor(z.element);
+      const color = zoneColor(z.element, z.def.delayed);
       for (const k of z.tiles) {
         const [x, y] = k.split(',').map(Number);
         fill({ x, y }, color, 0.32);
@@ -717,11 +718,11 @@ export class BattleScene extends Phaser.Scene {
     const cd = u.cooldowns[id] ?? 0;
     const interactive = (this.mode === 'select' || this.mode === 'target') && b.phase === 'player';
     const usable = interactive && this.canPick(u, id);
-    const why = !interactive || usable ? '' : this.plan && b.canUseSkill(u, id) ? "\nCan't follow the planned move (not enough AP left after it)." : u.mp < s.mana ? `\nNot enough mana (${u.mp}/${s.mana}).`
+    const why = !interactive || usable ? '' : u.bonusMove && !b.isMovementSkill(raw) ? "\nHit and Run's free move: only walking, or a Movement, Leap or Teleport skill." : this.plan && b.canUseSkill(u, id) ? "\nCan't follow the planned move (not enough AP left after it)." : u.mp < s.mana ? `\nNot enough mana (${u.mp}/${s.mana}).`
       : s.target === 'move' && !u.moved ? '\nUse your regular move first.' : !b.canAct(u) ? '\nThis unit\'s turn is over.' : !b.canPay(u, s) ? '\nNot enough AP.' : '';
     const modeLine = raw.modes ? `\nBow Mode: ${b.modeName(u)} (Switch Mode changes it)` : raw.switchMode && b.modesOf(u) ? `\nNow: ${b.modeName(u)}. Next: ${SKILLS[b.modesOf(u)![(u.weaponMode + 1) % b.modesOf(u)!.length]].modeName}` : '';
     const cancel = b.isCancellable(u, raw) ? `\nOn this turn. Use again to cancel: refunds ${raw.mana} mana and the cooldown.` : '';
-    this.showInfo(`${s.name}\n${skillStatText(s)}${modeLine}${cancel || (cd > 0 ? `\nReady ${cd === 1 ? 'next turn' : `in ${cd} turns`}.` : '')}${why}\nDrag to another slot to move it.`);
+    this.showInfo(`${s.name}\n${skillStatText(s)}${modeLine}${cancel || (cd > 0 ? `\nReady ${cd === 1 ? 'next turn' : `in ${cd} turns`}.` : '')}${why}`);
   }
 
   /** Page up/down. While dragging a skill, ▼ past the last page opens an empty one to drop it on. */
@@ -1339,6 +1340,12 @@ export class BattleScene extends Phaser.Scene {
       info = b.canAim(u, this.action, tile, from) ? `${plan}${this.preview(u, this.action, tile, from)}\n${info}` : `${why}\n${info}`;
     }
     for (const z of b.zonesAt(tile)) {
+      if (z.def.delayed) {
+        const hit = z.def.hit ? b.hitDamage(b.unit(z.casterUid), shownTarget(b, tile) ?? b.unit(z.casterUid), z.def.hit) : 0;
+        const whose = z.team === 'player' ? 'Your' : "the Enemy's";
+        info = `${z.name}: Lands at the Start of ${whose} Next Turn (~${hit} dmg to Anyone Standing Here)\n${info}`;
+        continue;
+      }
       const who = z.def.affects === 'enemy' ? `Affects ${z.team === 'player' ? 'Enemies' : 'Your Side'} Entering` : 'Hits Anyone Entering';
       const inside = z.def.statPct ? `; ${Object.entries(z.def.statPct).map(([k, v]) => `${Math.round((v ?? 0) * 100)}% ${STAT_INFO[k as StatKey].short}`).join(', ')} Inside` : '';
       const end = z.def.endTurnHits ? `; ${z.def.endTurnHits}x If a Turn Ends Here` : '';
@@ -1347,7 +1354,7 @@ export class BattleScene extends Phaser.Scene {
     // Walking through zones: warn before the move.
     if (this.mode === 'select' && u && this.reach.has(key(tile.x, tile.y)) && (tile.x !== u.x || tile.y !== u.y)) {
       const path = b.pathTo(this.reach, tile);
-      const hits = path.reduce((n, p) => n + b.zonesAt(p).length, 0);
+      const hits = path.reduce((n, p) => n + b.zonesAt(p).filter((z) => !z.def.delayed).length, 0);
       if (hits) info = `⚠ Path Crosses ${hits} Zone Tile${hits === 1 ? '' : 's'} (~${b.zoneDanger(u, path)} dmg incl. ending here)\n${info}`;
     }
     if (this.threat && this.mode === 'select') info = `${this.threat.label}\n${info}`;
@@ -1358,6 +1365,11 @@ export class BattleScene extends Phaser.Scene {
     const b = this.battle;
     if (s.target === 'move') return `→ Dash Here (${s.mana} MP, uses your last AP)`;
     if (s.cone) return '→ Watch This Cone until Your Next Turn';
+    if (s.zone?.delayed) {
+      const t = shownTarget(b, tile);
+      const dmg = t && t !== u && s.zone.hit ? `\n→ ${t.character.name}${t.team === u.team ? ' (ALLY!)' : ''}: ~${b.hitDamage(u, t, s.zone.hit)} dmg If It's Still Here` : '';
+      return `→ ${s.name} Lands Here at the Start of Your Next Turn${dmg}`;
+    }
     if (s.zone) return `→ Place a ${s.name} Here for ${s.zone.turns} Turns`;
     s = b.skillFor(u, s);
     const lines: string[] = [];
@@ -1366,9 +1378,11 @@ export class BattleScene extends Phaser.Scene {
     if (hasTag(s, 'disengage') && b.opponentOf(u)) lines.push(`→ Breaks Away from ${b.opponentOf(u)!.character.name} (no free attack)`);
     for (const a of s.selfStatus ?? []) lines.push(`→ You: ${STATUSES[a.status].name} (${STATUSES[a.status].description})`);
     if (s.teleport && !s.charge) return [...lines, '→ Teleport Here'].join('\n');
+    if (s.toggleStatus && !b.isToggledOn(u, s.toggleStatus) && b.toggleHpCost(u, s.toggleStatus)) lines.push(`→ You: -${b.toggleHpCost(u, s.toggleStatus)} HP Now and Each Turn It Stays On`);
+    if (hasTag(s, 'leap') && s.target === 'emptyTile') lines.push(s.hits?.length ? '→ Leap Here, Then Slam Down' : '→ Leap Here');
     if (s.charge) {
       const land = b.chargeDestination(u, tile, from, s);
-      if (land && (land.x !== from.x || land.y !== from.y)) lines.push(s.teleport ? '→ Teleport In, Then Strike' : '→ Dash In, Then Strike');
+      if (land && (land.x !== from.x || land.y !== from.y)) lines.push(s.teleport ? '→ Teleport In, Then Strike' : hasTag(s, 'leap') ? '→ Leap In, Then Strike' : '→ Dash In, Then Strike');
     }
     const targets = b.targetsOf(u, s, tile, from);
     if (targets.length === 0 && lines.length === 0) return '→ Nobody Affected (action will be spent)';
@@ -1382,7 +1396,7 @@ export class BattleScene extends Phaser.Scene {
         if (s.recoilIfSurvives && !kills) lines.push(`   If It Survives, You Take ${b.recoilDamage(u, s)} dmg`);
       }
       if (hasTag(s, 'engage') && t.team !== u.team && !u.engagedWith && !t.engagedWith && !s.hits?.length) lines.push(`→ ${who}: Engaged`);
-      if (s.heal) lines.push(`→ ${who}: +${Math.min(b.healAmount(u, s), t.stats.health - t.hp)} HP`);
+      if (s.heal) lines.push(`→ ${who}: +${Math.min(b.healAmount(u, s, t), t.stats.health - t.hp)} HP`);
       if (s.shield) lines.push(`→ ${who}: +${b.shieldAmount(u, s, t)} Shield`);
       for (const a of s.applyStatus ?? []) {
         const sc = STATUSES[a.status]?.casterScaled;
@@ -1405,6 +1419,11 @@ export class BattleScene extends Phaser.Scene {
       if (fires) lines.push(`→ Fans the Flames on ${fires} Fire Tile${fires === 1 ? '' : 's'}`);
     }
     if (s.followUp) lines.push('→ Then Break Away and Dash at a Second Enemy');
+    if (s.selfStatusPerUnitHit) {
+      const n = targets.filter((t) => t !== u).length;
+      const pct = Math.round((STATUSES[s.selfStatusPerUnitHit.status].statPct?.defense ?? 0) * 100 * n);
+      if (n) lines.push(`→ You: +${pct}% Def (${STATUSES[s.selfStatusPerUnitHit.status].name} x${n}, 1 Turn)`);
+    }
     return lines.join('\n');
   }
 
@@ -1617,6 +1636,22 @@ export class BattleScene extends Phaser.Scene {
       await this.tween({ targets: view.container, alpha: 0, scale: 0.4, duration: 150 });
       view.container.setPosition(to.x, to.y);
       await this.tween({ targets: view.container, alpha: 1, scale: 1, duration: 150 });
+    } else if (e.kind === 'leap') {
+      // A leap: up and over in an arc, then down.
+      const tiles = Math.max(1, Math.hypot(e.to.x - e.from.x, e.to.y - e.from.y));
+      const duration = 180 + tiles * 60;
+      const sx = view.container.x;
+      const sy = view.container.y;
+      const arc = { t: 0 };
+      await this.tween({
+        targets: arc, t: 1, duration, ease: 'Sine.easeInOut',
+        onUpdate: () => {
+          const k = arc.t;
+          view.container.setPosition(sx + (to.x - sx) * k, sy + (to.y - sy) * k - Math.sin(Math.PI * k) * TILE * Math.min(1.5, 0.4 + tiles * 0.2));
+          view.container.setScale(1 + Math.sin(Math.PI * k) * 0.2);
+        },
+      });
+      view.container.setScale(1);
     } else {
       // A charge comes one tile per event (it runs its path like a walk, so overwatch can catch it on the way).
       await this.tween({ targets: view.container, x: to.x, y: to.y, duration: e.kind === 'charge' ? 80 : 140, ease: e.kind === 'charge' ? 'Linear' : 'Quad.easeOut' });
@@ -1663,10 +1698,16 @@ export class BattleScene extends Phaser.Scene {
       this.floatText(this.battle.unit(e.target), e.name, '#e0b44c', index * 120);
       return;
     }
+    if (e.type === 'bonusMove') {
+      const t = this.battle.unit(e.target);
+      summary.push('gets a free move (Hit and Run)');
+      this.floatText(t, 'Free Move', '#6fdc8c', index * 120);
+      return;
+    }
     if (e.type === 'toggle') {
       const label = `${e.name} ${e.on ? 'On' : 'Off'}`;
       if (!this.seen(this.battle.unit(e.target))) summary.push('???');
-      else summary.push(e.reason === 'mana' ? `${e.name} fades (out of mana)` : e.reason === 'turn' ? `${e.name} fades (unused)` : `${e.name} ${e.on ? 'on' : 'off'}`);
+      else summary.push(e.reason === 'mana' ? `${e.name} fades (out of mana)` : e.reason === 'health' ? `${e.name} fades (not enough HP)` : e.reason === 'turn' ? `${e.name} fades unused (refunded)` : `${e.name} ${e.on ? 'on' : 'off'}`);
       this.floatText(this.battle.unit(e.target), label, '#c18cff', index * 120);
       return;
     }
