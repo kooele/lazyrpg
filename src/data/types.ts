@@ -22,7 +22,7 @@ export const STAT_INFO: Record<StatKey, { name: string; short: string; descripti
 
 /** Penetration stats: shown together as one line per damage type ("P.Pen: 50% | 10"), not in the usual stat lists. */
 export const PEN_KEYS = ['pPen', 'pPenPct', 'mPen', 'mPenPct'] as const satisfies readonly StatKey[];
-/** Stats with an icon (public/art/stats/<stat>.svg). Penetration shares one icon per damage type. */
+/** Stats with an icon (src/art/stats/<stat>.svg, bundled; see src/art/statIcons.ts). Penetration shares one icon per damage type. */
 export const STAT_ICONS: readonly StatKey[] = ['health', 'mana', 'pAtk', 'mAtk', 'defense', 'resist', 'movement', 'vision', 'pPen', 'mPen'];
 /** Penetration stats that are whole percents (50 = 50%). */
 export const PEN_PCT_KEYS: readonly StatKey[] = ['pPenPct', 'mPenPct'];
