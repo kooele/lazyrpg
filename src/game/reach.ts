@@ -20,7 +20,7 @@ function basicFor(s: SkillDef, ctx: ReachContext): SkillDef {
 
 export function rangeFor(s: SkillDef, ctx: ReachContext): number {
   // Movement is in points (grass = 4 per tile); convert to tiles.
-  if (hasTag(s, 'movement')) return Math.floor(((s.rangeScale ?? 1) * ctx.movement) / MOVEMENT_PER_TILE);
+  if (hasTag(s, 'movement') || hasTag(s, 'leap')) return Math.floor(((s.rangeScale ?? 1) * ctx.movement) / MOVEMENT_PER_TILE);
   if (hasTag(s, 'weapon')) return basicFor(s, ctx).range;
   return s.range;
 }

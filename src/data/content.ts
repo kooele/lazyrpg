@@ -33,7 +33,7 @@ export interface GameContent {
 }
 
 /** Tags that change how a skill behaves (the rest are descriptive). */
-export const BEHAVIOR_TAGS = ['engage', 'disengage', 'movement', 'weapon', 'free'] as const;
+export const BEHAVIOR_TAGS = ['engage', 'disengage', 'movement', 'leap', 'weapon', 'free'] as const;
 
 // ---- validation helpers ---------------------------------------------------------
 
@@ -118,6 +118,7 @@ export function parseContent(skillsData: unknown, equipmentData: unknown): GameC
       endTurnHits: S.num(o.endTurnHits ?? 1, `${path}.endTurnHits`),
       affects: S.oneOf(o.affects ?? 'any', `${path}.affects`, ['any', 'enemy'] as const),
       statPct: o.statPct === undefined ? undefined : S.stats(o.statPct, `${path}.statPct`),
+      delayed: S.bool(o.delayed, `${path}.delayed`) || undefined,
     };
   };
   const statusZones: [string, unknown][] = [];
@@ -147,6 +148,8 @@ export function parseContent(skillsData: unknown, equipmentData: unknown): GameC
       instantDamagePctMaxHp: S.optNum(st.instantDamagePctMaxHp, `${p}.instantDamagePctMaxHp`),
       toggle: S.bool(st.toggle, `${p}.toggle`) || undefined,
       manaPerTurn: S.optNum(st.manaPerTurn, `${p}.manaPerTurn`),
+      hpPctPerTurn: S.optNum(st.hpPctPerTurn, `${p}.hpPctPerTurn`),
+      bonusMove: S.bool(st.bonusMove, `${p}.bonusMove`) || undefined,
       manaPerHit: S.optNum(st.manaPerHit, `${p}.manaPerHit`),
       weaponOnHit: st.weaponOnHit === undefined ? undefined : (() => {
         const o = S.obj(st.weaponOnHit, `${p}.weaponOnHit`);
@@ -218,7 +221,10 @@ export function parseContent(skillsData: unknown, equipmentData: unknown): GameC
         : fail('skills.json', `${p}.ap`, 'must be 0, 1, 2 or "end"'),
       mana: S.num(r.mana ?? 0, `${p}.mana`),
       hits,
-      heal: r.heal === undefined ? undefined : { mAtk: S.num(S.obj(r.heal, `${p}.heal`).mAtk, `${p}.heal.mAtk`) },
+      heal: r.heal === undefined ? undefined : (() => {
+        const o = S.obj(r.heal, `${p}.heal`);
+        return { mAtk: S.num(o.mAtk ?? 0, `${p}.heal.mAtk`), missingHp: S.optNum(o.missingHp, `${p}.heal.missingHp`) };
+      })(),
       shield: r.shield === undefined ? undefined : (() => {
         const o = S.obj(r.shield, `${p}.shield`);
         const shield = { maxHpPct: S.optNum(o.maxHpPct, `${p}.shield.maxHpPct`), mAtk: S.optNum(o.mAtk, `${p}.shield.mAtk`), turns: S.num(o.turns, `${p}.shield.turns`) };
@@ -268,6 +274,9 @@ export function parseContent(skillsData: unknown, equipmentData: unknown): GameC
       pPenPct: S.optNum(r.pPenPct, `${p}.pPenPct`),
       pierce: S.optNum(r.pierce, `${p}.pierce`),
       weaponRangeBonus: S.optNum(r.weaponRangeBonus, `${p}.weaponRangeBonus`),
+      cooldownAfterOff: S.bool(r.cooldownAfterOff, `${p}.cooldownAfterOff`) || undefined,
+      selfStatusPerEnemyHit: r.selfStatusPerEnemyHit === undefined ? undefined : statusList([r.selfStatusPerEnemyHit], `${p}.selfStatusPerEnemyHit`)[0],
+      stealthVision: S.optNum(r.stealthVision, `${p}.stealthVision`),
     };
     if (skill.basicAttack !== undefined && (skill.basicAttack < 1 || !Number.isInteger(skill.basicAttack))) fail('skills.json', `${p}.basicAttack`, 'must be a whole number of 1 or more');
     if (skill.basicAttackDamage && skill.basicAttackDamage.length !== skill.basicAttack) fail('skills.json', `${p}.basicAttackDamage`, 'needs one multiplier per basic attack (and "basicAttack")');
@@ -279,7 +288,11 @@ export function parseContent(skillsData: unknown, equipmentData: unknown): GameC
     if (skill.zone && skill.target !== 'ground') fail('skills.json', `${p}.zone`, 'goes with target "ground"');
     if (skill.target === 'ground' && !skill.zone && !skill.shape) fail('skills.json', `${p}.zone`, 'is required for target "ground" (or a "shape" to hit)');
     if (skill.followUp && !skill.charge) fail('skills.json', `${p}.followUp`, 'needs "charge" (the follow-up is a second charge)');
-    if (skillTags.includes('movement') && skill.rangeScale === undefined) fail('skills.json', `${p}.rangeScale`, 'is required for "movement" skills');
+    if ((skillTags.includes('movement') || skillTags.includes('leap')) && skill.rangeScale === undefined) fail('skills.json', `${p}.rangeScale`, 'is required for "movement" and "leap" skills');
+    if (skillTags.includes('movement') && skillTags.includes('leap')) fail('skills.json', `${p}.tags`, 'a skill is either "movement" or "leap", not both');
+    if (skill.cooldownAfterOff && !skill.toggleStatus) fail('skills.json', `${p}.cooldownAfterOff`, 'goes with "toggleStatus"');
+    if (skill.selfStatusPerEnemyHit && !statuses[skill.selfStatusPerEnemyHit.status].stacking) fail('skills.json', `${p}.selfStatusPerEnemyHit`, 'needs a stacking status (a stack per enemy hit)');
+    if (skill.zone?.delayed && !skill.zone.hit) fail('skills.json', `${p}.zone.hit`, 'is required for a delayed zone (its strike)');
     skills[id] = skill;
   }
 
@@ -500,6 +513,10 @@ function shiftText(sh: { status: string; stacks: number }): string {
 /** A zone's numbers: "3x3 zone for 3 turns. Each tile entered: 50% M.Atk, a stack of Burn. Ending a turn inside: 2 hits". */
 export function zoneText(z: ZoneDef): string {
   const side = 2 * Math.floor(z.radius) + 1;
+  if (z.delayed) {
+    const where = side === 1 ? 'the tile' : `a ${side}x${side} area`;
+    return `Strikes ${where} at the start of your next turn: ${z.hit ? damageText(z.hit) : ''}${z.affects === 'enemy' ? ' to an enemy standing there' : ' to anyone standing there'}`;
+  }
   const hit = [z.hit ? damageText(z.hit) : '', ...z.applyStatus.map(statusText), ...(z.shiftStatus ?? []).map(shiftText)].filter(Boolean).join(', ');
   const who = z.affects === 'enemy' ? ' (enemies only)' : '';
   const inside = z.statPct ? `. Inside: ${Object.entries(z.statPct).map(([k, v]) => `${(v ?? 0) > 0 ? '+' : ''}${pct(v ?? 0)} ${STAT_INFO[k as keyof Stats].short}`).join(', ')}` : '';
@@ -516,7 +533,7 @@ export function skillEffect(s: SkillDef): string {
   if (s.zone) return zoneText(s.zone);
   const parts: string[] = [];
   if (s.shape === 'cross') parts.push('5-tile cross');
-  if (s.hits?.length) parts.push(s.hits.map(damageText).join(', then '));
+  if (s.hits?.length) parts.push(s.hits.map(damageText).join(', then ') + (s.target === 'emptyTile' && s.aoeRadius ? ` to every unit within ${tiles(s.aoeRadius)} of where you land${s.affects === 'any' ? ' (allies too)' : ''}` : ''));
   if (s.bonusVsTag) parts.push(`x${s.bonusVsTag.mult} vs ${UNIT_TAG_NAMES[s.bonusVsTag.tag] ?? s.bonusVsTag.tag}`);
   if (s.pPenPct) parts.push(`+${s.pPenPct}% P.Pen`);
   if (s.pierce) parts.push(`${pct(s.pierce)} basic attack damage to the unit behind the target`);
@@ -526,7 +543,7 @@ export function skillEffect(s: SkillDef): string {
     else parts.push(s.basicAttack > 1 ? `Basic attack x${s.basicAttack}` : 'Basic attack');
   }
   if (s.missingHpBonus) parts.push(`x1 to x${s.missingHpBonus.max} damage by the target's missing Health (x${s.missingHpBonus.max} at ${pct(s.missingHpBonus.atHealth)} Health or less)`);
-  if (s.heal) parts.push(`Heal ${pct(s.heal.mAtk)} ${STAT_INFO.mAtk.short}`);
+  if (s.heal) parts.push(`Heal ${[s.heal.mAtk ? `${pct(s.heal.mAtk)} ${STAT_INFO.mAtk.short}` : '', s.heal.missingHp ? `${pct(s.heal.missingHp)} of target's missing HP` : ''].filter(Boolean).join(' + ')}`);
   if (s.shield) {
     const sh = s.shield;
     const amount = [sh.maxHpPct ? `${pct(sh.maxHpPct)} of max HP` : '', sh.mAtk ? `${pct(sh.mAtk)} ${STAT_INFO.mAtk.short}` : ''].filter(Boolean).join(' + ');
@@ -534,6 +551,7 @@ export function skillEffect(s: SkillDef): string {
   }
   for (const a of s.applyStatus ?? []) {
     const st = STATUSES[a.status];
+    if (st.bonusMove) continue; // described below
     const sc = st.casterScaled;
     if (sc) {
       const from = [sc.pAtk ? `${pct(sc.pAtk)} ${STAT_INFO.pAtk.short}` : '', sc.mAtk ? `${pct(sc.mAtk)} ${STAT_INFO.mAtk.short}` : ''].filter(Boolean).join(' + ');
@@ -541,6 +559,11 @@ export function skillEffect(s: SkillDef): string {
     } else parts.push(statusText(a));
   }
   for (const a of s.selfStatus ?? []) parts.push(`You: ${STATUSES[a.status].name} (${turns(a.turns)})`);
+  if (s.selfStatusPerEnemyHit) {
+    const st = STATUSES[s.selfStatusPerEnemyHit.status];
+    const gives = st.statPct ? Object.entries(st.statPct).map(([k, v]) => `${(v ?? 0) > 0 ? '+' : ''}${pct(v ?? 0)} ${STAT_INFO[k as keyof Stats].short}`).join(', ') : st.name;
+    parts.push(`You: ${gives} per enemy hit (${st.name}, ${turns(s.selfStatusPerEnemyHit.turns)})`);
+  }
   if (s.recoilIfSurvives) {
     const r = s.recoilIfSurvives;
     parts.push(`${[r.pAtk ? `${pct(r.pAtk)} P.Atk` : '', r.mAtk ? `${pct(r.mAtk)} M.Atk` : ''].filter(Boolean).join(' + ')} recoil if the target survives`);
@@ -557,14 +580,19 @@ export function skillEffect(s: SkillDef): string {
     const st = STATUSES[s.toggleStatus];
     const onHit = [st.weaponOnHit ? `+${damageText(st.weaponOnHit)}` : '', ...(st.weaponOnHitStatus ?? []).map(statusText)].filter(Boolean).join(' and ');
     const hit = onHit ? `Weapon attacks ${onHit} per hit${st.manaPerHit ? ` (${st.manaPerHit} mana each)` : ''}`
-      : st.quickCast ? 'your next Mage spell of 2 AP or Ends Turn costs 1 AP' : st.name;
+      : st.quickCast ? 'your next Mage spell of 2 AP or Ends Turn costs 1 AP'
+        : st.statPct ? Object.entries(st.statPct).map(([k, v]) => `${(v ?? 0) > 0 ? '+' : ''}${pct(v ?? 0)} ${STAT_INFO[k as keyof Stats].short}`).join(', ') : st.name;
     if (st.thisTurnOnly) {
       parts.push(`Toggle: ${hit}; use again to cancel for a refund of its mana and cooldown (also refunded if the turn ends unused)`);
       return parts.join(', ');
     }
-    parts.push(`Toggle: ${hit}${st.manaPerTurn ? `; ${st.manaPerTurn} mana a turn while on` : ''}`);
+    const upkeep = [st.manaPerTurn ? `${st.manaPerTurn} mana` : '', st.hpPctPerTurn ? `${pct(st.hpPctPerTurn)} of max HP` : ''].filter(Boolean).join(' and ');
+    parts.push(`Toggle: ${hit}${upkeep ? `; ${upkeep} a turn while on${st.hpPctPerTurn ? ' (paid on switching on too)' : ''}` : ''}`);
+    if (s.cooldownAfterOff) parts.push('Cooldown starts when it switches off');
   }
+  if (s.applyStatus?.some((a) => STATUSES[a.status].bonusMove)) parts.push('The next time you use up your last AP this turn: a free move (walk, or a Movement, Leap or Teleport skill)');
   if (s.teleport) parts.push(s.charge ? 'Teleport next to the target' : 'Teleport');
+  else if (hasTag(s, 'leap')) parts.push(s.charge ? 'Leap next to the target' : 'Leap to the tile');
   else if (s.charge) parts.push('Dash next to the target');
   return parts.length ? parts.join(', ') : s.description;
 }

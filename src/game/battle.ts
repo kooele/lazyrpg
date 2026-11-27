@@ -91,6 +91,8 @@ export interface Unit {
   escaped?: boolean;
   /** Gave up (human enemies that can't escape): out of the fight, and taken prisoner if the party wins. */
   surrendered?: boolean;
+  /** Hit and Run fired: the unit has one free movement action left this turn (walk, or a Movement, Leap or Teleport skill). */
+  bonusMove?: boolean;
 }
 
 /**
@@ -108,13 +110,15 @@ export type BattleEvent =
   | { type: 'status'; source: string; target: string; name: string }
   | { type: 'resist'; source: string; target: string; name: string; chance: number; immune?: boolean }
   | { type: 'cleanse'; source: string; target: string; removed: string[] }
-  | { type: 'move'; target: string; from: Point; to: Point; kind: 'knockback' | 'teleport' | 'charge' }
+  | { type: 'move'; target: string; from: Point; to: Point; kind: 'knockback' | 'teleport' | 'charge' | 'leap' }
   | { type: 'overwatch'; source: string; skillId: string }
   | { type: 'escape'; target: string }
   | { type: 'surrender'; target: string }
   | { type: 'mode'; target: string; name: string }
   /** A toggle (Arcane Weapon) switched on or off; `reason` says why it went off on its own. */
-  | { type: 'toggle'; target: string; name: string; on: boolean; reason?: 'mana' | 'turn' }
+  | { type: 'toggle'; target: string; name: string; on: boolean; reason?: 'mana' | 'health' | 'turn' }
+  /** Hit and Run fired: the unit gets a free movement action. */
+  | { type: 'bonusMove'; target: string }
   /** A zone (Firestorm) was placed on these tiles. */
   | { type: 'zone'; source: string; name: string; tiles: Point[] }
   /** A unit is caught by a zone (followed by its damage and status events). */
@@ -347,6 +351,10 @@ export class Battle {
       }
     }
     if (stat === 'movement') value = Math.max(0, value);
+    // Scout: sees further while Stealthed.
+    if (stat === 'vision' && this.isStealthed(u)) {
+      for (const id of this.skillIds(u)) if (SKILLS[id]?.stealthVision && this.hasPassive(u, id)) value += SKILLS[id].stealthVision!;
+    }
     return Math.round(value);
   }
 
@@ -463,8 +471,22 @@ export class Battle {
   isUsable(u: Unit, skillId: string): boolean {
     const s = SKILLS[skillId];
     // Switching a toggle off is free.
-    const mana = s.toggleStatus && this.isToggledOn(u, s.toggleStatus) ? 0 : s.mana;
+    const switchingOn = !!s.toggleStatus && !this.isToggledOn(u, s.toggleStatus);
+    const mana = s.toggleStatus && !switchingOn ? 0 : s.mana;
+    // Soul Ignition: switching on also costs Health, and needs more than that left.
+    if (switchingOn && u.hp <= this.toggleHpCost(u, s.toggleStatus!)) return false;
     return this.isReady(u, skillId) && u.mp >= mana && !(u.weaponDisabled && hasTag(s, 'weapon')) && !(this.isFrozen(u) && this.movesUser(s));
+  }
+
+  /** Health a toggle (Soul Ignition) costs to switch on and each turn after: its share of max HP, rounded (0 for most). */
+  toggleHpCost(u: Unit, statusId: string): number {
+    const pct = STATUSES[statusId]?.hpPctPerTurn;
+    return pct ? Math.max(1, Math.round(u.stats.health * pct)) : 0;
+  }
+
+  /** Movement actions (Hit and Run's free move allows only these): Dash, and Movement, Leap and Teleport skills. */
+  isMovementSkill(s: SkillDef): boolean {
+    return s.target === 'move' || hasTag(s, 'movement') || hasTag(s, 'leap') || hasTag(s, 'teleport');
   }
 
   /** Frozen units can't move (see the Frozen status). */
@@ -472,9 +494,9 @@ export class Battle {
     return u.statuses.some((s) => STATUSES[s.id]?.frozen);
   }
 
-  /** Skills that move the user on its own feet (Dash, Charge, Movement skills); teleports don't count. */
+  /** Skills that move the user on its own feet (Dash, Charge, Movement and Leap skills); teleports don't count. */
   private movesUser(s: SkillDef): boolean {
-    return s.target === 'move' || hasTag(s, 'movement') || (!!s.charge && !s.teleport);
+    return s.target === 'move' || hasTag(s, 'movement') || hasTag(s, 'leap') || (!!s.charge && !s.teleport);
   }
 
   // ---- engagement ------------------------------------------------------------------
@@ -534,7 +556,7 @@ export class Battle {
       if (targets.length === 1 && targets[0] === opp) return null;
       return targets.length ? busy : `Engaged with ${opp.character.name}: disengage before moving.`;
     }
-    if (hasTag(skill, 'movement')) return `Engaged with ${opp.character.name}: disengage before moving.`;
+    if (hasTag(skill, 'movement') || hasTag(skill, 'leap')) return `Engaged with ${opp.character.name}: disengage before moving.`;
     // Heal, Cleanse, shields and buffs only on yourself while engaged.
     const helps = skill.heal || skill.cleanse || skill.shield || (skill.applyStatus ?? []).some((a) => !STATUSES[a.status]?.debuff);
     if (skill.target === 'unit' && helps && targets.some((t) => t !== caster)) return busy;
@@ -686,6 +708,7 @@ export class Battle {
     const skill = SKILLS[skillId];
     if (skill.target === 'passive') return false;
     if (!this.canAct(u) || !this.skillIds(u).includes(skillId) || !this.isUsable(u, skillId) || !this.canPay(u, skill)) return false;
+    if (u.bonusMove && !this.isMovementSkill(skill)) return false;
     // Dash: a second move with the action AP, only once the regular move is spent.
     if (skill.target === 'move') return u.moved && !u.engagedWith;
     if (skill.switchMode) return !!this.modesOf(u);
@@ -868,6 +891,7 @@ export class Battle {
     if (!this.canMove(u)) throw new Error(`${u.character.name} can't move now`);
     const reach = this.reachable(u);
     if (!reach.has(key(dest.x, dest.y))) throw new Error('Destination not reachable');
+    const before = u.ap;
     u.moved = true;
     u.walked = true;
     u.ap -= 1;
@@ -884,6 +908,8 @@ export class Battle {
       u.undoBlock = spotted ? 'spotted' : newTiles > UNDO_REVEAL_TILES ? 'scouted' : undefined;
       if (u.undoBlock) u.locked = true;
     }
+    const bonus = this.bonusMoveCheck(u, before);
+    if (bonus.length) result.triggers.push({ index: result.path.length - 1, events: bonus });
     this.updateSightings();
     return result;
   }
@@ -899,8 +925,9 @@ export class Battle {
     if (!id || !this.canUseSkill(u, id)) throw new Error(`${u.character.name} can't dash now`);
     const reach = this.reachable(u);
     if (!reach.has(key(dest.x, dest.y)) || (dest.x === u.x && dest.y === u.y)) throw new Error('Destination not reachable');
-    this.payFor(u, id);
+    const bonus = this.payFor(u, id);
     const result = this.walk(u, this.pathTo(reach, dest));
+    if (bonus.length) result.triggers.push({ index: result.path.length - 1, events: bonus });
     this.updateSightings();
     return result;
   }
@@ -909,8 +936,9 @@ export class Battle {
    * Spend a skill's AP (`ap`: its cost worked out before it was used, see apCost), mana and cooldown, and use up
    * what lowered the cost (a free basic attack doesn't start the cooldown). Using a skill can't be undone.
    */
-  private payFor(u: Unit, skillId: string, noMana = false, ap: ApCost = this.apCost(u, SKILLS[skillId]), noCooldown = false): void {
+  private payFor(u: Unit, skillId: string, noMana = false, ap: ApCost = this.apCost(u, SKILLS[skillId]), noCooldown = false): BattleEvent[] {
     const skill = SKILLS[skillId];
+    const before = u.ap;
     this.spendAp(u, ap);
     if (!noMana) u.mp -= skill.mana;
     const free = ap === 0 && skill.ap !== 0 ? this.statusWith(u, 'freeBasicAttacks') : undefined;
@@ -923,6 +951,26 @@ export class Battle {
     if (quick && skill.cooldown > 0) u.cooldowns[skillId] = skill.cooldown;
     u.locked = true;
     this.lockTeammates(u);
+    // Hit and Run: spending the last AP (a turn-ending attack included, not a reaction like Overwatch) gives a free move.
+    return skill.cone ? [] : this.bonusMoveCheck(u, before);
+  }
+
+  /**
+   * Hit and Run: `u` just spent its last AP (it had `before`). If it has a bonusMove status, that's used up and the
+   * unit gets one free movement action: 1 AP, usable only to walk or for a Movement, Leap or Teleport skill.
+   */
+  private bonusMoveCheck(u: Unit, before: number): BattleEvent[] {
+    if (!u.alive || before <= 0 || u.ap > 0 || u.bonusMove) return [];
+    const st = u.statuses.find((x) => STATUSES[x.id]?.bonusMove);
+    if (!st) return [];
+    u.statuses = u.statuses.filter((x) => x !== st);
+    u.bonusMove = true;
+    u.acted = false;
+    u.ap = 1;
+    u.moved = false;
+    u.walked = false;
+    u.locked = true;
+    return [{ type: 'bonusMove', target: u.uid }];
   }
 
   /**
@@ -1205,6 +1253,15 @@ export class Battle {
         return coneTiles(this.map, from, tile, skill.cone!.angle, this.coneRadius(caster, skill));
       case 'ground':
         return skill.zone ? this.zoneTiles(skill.zone, tile) : this.shapeTiles(tile);
+      case 'emptyTile': {
+        if (!skill.aoeRadius) return [tile];
+        const out: Point[] = [];
+        const R = Math.ceil(skill.aoeRadius);
+        for (let y = tile.y - R; y <= tile.y + R; y++) {
+          for (let x = tile.x - R; x <= tile.x + R; x++) if (this.inMap({ x, y }) && withinRange(dist(tile, { x, y }), skill.aoeRadius)) out.push({ x, y });
+        }
+        return out;
+      }
       default:
         return [tile];
     }
@@ -1257,8 +1314,11 @@ export class Battle {
   targetsOf(caster: Unit, skill: SkillDef, tile: Point, from: Point = caster): Unit[] {
     skill = this.skillFor(caster, skill);
     switch (skill.target) {
-      case 'cone':
       case 'emptyTile':
+        // Heroic Leap: everyone around where it lands (hidden units too, like other area attacks).
+        if (!skill.aoeRadius) return [];
+        return this.living().filter((t) => t !== caster && this.matches(caster, skill, t) && withinRange(dist(tile, t), skill.aoeRadius!));
+      case 'cone':
       case 'move':
       case 'passive':
         return [];
@@ -1330,6 +1390,14 @@ export class Battle {
     if (goals.length === 0) return null;
     // Teleport strike (Flicker Strike): appear on the free tile next to the target closest to you.
     if (chargeSkill.teleport) return [goals.reduce((a, b) => (dist(from, b) < dist(from, a) - EPS ? b : a))];
+    // Leap (Pounce): fly straight to the closest free tile next to the target within range, over anything in the way.
+    if (hasTag(chargeSkill, 'leap')) {
+      const range = this.skillRange(caster, chargeSkill);
+      const inRange = goals.filter((g) => withinRange(dist(from, g), range));
+      if (!inRange.length) return null;
+      const goal = inRange.reduce((a, b) => (dist(from, b) < dist(from, a) - EPS ? b : a));
+      return [...tilesBetween(from, goal).filter((p) => this.inMap(p)), goal];
+    }
     const goalKeys = new Set(goals.map((p) => key(p.x, p.y)));
     const maxSteps = Math.floor(this.skillRange(caster, chargeSkill));
     const seen = new Map<string, number>([[key(from.x, from.y), 0]]);
@@ -1579,7 +1647,7 @@ export class Battle {
   /** Zones on `p` that would act on `u` walking in (paths steer around them when they can). */
   private hazardsAt(u: Unit, p: Point): number {
     if (!this.zones.length) return 0;
-    return this.zonesAt(p).filter((z) => this.zoneAffects(z, u)).length;
+    return this.zonesAt(p).filter((z) => !z.def.delayed && this.zoneAffects(z, u)).length;
   }
 
   /**
@@ -1629,7 +1697,7 @@ export class Battle {
   /** Every zone on `tile` that acts on `u` hits it `times` times. */
   private zoneHits(u: Unit, tile: Point, times: number): BattleEvent[] {
     const events: BattleEvent[] = [];
-    for (const z of this.zonesAt(tile)) events.push(...this.zoneHit(z, u, times));
+    for (const z of this.zonesAt(tile)) if (!z.def.delayed) events.push(...this.zoneHit(z, u, times));
     return events;
   }
 
@@ -1653,8 +1721,9 @@ export class Battle {
     let total = 0;
     const end = path[path.length - 1] ?? u;
     const hit = (z: Zone) => (z.def.hit && this.zoneAffects(z, u) ? this.hitDamage(this.unit(z.casterUid), u, z.def.hit) : 0);
-    for (const p of path) for (const z of this.zonesAt(p)) total += hit(z);
-    for (const z of this.zonesAt(end)) total += z.def.endTurnHits * hit(z);
+    for (const p of path) for (const z of this.zonesAt(p)) if (!z.def.delayed) total += hit(z);
+    // A wind-up (Brutal Strike) hits whoever is still on it at the start of its caster's next turn.
+    for (const z of this.zonesAt(end)) total += (z.def.delayed ? 1 : z.def.endTurnHits) * hit(z);
     return total;
   }
 
@@ -1720,8 +1789,10 @@ export class Battle {
     return Math.round(target.stats.health * (sh.maxHpPct ?? 0) + this.stat(caster, 'mAtk') * (sh.mAtk ?? 0));
   }
 
-  healAmount(caster: Unit, skill: SkillDef): number {
-    return Math.round((skill.heal?.mAtk ?? 0) * this.stat(caster, 'mAtk'));
+  /** What `skill` heals: its share of the caster's M.Atk, plus (Emergency Heal) a share of `target`'s missing HP. */
+  healAmount(caster: Unit, skill: SkillDef, target?: Unit): number {
+    const missing = target ? target.stats.health - target.hp : 0;
+    return Math.round((skill.heal?.mAtk ?? 0) * this.stat(caster, 'mAtk') + (skill.heal?.missingHp ?? 0) * missing);
   }
 
   private dealDamage(target: Unit, amount: number, source: string | undefined, cause: DamageCause, bypassShield = false, damageType?: DamageType): BattleEvent {
@@ -1761,6 +1832,7 @@ export class Battle {
     if (skill.target === 'passive') throw new Error(`${skill.name} is a passive skill`);
     if (!this.skillIds(u).includes(skillId)) throw new Error(`${u.character.name} doesn't have ${skill.name}`);
     if (!this.canPay(u, skill)) throw new Error(`${skill.name} needs more AP`);
+    if (u.bonusMove && !this.isMovementSkill(skill)) throw new Error('The free move from Hit and Run is for moving only');
     if (!this.isReady(u, skillId)) throw new Error(`${skill.name} is on cooldown`);
     const switchingOff = !!skill.toggleStatus && this.isToggledOn(u, skill.toggleStatus);
     if (u.mp < skill.mana && !switchingOff) throw new Error(`${skill.name} needs ${skill.mana} mana`);
@@ -1802,6 +1874,9 @@ export class Battle {
         // Most toggles stay on until switched off; Quick Cast only lasts the turn.
         u.statuses.push({ id: def.id, name: def.name, debuff: def.debuff, stacks: 1, amount: 0, turns: def.thisTurnOnly ? 1 : Infinity, tick: def.thisTurnOnly ? 'end' : def.tick });
         events.push({ type: 'toggle', target: u.uid, name: def.name, on: true });
+        // Soul Ignition: switching on costs Health too.
+        const hpCost = this.toggleHpCost(u, def.id);
+        if (hpCost) events.push(this.dealDamage(u, hpCost, u.uid, 'status', true));
       }
     }
     // Still next to the target after the charge (it can be stopped short)? Melee charges strike only then.
@@ -1817,6 +1892,12 @@ export class Battle {
       u.y = tile.y;
       events.push({ type: 'move', target: u.uid, from: origin, to: { ...tile }, kind: 'teleport' });
       events.push(...this.zoneHits(u, tile, 1));
+    } else if (hasTag(skill, 'leap') && skill.target === 'emptyTile') {
+      this.leapTo(u, tile, events);
+      if (!u.alive) {
+        this.payFor(u, skillId, true, ap);
+        return events;
+      }
     }
     if (skill.zone) events.push(this.addZone(skillId, skill.name, u, skill.zone, this.zoneTiles(skill.zone, tile)));
     if (skill.cone) {
@@ -1839,6 +1920,10 @@ export class Battle {
     // Power Strike: whoever stands behind the target, picked before anyone is pushed or falls.
     const pierced = this.pierceVictim(u, used, tile);
     this.strike(u, skill, used, targets, events);
+    // Heroic Leap: a stack of Heroic Guard per enemy hit.
+    const perHit = used.selfStatusPerEnemyHit;
+    const enemiesHit = targets.filter((t) => t.team !== u.team).length;
+    if (perHit && enemiesHit && u.alive) events.push(...this.applyStatus(u, u, perHit.status, perHit.turns, enemiesHit, true));
     if (pierced && pierced.alive && used.pierce) {
       for (const part of scaleHits(this.basicAttack(u).hits ?? [], used.pierce)) {
         if (!pierced.alive) break;
@@ -1880,7 +1965,7 @@ export class Battle {
     if (this.isAttack(used) && used.affects !== 'ally') u.statuses = u.statuses.filter((st) => !STATUSES[st.id]?.stealth);
     if (!u.alive) u.acted = true;
     // Mana was paid up front (none when switching a toggle off); switching a toggle off doesn't restart its cooldown.
-    this.payFor(u, skillId, true, ap, switchingOff);
+    events.push(...this.payFor(u, skillId, true, ap, switchingOff || !!skill.cooldownAfterOff));
     this.updateSightings();
     return events;
   }
@@ -1892,6 +1977,11 @@ export class Battle {
    */
   private chargeTo(u: Unit, skill: SkillDef, tile: Point, events: BattleEvent[]): boolean {
     const origin = { x: u.x, y: u.y };
+    if (hasTag(skill, 'leap')) {
+      const path = this.chargePath(u, tile, u, skill) ?? [];
+      if (path.length) this.leapTo(u, path[path.length - 1], events);
+      return false;
+    }
     if (skill.teleport) {
       const dest = this.chargeDestination(u, tile, u, skill)!;
       if (dest.x !== u.x || dest.y !== u.y) {
@@ -1911,6 +2001,30 @@ export class Battle {
       for (const t of walked.triggers) if (t.index === i) events.push(...t.events);
     });
     return walked.interrupted;
+  }
+
+  /**
+   * Leap (Heroic Leap, Pounce) from where `u` stands to `dest`, in a straight line over terrain and units. Enemy
+   * overwatch fires on the tiles it passes over that it could stand on (it can't stop a leap); zones only act where it
+   * lands. Killed in the air, it falls where it was hit.
+   */
+  private leapTo(u: Unit, dest: Point, events: BattleEvent[]): void {
+    const origin = { x: u.x, y: u.y };
+    const shots: BattleEvent[] = [];
+    for (const p of [...tilesBetween(origin, dest), dest]) {
+      if (!u.alive) break;
+      if (!this.inMap(p) || !passable(this.map, p.x, p.y) || this.units.some((o) => o !== u && o.alive && o.x === p.x && o.y === p.y)) continue;
+      u.x = p.x;
+      u.y = p.y;
+      shots.push(...this.triggerOverwatch(u).events);
+    }
+    if (u.alive) {
+      u.x = dest.x;
+      u.y = dest.y;
+    }
+    events.push({ type: 'move', target: u.uid, from: origin, to: { x: u.x, y: u.y }, kind: 'leap' }, ...shots);
+    if (shots.length) u.locked = true;
+    if (u.alive) events.push(...this.zoneHits(u, dest, 1));
   }
 
   /**
@@ -1969,7 +2083,7 @@ export class Battle {
       for (const a of skill.applyStatus ?? []) events.push(...this.applyStatus(u, t, a.status, a.turns, a.stacks ?? 1));
       for (const sh of used.shiftStatus ?? []) events.push(...this.shiftStatus(u, t, sh.status, sh.stacks));
       if (skill.heal) {
-        const amount = Math.min(this.healAmount(u, skill), t.stats.health - t.hp);
+        const amount = Math.min(this.healAmount(u, skill, t), t.stats.health - t.hp);
         t.hp += amount;
         events.push({ type: 'heal', source: u.uid, target: t.uid, amount });
       }
@@ -2192,8 +2306,11 @@ export class Battle {
   }
 
   /** Switch a toggle status off (out of mana, or the unit used the skill again). */
-  private toggleOff(u: Unit, id: string, reason?: 'mana'): BattleEvent {
+  private toggleOff(u: Unit, id: string, reason?: 'mana' | 'health'): BattleEvent {
     u.statuses = u.statuses.filter((s) => s.id !== id);
+    // Soul Ignition: its cooldown starts now.
+    const sid = this.skillIds(u).find((x) => SKILLS[x].toggleStatus === id && SKILLS[x].cooldownAfterOff);
+    if (sid) u.cooldowns[sid] = SKILLS[sid].cooldown;
     return { type: 'toggle', target: u.uid, name: STATUSES[id].name, on: false, ...(reason ? { reason } : {}) };
   }
 
@@ -2262,6 +2379,12 @@ export class Battle {
         else this.turnStart.set(u.uid, { x: u.x, y: u.y });
       }
     }
+    // Wind-ups (Brutal Strike) land at the start of their caster's next turn, on whoever stands there, then end.
+    for (const z of this.zones) {
+      if (z.team !== team || !z.def.delayed) continue;
+      if (this.unit(z.casterUid).alive) for (const t of this.living()) if (z.tiles.has(key(t.x, t.y))) events.push(...this.zoneHit(z, t, 1));
+      z.turnsLeft = 0;
+    }
     for (const z of this.zones) if (z.team === team) z.turnsLeft -= 1;
     this.zones = this.zones.filter((z) => z.turnsLeft > 0);
     for (const u of this.living(team)) {
@@ -2273,14 +2396,20 @@ export class Battle {
       u.startPos = { x: u.x, y: u.y };
       u.undoBlock = undefined;
       u.overwatch = null;
+      u.bonusMove = false;
       for (const k of Object.keys(u.cooldowns)) u.cooldowns[k] = Math.max(0, u.cooldowns[k] - 1);
       events.push(...this.tickStatuses(u, 'start'));
-      // Toggles cost mana every turn to keep up; they switch off when the unit can't pay.
+      // Toggles cost mana (Soul Ignition: and Health) every turn to keep up; they switch off when the unit can't pay.
       for (const s of [...u.statuses]) {
-        const upkeep = STATUSES[s.id]?.manaPerTurn;
-        if (!upkeep || !u.alive) continue;
-        if (u.mp >= upkeep) u.mp -= upkeep;
-        else events.push(this.toggleOff(u, s.id, 'mana'));
+        const upkeep = STATUSES[s.id]?.manaPerTurn ?? 0;
+        const hpCost = this.toggleHpCost(u, s.id);
+        if ((!upkeep && !hpCost) || !u.alive) continue;
+        if (u.mp < upkeep) events.push(this.toggleOff(u, s.id, 'mana'));
+        else if (hpCost && u.hp <= hpCost) events.push(this.toggleOff(u, s.id, 'health'));
+        else {
+          u.mp -= upkeep;
+          if (hpCost) events.push(this.dealDamage(u, hpCost, u.uid, 'status', true));
+        }
       }
       // Frozen: the movement AP is lost this turn.
       if (this.isFrozen(u)) {
