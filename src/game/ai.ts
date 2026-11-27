@@ -360,24 +360,44 @@ export function sideStrength(battle: Battle, team: Unit['team']): number {
   return hp * atk;
 }
 
-/** A human holds firm while its side's strength is at least this share of its foes'. */
-export const HOLD_FIRM_ODDS = 0.5;
+/**
+ * A human's fear, a sliding scale: its missing Health share (0 to 1) plus DANGER_FEAR per foe that could kill it
+ * next turn where it stands. Each known foe in reach counts for the share of its Health it could take, up to 1 (a
+ * foe that could finish it off alone counts 1; three that each take a third count 1 between them). Below the
+ * floor it doesn't think of leaving; above it, every point of fear raises the odds its side needs to hold firm.
+ */
+export const FEAR = { floor: 0.4, oddsPerFear: 1, dangerFear: 0.25 };
+
+export function fear(battle: Battle, u: Unit, threats = foeThreats(battle, u)): number {
+  const danger = u.hp > 0
+    ? threats.reduce((sum, t) => (dist(t.at, u) <= t.reach ? sum + Math.min(1, t.damage / u.hp) : sum), 0) : 0;
+  return (1 - ratio(u)) + FEAR.dangerFear * danger;
+}
 
 /**
- * Is this human's side still in the fight? It has allies standing and the odds aren't too bad (its side's
- * strength at least HOLD_FIRM_ODDS of the other side's). Then a hurt human falls back to its friends
- * (wantsToRetreat) rather than running for the edge or giving up.
+ * The share of its foes' strength a human's side needs to hold firm (see holdsFirm): 0 while unhurt and out of
+ * reach, rising the more hurt it is and the more foes could kill it next turn. E.g. at 35% Health out of reach:
+ * 0.25; unhurt with four foes in reach that could each kill it: 0.6; at 20% Health with two of them: 0.9.
+ */
+export function holdFirmOdds(battle: Battle, u: Unit): number {
+  return FEAR.oddsPerFear * Math.max(0, fear(battle, u) - FEAR.floor);
+}
+
+/**
+ * Is this human's side still in the fight? Its side's strength (itself included) is at least holdFirmOdds of
+ * the other side's. Then a hurt human falls back to its friends (wantsToRetreat) rather than running for the
+ * edge or giving up. A unit that isn't afraid always holds firm.
  */
 export function holdsFirm(battle: Battle, u: Unit): boolean {
-  if (!battle.living(u.team).some((a) => a !== u)) return false;
+  const odds = holdFirmOdds(battle, u);
+  if (odds <= 0) return true;
   const foes = sideStrength(battle, u.team === 'enemy' ? 'player' : 'enemy');
-  return foes <= 0 || sideStrength(battle, u.team) >= HOLD_FIRM_ODDS * foes;
+  return foes <= 0 || sideStrength(battle, u.team) >= odds * foes;
 }
 
 /**
  * Does this enemy want out of the fight? Beasts once hurt; a tribal fighter when its group has broken;
- * a human when badly hurt, or hurt and in reach of a blow that could kill it, but only once its side is losing
- * or it's on its own (see holdsFirm). Evil never.
+ * a human once its side's odds fall short of what its fear asks for (see holdsFirm). Evil never.
  */
 export function wantsToFlee(battle: Battle, u: Unit): boolean {
   if (u.team !== 'enemy') return false;
@@ -385,7 +405,7 @@ export function wantsToFlee(battle: Battle, u: Unit): boolean {
     case 'evil': return false;
     case 'beast': return ratio(u) < BEAST_FLEE_AT;
     case 'tribal': return tribeRouted(battle, u.team);
-    default: return (isLow(u) || (ratio(u) < 0.6 && threatAt(battle, u, u) >= u.hp)) && !holdsFirm(battle, u);
+    default: return !holdsFirm(battle, u);
   }
 }
 

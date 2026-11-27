@@ -7,7 +7,7 @@ import { ENEMIES, parseEnemies } from '../src/data/enemies';
 import statsJson from '../src/data/stats.json';
 import { STAT_CONFIG, parseStatConfig } from '../src/data/stats';
 import type { Character, SkillDef } from '../src/data/types';
-import { HOLD_FIRM_ODDS, bestAction, caution, holdsFirm, planTurn, preferredMode, runAiTurn, shouldDisengage, shouldSurrender, sideStrength, threatAt, tribeRouted, wantsToFlee, watchesForOverwatch } from '../src/game/ai';
+import { bestAction, holdFirmOdds, caution, holdsFirm, planTurn, preferredMode, runAiTurn, shouldDisengage, shouldSurrender, sideStrength, threatAt, tribeRouted, wantsToFlee, watchesForOverwatch } from '../src/game/ai';
 import { Battle, defenseMultiplier, resistChance, deploymentTiles, enemyTypesForStage, generateEnemies, makeEnemy, pickFoes, makeUnit, statEffectPct, statText, type Team } from '../src/game/battle';
 import { allSkills, bodyGain, skillBarLayout, swapBarSlots, bodyPoints as bodyPointsOf, bodyStats, createCharacter, deriveStats, freePoints, grantXp, isUnlocked, makeRng, pointsUsed, sanitizeLoadout } from '../src/game/character';
 import { randomAdventurer } from '../src/game/people';
@@ -1132,9 +1132,39 @@ describe('progression and enemy behaviour', () => {
     expect(even.archer.surrendered).toBeFalsy();
     // Friends nearly dead: the fight is lost, and the cornered archer gives up.
     const lost = make(0.05);
-    expect(sideStrength(lost.battle, 'enemy')).toBeLessThan(HOLD_FIRM_ODDS * sideStrength(lost.battle, 'player'));
+    expect(sideStrength(lost.battle, 'enemy')).toBeLessThan(holdFirmOdds(lost.battle, lost.archer) * sideStrength(lost.battle, 'player'));
     expect(holdsFirm(lost.battle, lost.archer)).toBe(false);
     expect(shouldSurrender(lost.battle, lost.archer)).toBe(true);
+  });
+
+  it('human: fear is a sliding scale; more hurt or more foes that could kill it asks for better odds to hold firm', () => {
+    const map = openMap(30, 21);
+    const make = (hpShare: number, knightCount: number, friendsHp: number) => {
+      const bandit = makeUnit(makeEnemy('bandit', 4, makeRng(5)), 'enemy', { x: 15, y: 10 });
+      const friends = [8, 12].map((y, i) => makeUnit(makeEnemy('bandit', 4, makeRng(10 + i)), 'enemy', { x: 25, y }));
+      const knights = [9, 10, 11, 12].slice(0, knightCount).map((y) => makeUnit(hero('sword_shield', [], `K${y}`), 'player', { x: 13, y }));
+      const battle = new Battle(map, [bandit, ...friends, ...knights], makeRng(1));
+      battle.endPhase();
+      bandit.hp = Math.max(1, Math.round(bandit.stats.health * hpShare));
+      for (const f of friends) f.hp = Math.max(1, Math.round(f.stats.health * friendsHp));
+      return { battle, bandit };
+    };
+    const odds = (hpShare: number, knights: number) => {
+      const { battle, bandit } = make(hpShare, knights, 1);
+      return holdFirmOdds(battle, bandit);
+    };
+    // Unhurt and out of danger: never afraid.
+    expect(holdFirmOdds(make(1, 1, 1).battle, make(1, 1, 1).bandit)).toBe(0);
+    // Lower Health asks for better odds, and so does each extra foe in reach.
+    expect(odds(0.3, 2)).toBeGreaterThan(odds(0.5, 2));
+    expect(odds(0.5, 2)).toBeGreaterThan(odds(0.7, 2));
+    expect(odds(0.3, 3)).toBeGreaterThan(odds(0.3, 2));
+    expect(odds(0.3, 2)).toBeGreaterThan(odds(0.3, 1));
+    // The two interact: with the same weakened friends, a bandit at half Health holds firm, a badly hurt one doesn't.
+    const light = make(0.5, 2, 0.15);
+    const heavy = make(0.15, 2, 0.15);
+    expect(wantsToFlee(light.battle, light.bandit)).toBe(false);
+    expect(wantsToFlee(heavy.battle, heavy.bandit)).toBe(true);
   });
 
   it('human: a hurt enemy that isn\'t in mortal danger runs for the edge instead of surrendering', () => {
