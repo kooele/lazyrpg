@@ -197,7 +197,8 @@ export function glossaryEntries(): GlossaryEntry[] {
     + `Undo Move takes back a regular move (see Undo Move).`);
   add('Battle', 'Moving',
     `Clicking a tile in a unit's move range only previews the move: a faded copy of the unit shows where it would stand, and nothing happens yet (no AP spent, no overwatch, no fog lifted).\n\n`
-    + `While previewing, hover or pick the unit's skills to see what they would reach from the planned tile. Click the tile again, press Confirm Move or Enter to make the move; right-click or Esc cancels it.`);
+    + `While previewing, hover or pick the unit's skills to see what they would reach from the planned tile. Click the tile again, press Confirm Move or Enter to make the move; right-click or Esc cancels it.\n\n`
+    + `Aiming a skill from the planned tile and clicking a target makes the move and then uses the skill, if it can still reach from where the unit ends up (overwatch or a hidden enemy can stop it short). Skills that need both AP (and Dash) can't follow a move, so they can't be picked while previewing. Toggles and Switch Mode are used on the spot without moving.`);
   add('Battle', 'Undo Move',
     `Undo Move takes back a unit's regular move this turn, giving back its movement AP. You have ${UNDO_LIMIT} undos per battle; the button shows how many are left.\n\n`
     + `A move is locked in (it can't be undone) once:\n• that unit uses a skill or another unit on your team moves or acts,\n• it was shot by overwatch, caught in a zone or bumped into a hidden enemy on the way,\n• it spotted an enemy you couldn't see before, or\n• it revealed more than ${UNDO_REVEAL_TILES} new tiles of fog.\n\n`

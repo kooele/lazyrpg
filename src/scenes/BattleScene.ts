@@ -226,6 +226,20 @@ export class BattleScene extends Phaser.Scene {
     return this.selectedUid ? this.battle.unit(this.selectedUid) : null;
   }
 
+  /**
+   * Can `u` pick this skill now? While a move is previewed, picking a skill chains the move and then the skill, so
+   * it must still be affordable after the move (not 2 AP skills, not Dash). Toggles and Switch Mode don't move.
+   */
+  private canPick(u: Unit, id: string): boolean {
+    const b = this.battle;
+    if (!b.canUseSkill(u, id) || (u.cooldowns[id] ?? 0) > 0) return false;
+    const s = SKILLS[id];
+    if (!this.plan || s.switchMode || s.toggleStatus) return true;
+    if (s.target === 'move') return false;
+    const cost = b.apCost(u, s);
+    return cost === 0 || u.ap - 1 >= (cost === 'end' ? 1 : cost);
+  }
+
   /** Where `u` is treated as standing for range previews: the planned tile while its move is being previewed. */
   private aimFrom(u: Unit): Point {
     return this.plan && u.uid === this.selectedUid ? this.plan.tile : u;
@@ -634,7 +648,7 @@ export class BattleScene extends Phaser.Scene {
       // Quick Cast switched on and unused: it shows Cancel (a refund) instead of its cooldown.
       const cancellable = !!(u && id && b.isCancellable(u, SKILLS[id]));
       const cd = u && id && !cancellable ? u.cooldowns[id] ?? 0 : 0;
-      const usable = !!(u && id && interactive && b.canUseSkill(u, id) && cd <= 0);
+      const usable = !!(u && id && interactive && cd <= 0 && this.canPick(u, id));
       // A toggle that's on (Arcane Weapon) stays highlighted.
       const toggledOn = !!(u && s?.toggleStatus && b.isToggledOn(u, s.toggleStatus));
       const selected = !!(id && this.mode === 'target' && this.action?.id === id) || toggledOn;
@@ -691,8 +705,8 @@ export class BattleScene extends Phaser.Scene {
     const raw = SKILLS[id];
     const cd = u.cooldowns[id] ?? 0;
     const interactive = (this.mode === 'select' || this.mode === 'target') && b.phase === 'player';
-    const usable = interactive && b.canUseSkill(u, id);
-    const why = !interactive || usable ? '' : u.mp < s.mana ? `\nNot enough mana (${u.mp}/${s.mana}).`
+    const usable = interactive && this.canPick(u, id);
+    const why = !interactive || usable ? '' : this.plan && b.canUseSkill(u, id) ? "\nCan't follow the planned move (not enough AP left after it)." : u.mp < s.mana ? `\nNot enough mana (${u.mp}/${s.mana}).`
       : s.target === 'move' && !u.moved ? '\nUse your regular move first.' : !b.canAct(u) ? '\nThis unit\'s turn is over.' : !b.canPay(u, s) ? '\nNot enough AP.' : '';
     const modeLine = raw.modes ? `\nBow Mode: ${b.modeName(u)} (Switch Mode changes it)` : raw.switchMode && b.modesOf(u) ? `\nNow: ${b.modeName(u)}. Next: ${SKILLS[b.modesOf(u)![(u.weaponMode + 1) % b.modesOf(u)!.length]].modeName}` : '';
     const cancel = b.isCancellable(u, raw) ? `\nOn this turn. Use again to cancel: refunds ${raw.mana} mana and the cooldown.` : '';
@@ -716,7 +730,7 @@ export class BattleScene extends Phaser.Scene {
     const id = skillBarLayout(u.character)[index];
     if (!id) return;
     if (this.mode === 'target' && this.action?.id === id) return this.cancel();
-    if ((this.mode === 'select' || this.mode === 'target') && this.battle.canUseSkill(u, id) && (u.cooldowns[id] ?? 0) <= 0) this.selectAction(id);
+    if ((this.mode === 'select' || this.mode === 'target') && this.canPick(u, id)) this.selectAction(id);
   }
 
   private slotAt(p: Phaser.Input.Pointer): number | 'up' | 'down' | null {
@@ -951,7 +965,7 @@ export class BattleScene extends Phaser.Scene {
 
   private selectAction(id: string): void {
     const u = this.selected;
-    if (!u || (this.mode !== 'select' && this.mode !== 'target') || !this.battle.canUseSkill(u, id)) return;
+    if (!u || (this.mode !== 'select' && this.mode !== 'target') || !this.canPick(u, id)) return;
     this.action = SKILLS[id];
     this.pending = null;
     this.previewAction = null;
@@ -964,17 +978,14 @@ export class BattleScene extends Phaser.Scene {
     }
     this.renderSidebar();
     this.drawOverlay();
-    if (this.plan) {
-      this.showInfo(`${this.battle.skillFor(u, this.action).name}: showing its range from the planned tile. Confirm the move to use it (right-click / Esc to go back).`);
-      return;
-    }
     const how = this.action.target === 'cone' ? 'click to aim the cone'
       : this.action.target === 'move' ? 'click a tile to dash to'
       : this.action.target === 'line' ? 'click a tile to thrust toward'
         : this.action.target === 'self' ? 'click inside the box to use it'
           : this.action.push ? 'click a target, then the direction to push it'
             : this.action.followUp ? 'click a target, then a second one' : 'click a tile in the box';
-    this.showInfo(`${this.battle.skillFor(u, this.action).name}: ${how} (right-click / Esc to cancel).`);
+    const then = this.plan ? '; the unit makes the planned move first' : '';
+    this.showInfo(`${this.battle.skillFor(u, this.action).name}: ${how}${then} (right-click / Esc to cancel).`);
   }
 
   private cancel(): void {
@@ -1057,8 +1068,8 @@ export class BattleScene extends Phaser.Scene {
 
     if (this.mode === 'target' && u && this.action) {
       const action = this.action;
-      // Previewing a move: skills only show what they'd reach from the planned tile; any click goes back to the preview.
-      if (this.plan) return this.cancel();
+      // Previewing a move: aim as if standing on the planned tile; using the skill makes the move first.
+      const from = this.aimFrom(u);
       // Second pick of a two-step skill: a push direction or a second target (anything else goes back a step).
       if (this.pending) {
         const first = this.pending.tile;
@@ -1067,9 +1078,9 @@ export class BattleScene extends Phaser.Scene {
         await this.useSkill(u, action, first, tile);
         return;
       }
-      if (!b.canAim(u, action, tile)) return this.cancel();
+      if (!b.canAim(u, action, tile, from)) return this.cancel();
       const go = () => {
-        const second = this.secondPick(u, action, tile);
+        const second = this.secondPick(u, action, tile, from);
         if (second) {
           this.pending = second;
           this.drawOverlay();
@@ -1079,7 +1090,7 @@ export class BattleScene extends Phaser.Scene {
         }
         void this.useSkill(u, action, tile);
       };
-      const warning = this.targetWarning(u, action, tile);
+      const warning = this.targetWarning(u, action, tile, from);
       if (warning) {
         this.ask(warning, go, 'Use Anyway');
         return;
@@ -1107,10 +1118,10 @@ export class BattleScene extends Phaser.Scene {
    * (the 8 tiles around the target), or Blitz's second target (enemies it can reach from where it lands; none = no
    * second strike, so it goes at once).
    */
-  private secondPick(u: Unit, s: SkillDef, tile: Point): { tile: Point; kind: 'push' | 'followUp'; options: Point[] } | null {
+  private secondPick(u: Unit, s: SkillDef, tile: Point, from: Point = u): { tile: Point; kind: 'push' | 'followUp'; options: Point[] } | null {
     const b = this.battle;
     const used = b.skillFor(u, s);
-    const target = b.targetsOf(u, used, tile)[0];
+    const target = b.targetsOf(u, used, tile, from)[0];
     if (!target) return null;
     if (used.push) {
       const options = [-1, 0, 1].flatMap((dy) => [-1, 0, 1].map((dx) => ({ x: tile.x + dx, y: tile.y + dy })))
@@ -1118,7 +1129,7 @@ export class BattleScene extends Phaser.Scene {
       return { tile, kind: 'push', options };
     }
     if (used.followUp) {
-      const land = b.chargeDestination(u, tile, u, used);
+      const land = b.chargeDestination(u, tile, from, used);
       const options = land ? b.followUpTargets(u, used, target, land) : [];
       return options.length ? { tile, kind: 'followUp', options } : null;
     }
@@ -1129,15 +1140,17 @@ export class BattleScene extends Phaser.Scene {
    * Why the player might not mean this: attacking empty ground or an ally,
    * or healing / cleansing an enemy. Null when the target makes sense.
    */
-  private targetWarning(u: Unit, s: SkillDef, tile: Point): string | null {
+  private targetWarning(u: Unit, s: SkillDef, tile: Point, from: Point = u): string | null {
     const b = this.battle;
-    const occupant = b.unitAt(tile.x, tile.y);
+    const atTile = b.unitAt(tile.x, tile.y);
+    // From the planned tile, the unit's real tile is empty and the planned one holds the unit.
+    const occupant = tile.x === from.x && tile.y === from.y ? u : atTile === u ? undefined : atTile;
     s = b.skillFor(u, s);
-    const targets = b.targetsOf(u, s, tile);
+    const targets = b.targetsOf(u, s, tile, from);
     const offensive = s.affects !== 'ally' && !s.cone && (!!s.hits?.length || !!s.applyStatus?.length || hasTag(s, 'engage'));
     if (offensive) {
       // Power Strike carries through to whoever stands behind the target.
-      const behind = b.pierceVictim(u, s, tile);
+      const behind = b.pierceVictim(u, s, tile, from);
       if (behind && behind.team === u.team && behind !== u) targets.push(behind);
       const allies = targets.filter((t) => t.team === u.team);
       const also = allies.length < targets.length ? 'also ' : '';
@@ -1156,6 +1169,21 @@ export class BattleScene extends Phaser.Scene {
     this.action = null;
     this.pending = null;
     this.showInfo('');
+    // A skill picked while previewing a move: make the move, then use the skill if it still can be from where the
+    // unit ended up (overwatch or a hidden enemy can stop it short; Switch Mode and toggles don't move).
+    if (this.plan && !action.switchMode && !action.toggleStatus) {
+      const planned = this.plan.tile;
+      if (!(await this.walkPlan(u))) return;
+      const b = this.battle;
+      const arrived = u.x === planned.x && u.y === planned.y;
+      if (!arrived || !b.canUseSkill(u, action.id) || (u.cooldowns[action.id] ?? 0) > 0 || !b.canAim(u, action, tile)) {
+        this.addLog(`${u.character.name} ${arrived ? "can't" : 'is stopped short and can\'t'} use ${b.skillFor(u, action).name} after the move.`);
+        this.mode = 'select';
+        this.selectUnit(u);
+        return;
+      }
+      this.mode = 'busy';
+    }
     this.casterUid = u.uid;
     this.refresh();
     if (action.target === 'move') {
@@ -1215,15 +1243,29 @@ export class BattleScene extends Phaser.Scene {
   /** Make the previewed move. */
   private async confirmMove(): Promise<void> {
     const u = this.selected;
-    const b = this.battle;
     if (!u || !this.plan || this.dialogOpen) return;
     if (this.mode === 'target') this.cancel();
     if (this.mode !== 'select') return;
-    const tile = this.plan.tile;
-    this.setPlan(null);
-    if (!b.canMove(u) || !this.reach.has(key(tile.x, tile.y))) return this.refresh();
     this.mode = 'busy';
     this.showInfo('');
+    if (!(await this.walkPlan(u))) return;
+    this.mode = 'select';
+    this.refresh();
+  }
+
+  /**
+   * Walk `u` to its planned tile (the caller has set mode 'busy'). False if the unit died on the way (the turn moves
+   * on) or the plan was no longer possible (back to 'select').
+   */
+  private async walkPlan(u: Unit): Promise<boolean> {
+    const b = this.battle;
+    const tile = this.plan!.tile;
+    this.setPlan(null);
+    if (!b.canMove(u) || !this.reach.has(key(tile.x, tile.y))) {
+      this.mode = 'select';
+      this.selectUnit(u);
+      return false;
+    }
     const result = b.move(u, tile);
     this.refresh();
     await this.animateMove(u, result);
@@ -1232,10 +1274,9 @@ export class BattleScene extends Phaser.Scene {
     if (!u.alive) {
       this.selectedUid = null;
       this.afterUnitDone();
-      return;
+      return false;
     }
-    this.mode = 'select';
-    this.refresh();
+    return true;
   }
 
   /** Show (or hide) where an enemy can move next turn and how far its longest-ranged attack reaches. */
@@ -1283,7 +1324,7 @@ export class BattleScene extends Phaser.Scene {
       const why = engaged ?? (blocked
         ? los === 'fire' ? 'No line of fire: a rock or unit is in the way.' : 'No line of sight: a rock is in the way.'
         : inReach ? `${b.targetError(u, this.action, tile, from)} Click to cancel.` : "Can't aim there — click to cancel.");
-      const plan = this.plan ? '(From the planned tile: confirm the move to use it.)\n' : '';
+      const plan = this.plan ? '(Moves to the planned tile first.)\n' : '';
       info = b.canAim(u, this.action, tile, from) ? `${plan}${this.preview(u, this.action, tile, from)}\n${info}` : `${why}\n${info}`;
     }
     for (const z of b.zonesAt(tile)) {
