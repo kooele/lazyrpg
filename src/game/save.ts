@@ -7,18 +7,20 @@ import {
   type BodyInvestment, type Character, type Gear, type Item, type SmithyOrder, type StatKey, type Talents, type Contract, type GameState, type Look, type NewsItem, type Offer, type Quest, type QuestTab, type Rank, type RivalParty,
 } from '../data/types';
 import { usualCount } from './board';
-import { bodyStats, makeRng, modelFor } from './character';
+import { bodyStats, modelFor } from './character';
 import { gear } from './gear';
-import { newCampaign, tidyLineup } from './city';
-import { companionContract, companionDemand, foodLodgingWeekly } from './contracts';
+import { tidyLineup } from './city';
 import { lookFromModel } from './people';
 
 export const SAVE_FORMAT = 'lazyrpg-save';
 /**
  * v1: class + attribute points. v2: classless Adventurers with weapon + skill-tree picks. v3: Arch City (contracts, guild, calendar).
  * v4: equipment (weapon and armor with a quality, in place of a weapon id); older characters are converted on load.
+ * Versions 1-2 no longer load (see MIN_SAVE_VERSION).
  */
 export const SAVE_VERSION = 4;
+/** Oldest save version that still loads (versions 1-2 predate the Arch City campaign). */
+export const MIN_SAVE_VERSION = 3;
 export const SLOT_COUNT = 3;
 const SLOT_KEY_PREFIX = 'lazyrpg.save.slot';
 export const PARTY_NAME_MAX_LENGTH = 28;
@@ -60,21 +62,6 @@ const obj = (v: unknown, path: string) => (isObj(v) ? v : bad(path, 'must be an 
 const arr = (v: unknown, path: string) => (Array.isArray(v) ? v : bad(path, 'must be an array'));
 function oneOf<T extends string>(v: unknown, list: readonly T[], path: string): T {
   return (list as readonly unknown[]).includes(v) ? (v as T) : bad(path, `must be one of: ${list.join(', ')}`);
-}
-
-/** Convert a version-1 character (fixed classes) to the classless format. */
-const V1_CLASS_LOADOUT: Record<string, { weaponId: string; skillIds: string[] }> = {
-  knight: { weaponId: 'sword_shield', skillIds: ['charge', 'kick'] },
-  ranger: { weaponId: 'bow', skillIds: ['execute', 'kick'] },
-  mage: { weaponId: 'staff', skillIds: ['fireball', 'arcane_bolt'] },
-  cleric: { weaponId: 'staff', skillIds: ['heal', 'cleanse'] },
-};
-
-function migrateV1Character(raw: unknown): unknown {
-  if (!isObj(raw)) return raw;
-  const loadout = V1_CLASS_LOADOUT[String(raw.classId)] ?? V1_CLASS_LOADOUT.knight;
-  const { classId: _c, attributes: _a, unspentPoints: _u, ...rest } = raw;
-  return { ...rest, weaponId: loadout.weaponId, skillIds: loadout.skillIds };
 }
 
 /** Weapons of older saves, by their old id (the bow became the Longbow). */
@@ -466,34 +453,6 @@ function validateState(raw: Record<string, unknown>): GameState {
   return state;
 }
 
-/**
- * Versions 1-2 had only a party and a stage counter. The first member becomes the main
- * character, the others companions on a 4-week contract, and the party joins the guild
- * with renown and gold for the stages it had cleared.
- */
-function migrateLegacy(raw: Record<string, unknown>): GameState {
-  const progress = obj(raw.progress, 'progress');
-  const stage = int(progress.stage, 'progress.stage', 1);
-  const members = arr(raw.party, 'party');
-  if (members.length > MAX_PARTY_SIZE) bad('party', `can have at most ${MAX_PARTY_SIZE} members`);
-  const party = members.map((m, i) => validateCharacter(raw.version === 1 ? migrateV1Character(m) : m, `party[${i}]`));
-  uniqueIds(party, 'party');
-  if (party.length === 0) bad('party', 'is empty: start a new game instead');
-  const rng = makeRng(stage * 7919 + party.length);
-  const [main, ...rest] = party;
-  const state = newCampaign(main, `${main.name}'s Party`, rng);
-  state.progress = { victories: int(progress.victories, 'progress.victories'), defeats: int(progress.defeats, 'progress.defeats') };
-  state.gold += (stage - 1) * 50;
-  state.renown = (stage - 1) * 15;
-  for (const c of rest) {
-    const want = companionDemand(c.level, 1, 4);
-    c.contract = companionContract({ basePay: Math.max(0, Math.round((want - foodLodgingWeekly()) / 5) * 5), lootPct: 0, foodLodging: true, termWeeks: 4 }, state.day, 1, 30);
-    state.party.push(c);
-    state.lineup.push(c.id);
-  }
-  return state;
-}
-
 /** Parse and validate save JSON. Errors point at the exact field so hand-edited saves are easy to fix. */
 export function parseSave(text: string): ParseResult {
   let raw: unknown;
@@ -508,8 +467,12 @@ export function parseSave(text: string): ParseResult {
   if (raw.version > SAVE_VERSION) {
     return { ok: false, error: `Save version ${raw.version} is newer than this game supports (${SAVE_VERSION})` };
   }
+  // Versions 1-2 (before the Arch City campaign) are no longer converted.
+  if (raw.version < MIN_SAVE_VERSION) {
+    return { ok: false, error: `Save version ${raw.version} is from before the Arch City campaign and can't be loaded: start a new game` };
+  }
   try {
-    const state = raw.version < 3 ? migrateLegacy(raw) : validateState(raw);
+    const state = validateState(raw);
     return { ok: true, savedAt: typeof raw.savedAt === 'string' ? raw.savedAt : '', state };
   } catch (e) {
     if (e instanceof SaveError) return { ok: false, error: e.message };
