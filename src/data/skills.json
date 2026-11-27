@@ -234,7 +234,7 @@
       "zone": { "element": "water", "radius": 1.5, "turns": 3, "statPct": { "pAtk": -0.25, "mAtk": -0.25 }, "shiftStatus": [{ "status": "chilled", "stacks": 1 }, { "status": "burn", "stacks": -1 }], "endTurnHits": 0 }
     },
     "sonic_boom": {
-      "name": "Sonic Boom", "description": "Blast an enemy with wind and push it 2 tiles in the direction you choose. Being pushed out of an engagement or through fire and ice hurts as usual.",
+      "name": "Sonic Boom", "description": "Blast an enemy with wind and push it 2 tiles in the direction you choose. Being pushed out of an engagement or through overwatch triggers opportunity attacks, and being pushed through tile effects applies the tile effects.",
       "tags": ["knockback", "magical"],
       "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "los": "sight", "cooldown": 3, "mana": 60, "level": 6,
       "hits": [{ "mAtk": 0.5 }], "push": 2

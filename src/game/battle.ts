@@ -1973,8 +1973,8 @@ export class Battle {
 
   /**
    * Push `t` up to `tiles` tiles in direction `dir` (knockback, Sonic Boom). Walls and units stop it. Each tile it's
-   * pushed onto counts as entering it (zones hit). Being moved breaks Stealth, and pushes it out of an engagement:
-   * the old opponent gets a free basic attack (opportunity attack).
+   * pushed onto counts as entering it: zones hit and enemy overwatch fires. Being moved breaks Stealth, and pushes it
+   * out of an engagement: the old opponent gets a free basic attack (opportunity attack).
    */
   private pushUnit(t: Unit, dir: Point, tiles: number): BattleEvent[] {
     const events: BattleEvent[] = [];
@@ -1985,11 +1985,17 @@ export class Battle {
       events.push({ type: 'move', target: t.uid, from: { x: t.x, y: t.y }, to, kind: 'knockback' });
       t.x = to.x;
       t.y = to.y;
+      // Being moved breaks Stealth at once, so the push can be seen by overwatch.
+      if (!moved) t.statuses = t.statuses.filter((st) => !STATUSES[st.id]?.stealth);
       moved = true;
       events.push(...this.zoneHits(t, to, 1));
+      if (!t.alive) break;
+      // Each tile it's pushed onto counts as entering it: enemy overwatch fires (an interrupting watch stops the push).
+      const watch = this.triggerOverwatch(t);
+      events.push(...watch.events);
+      if (watch.interrupted) break;
     }
     if (!moved) return events;
-    t.statuses = t.statuses.filter((st) => !STATUSES[st.id]?.stealth);
     const partner = t.alive ? this.opponentOf(t) : null;
     if (partner) {
       this.breakEngagement(t);

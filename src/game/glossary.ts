@@ -231,7 +231,7 @@ export function glossaryEntries(): GlossaryEntry[] {
     + `An engaged unit has its back to the 3 tiles on the far side from its opponent: Backstab strikes from there.`);
   add('Battle', 'Overwatch',
     `Overwatch ends the turn and watches a 60° arc as far as your weapon reaches. The first enemy to move into it takes your basic attack and keeps moving.\n\n`
-    + `Walking, Dash and movement skills that run or leap to their target (Charge, Blitz, and monsters' Pounce, Dive and Infernal Leap) can all be caught, on any tile of the way. Teleports (Arcane Shift, Shadow Step, Flicker Strike) skip the tiles in between, so they can't.`);
+    + `Walking, Dash and movement skills that run or leap to their target (Charge, Blitz, and monsters' Pounce, Dive and Infernal Leap) can all be caught, on any tile of the way, and so can a unit knocked back or pushed (Sonic Boom) through the arc. Teleports (Arcane Shift, Shadow Step, Flicker Strike) skip the tiles in between, so they can't.`);
   add('Battle', 'Burn and Chilled Stacks',
     `${burn?.name ?? 'Burn'}: ${burn?.description ?? ''}\n\n${chilled?.name ?? 'Chilled'} (ice skills): ${chilled?.description ?? ''}\n\n`
     + `Stacks don't last a set number of turns: the unit loses one each turn. A unit with 2 stacks is affected just as much as with 1, for one more turn; a status shows its stacks as Burn (2).\n\n`

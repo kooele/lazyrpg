@@ -331,6 +331,20 @@ describe('Elementalist', () => {
     expect(e.engagedWith).toBeNull();
   });
 
+  it('a push sets off overwatch on the tiles it passes, like a walk', () => {
+    const { battle, units: [m, e, archer] } = setup([
+      { c: caster(['sonic_boom']), team: 'player', at: { x: 1, y: 3 } },
+      { c: hero(), team: 'enemy', at: { x: 4, y: 3 } },
+      { c: hero('longbow'), team: 'player', at: { x: 4, y: 6 } },
+    ]);
+    battle.perform(archer, 'overwatch', { x: 4, y: 5 }); // watches up the column toward the enemy
+    expect(archer.overwatch?.tiles.has('4,4')).toBe(true);
+    const events = battle.perform(m, 'sonic_boom', e, { x: 4, y: 4 }); // push down, into the arc
+    expect(events).toContainEqual(expect.objectContaining({ type: 'damage', source: archer.uid, target: e.uid, cause: 'overwatch' }));
+    expect(archer.overwatch).toBeNull(); // fired once
+    expect(e).toMatchObject({ x: 4, y: 5 });
+  });
+
   it('Fire Weapon: weapon attacks add 20% M.Atk and a stack of Burn; one enchantment at a time', () => {
     const { battle, units: [u, e] } = setup([
       { c: hero('sword_shield', ['fire_weapon', 'arcane_weapon', 'ice_weapon'], 'F', 3), team: 'player', at: { x: 3, y: 3 } },
