@@ -36,7 +36,7 @@
       "description": "Reach weapon: strikes from 2 tiles away, trading some of the greatsword's power for range.",
       "base": { "pAtk": 20, "mAtk": 10 },
       "modifiers": { "mAtk": 0.8 },
-      "skills": ["basic_attack", "circle_swing"]
+      "skills": ["basic_attack", "circle_swing_spear"]
     },
     "sword_shield": {
       "name": "Sword and Shield", "class": "1 Handed + Shield", "tag": "SS", "art": "sword_shield", "range": 1.5,

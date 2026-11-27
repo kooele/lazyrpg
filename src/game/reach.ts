@@ -50,9 +50,11 @@ export function skillShape(s: SkillDef, ctx: ReachContext): { kind: 'targets' | 
     }
   };
   switch (s.target) {
+    case 'passive':
+      return { kind: 'self', tiles };
     case 'self': {
       // A 'weapon' area without its own radius (Circle Swing) reaches as far as the weapon.
-      const r = s.aoeRadius ?? (hasTag(s, 'weapon') ? basicFor(s, ctx).range : 0);
+      const r = s.aoeRadius ?? (hasTag(s, 'weapon') ? basicFor(s, ctx).range + (s.weaponRangeBonus ?? 0) : 0);
       if (!r) return { kind: 'self', tiles };
       scan(r, (_p, d) => withinRange(d, r));
       return { kind: 'area', tiles };

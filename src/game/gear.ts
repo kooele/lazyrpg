@@ -55,7 +55,7 @@ export function baseStats(def: WeaponDef | ArmorDef, quality: QualityId | undefi
  * Add the character's equipment to its stats: every piece's base stats (x quality) first, then every piece's
  * modifiers multiply the total (penetration % adds instead). Rounded. Monsters are left alone.
  */
-export function applyGear(stats: Stats, c: Pick<Character, 'enemyType' | 'weapon' | 'armor'>): Stats {
+export function applyGear(stats: Stats, c: Pick<Character, 'enemyType' | 'weapon' | 'armor'>, opts: { spellblade?: boolean } = {}): Stats {
   const pieces: [WeaponDef | ArmorDef | undefined, QualityId | undefined][] = [[weaponOf(c), c.weapon?.quality], [armorOf(c), c.armor?.quality]];
   for (const [def, q] of pieces) {
     if (!def) continue;
@@ -65,12 +65,23 @@ export function applyGear(stats: Stats, c: Pick<Character, 'enemyType' | 'weapon
     if (!def) continue;
     for (const [k, v] of Object.entries(def.modifiers)) {
       const key = k as keyof Stats;
-      if (PEN_PCT_KEYS.includes(key)) stats[key] += v ?? 0;
+      if (PEN_PCT_KEYS.includes(key)) stats[key] = combinePenPct(stats[key], v ?? 0);
+      // Spellblade: the weapon's M.Atk penalty doesn't apply (a bonus still does).
+      else if (opts.spellblade && key === 'mAtk' && def === pieces[0][0] && (v ?? 1) < 1) continue;
       else stats[key] *= v ?? 1;
     }
   }
   for (const k of STAT_KEYS) stats[k] = Math.round(stats[k]);
   return stats;
+}
+
+/**
+ * Penetration % from different sources multiplies: each ignores its share of the Defense the others leave
+ * (50% and 25% = 62.5%, not 75%). Whole percents.
+ */
+export function combinePenPct(a: number, b: number): number {
+  const clamp = (v: number) => Math.min(100, Math.max(0, v));
+  return 100 - ((100 - clamp(a)) * (100 - clamp(b))) / 100;
 }
 
 /**

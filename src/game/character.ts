@@ -55,7 +55,7 @@ export function bodyBonus(body: BodyInvestment | undefined): Partial<Stats> {
 export function deriveStats(c: Character): Stats {
   const out = c.enemyType ? enemyLevelStats(c.enemyType, c.level) : levelStats(c.level, c.talents);
   if (!c.enemyType) for (const [k, v] of Object.entries(bodyBonus(c.body))) out[k as StatKey] += v ?? 0;
-  applyGear(out, c);
+  applyGear(out, c, { spellblade: !c.enemyType && allSkills(c).includes('spellblade') });
   out.movement = Math.max(1, out.movement);
   out.health = Math.max(1, out.health);
   return out;
@@ -104,9 +104,12 @@ export function allSkills(c: Character): string[] {
 /** Slots per skill-bar page (hotkeys 1-9, 0). */
 export const BAR_PAGE = 10;
 
+/** Skills that go on the battle skill bar: everything but passives (always in effect). */
+const barSkills = (c: Character) => allSkills(c).filter((id) => SKILLS[id]?.target !== 'passive');
+
 /** Default bar: basic attack, then the basic abilities (Overwatch, Dash), then everything else in order. */
 export function defaultSkillBar(c: Character): string[] {
-  const all = allSkills(c);
+  const all = barSkills(c);
   const front = [all[0], ...BASIC_SKILLS.filter((s) => all.includes(s))];
   return [...front, ...all.filter((s) => !front.includes(s))];
 }
@@ -116,7 +119,7 @@ export function defaultSkillBar(c: Character): string[] {
  * has leave an empty slot, and skills not on the bar yet are added after the last used slot.
  */
 export function skillBarLayout(c: Character): (string | null)[] {
-  const owned = new Set(allSkills(c));
+  const owned = new Set(barSkills(c));
   const seen = new Set<string>();
   const bar = (c.skillBar ?? defaultSkillBar(c)).map((id) => {
     if (!id || !owned.has(id) || seen.has(id)) return null;
@@ -126,7 +129,7 @@ export function skillBarLayout(c: Character): (string | null)[] {
   let last = bar.length - 1;
   while (last >= 0 && !bar[last]) last--;
   const out = bar.slice(0, last + 1);
-  for (const id of allSkills(c)) if (!seen.has(id)) out.push(id);
+  for (const id of barSkills(c)) if (!seen.has(id)) out.push(id);
   const pages = Math.max(1, Math.ceil(out.length / BAR_PAGE));
   while (out.length < pages * BAR_PAGE) out.push(null);
   return out;

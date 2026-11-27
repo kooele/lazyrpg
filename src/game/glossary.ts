@@ -192,7 +192,7 @@ export function glossaryEntries(): GlossaryEntry[] {
   // ---- Battle -----------------------------------------------------------------------------------
   add('Battle', 'Action Points',
     `Every unit gets 2 AP a turn: a movement AP and an action AP.\n\n`
-    + `• Free skills cost nothing and work until the turn ends.\n• 1 AP skills use the movement AP if it's unspent, otherwise the action AP.\n• 2 AP skills use both, so they can't follow a move.\n• Ends-turn skills (most attacks) use whatever is left.\n\n`
+    + `• Free skills cost nothing and work until the turn ends.\n• 1 AP skills use the movement AP if it's unspent, otherwise the action AP.\n• 2 AP skills use both, so they can't follow a move.\n• Ends-turn skills (most attacks) use whatever is left.\n• Quick Cast makes your next 2 AP or Ends-turn Mage spell cost 1 AP; In the Zone makes two basic attacks free.\n\n`
     + `Undo move works until that unit acts or another unit on your team moves.`);
   add('Battle', 'Mana',
     `Mana is spent by skills and doesn't come back during a battle. Units start each battle with full mana.`);
@@ -200,8 +200,24 @@ export function glossaryEntries(): GlossaryEntry[] {
     `Every attack hits. Defense reduces damage taken: each point of Defense is +1% effective health.\n\n`
     + `Resist shrugs off debuffs: each point of Resist is +1% effective resistance to debuffs. A resisted debuff doesn't apply, but the hit's damage still lands.`);
   add('Battle', 'Penetration',
-    `P.Pen and M.Pen (from gear) make the target's Defense count for less against your Physical or Magical damage: the percent first, then the flat amount. 50% and 10 P.Pen make 100 Defense count as 40 against Physical damage.\n\n`
+    `P.Pen and M.Pen (from gear and some skills) make the target's Defense count for less against your Physical or Magical damage: the percent first, then the flat amount. 50% and 10 P.Pen make 100 Defense count as 40 against Physical damage.\n\n`
+    + `Percents from different sources multiply rather than add: a 50% weapon and Backstab's 25% make 62.5%, not 75%.\n\n`
     + `Penetration never takes Defense below 0, and does nothing to Defense that is already 0 or less.`);
+  add('Battle', 'Fog of War',
+    `Each side sees only the tiles within its units' Vision (${STAT_CONFIG.base.vision} tiles) that they have line of sight to: rocks block it. Enemies outside that are hidden, and the map shows those tiles darkened.\n\n`
+    + `• You can't aim at a unit you can't see, but area attacks and zones still hit it.\n• Overwatch only fires on units its side can see.\n• Walking into an unseen enemy stops you in front of it.\n• Enemies play by the same rules: they go where they last saw you.\n\n`
+    + `Revelation (Cleric) reveals every enemy within 15 tiles for a turn.`);
+  add('Battle', 'Stealth',
+    `A Stealthed unit can't be targeted directly or set off overwatch; area attacks still hit it. It stays hidden until it attacks.\n\n`
+    + `• Enemies don't know it's there: they may try to walk through it, and bumping into it breaks its Stealth.\n• Being knocked back or pushed breaks it too.\n• Revealed units can't be Stealthed.\n\n`
+    + `Shadow Step stealths you for a turn; Scout (passive) starts every battle Stealthed.`);
+  add('Battle', 'Fire, Ice and Rain on the Ground',
+    `Firestorm, Blizzard and Rain cover the ground for a few turns, and an Explosion (Burn's 3rd stack) leaves 2 turns of Burning Ground under its target.\n\n`
+    + `• A tile holds one of these at a time: a new one replaces the old there.\n• Firestorm, Blizzard and Burning Ground hit anyone who enters or ends a turn on them.\n• Rain only acts on the caster's enemies: −25% P.Atk and M.Atk while inside, and walking in adds a Chilled stack (if chilled) and removes a Burn stack.\n• Draft fans the flames: fire on the tiles it hits spreads 1.5 tiles around, with the same turns left.`);
+  add('Battle', 'Passive Skills',
+    `Passive skills are always in effect once learned and never go on the skill bar.\n\n`
+    + `• Spellblade: your weapon's M.Atk penalty doesn't apply.\n• Fighting Spirit: whenever you become engaged, a free basic attack at 50%.\n• Tooth for Tooth: when your engaged opponent attacks you, a free basic attack back at 50%.\n• Scout: Stealthed from the start of each battle until you attack.\n\n`
+    + `These free attacks never set off another free attack.`);
   add('Battle', 'Forest',
     `Forest costs 6 Movement to enter. A unit standing in forest takes ${Math.round(STAT_CONFIG.forestProjectileReduction * 100)}% less damage from projectiles: arrows and shots (Direct and Indirect) and thrown spells like Magic Bolt and Fireball. Melee attacks, area spells and zones hit it as usual.`);
   add('Battle', 'Equipment',
@@ -211,10 +227,11 @@ export function glossaryEntries(): GlossaryEntry[] {
     + `Manage Party > Equipment swaps gear with the party's stash. Mercenaries use their own. A companion who leaves hands back what the party gave them; a slave who is sold leaves everything with the party.`);
   add('Battle', 'Engagement',
     `Hitting a unit with an Engage skill locks you both together, unless it's already engaged with someone else. While engaged you can't move, and you can only attack your opponent (and heal or cleanse yourself).\n\n`
-    + `Disengage breaks free, but your opponent gets a free basic attack. Disengage skills (like Shadow Step) slip out with no free attack. Knockbacks and falling also end it.`);
+    + `Disengage breaks free, but your opponent gets a free basic attack. Disengage skills (like Shadow Step) slip out with no free attack. Knockbacks, pushes (Sonic Boom) and falling also end it.\n\n`
+    + `An engaged unit has its back to the 3 tiles on the far side from its opponent: Backstab strikes from there.`);
   add('Battle', 'Overwatch',
     `Overwatch ends the turn and watches a 60° arc as far as your weapon reaches. The first enemy to move into it takes your basic attack and keeps moving.\n\n`
-    + `Walking, Dash and movement skills that run or leap to their target (Charge, and monsters' Pounce, Dive and Infernal Leap) can all be caught, on any tile of the way. Teleports (Arcane Shift, Shadow Step, Flicker Strike) skip the tiles in between, so they can't.`);
+    + `Walking, Dash and movement skills that run or leap to their target (Charge, Blitz, and monsters' Pounce, Dive and Infernal Leap) can all be caught, on any tile of the way. Teleports (Arcane Shift, Shadow Step, Flicker Strike) skip the tiles in between, so they can't.`);
   add('Battle', 'Burn and Chilled Stacks',
     `${burn?.name ?? 'Burn'}: ${burn?.description ?? ''}\n\n${chilled?.name ?? 'Chilled'} (ice skills): ${chilled?.description ?? ''}\n\n`
     + `Stacks don't last a set number of turns: the unit loses one each turn. A unit with 2 stacks is affected just as much as with 1, for one more turn; a status shows its stacks as Burn (2).\n\n`

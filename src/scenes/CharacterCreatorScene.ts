@@ -349,6 +349,10 @@ export class CharacterCreatorScene extends Phaser.Scene {
     const points = skillPoints(d);
     const free = freePoints(d);
     L.add(text(this, 330, 66, `Skill Points  ${pointsUsed(d)}/${points}`, { color: free > 0 ? COLORS.gold : COLORS.dim }));
+    // Unspec: give back every point (tree skills and Body). Cancel still undoes it.
+    L.add(button(this, 530, 62, 90, 24, 'Reset All', () => this.resetPoints(), {
+      fontSize: 12, enabled: pointsUsed(d) > 0,
+    }));
     [...SKILL_TABS, { id: 'body', name: 'Body' }].forEach((t, i) => {
       L.add(button(this, 330 + i * 98, 90, 94, 30, t.name, () => {
         this.tab = t.id;
@@ -521,6 +525,17 @@ export class CharacterCreatorScene extends Phaser.Scene {
       this.render();
     }, { fontSize: 12 }));
 
+  }
+
+  /** Unlearn every tree skill and refund every Body point. */
+  private resetPoints(): void {
+    const d = this.draft;
+    const n = pointsUsed(d);
+    if (!n) return;
+    d.skillIds = [];
+    delete d.body;
+    toast(this, `Reset: ${n} skill point${n === 1 ? '' : 's'} back to spend.`, COLORS.good);
+    this.render();
   }
 
   private toggleSkill(id: string): void {

@@ -1,11 +1,11 @@
 // Pure battle rules (no rendering). BattleScene drives this and animates the events it returns.
-import { ENEMY_COLOR, SKILLS, STATUSES, hasTag, isFree, modeWithTag, resolveWeaponSkill } from '../data/content';
+import { ENEMY_COLOR, SKILLS, SKILL_TREES, STATUSES, hasTag, modeWithTag, resolveWeaponSkill } from '../data/content';
 import { ENCOUNTER, ENEMIES } from '../data/enemies';
 import { STAT_CONFIG, type StatConfig } from '../data/stats';
-import { DAMAGE_TYPES, PEN_KEYS, type Character, type DamagePart, type DamageType, type LosRule, type SkillDef, type StatKey, type Stats, type ZoneDef } from '../data/types';
+import { DAMAGE_TYPES, PEN_KEYS, type ApCost, type Character, type DamagePart, type DamageType, type LosRule, type SkillDef, type StatKey, type Stats, type ZoneDef, type ZoneElement } from '../data/types';
 import { allSkills, deriveStats, modelFor, newId, type Rng } from './character';
 import { combatPenalty } from './condition';
-import { enemyGearQuality, gear, weaponOf } from './gear';
+import { combinePenPct, enemyGearQuality, gear, weaponOf } from './gear';
 import { losFor, minRangeFor, rangeFor, type ReachContext } from './reach';
 import {
   DIRS, DIRS8, EPS, TERRAIN, coneTiles, dist, hasLineOfSight, inBounds, key, passable, tilesBetween, withinRange,
@@ -86,8 +86,11 @@ export interface Unit {
   surrendered?: boolean;
 }
 
-/** Why damage happened: a skill, a status tick (e.g. Burn), overwatch, or an opportunity attack on disengage. */
-export type DamageCause = 'skill' | 'status' | 'overwatch' | 'opportunity' | 'zone';
+/**
+ * Why damage happened: a skill, a status tick (e.g. Burn), overwatch, an opportunity attack on disengage, a zone, or a
+ * passive's free counter attack (Fighting Spirit, Tooth for Tooth).
+ */
+export type DamageCause = 'skill' | 'status' | 'overwatch' | 'opportunity' | 'zone' | 'counter';
 
 export type BattleEvent =
   | { type: 'damage'; source?: string; target: string; amount: number; absorbed: number; killed: boolean; cause: DamageCause; damageType?: DamageType }
@@ -96,7 +99,7 @@ export type BattleEvent =
   | { type: 'heal'; source: string; target: string; amount: number }
   | { type: 'shield'; source: string; target: string; amount: number }
   | { type: 'status'; source: string; target: string; name: string }
-  | { type: 'resist'; source: string; target: string; name: string; chance: number }
+  | { type: 'resist'; source: string; target: string; name: string; chance: number; immune?: boolean }
   | { type: 'cleanse'; source: string; target: string; removed: string[] }
   | { type: 'move'; target: string; from: Point; to: Point; kind: 'knockback' | 'teleport' | 'charge' }
   | { type: 'overwatch'; source: string; skillId: string }
@@ -108,13 +111,19 @@ export type BattleEvent =
   /** A zone (Firestorm) was placed on these tiles. */
   | { type: 'zone'; source: string; name: string; tiles: Point[] }
   /** A unit is caught by a zone (followed by its damage and status events). */
-  | { type: 'zoneHit'; source: string; target: string; name: string };
+  | { type: 'zoneHit'; source: string; target: string; name: string }
+  /** A unit walked into an enemy it couldn't see (Stealthed, or in fog of war): it stops, and the hidden unit is found. */
+  | { type: 'bump'; source: string; target: string }
+  /** A passive struck back for free (Fighting Spirit, Tooth for Tooth); its damage events follow. */
+  | { type: 'counter'; source: string; target: string; name: string };
 
 /** A lasting ground effect from a 'ground' skill (Firestorm, Blizzard). */
 export interface Zone {
-  /** The skill that made it (its name and look). */
+  /** The skill (or status, "status:explosion") that made it. */
   skillId: string;
   name: string;
+  /** Fire, ice or water: a tile holds one elemental effect (see Battle.addZone). */
+  element?: ZoneElement;
   casterUid: string;
   /** It counts down at the start of this team's turns. */
   team: Team;
@@ -243,8 +252,21 @@ export function statusStrength(s: { id: string; stacks: number }): number {
   return STATUSES[s.id]?.decay ? 1 : Math.max(1, s.stacks);
 }
 
+/** Skills of the Mage tab's trees (Quick Cast speeds these up). */
+const MAGE_SPELLS = new Set(SKILL_TREES.filter((t) => t.tab === 'mage').flatMap((t) => t.skills));
+
+/** Sign of each coordinate of b - a: the 8-way direction from a toward b. */
+const dirTo = (a: Point, b: Point): Point => ({ x: Math.sign(b.x - a.x), y: Math.sign(b.y - a.y) });
+
 export class Battle {
   readonly units: Unit[];
+  /**
+   * Where each team last saw each enemy it can't see now (by uid). The AI plans around these instead of the real
+   * positions of units hidden in fog of war. Starts with where the enemies were deployed.
+   */
+  readonly lastSeen: Record<Team, Map<string, Point>> = { player: new Map(), enemy: new Map() };
+  /** visibleTiles results per team, valid while its units stand where they did (see sightKey). */
+  private sight: Partial<Record<Team, { key: string; tiles: Set<string> }>> = {};
   /** Ground effects in play (Firestorm, Blizzard). */
   zones: Zone[] = [];
   phase: Team = 'player';
@@ -252,7 +274,24 @@ export class Battle {
 
   constructor(readonly map: BattleMap, units: Unit[], readonly rng: Rng, readonly rules: StatConfig = STAT_CONFIG) {
     this.units = units;
+    // Scout: Stealthed from the start until the unit first attacks.
+    for (const u of units) {
+      if (!this.hasPassive(u, 'scout') || this.isStealthed(u)) continue;
+      const def = STATUSES.stealth;
+      u.statuses.push({ id: def.id, name: def.name, debuff: false, stacks: 1, amount: 0, turns: Infinity, tick: def.tick });
+    }
+    for (const u of units) for (const f of units) if (f.team !== u.team) this.lastSeen[u.team].set(f.uid, { x: f.x, y: f.y });
     this.beginPhase('player');
+  }
+
+  /** Has the unit learned this passive (Fighting Spirit, Scout...)? */
+  hasPassive(u: Unit, id: string): boolean {
+    return SKILLS[id]?.target === 'passive' && this.skillIds(u).includes(id);
+  }
+
+  /** The unit's tags ("evil"), from its enemy type. */
+  unitTags(u: Unit): string[] {
+    return (u.character.enemyType && ENEMIES[u.character.enemyType]?.tags) || [];
   }
 
   // ---- queries ----------------------------------------------------------------
@@ -283,6 +322,13 @@ export class Battle {
     for (const s of u.statuses) {
       const pct = STATUSES[s.id]?.statPct?.[stat];
       if (pct) value *= Math.max(0, 1 + pct * statusStrength(s));
+    }
+    // Zones the unit stands in (Rain: -25% P.Atk and M.Atk for the caster's enemies).
+    if (this.zones.length) {
+      for (const z of this.zonesAt(u)) {
+        const pct = z.def.statPct?.[stat];
+        if (pct && this.zoneAffects(z, u)) value *= Math.max(0, 1 + pct);
+      }
     }
     if (stat === 'movement') value = Math.max(0, value);
     return Math.round(value);
@@ -361,7 +407,7 @@ export class Battle {
         out = {
           ...out,
           hits: out.basicAttack ? Array.from({ length: out.basicAttack }, (_, i) => scaleHits(basic.hits ?? [], out!.basicAttackDamage?.[i] ?? 1)).flat() : out.hits,
-          aoeRadius: areaFromWeapon ? basic.range : out.aoeRadius,
+          aoeRadius: areaFromWeapon ? basic.range + (out.weaponRangeBonus ?? 0) : out.aoeRadius,
         };
       }
       perSkill.set(cacheKey, out);
@@ -472,9 +518,10 @@ export class Battle {
     if (skill.target === 'unit' && helps && targets.some((t) => t !== caster)) return busy;
     if (!this.isAttack(skill)) return null;
     if (skill.cone) return `Engaged with ${opp.character.name}: can't watch other enemies.`;
-    // Area attacks around you (Circle Swing) are fine as long as they hit the opponent;
+    // Area attacks (Circle Swing, Smite) are fine as long as they hit the opponent;
     // aimed attacks must hit exactly the opponent.
-    const ok = skill.target === 'self' ? targets.includes(opp) : targets.length === 1 && targets[0] === opp;
+    const area = skill.target === 'self' || skill.target === 'ground';
+    const ok = area ? targets.includes(opp) : targets.length === 1 && targets[0] === opp;
     return ok ? null : busy;
   }
 
@@ -503,6 +550,7 @@ export class Battle {
     this.breakEngagement(u);
     events.push({ type: 'disengage', source: u.uid, target: opp.uid, reason: 'disengage' });
     events.push(...this.opportunityAttack(opp, u));
+    this.updateSightings();
     u.locked = true;
     this.lockTeammates(u);
     u.startPos = { x: u.x, y: u.y };
@@ -559,7 +607,9 @@ export class Battle {
   }
 
   isReady(u: Unit, skillId: string): boolean {
-    return (u.cooldowns[skillId] ?? 0) <= 0;
+    if ((u.cooldowns[skillId] ?? 0) <= 0) return true;
+    // In the Zone: free basic attacks ignore the cooldown.
+    return this.isBasic(u, SKILLS[skillId]) && !!this.statusWith(u, 'freeBasicAttacks');
   }
 
   /** Regular move: needs the movement AP (and not engaged). */
@@ -574,8 +624,31 @@ export class Battle {
 
   /** Enough AP for the skill's cost? Turn-ending skills need at least 1 AP; 2-AP skills need both. */
   canPay(u: Unit, skill: SkillDef): boolean {
-    if (skill.ap === 0) return true;
-    return u.ap >= (skill.ap === 'end' ? 1 : skill.ap);
+    const ap = this.apCost(u, skill);
+    if (ap === 0) return true;
+    return u.ap >= (ap === 'end' ? 1 : ap);
+  }
+
+  /** The unit's active status with this flag (Quick Cast, In the Zone), if any. */
+  private statusWith(u: Unit, flag: 'quickCast' | 'freeBasicAttacks'): Status | undefined {
+    return u.statuses.find((s) => STATUSES[s.id]?.[flag] && s.stacks > 0);
+  }
+
+  /** Is this the unit's weapon basic attack (any mode)? */
+  isBasic(u: Unit, s: SkillDef): boolean {
+    const raw = this.rawBasic(u);
+    return s.id === raw.id || !!raw.modes?.includes(s.id);
+  }
+
+  /**
+   * What the skill costs `u` right now: its AP, except that In the Zone makes basic attacks free and Quick Cast makes
+   * the next Mage spell of 2 AP or Ends Turn cost 1 AP.
+   */
+  apCost(u: Unit, skill: SkillDef): ApCost {
+    if (skill.ap === 0) return 0;
+    if (this.isBasic(u, skill) && this.statusWith(u, 'freeBasicAttacks')) return 0;
+    if ((skill.ap === 2 || skill.ap === 'end') && MAGE_SPELLS.has(skill.id) && this.statusWith(u, 'quickCast')) return 1;
+    return skill.ap;
   }
 
   /** Units of the current team that still have AP this turn. */
@@ -586,6 +659,7 @@ export class Battle {
   /** Can `u` use this skill right now (ignoring targets)? AP, mana, cooldown and weapon permitting. */
   canUseSkill(u: Unit, skillId: string): boolean {
     const skill = SKILLS[skillId];
+    if (skill.target === 'passive') return false;
     if (!this.canAct(u) || !this.skillIds(u).includes(skillId) || !this.isUsable(u, skillId) || !this.canPay(u, skill)) return false;
     // Dash: a second move with the action AP, only once the regular move is spent.
     if (skill.target === 'move') return u.moved && !u.engagedWith;
@@ -593,25 +667,26 @@ export class Battle {
     return true;
   }
 
-  /** Pay a skill's AP cost (see ApCost). */
-  private spendAp(u: Unit, skill: SkillDef): void {
-    if (skill.ap === 0) return;
-    if (skill.ap === 1) {
+  /** Pay an AP cost (see ApCost). */
+  private spendAp(u: Unit, ap: ApCost): void {
+    if (ap === 0) return;
+    if (ap === 1) {
       u.moved = true; // uses the movement AP if it was still there
       u.ap -= 1;
       return;
     }
     u.ap = 0;
     u.moved = true;
-    if (skill.ap === 'end') u.acted = true;
+    if (ap === 'end') u.acted = true;
   }
 
   /** Free skills (e.g. Kick) the unit could use right now on at least one unit. */
   usableFreeActions(u: Unit): string[] {
     return this.skillIds(u).filter((id) => {
       const s = SKILLS[id];
-      // Switch Mode and toggles never keep a turn open on their own.
-      if (!isFree(s) || s.switchMode || s.toggleStatus || !this.canUseSkill(u, id)) return false;
+      // Switch Mode, toggles and self-buffs (Quick Cast) never keep a turn open on their own.
+      if (this.apCost(u, s) !== 0 || s.switchMode || s.toggleStatus || !this.canUseSkill(u, id)) return false;
+      if (s.target === 'self' && !s.aoeRadius && !this.isAttack(s)) return false;
       return this.rangeTiles(u, s).some((t) => this.targetsOf(u, s, t).length > 0);
     });
   }
@@ -638,24 +713,27 @@ export class Battle {
         const nx = cur.x + d.x;
         const ny = cur.y + d.y;
         if (!passable(this.map, nx, ny)) continue;
-        const occupant = this.unitAt(nx, ny);
+        // Enemies block, unless the unit doesn't know they're there (Stealthed, or in fog of war): it plans as if the
+        // tile were empty and bumps into them on the way (see walk).
+        const seen = this.unitAt(nx, ny);
+        const occupant = seen && seen.team !== u.team && this.hiddenFrom(u, seen) ? undefined : seen;
         if (occupant && occupant.team !== u.team) continue; // can't pass through enemies
         if (!occupant && avoid?.has(key(nx, ny))) continue; // overwatch doesn't fire while passing through an ally
         const cost = cur.cost + (TERRAIN[this.map.tiles[ny][nx]].moveCost ?? 99);
         if (cost > budget) continue;
         const k = key(nx, ny);
-        const hazards = cur.hazards + this.zonesAt({ x: nx, y: ny }).length;
+        const hazards = cur.hazards + this.hazardsAt(u, { x: nx, y: ny });
         const known = result.get(k);
         if (known && (known.cost < cost || (known.cost === cost && (known.hazards ?? 0) <= hazards))) continue;
         result.set(k, { cost, prev: key(cur.x, cur.y), hazards });
         frontier.push({ x: nx, y: ny, cost, hazards });
       }
     }
-    // Can pass through allies but not stop on them.
+    // Can pass through allies but not stop on them (unseen enemies' tiles look empty).
     for (const k of [...result.keys()]) {
       const [x, y] = k.split(',').map(Number);
       const occupant = this.unitAt(x, y);
-      if (occupant && occupant !== u) result.delete(k);
+      if (occupant && occupant !== u && !(occupant.team !== u.team && this.hiddenFrom(u, occupant))) result.delete(k);
     }
     return result;
   }
@@ -729,11 +807,11 @@ export class Battle {
     return path;
   }
 
-  /** Tiles where enemy overwatch would fire at `u` if it stepped there (none while it's Stealthed). */
+  /** Tiles where enemy overwatch `u` knows about would fire at it if it stepped there (none while it's Stealthed). */
   watchedTiles(u: Unit): Set<string> {
     const out = new Set<string>();
     if (this.isStealthed(u)) return out;
-    for (const w of this.living()) if (w.team !== u.team && w.overwatch) for (const k of w.overwatch.tiles) out.add(k);
+    for (const w of this.living()) if (w.team !== u.team && w.overwatch && !this.hiddenFrom(u, w)) for (const k of w.overwatch.tiles) out.add(k);
     return out;
   }
 
@@ -769,7 +847,9 @@ export class Battle {
     u.walked = true;
     u.ap -= 1;
     this.lockTeammates(u);
-    return this.walk(u, this.routeTo(u, dest, avoidWatch, reach));
+    const result = this.walk(u, this.routeTo(u, dest, avoidWatch, reach));
+    this.updateSightings();
+    return result;
   }
 
   /** Dash: after the regular move, spend the action AP (and its mana, cooldown) to move again. */
@@ -779,17 +859,27 @@ export class Battle {
     const reach = this.reachable(u);
     if (!reach.has(key(dest.x, dest.y)) || (dest.x === u.x && dest.y === u.y)) throw new Error('Destination not reachable');
     this.payFor(u, id);
-    return this.walk(u, this.pathTo(reach, dest));
+    const result = this.walk(u, this.pathTo(reach, dest));
+    this.updateSightings();
+    return result;
   }
 
-  /** Spend a skill's AP, mana and cooldown. Using a skill can't be undone. */
-  private payFor(u: Unit, skillId: string, noMana = false): void {
+  /**
+   * Spend a skill's AP (`ap`: its cost worked out before it was used, see apCost), mana and cooldown, and use up
+   * what lowered the cost (a free basic attack doesn't start the cooldown). Using a skill can't be undone.
+   */
+  private payFor(u: Unit, skillId: string, noMana = false, ap: ApCost = this.apCost(u, SKILLS[skillId])): void {
     const skill = SKILLS[skillId];
-    this.spendAp(u, skill);
+    this.spendAp(u, ap);
     if (!noMana) u.mp -= skill.mana;
+    const free = ap === 0 && skill.ap !== 0 ? this.statusWith(u, 'freeBasicAttacks') : undefined;
+    const quick = ap === 1 && skill.ap !== 1 ? this.statusWith(u, 'quickCast') : undefined;
+    if (free) free.stacks -= 1;
+    if (free || quick) u.statuses = u.statuses.filter((s) => s !== quick && s.stacks > 0);
     // Cooldown N counts from the current turn: the counter ticks at the start of each of
     // the unit's turns, so 1 = not again this turn, usable next turn.
-    if (skill.cooldown > 0) u.cooldowns[skillId] = skill.cooldown;
+    else if (skill.cooldown > 0) u.cooldowns[skillId] = skill.cooldown;
+    if (quick && skill.cooldown > 0) u.cooldowns[skillId] = skill.cooldown;
     u.locked = true;
     this.lockTeammates(u);
   }
@@ -806,6 +896,15 @@ export class Battle {
   private walk(u: Unit, full: Point[]): MoveResult {
     const result: MoveResult = { path: [], triggers: [], interrupted: false };
     for (const step of full) {
+      // Walking into an enemy it didn't know about: stop short, and the hidden unit is found (loses Stealth).
+      const hidden = this.unitAt(step.x, step.y);
+      if (hidden && hidden.team !== u.team) {
+        hidden.statuses = hidden.statuses.filter((st) => !STATUSES[st.id]?.stealth);
+        result.triggers.push({ index: result.path.length - 1, events: [{ type: 'bump', source: u.uid, target: hidden.uid }] });
+        result.interrupted = true;
+        u.locked = true;
+        break;
+      }
       u.x = step.x;
       u.y = step.y;
       result.path.push(step);
@@ -845,7 +944,8 @@ export class Battle {
     let interrupted = false;
     for (const w of this.living()) {
       if (w.team === mover.team || !w.overwatch || !mover.alive) continue;
-      if (!w.overwatch.tiles.has(key(mover.x, mover.y)) || this.isStealthed(mover)) continue;
+      // A watch only fires on what its side can see (not Stealthed units, not units in fog of war).
+      if (!w.overwatch.tiles.has(key(mover.x, mover.y)) || this.hiddenFrom(w, mover)) continue;
       if (w.overwatch.los && !this.clearLine(w, mover, w.overwatch.los, w)) continue;
       const ow = w.overwatch;
       w.overwatch = null;
@@ -946,10 +1046,40 @@ export class Battle {
         if (d < minRange - EPS || !withinRange(d, range)) return false;
         const los = this.skillLos(caster, skill);
         if (los && !this.clearLine(from, tile, los, caster)) return false;
+        if (skill.backstab && !this.behindTarget(caster, tile, from)) return false;
         if (skill.charge) return this.chargeDestination(caster, tile, from, skill) !== null;
         return true;
       }
+      case 'passive':
+        return false;
     }
+  }
+
+  /**
+   * The 3 tiles behind `t`: on the side away from the unit it's engaged with (none if it isn't engaged).
+   * Facing the opponent, these are directly behind it and diagonally behind on each side.
+   */
+  behindTiles(t: Unit): Point[] {
+    const opp = this.opponentOf(t);
+    if (!opp) return [];
+    const d = dirTo(opp, t);
+    return DIRS8.filter((n) => n.x * d.x + n.y * d.y > 0).map((n) => ({ x: t.x + n.x, y: t.y + n.y }));
+  }
+
+  /** Backstab: is there an enemy on `tile` engaged with someone other than `caster`, with `from` one of the 3 tiles behind it? */
+  behindTarget(caster: Unit, tile: Point, from: Point = caster): boolean {
+    const t = this.occupantFrom(caster, from, tile);
+    if (!t || t === caster || !t.engagedWith || t.engagedWith === caster.uid) return false;
+    return this.behindTiles(t).some((p) => p.x === from.x && p.y === from.y);
+  }
+
+  /** The unit `skill` (Power Strike) also hits behind its target: the next tile on from the user, past the target. */
+  pierceVictim(caster: Unit, skill: SkillDef, tile: Point, from: Point = caster): Unit | undefined {
+    if (!skill.pierce) return undefined;
+    const d = dirTo(from, tile);
+    if (!d.x && !d.y) return undefined;
+    const t = this.occupantFrom(caster, from, { x: tile.x + d.x, y: tile.y + d.y });
+    return t && t !== caster ? t : undefined;
   }
 
   /**
@@ -1022,10 +1152,15 @@ export class Battle {
       case 'cone':
         return coneTiles(this.map, from, tile, skill.cone!.angle, this.coneRadius(caster, skill));
       case 'ground':
-        return this.zoneTiles(skill.zone!, tile);
+        return skill.zone ? this.zoneTiles(skill.zone, tile) : this.shapeTiles(tile);
       default:
         return [tile];
     }
+  }
+
+  /** A 'cross' (Smite, Draft): the tile and its 4 neighbours, inside the map. */
+  shapeTiles(center: Point): Point[] {
+    return [center, ...DIRS.map((d) => ({ x: center.x + d.x, y: center.y + d.y }))].filter((p) => this.inMap(p));
   }
 
   /** A cone's reach: its own radius, or the skill's range (a 'weapon' cone reaches as far as the weapon). */
@@ -1040,13 +1175,19 @@ export class Battle {
     return u === caster ? undefined : u;
   }
 
-  /** Stealthed units can't be targeted directly by the other team (see the Stealthed status). */
+  /** Stealthed units can't be targeted directly by the other team (see the Stealthed status). Revealed units can't be Stealthed. */
   isStealthed(u: Unit): boolean {
-    return u.statuses.some((s) => STATUSES[s.id]?.stealth);
+    return u.statuses.some((s) => STATUSES[s.id]?.stealth) && !this.isRevealed(u);
   }
 
+  /** Revealed (Revelation): seen through fog of war and can't be Stealthed. */
+  isRevealed(u: Unit): boolean {
+    return u.statuses.some((s) => STATUSES[s.id]?.reveals);
+  }
+
+  /** Is `t` hidden from `caster`'s side: an enemy that is Stealthed, or out of its side's sight (fog of war)? */
   hiddenFrom(caster: Unit, t: Unit): boolean {
-    return t.team !== caster.team && this.isStealthed(t);
+    return t.team !== caster.team && (this.isStealthed(t) || !this.canSee(caster.team, t));
   }
 
   private matches(caster: Unit, skill: SkillDef, t: Unit): boolean {
@@ -1067,8 +1208,17 @@ export class Battle {
       case 'cone':
       case 'emptyTile':
       case 'move':
-      case 'ground':
+      case 'passive':
         return [];
+      case 'ground': {
+        if (skill.zone) return [];
+        // A shape (Smite's cross) hits every matching unit on its tiles, hidden ones included.
+        const area = new Set(this.shapeTiles(tile).map((p) => key(p.x, p.y)));
+        return this.living().filter((t) => {
+          const pos = t === caster ? from : t;
+          return area.has(key(pos.x, pos.y)) && this.matches(caster, skill, t);
+        });
+      }
       case 'self': {
         if (!skill.aoeRadius) return [caster];
         return this.living().filter((t) => {
@@ -1146,7 +1296,7 @@ export class Battle {
         const n = { x: p.x + d.x, y: p.y + d.y };
         if (!passable(this.map, n.x, n.y) || seen.has(key(n.x, n.y))) continue;
         const occ = this.occupantFrom(caster, from, n);
-        if (occ && occ.team !== caster.team) continue;
+        if (occ && occ.team !== caster.team && !this.hiddenFrom(caster, occ)) continue;
         seen.set(key(n.x, n.y), steps + 1);
         prev.set(key(n.x, n.y), p);
         queue.push(n);
@@ -1165,25 +1315,76 @@ export class Battle {
     return Math.round(resistChance(this.stat(t, 'resist'), this.rules.defenseScale) * 100);
   }
 
-  // ---- vision (framework: disabled in stats.json until fog of war is designed) ----
+  // ---- vision (fog of war; stats.json "vision".enabled) --------------------------------
 
-  /** Tiles `team` can currently see. Everything while vision is disabled. */
+  /** Tiles `team` can currently see: within some living member's Vision, in line of sight. Everything while vision is off. */
   visibleTiles(team: Team): Set<string> {
-    const seen = new Set<string>();
-    const all = !this.rules.vision.enabled;
     const viewers = this.living(team);
-    for (let y = 0; y < this.map.height; y++) {
-      for (let x = 0; x < this.map.width; x++) {
-        const p = { x, y };
-        if (all || viewers.some((v) => withinRange(dist(v, p), this.stat(v, 'vision')) && hasLineOfSight(this.map, v, p))) seen.add(key(x, y));
+    const enabled = this.rules.vision.enabled;
+    // Worked out again only when the team's units move (or their Vision changes); everything else reads the cache.
+    const sightKey = enabled ? viewers.map((v) => `${v.x},${v.y},${this.stat(v, 'vision')}`).join('|') : 'all';
+    const cached = this.sight[team];
+    if (cached && cached.key === sightKey) return cached.tiles;
+    const seen = new Set<string>();
+    if (!enabled) {
+      for (let y = 0; y < this.map.height; y++) for (let x = 0; x < this.map.width; x++) seen.add(key(x, y));
+    } else {
+      for (const v of viewers) {
+        const r = this.stat(v, 'vision');
+        const R = Math.ceil(r);
+        for (let y = Math.max(0, v.y - R); y <= Math.min(this.map.height - 1, v.y + R); y++) {
+          for (let x = Math.max(0, v.x - R); x <= Math.min(this.map.width - 1, v.x + R); x++) {
+            const k = key(x, y);
+            if (seen.has(k)) continue;
+            const p = { x, y };
+            if (withinRange(dist(v, p), r) && hasLineOfSight(this.map, v, p)) seen.add(k);
+          }
+        }
       }
     }
+    this.sight[team] = { key: sightKey, tiles: seen };
     return seen;
   }
 
-  /** Can `team` see `u`? Own units are always visible. */
+  /** Can `team` see `u`? Own units are always visible, and so are Revealed ones. */
   canSee(team: Team, u: Unit): boolean {
-    return u.team === team || !this.rules.vision.enabled || this.visibleTiles(team).has(key(u.x, u.y));
+    return u.team === team || !this.rules.vision.enabled || this.isRevealed(u) || this.visibleTiles(team).has(key(u.x, u.y));
+  }
+
+  /**
+   * Update each team's memory of where its enemies are (lastSeen): units in sight are noted where they stand;
+   * a remembered spot that is in sight again but empty of that unit is forgotten, and so are fallen units.
+   */
+  updateSightings(): void {
+    for (const team of ['player', 'enemy'] as const) {
+      const memory = this.lastSeen[team];
+      for (const f of this.units) {
+        if (f.team === team) continue;
+        if (!f.alive) memory.delete(f.uid);
+        else if (this.canSee(team, f) && !this.isStealthed(f)) memory.set(f.uid, { x: f.x, y: f.y });
+        else {
+          const at = memory.get(f.uid);
+          if (at && this.visibleTiles(team).has(key(at.x, at.y))) memory.delete(f.uid);
+        }
+      }
+    }
+  }
+
+  /**
+   * Where `u`'s side thinks its enemies are: the ones it can see where they stand, the rest where it last saw them.
+   * Fallen units and forgotten spots are left out.
+   */
+  knownFoes(u: Unit): { foe: Unit; at: Point }[] {
+    const out: { foe: Unit; at: Point }[] = [];
+    for (const f of this.living()) {
+      if (f.team === u.team) continue;
+      if (!this.hiddenFrom(u, f)) out.push({ foe: f, at: { x: f.x, y: f.y } });
+      else {
+        const at = this.lastSeen[u.team].get(f.uid);
+        if (at) out.push({ foe: f, at });
+      }
+    }
+    return out;
   }
 
   // ---- damage -----------------------------------------------------------------------
@@ -1194,13 +1395,15 @@ export class Battle {
    * (Magic Bolt) deals one portion of each. `projectile`: the hit comes from a projectile
    * (a forest tile shelters the target from it).
    */
-  hitPortions(attacker: Unit, target: Unit, part: DamagePart, projectile = false): { type: DamageType; amount: number }[] {
+  hitPortions(attacker: Unit, target: Unit, part: DamagePart, projectile = false, pPenBonus = 0): { type: DamageType; amount: number }[] {
     const raw: Record<DamageType, number> = {
       physical: (part.pAtk ?? 0) * this.stat(attacker, 'pAtk') + (part.def ?? 0) * this.stat(attacker, 'defense') + (part.missingHp ?? 0) * (target.stats.health - target.hp),
       magical: (part.mAtk ?? 0) * this.stat(attacker, 'mAtk'),
     };
     const cover = projectile ? 1 - this.coverFrom(target) : 1;
-    const out = DAMAGE_TYPES.filter((t) => raw[t] > 0).map((type) => ({ type, amount: Math.max(1, Math.round(raw[type] * this.mitigation(attacker, target, type) * cover)) }));
+    const out = DAMAGE_TYPES.filter((t) => raw[t] > 0).map((type) => ({
+      type, amount: Math.max(1, Math.round(raw[type] * this.mitigation(attacker, target, type, type === 'physical' ? pPenBonus : 0) * cover)),
+    }));
     return out.length ? out : [{ type: 'physical', amount: 1 }];
   }
 
@@ -1209,27 +1412,30 @@ export class Battle {
     return TERRAIN[this.map.tiles[target.y][target.x]].projectileCover;
   }
 
-  /** The target's Defense against the attacker's damage of `type`, after the attacker's penetration. */
-  effectiveDefense(attacker: Unit, target: Unit, type: DamageType): number {
+  /**
+   * The target's Defense against the attacker's damage of `type`, after the attacker's penetration. `bonusPct`: a
+   * skill's own penetration % (Backstab), multiplied with the attacker's (see combinePenPct).
+   */
+  effectiveDefense(attacker: Unit, target: Unit, type: DamageType, bonusPct = 0): number {
     const def = this.stat(target, 'defense');
     const [flat, pct] = type === 'physical' ? ['pPen', 'pPenPct'] as const : ['mPen', 'mPenPct'] as const;
-    return penetrate(def, this.stat(attacker, pct), this.stat(attacker, flat));
+    return penetrate(def, combinePenPct(this.stat(attacker, pct), bonusPct), this.stat(attacker, flat));
   }
 
   /** Damage multiplier for a hit of `type` on `target`: Defense (both types), lowered by the attacker's penetration. */
-  mitigation(attacker: Unit, target: Unit, type: DamageType): number {
-    return defenseMultiplier(this.effectiveDefense(attacker, target, type));
+  mitigation(attacker: Unit, target: Unit, type: DamageType, bonusPct = 0): number {
+    return defenseMultiplier(this.effectiveDefense(attacker, target, type, bonusPct));
   }
 
   /** Total damage of one hit (all damage types). */
-  hitDamage(attacker: Unit, target: Unit, part: DamagePart, projectile = false): number {
-    return this.hitPortions(attacker, target, part, projectile).reduce((a, p) => a + p.amount, 0);
+  hitDamage(attacker: Unit, target: Unit, part: DamagePart, projectile = false, pPenBonus = 0): number {
+    return this.hitPortions(attacker, target, part, projectile, pPenBonus).reduce((a, p) => a + p.amount, 0);
   }
 
   /** Deal one hit: a damage event per damage type in it. */
-  private dealHit(attacker: Unit, target: Unit, part: DamagePart, cause: DamageCause, projectile = false): BattleEvent[] {
+  private dealHit(attacker: Unit, target: Unit, part: DamagePart, cause: DamageCause, projectile = false, pPenBonus = 0): BattleEvent[] {
     const events: BattleEvent[] = [];
-    for (const p of this.hitPortions(attacker, target, part, projectile)) {
+    for (const p of this.hitPortions(attacker, target, part, projectile, pPenBonus)) {
       if (!target.alive) break;
       events.push(this.dealDamage(target, p.amount, attacker.uid, cause, false, p.type));
     }
@@ -1247,12 +1453,18 @@ export class Battle {
     return 1 + (b.max - 1) * Math.min(1, Math.max(0, missing / (1 - b.atHealth)));
   }
 
+  /** Execute's missing-Health multiplier times the bonus against the target's tags (Smite: x2 vs Evil). */
+  hitMultiplier(skill: SkillDef, target: Unit): number {
+    const tag = skill.bonusVsTag && this.unitTags(target).includes(skill.bonusVsTag.tag) ? skill.bonusVsTag.mult : 1;
+    return this.missingHpMultiplier(skill, target) * tag;
+  }
+
   /** Predicted damage of each hit of `skill` on `target` (accounts for missing health growing). */
   previewHits(attacker: Unit, skill: SkillDef, target: Unit): number[] {
     const swings = this.isWeaponAttack(attacker, skill) ? (this.skillFor(attacker, skill).basicAttack ?? 1) : 0;
     skill = this.skillFor(attacker, skill);
     // Execute: the multiplier comes from Health before the hit, and leaves on-hit effects alone.
-    const mult = this.missingHpMultiplier(skill, target);
+    const mult = this.hitMultiplier(skill, target);
     if (mult !== 1) skill = { ...skill, hits: scaleHits(skill.hits ?? [], mult) };
     // Weapon on-hit effects (Arcane Weapon) the attacker can pay for.
     if (swings) skill = { ...skill, hits: [...(skill.hits ?? []), ...this.procParts(attacker, swings, skill.mana)] };
@@ -1262,7 +1474,7 @@ export class Battle {
     for (const part of skill.hits ?? []) {
       const saved = target.hp;
       target.hp = hp;
-      const amount = this.hitDamage(attacker, target, part, isProjectile(skill));
+      const amount = this.hitDamage(attacker, target, part, isProjectile(skill), skill.pPenPct ?? 0);
       target.hp = saved;
       out.push(amount);
       const absorbed = Math.min(shield, amount);
@@ -1307,22 +1519,79 @@ export class Battle {
     return this.zones.filter((z) => z.tiles.has(key(p.x, p.y)));
   }
 
-  /** Every zone on `tile` hits `u` `times` times. */
+  /** Does the zone act on `u`? Most hit anyone; Rain only the caster's enemies. */
+  zoneAffects(z: Zone, u: Unit): boolean {
+    return z.def.affects !== 'enemy' || u.team !== z.team;
+  }
+
+  /** Zones on `p` that would act on `u` walking in (paths steer around them when they can). */
+  private hazardsAt(u: Unit, p: Point): number {
+    if (!this.zones.length) return 0;
+    return this.zonesAt(p).filter((z) => this.zoneAffects(z, u)).length;
+  }
+
+  /**
+   * Put `tiles` under zone `z` (new or growing). A tile holds one elemental effect: other elemental zones lose
+   * those tiles (and vanish once they have none left).
+   */
+  private paintZone(z: Zone, tiles: Point[]): void {
+    const keys = tiles.map((p) => key(p.x, p.y));
+    if (z.element) {
+      for (const o of this.zones) if (o !== z && o.element) for (const k of keys) o.tiles.delete(k);
+    }
+    for (const k of keys) z.tiles.add(k);
+    if (!this.zones.includes(z)) this.zones.push(z);
+    this.zones = this.zones.filter((o) => o.tiles.size > 0);
+  }
+
+  /** Place a zone from `def` on `tiles` for `caster`'s side. */
+  private addZone(skillId: string, name: string, caster: Unit, def: ZoneDef, tiles: Point[]): BattleEvent {
+    this.paintZone({ skillId, name, element: def.element, casterUid: caster.uid, team: caster.team, tiles: new Set(), turnsLeft: def.turns, def }, tiles);
+    return { type: 'zone', source: caster.uid, name, tiles };
+  }
+
+  /**
+   * Draft: fire zones on `hit` tiles spread to every walkable tile within `radius` of them, keeping their caster and
+   * turns left. Returns an event per zone that grew.
+   */
+  private spreadFire(source: Unit, hit: Point[], radius: number): BattleEvent[] {
+    const growth = new Map<Zone, Point[]>();
+    for (const p of hit) {
+      for (const z of this.zonesAt(p)) {
+        if (z.element !== 'fire') continue;
+        const list = growth.get(z) ?? [];
+        list.push(...this.zoneTiles({ ...z.def, radius }, p).filter((q) => !z.tiles.has(key(q.x, q.y))));
+        growth.set(z, list);
+      }
+    }
+    const events: BattleEvent[] = [];
+    for (const [z, tiles] of growth) {
+      const fresh = [...new Map(tiles.map((q) => [key(q.x, q.y), q])).values()];
+      if (!fresh.length) continue;
+      this.paintZone(z, fresh);
+      events.push({ type: 'zone', source: source.uid, name: z.name, tiles: fresh });
+    }
+    return events;
+  }
+
+  /** Every zone on `tile` that acts on `u` hits it `times` times. */
   private zoneHits(u: Unit, tile: Point, times: number): BattleEvent[] {
     const events: BattleEvent[] = [];
     for (const z of this.zonesAt(tile)) events.push(...this.zoneHit(z, u, times));
     return events;
   }
 
-  /** One zone hits `u` `times` times: its damage (from the caster's stats) and statuses each time. */
+  /** One zone hits `u` `times` times: its damage (from the caster's stats), statuses and status shifts each time. */
   private zoneHit(z: Zone, u: Unit, times: number): BattleEvent[] {
+    if (!this.zoneAffects(z, u)) return [];
     const caster = this.unit(z.casterUid);
     const events: BattleEvent[] = [];
     for (let i = 0; i < times && u.alive; i++) {
       events.push({ type: 'zoneHit', source: caster.uid, target: u.uid, name: z.name });
-      events.push(...this.dealHit(caster, u, z.def.hit, 'zone'));
+      if (z.def.hit) events.push(...this.dealHit(caster, u, z.def.hit, 'zone'));
       if (!u.alive) break;
       for (const a of z.def.applyStatus) events.push(...this.applyStatus(caster, u, a.status, a.turns, a.stacks ?? 1));
+      for (const sh of z.def.shiftStatus ?? []) events.push(...this.shiftStatus(caster, u, sh.status, sh.stacks));
     }
     return events;
   }
@@ -1331,8 +1600,9 @@ export class Battle {
   zoneDanger(u: Unit, path: Point[]): number {
     let total = 0;
     const end = path[path.length - 1] ?? u;
-    for (const p of path) for (const z of this.zonesAt(p)) total += this.hitDamage(this.unit(z.casterUid), u, z.def.hit);
-    for (const z of this.zonesAt(end)) total += z.def.endTurnHits * this.hitDamage(this.unit(z.casterUid), u, z.def.hit);
+    const hit = (z: Zone) => (z.def.hit && this.zoneAffects(z, u) ? this.hitDamage(this.unit(z.casterUid), u, z.def.hit) : 0);
+    for (const p of path) for (const z of this.zonesAt(p)) total += hit(z);
+    for (const z of this.zonesAt(end)) total += z.def.endTurnHits * hit(z);
     return total;
   }
 
@@ -1341,7 +1611,7 @@ export class Battle {
    * first tile of the path in its arc where `u` could stop (not while passing through a unit), as in walk().
    */
   overwatchDanger(u: Unit, path: Point[]): number {
-    const watchers = this.living().filter((w) => w.team !== u.team && w.overwatch);
+    const watchers = this.living().filter((w) => w.team !== u.team && w.overwatch && !this.hiddenFrom(u, w));
     if (watchers.length === 0 || this.isStealthed(u)) return 0;
     const fired = new Set<Unit>();
     let total = 0;
@@ -1354,7 +1624,7 @@ export class Battle {
         u.y = p.y;
         for (const w of watchers) {
           const ow = w.overwatch!;
-          if (fired.has(w) || !ow.tiles.has(key(p.x, p.y))) continue;
+          if (fired.has(w) || !ow.tiles.has(key(p.x, p.y)) || this.hiddenFrom(w, u)) continue;
           if (ow.los && !this.clearLine(w, u, ow.los, w)) continue;
           fired.add(w);
           total += ow.hits.reduce((sum, part) => sum + this.hitDamage(w, u, part, ow.projectile), 0);
@@ -1426,11 +1696,17 @@ export class Battle {
 
   // ---- actions -------------------------------------------------------------------------
 
-  perform(u: Unit, skillId: string, tile: Point): BattleEvent[] {
+  /**
+   * Use a skill on `tile`. `aim2` is the second pick of two-step skills: the direction tile for a push (Sonic Boom:
+   * any tile; the push goes the 8-way direction from the target toward it), or the second target of a follow-up
+   * (Blitz). Without it a push goes straight away from the user and a follow-up picks the nearest enemy it can reach.
+   */
+  perform(u: Unit, skillId: string, tile: Point, aim2?: Point): BattleEvent[] {
     const skill = SKILLS[skillId];
     if (!skill) throw new Error(`Unknown skill ${skillId}`);
     if (!this.canAct(u)) throw new Error(`${u.character.name}'s turn is over`);
     if (skill.target === 'move') throw new Error('Use dash() to dash');
+    if (skill.target === 'passive') throw new Error(`${skill.name} is a passive skill`);
     if (!this.skillIds(u).includes(skillId)) throw new Error(`${u.character.name} doesn't have ${skill.name}`);
     if (!this.canPay(u, skill)) throw new Error(`${skill.name} needs more AP`);
     if (!this.isReady(u, skillId)) throw new Error(`${skill.name} is on cooldown`);
@@ -1444,6 +1720,8 @@ export class Battle {
     if (bad) throw new Error(bad);
 
     const events: BattleEvent[] = [];
+    // Worked out before anything changes (Quick Cast and In the Zone lower it, and are used up when it's paid).
+    const ap = this.apCost(u, skill);
     // The skill's own mana comes first, so per-hit costs during it (Arcane Weapon) only spend what's left.
     if (!switchingOff) u.mp -= skill.mana;
     const origin = { x: u.x, y: u.y };
@@ -1458,41 +1736,25 @@ export class Battle {
         events.push({ type: 'disengage', source: u.uid, target: opp.uid, reason: 'escaped' });
       }
     }
-    for (const a of skill.selfStatus ?? []) events.push(...this.applyStatus(u, u, a.status, a.turns, 1, true));
+    for (const a of skill.selfStatus ?? []) events.push(...this.applyStatus(u, u, a.status, a.turns, a.stacks ?? 1, true));
     if (skill.switchMode) events.push(...this.setWeaponMode(u, u.weaponMode + 1));
-    // Toggles: switch the status on (paying the mana) or off again (free).
+    // Toggles: switch the status on (paying the mana) or off again (free). A weapon holds one enchantment at a time.
     if (skill.toggleStatus) {
       if (this.isToggledOn(u, skill.toggleStatus)) {
         events.push(this.toggleOff(u, skill.toggleStatus));
       } else {
         const def = STATUSES[skill.toggleStatus];
+        if (def.enchantment) for (const s of [...u.statuses]) if (s.id !== def.id && STATUSES[s.id]?.enchantment) events.push(this.toggleOff(u, s.id));
         u.statuses.push({ id: def.id, name: def.name, debuff: def.debuff, stacks: 1, amount: 0, turns: Infinity, tick: def.tick });
         events.push({ type: 'toggle', target: u.uid, name: def.name, on: true });
       }
     }
     // Still next to the target after the charge (it can be stopped short)? Melee charges strike only then.
     let stoppedShort = false;
-    if (skill.charge && skill.teleport) {
-      const dest = this.chargeDestination(u, tile, u, skill)!;
-      if (dest.x !== u.x || dest.y !== u.y) {
-        u.x = dest.x;
-        u.y = dest.y;
-        events.push({ type: 'move', target: u.uid, from: origin, to: dest, kind: 'teleport' });
-        events.push(...this.zoneHits(u, dest, 1));
-      }
-    } else if (skill.charge) {
-      // A charge runs there on its own feet, tile by tile like a walk: enemy overwatch fires (and an interrupting
-      // watch or Frozen stops it) and zones hit on the way. Teleports skip all that.
-      const walked = this.walk(u, this.chargePath(u, tile, u, skill)!);
-      let at = origin;
-      walked.path.forEach((step, i) => {
-        events.push({ type: 'move', target: u.uid, from: at, to: step, kind: 'charge' });
-        at = step;
-        for (const t of walked.triggers) if (t.index === i) events.push(...t.events);
-      });
-      stoppedShort = walked.interrupted;
+    if (skill.charge) {
+      stoppedShort = this.chargeTo(u, skill, tile, events);
       if (!u.alive) {
-        this.payFor(u, skillId, true);
+        this.payFor(u, skillId, true, ap);
         return events;
       }
     } else if (skill.teleport) {
@@ -1501,14 +1763,7 @@ export class Battle {
       events.push({ type: 'move', target: u.uid, from: origin, to: { ...tile }, kind: 'teleport' });
       events.push(...this.zoneHits(u, tile, 1));
     }
-    if (skill.zone) {
-      const tiles = this.zoneTiles(skill.zone, tile);
-      this.zones.push({
-        skillId, name: skill.name, casterUid: u.uid, team: u.team,
-        tiles: new Set(tiles.map((p) => key(p.x, p.y))), turnsLeft: skill.zone.turns, def: skill.zone,
-      });
-      events.push({ type: 'zone', source: u.uid, name: skill.name, tiles });
-    }
+    if (skill.zone) events.push(this.addZone(skillId, skill.name, u, skill.zone, this.zoneTiles(skill.zone, tile)));
     if (skill.cone) {
       u.overwatch = {
         skillId,
@@ -1526,14 +1781,121 @@ export class Battle {
     let targets = skill.toggleStatus ? [] : aimed ?? this.targetsOf(u, skill, tile);
     // Stopped on the way: the strike only lands on targets it still reaches.
     if (stoppedShort) targets = targets.filter((t) => dist(u, t) <= 1.5 + EPS);
+    // Power Strike: whoever stands behind the target, picked before anyone is pushed or falls.
+    const pierced = this.pierceVictim(u, used, tile);
+    this.strike(u, skill, used, targets, events);
+    if (pierced && pierced.alive && used.pierce) {
+      for (const part of scaleHits(this.basicAttack(u).hits ?? [], used.pierce)) {
+        if (!pierced.alive) break;
+        events.push(...this.dealHit(u, pierced, part, 'skill', isProjectile(used), used.pPenPct ?? 0));
+      }
+    }
+    // Draft: fire on the tiles hit spreads.
+    if (used.spreadFire) events.push(...this.spreadFire(u, this.areaTiles(u, used, tile), used.spreadFire));
+
+    // Knockback: push each surviving target away from the attacker, if there is room.
+    if (used.knockback) for (const t of targets) if (t.alive) events.push(...this.pushUnit(t, dirTo(u, t), used.knockback));
+    // Sonic Boom: push the target the way the user picked.
+    if (used.push) {
+      for (const t of targets) {
+        if (!t.alive) continue;
+        const d = aim2 ? dirTo(t, aim2) : { x: 0, y: 0 };
+        events.push(...this.pushUnit(t, d.x || d.y ? d : dirTo(u, t), used.push));
+      }
+    }
+
+    // Blitz: break away for free, then charge a second enemy within range of where the first strike landed.
+    if (used.followUp && u.alive) {
+      const first = targets[0];
+      const opp = this.opponentOf(u);
+      if (opp) {
+        this.breakEngagement(u);
+        events.push({ type: 'disengage', source: u.uid, target: opp.uid, reason: 'escaped' });
+      }
+      const next = this.followUpTarget(u, skill, first, aim2);
+      if (next) {
+        const short = this.chargeTo(u, skill, next, events);
+        const t2 = this.unitAt(next.x, next.y);
+        if (u.alive && t2 && (!short || dist(u, t2) <= 1.5 + EPS)) this.strike(u, skill, used, [t2], events);
+      }
+    }
+
+    events.push(...this.separationEvents());
+    // Attacking gives a Stealthed unit away.
+    if (this.isAttack(used) && used.affects !== 'ally') u.statuses = u.statuses.filter((st) => !STATUSES[st.id]?.stealth);
+    if (!u.alive) u.acted = true;
+    this.payFor(u, skillId, true, ap); // mana was paid up front (none when switching a toggle off)
+    this.updateSightings();
+    return events;
+  }
+
+  /**
+   * Charge (or teleport-strike) at the unit on `tile`, adding the move events. A charge runs there on its own feet,
+   * tile by tile like a walk: enemy overwatch fires (and an interrupting watch, Frozen or an unseen enemy stops it)
+   * and zones hit on the way. Returns true if it was stopped short.
+   */
+  private chargeTo(u: Unit, skill: SkillDef, tile: Point, events: BattleEvent[]): boolean {
+    const origin = { x: u.x, y: u.y };
+    if (skill.teleport) {
+      const dest = this.chargeDestination(u, tile, u, skill)!;
+      if (dest.x !== u.x || dest.y !== u.y) {
+        u.x = dest.x;
+        u.y = dest.y;
+        events.push({ type: 'move', target: u.uid, from: origin, to: dest, kind: 'teleport' });
+        events.push(...this.zoneHits(u, dest, 1));
+      }
+      return false;
+    }
+    const walked = this.walk(u, this.chargePath(u, tile, u, skill) ?? []);
+    for (const t of walked.triggers) if (t.index < 0) events.push(...t.events);
+    let at = origin;
+    walked.path.forEach((step, i) => {
+      events.push({ type: 'move', target: u.uid, from: at, to: step, kind: 'charge' });
+      at = step;
+      for (const t of walked.triggers) if (t.index === i) events.push(...t.events);
+    });
+    return walked.interrupted;
+  }
+
+  /**
+   * Blitz's second target: the enemy on `aim2` if it can still be reached from where the user stands, else the
+   * nearest one that can (never `first`). Null if there's none.
+   */
+  private followUpTarget(u: Unit, skill: SkillDef, first: Unit | undefined, aim2?: Point): Point | null {
+    const options = this.followUpTargets(u, skill, first);
+    if (aim2) {
+      const pick = options.find((p) => p.x === aim2.x && p.y === aim2.y);
+      if (pick) return pick;
+    }
+    return options.length ? options.reduce((a, b) => (dist(u, b) < dist(u, a) - EPS ? b : a)) : null;
+  }
+
+  /**
+   * Enemies a follow-up (Blitz) could charge next from `from`: in range, visible, reachable, and not `first`.
+   * Used for the player's second pick (with `from` = where the first charge lands).
+   */
+  followUpTargets(u: Unit, skill: SkillDef, first: Unit | undefined, from: Point = u): Point[] {
+    const range = this.skillRange(u, skill);
+    return this.living().filter((t) => t !== first && t.team !== u.team && !this.hiddenFrom(u, t)
+      && withinRange(dist(from, t), range) && this.chargePath(u, t, from, skill) !== null).map((t) => ({ x: t.x, y: t.y }));
+  }
+
+  /**
+   * The skill lands on each target: its hits (and weapon on-hit effects), recoil, engagement, statuses, heals,
+   * shields and cleanses, and the target striking back (Tooth for Tooth).
+   */
+  private strike(u: Unit, skill: SkillDef, used: SkillDef, targets: Unit[], events: BattleEvent[]): void {
     // Weapon attacks carry on-hit effects (Arcane Weapon): one per swing (Double Strike swings twice).
     const swings = this.isWeaponAttack(u, skill) ? (used.basicAttack ?? 1) : 0;
     for (const t of targets) {
-      // Execute: scaled by the target's Health before the hit.
-      const mult = this.missingHpMultiplier(used, t);
-      for (const part of scaleHits(used.hits ?? [], mult)) {
+      // Tooth for Tooth answers its opponent only (engaged before this attack).
+      const wasEngaged = t !== u && t.engagedWith === u.uid;
+      // Execute: scaled by the target's Health before the hit. Smite: more against Evil.
+      const mult = this.hitMultiplier(used, t);
+      const hits = scaleHits(used.hits ?? [], mult);
+      for (const part of hits) {
         if (!t.alive) break;
-        events.push(...this.dealHit(u, t, part, 'skill', isProjectile(used)));
+        events.push(...this.dealHit(u, t, part, 'skill', isProjectile(used), used.pPenPct ?? 0));
       }
       for (let i = 0; i < swings && t.alive; i++) events.push(...this.weaponProcs(u, t, 'skill', isProjectile(used)));
       // Life-Risking Strike: the user pays if the target is still standing.
@@ -1542,13 +1904,14 @@ export class Battle {
         if (!u.alive) u.acted = true;
       }
       if (!t.alive) continue;
+      if (wasEngaged && hits.length && u.alive && this.hasPassive(t, 'tooth_for_tooth')) events.push(...this.counter(t, u, 'Tooth for Tooth'));
+      if (!t.alive || !u.alive) continue;
       // Engage: locks both units together, unless either is already engaged.
       const engages = hasTag(used, 'engage') || (used.engageWithin !== undefined && withinRange(dist(u, t), used.engageWithin));
-      if (engages && t.team !== u.team && u.alive && !u.engagedWith && !t.engagedWith) {
-        this.engage(u, t);
-        events.push({ type: 'engage', source: u.uid, target: t.uid });
-      }
+      if (engages && t.team !== u.team && !u.engagedWith && !t.engagedWith) events.push(...this.engagePair(u, t));
+      if (!t.alive) continue;
       for (const a of skill.applyStatus ?? []) events.push(...this.applyStatus(u, t, a.status, a.turns, a.stacks ?? 1));
+      for (const sh of used.shiftStatus ?? []) events.push(...this.shiftStatus(u, t, sh.status, sh.stacks));
       if (skill.heal) {
         const amount = Math.min(this.healAmount(u, skill), t.stats.health - t.hp);
         t.hp += amount;
@@ -1566,52 +1929,110 @@ export class Battle {
         events.push({ type: 'cleanse', source: u.uid, target: t.uid, removed });
       }
     }
+  }
 
-    // Knockback: push each surviving target away from the attacker, if there is room.
-    // A unit that actually gets pushed breaks free of its engagement.
-    if (used.knockback) {
-      for (const t of targets) {
-        if (!t.alive) continue;
-        const dir = { x: Math.sign(t.x - u.x), y: Math.sign(t.y - u.y) };
-        let moved = false;
-        for (let i = 0; i < used.knockback; i++) {
-          const to = { x: t.x + dir.x, y: t.y + dir.y };
-          if (!passable(this.map, to.x, to.y) || this.unitAt(to.x, to.y)) break;
-          events.push({ type: 'move', target: t.uid, from: { x: t.x, y: t.y }, to, kind: 'knockback' });
-          t.x = to.x;
-          t.y = to.y;
-          moved = true;
-          events.push(...this.zoneHits(t, to, 1));
-          if (!t.alive) break;
-        }
-        // Being pushed out of an engagement counts as breaking away: the old opponent gets a free hit.
-        const partner = moved ? this.opponentOf(t) : null;
-        if (partner) {
-          this.breakEngagement(t);
-          events.push({ type: 'disengage', source: t.uid, target: partner.uid, reason: 'displaced' });
-          events.push(...this.opportunityAttack(partner, t));
-        }
-      }
+  /** `a` engages `b`. Fighting Spirit: each side that has it hits the other with a free half-strength basic attack. */
+  private engagePair(a: Unit, b: Unit): BattleEvent[] {
+    this.engage(a, b);
+    const events: BattleEvent[] = [{ type: 'engage', source: a.uid, target: b.uid }];
+    for (const [x, y] of [[a, b], [b, a]] as const) {
+      if (x.alive && y.alive && this.hasPassive(x, 'fighting_spirit')) events.push(...this.counter(x, y, 'Fighting Spirit'));
     }
-
-    events.push(...this.separationEvents());
-    // Attacking gives a Stealthed unit away.
-    if (this.isAttack(used) && used.affects !== 'ally') u.statuses = u.statuses.filter((st) => !STATUSES[st.id]?.stealth);
-    this.payFor(u, skillId, true); // mana was paid up front (none when switching a toggle off)
     return events;
   }
 
-  /** Apply a status. Debuffs can be shrugged off: a Resist roll (see resistChance). */
+  /**
+   * A passive's free basic attack at half damage (Fighting Spirit, Tooth for Tooth), with weapon on-hit effects. It
+   * ignores range, and never sets off another counter.
+   */
+  private counter(attacker: Unit, victim: Unit, name: string): BattleEvent[] {
+    if (!attacker.alive || !victim.alive) return [];
+    const events: BattleEvent[] = [{ type: 'counter', source: attacker.uid, target: victim.uid, name }];
+    const basic = this.basicAttack(attacker);
+    for (const part of scaleHits(basic.hits ?? [], 0.5)) {
+      if (!victim.alive) break;
+      events.push(...this.dealHit(attacker, victim, part, 'counter', isProjectile(basic)));
+    }
+    events.push(...this.weaponProcs(attacker, victim, 'counter', isProjectile(basic)));
+    return events;
+  }
+
+  /**
+   * Push `t` up to `tiles` tiles in direction `dir` (knockback, Sonic Boom). Walls and units stop it. Each tile it's
+   * pushed onto counts as entering it (zones hit). Being moved breaks Stealth, and pushes it out of an engagement:
+   * the old opponent gets a free basic attack (opportunity attack).
+   */
+  private pushUnit(t: Unit, dir: Point, tiles: number): BattleEvent[] {
+    const events: BattleEvent[] = [];
+    let moved = false;
+    for (let i = 0; i < tiles && t.alive; i++) {
+      const to = { x: t.x + dir.x, y: t.y + dir.y };
+      if (!passable(this.map, to.x, to.y) || this.unitAt(to.x, to.y)) break;
+      events.push({ type: 'move', target: t.uid, from: { x: t.x, y: t.y }, to, kind: 'knockback' });
+      t.x = to.x;
+      t.y = to.y;
+      moved = true;
+      events.push(...this.zoneHits(t, to, 1));
+    }
+    if (!moved) return events;
+    t.statuses = t.statuses.filter((st) => !STATUSES[st.id]?.stealth);
+    const partner = t.alive ? this.opponentOf(t) : null;
+    if (partner) {
+      this.breakEngagement(t);
+      events.push({ type: 'disengage', source: t.uid, target: partner.uid, reason: 'displaced' });
+      events.push(...this.opportunityAttack(partner, t));
+    }
+    return events;
+  }
+
+  /**
+   * Where a push (Sonic Boom) of `t` toward `dir` would end, tile by tile (for previews). Stops at walls and units.
+   */
+  pushPath(t: Unit, dir: Point, tiles: number): Point[] {
+    const out: Point[] = [];
+    let at = { x: t.x, y: t.y };
+    for (let i = 0; i < tiles; i++) {
+      const to = { x: at.x + dir.x, y: at.y + dir.y };
+      const occ = this.unitAt(to.x, to.y);
+      if (!passable(this.map, to.x, to.y) || (occ && occ !== t)) break;
+      out.push(to);
+      at = to;
+    }
+    return out;
+  }
+
+  /**
+   * Move `stacks` stacks of a status the target already has (nothing if it doesn't): more (Draft fans a Burn, Rain
+   * deepens a Chill; resisted like any debuff) or fewer (Rain dampens a Burn).
+   */
+  private shiftStatus(source: Unit, t: Unit, id: string, stacks: number): BattleEvent[] {
+    const have = t.statuses.find((s) => s.id === id);
+    if (!have || !t.alive || stacks === 0) return [];
+    if (stacks > 0) return this.applyStatus(source, t, id, have.turns, stacks);
+    have.stacks += stacks;
+    if (have.stacks <= 0) t.statuses = t.statuses.filter((s) => s !== have);
+    return [{ type: 'status', source: source.uid, target: t.uid, name: `${have.name} ${stacks}` }];
+  }
+
+  /** Apply a status. Debuffs can be shrugged off: a Resist roll (see resistChance), unless the target is immune to them. */
   private applyStatus(source: Unit, t: Unit, id: string, turns: number, stacks: number, unresisted = false): BattleEvent[] {
     const def = STATUSES[id];
     if (!t.alive) return [];
-    if (def.debuff && !unresisted) {
+    // Tough It Out: no debuffs from others while it lasts.
+    if (def.debuff && !unresisted && t.statuses.some((s) => STATUSES[s.id]?.debuffImmune)) {
+      return [{ type: 'resist', source: source.uid, target: t.uid, name: def.name, chance: 100, immune: true }];
+    }
+    if (def.debuff && !unresisted && !def.unresisted) {
       const chance = resistChance(this.stat(t, 'resist'), this.rules.defenseScale);
       if (chance > 0 && this.rng() < chance) return [{ type: 'resist', source: source.uid, target: t.uid, name: def.name, chance: Math.round(chance * 100) }];
     }
-    // Instant statuses (Explosion) do their damage now and aren't kept.
+    // Revealed units can't be Stealthed.
+    if (def.stealth && this.isRevealed(t)) return [];
+    // Instant statuses (Explosion) do their damage now and aren't kept. Explosion also sets the ground on fire.
     if (def.instantDamagePctMaxHp) {
-      return [{ type: 'status', source: source.uid, target: t.uid, name: def.name }, this.statusDamage(t, def.instantDamagePctMaxHp, def.mitigated, source.uid)];
+      const events: BattleEvent[] = [{ type: 'status', source: source.uid, target: t.uid, name: def.name }, this.statusDamage(t, def.instantDamagePctMaxHp, def.mitigated, source.uid)];
+      if (def.zone) events.push(this.addZone(`status:${id}`, def.zone.name ?? def.name, source, def.zone, this.zoneTiles(def.zone, t)));
+      return events;
     }
     const existing = t.statuses.find((s) => s.id === id);
     // Past its stack cap the status turns into its overflow (Chilled x3 -> Frozen, Burn x3 -> Explosion).
@@ -1620,8 +2041,8 @@ export class Battle {
       t.statuses = t.statuses.filter((s) => s.id !== id);
       return this.applyStatus(source, t, def.overflow.status, def.overflow.turns, 1, true);
     }
-    // Decaying statuses (Burn, Chilled) last until their stacks run out, not a number of turns.
-    const lasts = def.decay ? Infinity : turns;
+    // Decaying statuses (Burn, Chilled) last until their stacks run out, not a number of turns; Quick Cast until used.
+    const lasts = def.decay || def.untilUsed ? Infinity : turns;
     if (existing) {
       if (def.stacking) existing.stacks += stacks;
       existing.turns = Math.max(existing.turns, lasts);
@@ -1634,6 +2055,8 @@ export class Battle {
       const status = t.statuses.find((s) => s.id === id)!;
       status.amount = Math.max(status.amount, this.scaledStatusAmount(source, id));
     }
+    // Revealed: Stealth is gone.
+    if (def.reveals) t.statuses = t.statuses.filter((s) => !STATUSES[s.id]?.stealth);
     const now = t.statuses.find((s) => s.id === id)!;
     return [{ type: 'status', source: source.uid, target: t.uid, name: def.stacking ? `${def.name} x${now.stacks}` : def.name }];
   }
@@ -1679,7 +2102,7 @@ export class Battle {
 
   /** The unit's active toggle statuses with a weapon on-hit effect. */
   private weaponOnHits(u: Unit): Status[] {
-    return u.statuses.filter((s) => STATUSES[s.id]?.weaponOnHit);
+    return u.statuses.filter((s) => STATUSES[s.id]?.weaponOnHit || STATUSES[s.id]?.weaponOnHitStatus);
   }
 
   /** Is `s` (as listed, not resolved) a weapon attack: the weapon's basic attack (any mode) or a 'weapon' skill? */
@@ -1709,7 +2132,9 @@ export class Battle {
         continue;
       }
       u.mp -= cost;
-      events.push(...this.dealHit(u, t, def.weaponOnHit!, cause, projectile));
+      if (def.weaponOnHit) events.push(...this.dealHit(u, t, def.weaponOnHit, cause, projectile));
+      // Fire Weapon / Ice Weapon: a stack of Burn / Chilled with each hit.
+      for (const a of def.weaponOnHitStatus ?? []) if (t.alive) events.push(...this.applyStatus(u, t, a.status, a.turns, a.stacks ?? 1));
     }
     return events;
   }
@@ -1721,9 +2146,9 @@ export class Battle {
     for (let i = 0; i < swings; i++) {
       for (const s of this.weaponOnHits(u)) {
         const def = STATUSES[s.id];
-        if (mp < (def.manaPerHit ?? 0)) continue;
+        if (mp < (def.manaPerHit ?? 0) || !def.weaponOnHit) continue;
         mp -= def.manaPerHit ?? 0;
-        out.push(def.weaponOnHit!);
+        out.push(def.weaponOnHit);
       }
     }
     return out;
@@ -1767,8 +2192,15 @@ export class Battle {
         u.ap -= 1;
         u.moved = true;
       }
+      // Staggered (Sucker Punch): AP lost, the movement AP first.
+      const loss = u.statuses.reduce((n, s) => n + (STATUSES[s.id]?.apLoss ?? 0), 0);
+      for (let i = 0; i < loss && u.ap > 0; i++) {
+        u.ap -= 1;
+        u.moved = true;
+      }
       if (!u.alive) u.acted = true;
     }
+    this.updateSightings();
     return events;
   }
 

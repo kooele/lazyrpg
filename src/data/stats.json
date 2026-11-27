@@ -10,7 +10,7 @@
     "defense": 20,
     "resist": 20,
     "movement": 16,
-    "vision": 8,
+    "vision": 6,
     "pPen": 0,
     "pPenPct": 0,
     "mPen": 0,
@@ -67,7 +67,7 @@
   },
 
   "vision": {
-    "_comment": "Disabled for now: the whole map is visible. When enabled: a team sees tiles within each unit's Vision range that it has line of sight to; enemies outside that are hidden (fog of war).",
-    "enabled": false
+    "_comment": "Fog of war. When enabled: a team sees tiles within each unit's Vision range that it has line of sight to; enemies outside that are hidden from it (the player sees them as fog; the enemy AI only plans around what its side can see, and remembers where it last saw the rest). Set false to see the whole map.",
+    "enabled": true
   }
 }

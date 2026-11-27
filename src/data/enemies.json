@@ -1,5 +1,9 @@
 {
   "_readme": "Enemy types. Each type always fights within its level range. A quest picks one type whose range contains its level as the main foe; types of the same ai category that fit join in. ai sets how the type fights: beast (acts alone, goes for the nearest target, flees when hurt), tribal (fights as a group in a loose formation, and the whole group may flee), human (fights tactically, flees from danger, surrenders when it can't escape; only humans can be taken prisoner) or evil (spirits and demons: no self-preservation, goes for kills). Past the highest range, the toughest types keep appearing at their top level. stats are at the type's lowest level; growthPerLevel is added per level above that. Resist matches each type's Defense. Stats left out (e.g. mana for monsters) are 0. skills: the first one is the basic attack (also used for opportunity attacks). skillsByLevel adds skills from that level up. Monster art is public/art/monsters/<art.kind>.svg (regenerate it with node tools/generate-art.mjs after changing art.color). Humanoid types pick a body model from art.models (bandits have their own: b1-b4) and one of their loadouts: { name, weapon, armor (optional), skills }. They get the gear's stats like Adventurers do (equipment.json) and the weapon's skills (all of them, or only the basic attack with weaponSkillUse = basic), plus the loadout's skills. gearQuality is the quality of their gear: crude (Common with equipment.json enemyGear.commonChancePerLevel per level) or an enemy-only tier like goblin (Goblin-Made). threat is how much of the encounter budget one unit uses (the budget comes from the quest: guild.json quests.<rank>.encounter x the quest's threat, whatever the size of the party). questTitle names the quests where the type is the main foe.",
+  "unitTags": {
+    "_comment": "Tags an enemy type can carry (its \"tags\" list). Some skills do more against a tag (Smite: double damage vs Evil). Shown on the unit in battle.",
+    "evil": { "name": "Evil", "description": "Undead and demons. Holy skills such as Smite deal double damage to them." }
+  },
   "encounter": {
     "maxEnemies": 12
   },
@@ -65,7 +69,7 @@
         "defense": 40,
         "resist": 40,
         "movement": 12,
-        "vision": 5
+        "vision": 6
       },
       "growthPerLevel": {
         "health": 50,
@@ -107,7 +111,7 @@
         "defense": 40,
         "resist": 40,
         "movement": 24,
-        "vision": 8
+        "vision": 6
       },
       "growthPerLevel": {
         "health": 50,
@@ -192,7 +196,7 @@
         "defense": 60,
         "resist": 60,
         "movement": 16,
-        "vision": 8
+        "vision": 6
       },
       "growthPerLevel": {
         "health": 50,
@@ -254,7 +258,7 @@
         "defense": 36,
         "resist": 36,
         "movement": 16,
-        "vision": 8,
+        "vision": 6,
         "mana": 240
       },
       "growthPerLevel": {
@@ -318,6 +322,7 @@
     "skeleton": {
       "name": "Skeleton",
       "ai": "evil",
+      "tags": ["evil"],
       "levels": [
         6,
         11
@@ -355,7 +360,7 @@
         "defense": 52,
         "resist": 52,
         "movement": 14,
-        "vision": 8,
+        "vision": 6,
         "mana": 300
       },
       "growthPerLevel": {
@@ -413,7 +418,7 @@
         "defense": 72,
         "resist": 72,
         "movement": 16,
-        "vision": 8,
+        "vision": 6,
         "mana": 320
       },
       "growthPerLevel": {
@@ -495,7 +500,7 @@
         "defense": 85,
         "resist": 85,
         "movement": 16,
-        "vision": 8,
+        "vision": 6,
         "mana": 340
       },
       "growthPerLevel": {
@@ -529,7 +534,7 @@
         "defense": 81,
         "resist": 81,
         "movement": 16,
-        "vision": 8
+        "vision": 6
       },
       "growthPerLevel": {
         "health": 75,
@@ -555,6 +560,7 @@
     "wraith": {
       "name": "Wraith",
       "ai": "evil",
+      "tags": ["evil"],
       "levels": [
         10,
         16
@@ -571,7 +577,7 @@
         "defense": 57,
         "resist": 57,
         "movement": 20,
-        "vision": 8
+        "vision": 6
       },
       "growthPerLevel": {
         "health": 40,
@@ -610,7 +616,7 @@
         "defense": 99,
         "resist": 99,
         "movement": 12,
-        "vision": 8
+        "vision": 6
       },
       "growthPerLevel": {
         "health": 68,
@@ -693,7 +699,7 @@
         "defense": 115,
         "resist": 115,
         "movement": 16,
-        "vision": 8,
+        "vision": 6,
         "mana": 460
       },
       "growthPerLevel": {
@@ -727,7 +733,7 @@
         "defense": 108,
         "resist": 108,
         "movement": 24,
-        "vision": 10
+        "vision": 6
       },
       "growthPerLevel": {
         "health": 85,
@@ -750,6 +756,7 @@
     "demon": {
       "name": "Demon",
       "ai": "evil",
+      "tags": ["evil"],
       "levels": [
         16,
         25
@@ -766,7 +773,7 @@
         "defense": 125,
         "resist": 125,
         "movement": 20,
-        "vision": 8
+        "vision": 6
       },
       "growthPerLevel": {
         "health": 80,
