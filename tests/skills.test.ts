@@ -162,7 +162,7 @@ describe('Undo Move with fog of war', () => {
     expect(battle.undoBlockReason(p)).toMatch(/spotted an enemy/);
   });
 
-  it('a move that reveals more than 8 new tiles can\'t be undone; a small one can', () => {
+  it('a move that reveals more than 10 new tiles can\'t be undone; a small one can', () => {
     const { battle, units: [p] } = setup([
       { c: hero(), team: 'player', at: { x: 1, y: 3 } },
       { c: hero(), team: 'enemy', at: { x: 20, y: 3 } },

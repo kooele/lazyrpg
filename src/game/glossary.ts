@@ -7,6 +7,7 @@ import { TRAITS } from '../data/traits';
 import { LOOT } from '../data/enemies';
 import { RANKS, type Rank } from '../data/types';
 import { lodgingName } from './condition';
+import { UNDO_LIMIT, UNDO_REVEAL_TILES } from './battle';
 
 export const GLOSSARY_TOPICS = ['City Life', 'Quests & Ranks', 'Experience', 'Party Members', 'Slaves', 'Battle'] as const;
 export type GlossaryTopic = (typeof GLOSSARY_TOPICS)[number];
@@ -193,7 +194,11 @@ export function glossaryEntries(): GlossaryEntry[] {
   add('Battle', 'Action Points',
     `Every unit gets 2 AP a turn: a movement AP and an action AP.\n\n`
     + `• Free skills cost nothing and work until the turn ends.\n• 1 AP skills use the movement AP if it's unspent, otherwise the action AP.\n• 2 AP skills use both, so they can't follow a move.\n• Ends-turn skills (most attacks) use whatever is left.\n• Quick Cast makes your next 2 AP or Ends-turn Mage spell this turn cost 1 AP (use it again to cancel for a refund); In the Zone makes two basic attacks free.\n\n`
-    + `Undo move works until that unit acts or another unit on your team moves.`);
+    + `Undo Move takes back a regular move (see Undo Move).`);
+  add('Battle', 'Undo Move',
+    `Undo Move takes back a unit's regular move this turn, giving back its movement AP. You have ${UNDO_LIMIT} undos per battle; the button shows how many are left.\n\n`
+    + `A move is locked in (it can't be undone) once:\n• that unit uses a skill or another unit on your team moves or acts,\n• it was shot by overwatch, caught in a zone or bumped into a hidden enemy on the way,\n• it spotted an enemy you couldn't see before, or\n• it revealed more than ${UNDO_REVEAL_TILES} new tiles of fog.\n\n`
+    + `So moving to scout and stepping back doesn't work. Dash and movement skills can never be undone. Hover the button to see why a move is locked.`);
   add('Battle', 'Mana',
     `Mana is spent by skills and doesn't come back during a battle. Units start each battle with full mana.`);
   add('Battle', 'Defense and Resist',

@@ -47,7 +47,7 @@ export const AP_PER_TURN = 2;
 /** Moves each side can undo per battle (Undo Move). */
 export const UNDO_LIMIT = 3;
 /** A move that brings more than this many new tiles into its side's sight (fog of war) can't be undone. */
-export const UNDO_REVEAL_TILES = 8;
+export const UNDO_REVEAL_TILES = 10;
 
 export interface Unit {
   uid: string;
