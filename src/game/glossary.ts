@@ -195,6 +195,10 @@ export function glossaryEntries(): GlossaryEntry[] {
     `Every unit gets 2 AP a turn: a movement AP and an action AP.\n\n`
     + `• Free skills cost nothing and work until the turn ends.\n• 1 AP skills use the movement AP if it's unspent, otherwise the action AP.\n• 2 AP skills use both, so they can't follow a move.\n• Ends-turn skills (most attacks) use whatever is left.\n• Quick Cast makes your next 2 AP or Ends-turn Mage spell this turn cost 1 AP (use it again to cancel for a refund); In the Zone makes two basic attacks free.\n\n`
     + `Undo Move takes back a regular move (see Undo Move).`);
+  add('Battle', 'Moving',
+    `Clicking a tile in a unit's move range only previews the move: a faded copy of the unit shows where it would stand, and nothing happens yet (no AP spent, no overwatch, no fog lifted).\n\n`
+    + `While previewing, hover or pick the unit's skills to see what they would reach from the planned tile. Click the tile again, press Confirm Move or Enter to make the move; right-click or Esc cancels it.\n\n`
+    + `Aiming a skill from the planned tile and clicking a target makes the move and then uses the skill, if it can still reach from where the unit ends up (overwatch or a hidden enemy can stop it short). Skills that need both AP (and Dash) can't follow a move, so they can't be picked while previewing. Toggles and Switch Mode are used on the spot without moving.`);
   add('Battle', 'Undo Move',
     `Undo Move takes back a unit's regular move this turn, giving back its movement AP. You have ${UNDO_LIMIT} undos per battle; the button shows how many are left.\n\n`
     + `A move is locked in (it can't be undone) once:\n• that unit uses a skill or another unit on your team moves or acts,\n• it was shot by overwatch, caught in a zone or bumped into a hidden enemy on the way,\n• it spotted an enemy you couldn't see before, or\n• it revealed more than ${UNDO_REVEAL_TILES} new tiles of fog.\n\n`
@@ -210,7 +214,7 @@ export function glossaryEntries(): GlossaryEntry[] {
     + `Penetration never takes Defense below 0, and does nothing to Defense that is already 0 or less.`);
   add('Battle', 'Fog of War',
     `Each side sees only the tiles within its units' Vision (${STAT_CONFIG.base.vision} tiles) that they have line of sight to: rocks block it. Enemies outside that are hidden, and the map shows those tiles darkened.\n\n`
-    + `• You can't aim at a unit you can't see, but area attacks and zones still hit it.\n• Overwatch only fires on units its side can see.\n• Walking into an unseen enemy stops you in front of it.\n• Enemies play by the same rules: they go where they last saw you, and each turn they learn where your units stood at the start of your last turn (not Stealthed ones).\n\n`
+    + `• You can't aim at a unit you can't see, but area attacks and zones still hit it.\n• Overwatch only fires on units its side can see.\n• Walking into an unseen enemy stops you in front of it.\n• The battle log shows units you can't see as ???. A hidden enemy's skill is named only when it lands where you can see.\n• Enemies play by the same rules: they go where they last saw you, and each turn they learn where your units stood at the start of your last turn (not Stealthed ones).\n\n`
     + `Revelation (Cleric) reveals every enemy within 15 tiles for a turn.`);
   add('Battle', 'Stealth',
     `A Stealthed unit can't be targeted directly or set off overwatch; area attacks still hit it. It stays hidden until it attacks.\n\n`
@@ -242,7 +246,7 @@ export function glossaryEntries(): GlossaryEntry[] {
     + `Stacks don't last a set number of turns: the unit loses one each turn. A unit with 2 stacks is affected just as much as with 1, for one more turn; a status shows its stacks as Burn (2).\n\n`
     + `${slow?.name ?? 'Slow'} (webs, goo and other non-ice effects): ${slow?.description ?? ''} Slow and Chilled are separate: a unit with both moves at 75% × 75% = 56%.`);
   add('Battle', 'Enemy Temperaments',
-    `• Beasts act alone, go for the nearest target and flee when badly hurt.\n• Tribal enemies fight as a group, and the whole group runs once only a third of it is left (or the survivors are badly hurt).\n• Humans use cover and pick off the weak; when cornered and badly hurt they may surrender, and you take them prisoner if you win.\n• Evil enemies never flee and go for kills.\n• Humans and tribal enemies steer around your overwatch when they can; beasts and evil run and leap straight through it.\n\n`
+    `• Beasts act alone, go for the nearest target and flee when badly hurt.\n• Tribal enemies fight as a group, and the whole group runs once only a third of it is left (or the survivors are badly hurt).\n• Humans use cover and pick off the weak. The more hurt they are and the more of your units could kill them next turn, the better their side's odds must be for them to stay in the fight; past that they run for the edge, and if they're cornered with nowhere safe to go they surrender (you take them prisoner if you win).\n• Evil enemies never flee and go for kills.\n• Humans and tribal enemies steer around your overwatch when they can; beasts and evil run and leap straight through it.\n\n`
     + `Click an enemy to see where it can move and hit next turn.`);
   add('Battle', 'Ranges',
     `Ranges use straight-line distance. Ranges of 2 or more round to the nearest tile, so shapes are roundish. Range 1 is the 4 neighbours; 1.5 adds the diagonals.`);
