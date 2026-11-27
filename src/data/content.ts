@@ -9,7 +9,8 @@ import {
   AP_COSTS, STAT_KEYS, STAT_INFO,
   type ApCost,
   type ConeDef, type DamagePart, type LosRule, type SkillDef, type SkillTab, type SkillTarget, type SkillTreeDef,
-  type ArmorDef, type QualityDef, type Stats, type StatusDef, type TagDef, type WeaponDef,
+  ELEMENTS,
+  type ArmorDef, type QualityDef, type Stats, type StatusDef, type TagDef, type WeaponDef, type ZoneDef,
 } from './types';
 
 export interface GameContent {
@@ -77,7 +78,48 @@ export function parseContent(skillsData: unknown, equipmentData: unknown): GameC
   }
   for (const t of BEHAVIOR_TAGS) if (!tags[t]) fail('skills.json', `tags.${t}`, 'is required (the game uses it)');
 
+  const part = (h: unknown, path: string): DamagePart => {
+    const o = S.obj(h, path);
+    return {
+      pAtk: S.optNum(o.pAtk, `${path}.pAtk`),
+      mAtk: S.optNum(o.mAtk, `${path}.mAtk`),
+      def: S.optNum(o.def, `${path}.def`),
+      missingHp: S.optNum(o.missingHp, `${path}.missingHp`),
+    };
+  };
   const statuses: Record<string, StatusDef> = {};
+  // Lists of statuses are checked once every status is read (a status can apply another, e.g. Burning Ground's Burn).
+  const statusList = (v: unknown, path: string) => S.arr(v, path).map((a, i) => {
+    const o = S.obj(a, `${path}[${i}]`);
+    const status = S.str(o.status, `${path}[${i}].status`);
+    if (!statuses[status]) fail('skills.json', `${path}[${i}].status`, `"${status}" is not defined in "statuses"`);
+    // Decaying statuses (Burn, Chilled) last by stacks, not turns.
+    const turns = statuses[status].decay && o.turns === undefined ? 0 : S.num(o.turns, `${path}[${i}].turns`);
+    return { status, turns, stacks: S.optNum(o.stacks, `${path}[${i}].stacks`) };
+  });
+  const shiftList = (v: unknown, path: string) => S.arr(v, path).map((a, i) => {
+    const o = S.obj(a, `${path}[${i}]`);
+    const status = S.str(o.status, `${path}[${i}].status`);
+    if (!statuses[status]) fail('skills.json', `${path}[${i}].status`, `"${status}" is not defined in "statuses"`);
+    return { status, stacks: S.num(o.stacks, `${path}[${i}].stacks`) };
+  });
+  const zoneDef = (v: unknown, path: string): ZoneDef => {
+    const o = S.obj(v, path);
+    return {
+      name: o.name === undefined ? undefined : S.str(o.name, `${path}.name`),
+      element: o.element === undefined ? undefined : S.oneOf(o.element, `${path}.element`, ELEMENTS),
+      radius: S.num(o.radius, `${path}.radius`),
+      turns: S.num(o.turns, `${path}.turns`),
+      hit: o.hit === undefined ? undefined : part(o.hit, `${path}.hit`),
+      applyStatus: o.applyStatus === undefined ? [] : statusList(o.applyStatus, `${path}.applyStatus`),
+      shiftStatus: o.shiftStatus === undefined ? undefined : shiftList(o.shiftStatus, `${path}.shiftStatus`),
+      endTurnHits: S.num(o.endTurnHits ?? 1, `${path}.endTurnHits`),
+      affects: S.oneOf(o.affects ?? 'any', `${path}.affects`, ['any', 'enemy'] as const),
+      statPct: o.statPct === undefined ? undefined : S.stats(o.statPct, `${path}.statPct`),
+    };
+  };
+  const statusZones: [string, unknown][] = [];
+  const statusOnHit: [string, unknown][] = [];
   for (const [id, raw] of entries(S.obj(root.statuses, 'statuses'))) {
     const p = `statuses.${id}`;
     const st = S.obj(raw, p);
@@ -108,17 +150,29 @@ export function parseContent(skillsData: unknown, equipmentData: unknown): GameC
         const o = S.obj(st.weaponOnHit, `${p}.weaponOnHit`);
         return { pAtk: S.optNum(o.pAtk, `${p}.weaponOnHit.pAtk`), mAtk: S.optNum(o.mAtk, `${p}.weaponOnHit.mAtk`) };
       })(),
+      enchantment: S.bool(st.enchantment, `${p}.enchantment`) || undefined,
+      unresisted: S.bool(st.unresisted, `${p}.unresisted`) || undefined,
+      reveals: S.bool(st.reveals, `${p}.reveals`) || undefined,
+      debuffImmune: S.bool(st.debuffImmune, `${p}.debuffImmune`) || undefined,
+      apLoss: S.optNum(st.apLoss, `${p}.apLoss`),
+      quickCast: S.bool(st.quickCast, `${p}.quickCast`) || undefined,
+      thisTurnOnly: S.bool(st.thisTurnOnly, `${p}.thisTurnOnly`) || undefined,
+      freeBasicAttacks: S.bool(st.freeBasicAttacks, `${p}.freeBasicAttacks`) || undefined,
       casterScaled: st.casterScaled === undefined ? undefined : (() => {
         const o = S.obj(st.casterScaled, `${p}.casterScaled`);
         return { stat: S.oneOf(o.stat, `${p}.casterScaled.stat`, STAT_KEYS), pAtk: S.optNum(o.pAtk, `${p}.casterScaled.pAtk`), mAtk: S.optNum(o.mAtk, `${p}.casterScaled.mAtk`) };
       })(),
     };
+    if (st.zone !== undefined) statusZones.push([id, st.zone]);
+    if (st.weaponOnHitStatus !== undefined) statusOnHit.push([id, st.weaponOnHitStatus]);
   }
+  for (const [id, z] of statusZones) statuses[id].zone = zoneDef(z, `statuses.${id}.zone`);
+  for (const [id, l] of statusOnHit) statuses[id].weaponOnHitStatus = statusList(l, `statuses.${id}.weaponOnHitStatus`);
   for (const st of Object.values(statuses)) {
     if (st.overflow && !statuses[st.overflow.status]) fail('skills.json', `statuses.${st.id}.overflow.status`, `"${st.overflow.status}" is not defined in "statuses"`);
   }
 
-  const TARGETS: readonly SkillTarget[] = ['unit', 'self', 'line', 'cone', 'emptyTile', 'move', 'ground'];
+  const TARGETS: readonly SkillTarget[] = ['unit', 'self', 'line', 'cone', 'emptyTile', 'move', 'ground', 'passive'];
   const LOS: readonly LosRule[] = ['sight', 'fire'];
   const skills: Record<string, SkillDef> = {};
   // Skills with modes (the bow's basic attack) are filled in from their modes once every skill is read.
@@ -134,24 +188,7 @@ export function parseContent(skillsData: unknown, equipmentData: unknown): GameC
       const tag = S.str(t, `${p}.tags[${i}]`);
       return tags[tag] ? tag : fail('skills.json', `${p}.tags[${i}]`, `"${tag}" is not defined in "tags"`);
     });
-    const part = (h: unknown, path: string): DamagePart => {
-      const o = S.obj(h, path);
-      return {
-        pAtk: S.optNum(o.pAtk, `${path}.pAtk`),
-        mAtk: S.optNum(o.mAtk, `${path}.mAtk`),
-        def: S.optNum(o.def, `${path}.def`),
-        missingHp: S.optNum(o.missingHp, `${path}.missingHp`),
-      };
-    };
     const hits = r.hits === undefined ? undefined : S.arr(r.hits, `${p}.hits`).map((h, i) => part(h, `${p}.hits[${i}]`));
-    const statusList = (v: unknown, path: string) => S.arr(v, path).map((a, i) => {
-      const o = S.obj(a, `${path}[${i}]`);
-      const status = S.str(o.status, `${path}[${i}].status`);
-      if (!statuses[status]) fail('skills.json', `${path}[${i}].status`, `"${status}" is not defined in "statuses"`);
-      // Decaying statuses (Burn, Chilled) last by stacks, not turns.
-      const turns = statuses[status].decay && o.turns === undefined ? 0 : S.num(o.turns, `${path}[${i}].turns`);
-      return { status, turns, stacks: S.optNum(o.stacks, `${path}[${i}].stacks`) };
-    });
     let cone: ConeDef | undefined;
     if (r.cone !== undefined) {
       const c = S.obj(r.cone, `${p}.cone`);
@@ -191,17 +228,7 @@ export function parseContent(skillsData: unknown, equipmentData: unknown): GameC
       cleanse: S.bool(r.cleanse, `${p}.cleanse`) || undefined,
       aoeRadius: S.optNum(r.aoeRadius, `${p}.aoeRadius`),
       cone,
-      zone: r.zone === undefined ? undefined : (() => {
-        const o = S.obj(r.zone, `${p}.zone`);
-        const endTurnHits = S.num(o.endTurnHits ?? 1, `${p}.zone.endTurnHits`);
-        return {
-          radius: S.num(o.radius, `${p}.zone.radius`),
-          turns: S.num(o.turns, `${p}.zone.turns`),
-          hit: part(o.hit, `${p}.zone.hit`),
-          applyStatus: o.applyStatus === undefined ? [] : statusList(o.applyStatus, `${p}.zone.applyStatus`),
-          endTurnHits,
-        };
-      })(),
+      zone: r.zone === undefined ? undefined : zoneDef(r.zone, `${p}.zone`),
       teleport: S.bool(r.teleport, `${p}.teleport`) || undefined,
       charge: S.bool(r.charge, `${p}.charge`) || undefined,
       level: S.num(r.level ?? 1, `${p}.level`),
@@ -226,6 +253,19 @@ export function parseContent(skillsData: unknown, equipmentData: unknown): GameC
         if (!statuses[st]?.toggle) fail('skills.json', `${p}.toggleStatus`, `"${st}" must be a status with "toggle": true`);
         return st;
       })(),
+      shape: r.shape === undefined ? undefined : S.oneOf(r.shape, `${p}.shape`, ['cross'] as const),
+      bonusVsTag: r.bonusVsTag === undefined ? undefined : (() => {
+        const o = S.obj(r.bonusVsTag, `${p}.bonusVsTag`);
+        return { tag: S.str(o.tag, `${p}.bonusVsTag.tag`), mult: S.num(o.mult, `${p}.bonusVsTag.mult`) };
+      })(),
+      shiftStatus: r.shiftStatus === undefined ? undefined : shiftList(r.shiftStatus, `${p}.shiftStatus`),
+      spreadFire: S.optNum(r.spreadFire, `${p}.spreadFire`),
+      push: S.optNum(r.push, `${p}.push`),
+      followUp: S.bool(r.followUp, `${p}.followUp`) || undefined,
+      backstab: S.bool(r.backstab, `${p}.backstab`) || undefined,
+      pPenPct: S.optNum(r.pPenPct, `${p}.pPenPct`),
+      pierce: S.optNum(r.pierce, `${p}.pierce`),
+      weaponRangeBonus: S.optNum(r.weaponRangeBonus, `${p}.weaponRangeBonus`),
     };
     if (skill.basicAttack !== undefined && (skill.basicAttack < 1 || !Number.isInteger(skill.basicAttack))) fail('skills.json', `${p}.basicAttack`, 'must be a whole number of 1 or more');
     if (skill.basicAttackDamage && skill.basicAttackDamage.length !== skill.basicAttack) fail('skills.json', `${p}.basicAttackDamage`, 'needs one multiplier per basic attack (and "basicAttack")');
@@ -234,7 +274,9 @@ export function parseContent(skillsData: unknown, equipmentData: unknown): GameC
     if (skill.basicAttack !== undefined && skill.hits) fail('skills.json', `${p}.basicAttack`, "can't be combined with \"hits\"");
     if (skill.level < 1 || !Number.isInteger(skill.level)) fail('skills.json', `${p}.level`, 'must be a whole number of 1 or more');
     if (skill.target === 'cone' && !skill.cone) fail('skills.json', `${p}.cone`, 'is required when target is "cone"');
-    if ((skill.target === 'ground') !== !!skill.zone) fail('skills.json', `${p}.zone`, 'goes with target "ground" (each needs the other)');
+    if (skill.zone && skill.target !== 'ground') fail('skills.json', `${p}.zone`, 'goes with target "ground"');
+    if (skill.target === 'ground' && !skill.zone && !skill.shape) fail('skills.json', `${p}.zone`, 'is required for target "ground" (or a "shape" to hit)');
+    if (skill.followUp && !skill.charge) fail('skills.json', `${p}.followUp`, 'needs "charge" (the follow-up is a second charge)');
     if (skillTags.includes('movement') && skill.rangeScale === undefined) fail('skills.json', `${p}.rangeScale`, 'is required for "movement" skills');
     skills[id] = skill;
   }
@@ -443,16 +485,36 @@ function statusText(a: { status: string; turns: number; stacks?: number }): stri
   return `${st.name}${a.stacks && a.stacks > 1 ? ` x${a.stacks}` : ''} (${turns(a.turns)})`;
 }
 
+/** "+1 stack of Chilled if Chilled" / "-1 stack of Burn if burning". */
+function shiftText(sh: { status: string; stacks: number }): string {
+  const name = STATUSES[sh.status].name;
+  const n = Math.abs(sh.stacks);
+  return `${sh.stacks > 0 ? '+' : '-'}${n} stack${n === 1 ? '' : 's'} of ${name} if it has ${name}`;
+}
+
+/** A zone's numbers: "3x3 zone for 3 turns. Each tile entered: 50% M.Atk, a stack of Burn. Ending a turn inside: 2 hits". */
+export function zoneText(z: ZoneDef): string {
+  const side = 2 * Math.floor(z.radius) + 1;
+  const hit = [z.hit ? damageText(z.hit) : '', ...z.applyStatus.map(statusText), ...(z.shiftStatus ?? []).map(shiftText)].filter(Boolean).join(', ');
+  const who = z.affects === 'enemy' ? ' (enemies only)' : '';
+  const inside = z.statPct ? `. Inside: ${Object.entries(z.statPct).map(([k, v]) => `${(v ?? 0) > 0 ? '+' : ''}${pct(v ?? 0)} ${STAT_INFO[k as keyof Stats].short}`).join(', ')}` : '';
+  const end = z.endTurnHits ? `. Ending a turn inside: ${z.endTurnHits} hit${z.endTurnHits === 1 ? '' : 's'}` : '';
+  return `${side}x${side} zone for ${turns(z.turns)}${who}${inside}. Each tile entered: ${hit}${end}`;
+}
+
+/** Display names of unit tags (enemies.json "unitTags"), filled in by enemies.ts. */
+export const UNIT_TAG_NAMES: Record<string, string> = {};
+
 export function skillEffect(s: SkillDef): string {
   if (s.modes) return s.description;
-  if (s.zone) {
-    const z = s.zone;
-    const side = 2 * Math.floor(z.radius) + 1;
-    const hit = [damageText(z.hit), ...z.applyStatus.map(statusText)].join(', ');
-    return `${side}x${side} zone for ${turns(z.turns)}. Each tile entered: ${hit}. Ending a turn inside: ${z.endTurnHits} hits`;
-  }
+  if (s.target === 'passive') return `Passive: ${s.description}`;
+  if (s.zone) return zoneText(s.zone);
   const parts: string[] = [];
+  if (s.shape === 'cross') parts.push('5-tile cross');
   if (s.hits?.length) parts.push(s.hits.map(damageText).join(', then '));
+  if (s.bonusVsTag) parts.push(`x${s.bonusVsTag.mult} vs ${UNIT_TAG_NAMES[s.bonusVsTag.tag] ?? s.bonusVsTag.tag}`);
+  if (s.pPenPct) parts.push(`+${s.pPenPct}% P.Pen`);
+  if (s.pierce) parts.push(`${pct(s.pierce)} basic attack damage to the unit behind the target`);
   if (s.basicAttack) {
     const dmg = s.basicAttackDamage;
     if (dmg && dmg.some((m) => m !== 1)) parts.push(`Basic attack${s.basicAttack > 1 ? ` x${s.basicAttack}` : ''} (${dmg.map(pct).join(', then ')} damage)`);
@@ -478,12 +540,23 @@ export function skillEffect(s: SkillDef): string {
     const r = s.recoilIfSurvives;
     parts.push(`${[r.pAtk ? `${pct(r.pAtk)} P.Atk` : '', r.mAtk ? `${pct(r.mAtk)} M.Atk` : ''].filter(Boolean).join(' + ')} recoil if the target survives`);
   }
+  for (const sh of s.shiftStatus ?? []) parts.push(shiftText(sh));
+  if (s.spreadFire) parts.push(`Fire tiles hit spread ${tiles(s.spreadFire)} (same duration)`);
   if (s.knockback) parts.push(`Knockback ${tiles(s.knockback)}`);
+  if (s.push) parts.push(`Push ${tiles(s.push)} in a direction you pick`);
+  if (s.followUp) parts.push(`Then break away for free and charge another enemy within ${tiles(s.range)} for the same`);
+  if (s.backstab) parts.push('Only on an engaged enemy, from one of the 3 tiles behind it');
   if (s.engageWithin !== undefined) parts.push(s.engageWithin <= 1.5 ? 'Engages an adjacent target' : `Engages a target within ${tiles(s.engageWithin)}`);
   if (s.cleanse) parts.push('Removes all debuffs');
   if (s.toggleStatus) {
     const st = STATUSES[s.toggleStatus];
-    const hit = st.weaponOnHit ? `Weapon attacks +${damageText(st.weaponOnHit)} per hit${st.manaPerHit ? ` (${st.manaPerHit} mana each)` : ''}` : st.name;
+    const onHit = [st.weaponOnHit ? `+${damageText(st.weaponOnHit)}` : '', ...(st.weaponOnHitStatus ?? []).map(statusText)].filter(Boolean).join(' and ');
+    const hit = onHit ? `Weapon attacks ${onHit} per hit${st.manaPerHit ? ` (${st.manaPerHit} mana each)` : ''}`
+      : st.quickCast ? 'your next Mage spell of 2 AP or Ends Turn costs 1 AP' : st.name;
+    if (st.thisTurnOnly) {
+      parts.push(`Toggle: ${hit}; use again to cancel for a refund of its mana and cooldown (also refunded if the turn ends unused)`);
+      return parts.join(', ');
+    }
     parts.push(`Toggle: ${hit}${st.manaPerTurn ? `; ${st.manaPerTurn} mana a turn while on` : ''}`);
   }
   if (s.teleport) parts.push(s.charge ? 'Teleport next to the target' : 'Teleport');
@@ -504,6 +577,7 @@ export function skillStats(s: SkillDef): SkillStat[] {
   if (tags.length) rows.push({ label: 'Tags', value: tags.join(', ') });
   // A moded skill (the bow's Basic Attack) costs what its modes cost.
   const c = s.modes ? SKILLS[s.modes[0]] : s;
+  if (c.target === 'passive') return rows;
   rows.push({ label: 'AP', value: apLabel(c) });
   if (c.mana) rows.push({ label: 'Mana', value: String(c.mana) });
   if (c.cooldown > 0) rows.push({ label: 'Cooldown', value: `${c.cooldown} Turn${c.cooldown === 1 ? '' : 's'}` });

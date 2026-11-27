@@ -14,7 +14,7 @@ import { parseSave, serializeSave } from '../src/game/save';
 import {
   companionContract, companionDemand, evaluateOffer, foodLodgingWeekly, joinParty, mercenaryRates, offerValue, openingTerms, punishSlave, slaveContract, bounty, registrationFee, slaveTax, slaveValue, leaveParty, isCompanion, releaseCost, proratedWages, wagesBetween,
 } from '../src/game/contracts';
-import { DEMO_STAGES, newDemo, resolveDemoBattle } from '../src/game/demo';
+import { DEMO_LEVELS, autoMultiplier, demoEncounter, newDemo, partyChanged, resolveDemoBattle, setDemoLevel } from '../src/game/demo';
 import { dangerRating, expectedEnemies, fairReward, payRatio, questRenown, strength, totalThreat, usualCount } from '../src/game/board';
 import { adventurerCount, adventurerRank, deathFactor, leaderboard, promotionReady, questDifficulty, rankDifficulty, rivalPickQuest, rivalQuestChance, rankCounts, simulateGuildDay } from '../src/game/guild';
 
@@ -1553,15 +1553,52 @@ describe('contracts', () => {
 });
 
 describe('quick battle (demo)', () => {
-  it('runs 5 stages: each victory is worth a level, and stage 5 completes the demo', () => {
+  it('the party fights at a chosen level (1 to 10); results only count, they don\'t level anyone up', () => {
     const d = newDemo();
     d.party.push(createCharacter('A'));
+    setDemoLevel(d, 7);
+    expect(d.party[0]).toMatchObject({ level: 7, xp: 0 });
     resolveDemoBattle(d, 'defeat');
-    expect(d.stage).toBe(1);
-    for (let i = 0; i < DEMO_STAGES; i++) resolveDemoBattle(d, 'victory');
-    expect(d.complete).toBe(true);
-    expect(d.stage).toBe(DEMO_STAGES);
-    expect(d.party[0].level).toBe(1 + DEMO_STAGES);
-    expect(d).toMatchObject({ victories: DEMO_STAGES, defeats: 1 });
+    resolveDemoBattle(d, 'victory');
+    expect(d).toMatchObject({ victories: 1, defeats: 1, level: 7 });
+    expect(d.party[0].level).toBe(7);
+    setDemoLevel(d, 99);
+    expect(d.level).toBe(DEMO_LEVELS.max);
+    setDemoLevel(d, 0);
+    expect(d.level).toBe(DEMO_LEVELS.min);
+  });
+
+  it('lowering the level unlearns skills above it and refunds points past the new total', () => {
+    const d = newDemo();
+    const c = createCharacter('A');
+    d.party.push(c);
+    setDemoLevel(d, 7);
+    c.skillIds = ['heal', 'cleanse', 'firestorm', 'smite']; // Firestorm needs level 7, Smite level 5
+    c.body = { health: 2 };
+    setDemoLevel(d, 3); // 4 points: Firestorm and Smite go, Heal + Cleanse + 2 Body fit
+    expect(c.skillIds).toEqual(['heal', 'cleanse']);
+    expect(c.body).toEqual({ health: 1 }); // Body capped at level / 3 rounded up = 1
+  });
+
+  it('the Enemies slider follows the party size: 1x per Adventurer, 1x to 4x', () => {
+    const d = newDemo();
+    expect(autoMultiplier(d)).toBe(1);
+    for (let i = 1; i <= 4; i++) {
+      d.party.push(createCharacter(`A${i}`));
+      partyChanged(d);
+      expect(d.mobMultiplier).toBe(i);
+    }
+    d.mobMultiplier = 5; // moved by hand...
+    d.party.pop();
+    partyChanged(d); // ...until the party changes again
+    expect(d.mobMultiplier).toBe(3);
+  });
+
+  it('1x on the Enemies slider is half a usual group: a full party at 4x meets two', () => {
+    const d = newDemo();
+    d.mobMultiplier = 1;
+    expect(demoEncounter(d, 3, 12)).toEqual({ budget: 1.5, cap: 6 });
+    d.mobMultiplier = 4;
+    expect(demoEncounter(d, 3, 12)).toEqual({ budget: 6, cap: 24 });
   });
 });

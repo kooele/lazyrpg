@@ -11,7 +11,7 @@
 //  evil   – no self-preservation: never flees, ignores danger (overwatch too) and its own allies, finishes off the weak.
 // Humans and tribal fighters see overwatch coming: walking or charging through a watched arc counts as the
 // damage it would draw (see watchesForOverwatch).
-import { SKILLS, STATUSES, hasTag, isFree } from '../data/content';
+import { SKILLS, STATUSES, hasTag } from '../data/content';
 import { ENEMIES } from '../data/enemies';
 import type { EnemyAi, SkillDef } from '../data/types';
 import type { Battle, ReachInfo, Team, Unit } from './battle';
@@ -90,14 +90,17 @@ export function tribeRouted(battle: Battle, team: Team): boolean {
   return broken;
 }
 
-/** Aim points worth trying for a skill used from `from`. */
-function aimPoints(battle: Battle, skill: SkillDef, from: Point): Point[] {
+/** Aim points worth trying for a skill used from `from`: the units `u` knows about (fog of war hides the rest). */
+function aimPoints(battle: Battle, u: Unit, skill: SkillDef, from: Point): Point[] {
   switch (skill.target) {
     case 'self':
       return [from];
     case 'line':
     case 'unit':
-      return battle.living().map((t) => ({ x: t.x, y: t.y }));
+      return battle.living().filter((t) => !battle.hiddenFrom(u, t)).map((t) => ({ x: t.x, y: t.y }));
+    case 'ground':
+      // Shaped hits (Smite's cross) centered on a known unit; zones (Firestorm) aren't placed by the AI.
+      return skill.zone ? [] : battle.living().filter((t) => !battle.hiddenFrom(u, t)).map((t) => ({ x: t.x, y: t.y }));
     default:
       return [];
   }
@@ -112,6 +115,8 @@ function scoreSkill(battle: Battle, u: Unit, skill: SkillDef, from: Point, aim: 
   let score = 0;
   for (const t of battle.targetsOf(u, skill, aim, from)) {
     const friendly = t.team === u.team;
+    // Area attacks hit hidden enemies too, but the AI can't count on what it can't see.
+    if (!friendly && battle.hiddenFrom(u, t)) continue;
     if (focus && !friendly && t !== focus) continue;
     if (skill.hits?.length) {
       const total = battle.previewHits(u, skill, t).reduce((a, b) => a + b, 0);
@@ -150,7 +155,7 @@ function scoreSkill(battle: Battle, u: Unit, skill: SkillDef, from: Point, aim: 
     }
     if (skill.shield) {
       // Only worth it if an enemy could walk up and hit us next turn.
-      const threatened = battle.living().some((f) => f.team !== u.team && dist(f, from) <= f.stats.movement / MOVEMENT_PER_TILE + 1.5);
+      const threatened = battle.knownFoes(u).some(({ foe, at }) => dist(at, from) <= foe.stats.movement / MOVEMENT_PER_TILE + 1.5);
       if (threatened && battle.shieldOf(t) === 0) score += battle.shieldAmount(u, skill, t) * (friendly ? 0.5 : -1);
     }
     if (skill.cleanse) {
@@ -183,7 +188,7 @@ function buffValue(battle: Battle, u: Unit, skill: SkillDef, from: Point, t: Uni
   const later = Math.max(0, turns - 1);
   const tiles = (x: Unit) => battle.stat(x, 'movement') / MOVEMENT_PER_TILE;
   const damage = (from: Unit, to: Unit) => battle.previewHits(from, battle.basicAttack(from), to).reduce((a, b) => a + b, 0);
-  const foes = battle.living().filter((f) => f.team !== t.team);
+  const foes = battle.living().filter((f) => f.team !== t.team && !battle.hiddenFrom(u, f));
   const before = {
     dealt: new Map(foes.map((f) => [f, damage(t, f)])),
     taken: new Map(foes.map((f) => [f, damage(f, t)])),
@@ -217,9 +222,9 @@ function bestFrom(
   let best: { action: AiAction; score: number } | null = null;
   for (const id of battle.skillIds(u)) {
     const skill = SKILLS[id];
-    if (!battle.isUsable(u, id) || !battle.canPay(u, skill) || isFree(skill) !== wantFree || skill.cone || (skill.teleport && !skill.charge) || skill.target === 'move') continue;
+    if (!battle.isUsable(u, id) || !battle.canPay(u, skill) || (battle.apCost(u, skill) === 0) !== wantFree || skill.cone || (skill.teleport && !skill.charge) || skill.target === 'move' || skill.target === 'passive') continue;
     if (!includeDefensive && skill.shield) continue;
-    for (const aim of aimPoints(battle, skill, from)) {
+    for (const aim of aimPoints(battle, u, skill, from)) {
       if (!battle.canAim(u, skill, aim, from)) continue;
       const score = scoreSkill(battle, u, skill, from, aim) - chargeRisk(battle, u, skill, from, aim);
       if (score > 0 && (!best || score > best.score)) best = { action: { id, target: aim }, score };
@@ -241,7 +246,7 @@ export function bestFreeAction(battle: Battle, u: Unit): AiAction | null {
 export function bestAction(battle: Battle, u: Unit): AiAction | null {
   const best = bestFrom(battle, u, u, false);
   if (best) return best.action;
-  const foes = battle.living().filter((f) => f.team !== u.team);
+  const foes = battle.knownFoes(u).map((f) => f.at);
   if (foes.length === 0) return null;
   const nearest = foes.reduce((a, b) => (dist(a, u) <= dist(b, u) ? a : b));
   for (const id of battle.skillIds(u)) {
@@ -255,13 +260,22 @@ export function bestAction(battle: Battle, u: Unit): AiAction | null {
   return null;
 }
 
-/** Walking distance (ignoring units) from every tile to the nearest living foe. */
+/**
+ * Walking distance (ignoring units) from every tile to the nearest foe `u` knows of (where its side sees it, or last
+ * saw it). Knowing of none, it heads for the other side's edge of the map, where they came from.
+ */
 function distanceField(battle: Battle, u: Unit): Map<string, number> {
   const d = new Map<string, number>();
   const queue: Point[] = [];
-  for (const foe of battle.living().filter((f) => f.team !== u.team)) {
-    d.set(key(foe.x, foe.y), 0);
-    queue.push({ x: foe.x, y: foe.y });
+  let goals = battle.knownFoes(u).map((f) => f.at);
+  if (goals.length === 0) {
+    const x = u.team === 'enemy' ? 1 : battle.map.width - 2;
+    goals = Array.from({ length: battle.map.height }, (_, y) => ({ x, y })).filter((p) => passable(battle.map, p.x, p.y));
+  }
+  for (const g of goals) {
+    if (d.has(key(g.x, g.y))) continue;
+    d.set(key(g.x, g.y), 0);
+    queue.push({ x: g.x, y: g.y });
   }
   while (queue.length) {
     const p = queue.shift()!;
@@ -280,22 +294,25 @@ function distanceField(battle: Battle, u: Unit): Map<string, number> {
 
 // ---- self-preservation ------------------------------------------------------------
 
-/** For each foe of `u`: how far it threatens (move + longest attack) and its basic-attack damage on `u`. */
-function foeThreats(battle: Battle, u: Unit): { foe: Unit; reach: number; damage: number }[] {
-  return battle.living().filter((f) => f.team !== u.team).map((f) => {
+/**
+ * For each foe `u` knows of: where it is (or was last seen), how far it threatens (move + longest attack) and its
+ * basic-attack damage on `u`.
+ */
+function foeThreats(battle: Battle, u: Unit): { foe: Unit; at: Point; reach: number; damage: number }[] {
+  return battle.knownFoes(u).map(({ foe: f, at }) => {
     let range = battle.basicAttack(f).range;
     for (const id of battle.skillIds(f)) {
       const sk = battle.skillFor(f, SKILLS[id]);
       if (sk.hits?.length && sk.affects !== 'ally') range = Math.max(range, battle.skillRange(f, sk));
     }
     const damage = battle.previewHits(f, battle.basicAttack(f), u).reduce((a, b) => a + b, 0);
-    return { foe: f, reach: f.stats.movement / MOVEMENT_PER_TILE + range + 0.5, damage };
+    return { foe: f, at, reach: f.stats.movement / MOVEMENT_PER_TILE + range + 0.5, damage };
   });
 }
 
 /** Rough damage `u` could take next turn standing on `tile`. */
 export function threatAt(battle: Battle, u: Unit, tile: Point, threats = foeThreats(battle, u)): number {
-  return threats.reduce((sum, t) => (dist(t.foe, tile) <= t.reach ? sum + t.damage : sum), 0);
+  return threats.reduce((sum, t) => (dist(t.at, tile) <= t.reach ? sum + t.damage : sum), 0);
 }
 
 const isLow = (u: Unit) => u.hp / u.stats.health < 0.35;
@@ -457,7 +474,7 @@ function pinCost(battle: Battle, u: Unit, tile: Point): number {
   if (u.engagedWith || !isRanged(battle, u)) return 0;
   let cost = 0;
   for (const f of battle.living()) {
-    if (f.team === u.team || dist(f, tile) > 1.5 + 1e-9) continue;
+    if (f.team === u.team || battle.hiddenFrom(u, f) || dist(f, tile) > 1.5 + 1e-9) continue;
     cost += battle.previewHits(f, battle.basicAttack(f), u).reduce((a, b) => a + b, 0);
   }
   return cost;

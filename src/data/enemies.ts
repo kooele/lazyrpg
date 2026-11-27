@@ -1,6 +1,6 @@
 // Loads and validates enemies.json (enemy types, their level ranges, stats and skills).
 import raw from './enemies.json';
-import { ARMORS, QUALITIES, SKILLS, WEAPONS } from './content';
+import { ARMORS, QUALITIES, SKILLS, UNIT_TAG_NAMES, WEAPONS } from './content';
 import { BODY_MODELS, ENEMY_AIS, ENEMY_MODELS, STAT_KEYS, type EnemyAi, type EnemyDef, type EnemyLoadout, type MonsterKind, type Stats, type UnitModel } from './types';
 
 export interface EncounterRules {
@@ -31,8 +31,21 @@ const skillList = (v: unknown, p: string) => list(v, p).map((x, i) => {
 });
 const KINDS: MonsterKind[] = ['rat', 'slime', 'wolf', 'spider', 'bear', 'troll', 'wraith', 'wyvern', 'demon', 'human'];
 
-export function parseEnemies(data: unknown): { enemies: Record<string, EnemyDef>; encounter: EncounterRules; loot: LootRules } {
+/** A tag enemy types can carry ("evil"): skills can do more against it (Smite). */
+export interface UnitTagDef {
+  id: string;
+  name: string;
+  description: string;
+}
+
+export function parseEnemies(data: unknown): { enemies: Record<string, EnemyDef>; encounter: EncounterRules; loot: LootRules; unitTags: Record<string, UnitTagDef> } {
   const root = obj(data, '(root)');
+  const unitTags: Record<string, UnitTagDef> = {};
+  for (const [id, t] of Object.entries(obj(root.unitTags ?? {}, 'unitTags'))) {
+    if (id.startsWith('_')) continue;
+    const o = obj(t, `unitTags.${id}`);
+    unitTags[id] = { id, name: str(o.name, `unitTags.${id}.name`), description: str(o.description, `unitTags.${id}.description`) };
+  }
   const enc = obj(root.encounter ?? {}, 'encounter');
   const encounter: EncounterRules = {
     maxEnemies: num(enc.maxEnemies ?? 8, 'encounter.maxEnemies'),
@@ -98,6 +111,10 @@ export function parseEnemies(data: unknown): { enemies: Record<string, EnemyDef>
       skillsByLevel: byLevel,
       loadouts,
       gearQuality,
+      tags: list(d.tags, `${p}.tags`).map((t, i) => {
+        const tag = str(t, `${p}.tags[${i}]`);
+        return unitTags[tag] ? tag : fail(`${p}.tags[${i}]`, `"${tag}" is not defined in "unitTags"`);
+      }),
       ...(d.drops !== undefined ? { drops: (() => {
         const o = obj(d.drops, `${p}.drops`);
         const junk = str(o.junk, `${p}.drops.junk`);
@@ -111,10 +128,12 @@ export function parseEnemies(data: unknown): { enemies: Record<string, EnemyDef>
   }
   if (Object.keys(enemies).length === 0) fail('enemies', 'must define at least one enemy type');
   for (const e of Object.values(enemies)) if (e.ai !== 'human' && !e.drops) fail(`enemies.${e.id}.drops`, 'is required for non-human types ({ trophy, junk })');
-  return { enemies, encounter, loot };
+  return { enemies, encounter, loot, unitTags };
 }
 
 const parsed = parseEnemies(raw);
 export const ENEMIES = parsed.enemies;
 export const ENCOUNTER = parsed.encounter;
 export const LOOT = parsed.loot;
+export const UNIT_TAGS = parsed.unitTags;
+for (const t of Object.values(UNIT_TAGS)) UNIT_TAG_NAMES[t.id] = t.name;

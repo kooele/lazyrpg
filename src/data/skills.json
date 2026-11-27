@@ -52,13 +52,18 @@
     "debuff": { "name": "Debuff", "description": "Applies a harmful effect that Cleanse can remove." },
     "monster": { "name": "Monster", "description": "A natural attack used by monsters." },
     "support": { "name": "Support", "description": "Restores or protects. Works only on your own side (yourself included)." },
-    "toggle": { "name": "Toggle", "description": "Switches an effect on, paying its mana cost. It stays on, costing mana every turn, until you use it again (free) or run out of mana." }
+    "toggle": { "name": "Toggle", "description": "Switches an effect on, paying its mana cost. It stays on, costing mana every turn, until you use it again (free) or run out of mana." },
+    "passive": { "name": "Passive", "description": "Always in effect once learned. It isn't used from the skill bar." }
   },
 
   "statuses": {
     "burn": { "name": "Burn", "debuff": true, "stacking": true, "decay": true, "maxStacks": 2, "overflow": { "status": "explosion", "turns": 1 }, "tick": "end", "damagePctMaxHpPerStack": 0.05, "mitigated": true, "description": "At the end of each turn: take 5% of max Health (reduced by Defense, absorbed by shields), then lose a stack. Each stack is a turn; more stacks last longer but don't burn harder. Up to 2 stacks; a 3rd stack Explodes instead." },
-    "explosion": { "name": "Explosion", "debuff": true, "stacking": false, "tick": "start", "instantDamagePctMaxHp": 0.15, "mitigated": true, "description": "Burn's 3rd stack: removes Burn and deals 15% of max Health at once (reduced by Defense, absorbed by shields)." },
-    "arcane_weapon": { "name": "Arcane Weapon", "debuff": false, "stacking": false, "tick": "start", "toggle": true, "manaPerHit": 10, "weaponOnHit": { "mAtk": 0.5 }, "description": "Weapon attacks deal an extra 50% M.Atk (Magical) each time they hit, for 10 mana each (Double Strike: twice; Circle Swing: once per target). No cost while it is on and unused. Switches off when there is no mana left to pay for a hit." },
+    "explosion": { "name": "Explosion", "debuff": true, "stacking": false, "tick": "start", "instantDamagePctMaxHp": 0.15, "mitigated": true,
+      "zone": { "name": "Burning Ground", "element": "fire", "radius": 0, "turns": 2, "hit": { "mAtk": 0.5 }, "applyStatus": [{ "status": "burn", "stacks": 1 }], "endTurnHits": 2 },
+      "description": "Burn's 3rd stack: removes Burn and deals 15% of max Health at once (reduced by Defense, absorbed by shields). The ground under it catches fire for 2 turns." },
+    "arcane_weapon": { "name": "Arcane Weapon", "debuff": false, "stacking": false, "tick": "start", "toggle": true, "enchantment": true, "manaPerHit": 10, "weaponOnHit": { "mAtk": 0.5 }, "description": "Weapon attacks deal an extra 50% M.Atk (Magical) each time they hit, for 10 mana each (Double Strike: twice; Circle Swing: once per target). No cost while it is on and unused. Switches off when there is no mana left to pay for a hit. A weapon holds one enchantment at a time." },
+    "fire_weapon": { "name": "Fire Weapon", "debuff": false, "stacking": false, "tick": "start", "toggle": true, "enchantment": true, "manaPerHit": 10, "weaponOnHit": { "mAtk": 0.2 }, "weaponOnHitStatus": [{ "status": "burn", "stacks": 1 }], "description": "Weapon attacks deal an extra 20% M.Atk (Magical) and add a stack of Burn each time they hit, for 10 mana each. Switches off when there is no mana left to pay for a hit. A weapon holds one enchantment at a time." },
+    "ice_weapon": { "name": "Ice Weapon", "debuff": false, "stacking": false, "tick": "start", "toggle": true, "enchantment": true, "manaPerHit": 10, "weaponOnHit": { "mAtk": 0.2 }, "weaponOnHitStatus": [{ "status": "chilled", "stacks": 1 }], "description": "Weapon attacks deal an extra 20% M.Atk (Magical) and add a stack of Chilled each time they hit, for 10 mana each. Switches off when there is no mana left to pay for a hit. A weapon holds one enchantment at a time." },
     "frenzy": { "name": "Frenzy", "debuff": false, "stacking": false, "tick": "end", "statMods": { "pAtk": 20 }, "description": "+20 P.Atk." },
     "chilled": { "name": "Chilled", "debuff": true, "stacking": true, "decay": true, "maxStacks": 2, "overflow": { "status": "frozen", "turns": 1 }, "tick": "end", "statPct": { "movement": -0.25 }, "description": "-25% Movement; loses a stack at the end of each turn. Each stack is a turn; more stacks last longer but don't slow more. Up to 2 stacks; a 3rd stack Freezes the unit instead." },
     "slow": { "name": "Slow", "debuff": true, "stacking": false, "tick": "end", "statPct": { "movement": -0.25 }, "description": "-25% Movement. Doesn't stack and can't Freeze; getting slowed again only renews it." },
@@ -68,6 +73,11 @@
     "stealth": { "name": "Stealthed", "debuff": false, "stacking": false, "tick": "start", "stealth": true, "description": "Enemies can't target you directly or trigger overwatch on you; area attacks still hit. Ends early if you attack." },
     "protected": { "name": "Protected", "debuff": false, "stacking": false, "tick": "end", "casterScaled": { "stat": "defense", "mAtk": 0.25 }, "description": "+Defense equal to 25% of the caster's M.Atk." },
     "corrode": { "name": "Corrode", "debuff": true, "stacking": false, "tick": "end", "statPct": { "defense": -0.25 }, "description": "-25% Defense." },
+    "revealed": { "name": "Revealed", "debuff": true, "stacking": false, "tick": "end", "unresisted": true, "reveals": true, "description": "Seen by the other side through fog of war, and can't be Stealthed (Stealth is removed). Can't be resisted." },
+    "unyielding": { "name": "Unyielding", "debuff": false, "stacking": false, "tick": "start", "debuffImmune": true, "description": "Immune to debuffs (status effects) until the start of your next turn." },
+    "staggered": { "name": "Staggered", "debuff": true, "stacking": false, "tick": "end", "apLoss": 1, "description": "Loses 1 AP at the start of its next turn: the movement AP if it still has it." },
+    "quick_cast": { "name": "Quick Cast", "debuff": false, "stacking": false, "tick": "end", "toggle": true, "thisTurnOnly": true, "quickCast": true, "description": "Your next Mage spell this turn that costs 2 AP or ends your turn costs 1 AP instead. Using Quick Cast again cancels it, refunding its mana and cooldown; it also switches off (refunded) at the end of your turn if unused." },
+    "in_the_zone": { "name": "In the Zone", "debuff": false, "stacking": true, "tick": "end", "freeBasicAttacks": true, "description": "Your basic attacks cost no AP and ignore their cooldown, one stack per attack." },
     "poison": { "name": "Poison", "debuff": true, "stacking": true, "tick": "start", "damagePctMaxHpPerStack": 0.03, "description": "Lose 3% of max Health per stack at the start of each turn. Ignores Defense and shields." }
   },
 
@@ -155,10 +165,33 @@
       "teleport": true
     },
     "arcane_weapon": {
-      "name": "Arcane Weapon", "description": "Empower your weapon with arcane force. Use it again to switch it off.",
+      "name": "Arcane Weapon", "description": "Empower your weapon with arcane force. Use it again to switch it off. Switching it on ends Fire Weapon or Ice Weapon.",
       "tags": ["free", "toggle", "magical"],
       "target": "self", "affects": "ally", "range": 0, "minRange": 0, "ap": 0, "cooldown": 0, "mana": 10, "level": 3,
       "toggleStatus": "arcane_weapon"
+    },
+    "spellblade": {
+      "name": "Spellblade", "description": "Your weapon's M.Atk penalty no longer applies to you. A weapon that raises M.Atk still does.",
+      "tags": ["passive"],
+      "target": "passive", "affects": "ally", "range": 0, "level": 5
+    },
+    "quick_cast": {
+      "name": "Quick Cast", "description": "Your next Mage spell this turn that would cost 2 AP or end your turn costs 1 AP instead. Use it again to cancel for a refund; it ends with your turn (refunded) if unused.",
+      "tags": ["free", "toggle"],
+      "target": "self", "affects": "ally", "range": 0, "minRange": 0, "ap": 0, "cooldown": 3, "mana": 30, "level": 5,
+      "toggleStatus": "quick_cast"
+    },
+    "fire_weapon": {
+      "name": "Fire Weapon", "description": "Wreathe your weapon in flame. Use it again to switch it off. Switching it on ends Arcane Weapon or Ice Weapon.",
+      "tags": ["free", "toggle", "magical", "debuff"],
+      "target": "self", "affects": "ally", "range": 0, "minRange": 0, "ap": 0, "cooldown": 0, "mana": 10, "level": 3,
+      "toggleStatus": "fire_weapon"
+    },
+    "ice_weapon": {
+      "name": "Ice Weapon", "description": "Coat your weapon in frost. Use it again to switch it off. Switching it on ends Arcane Weapon or Fire Weapon.",
+      "tags": ["free", "toggle", "magical", "debuff"],
+      "target": "self", "affects": "ally", "range": 0, "minRange": 0, "ap": 0, "cooldown": 0, "mana": 10, "level": 3,
+      "toggleStatus": "ice_weapon"
     },
     "ignite": {
       "name": "Ignite", "description": "Set an enemy on fire.",
@@ -177,28 +210,46 @@
     "fireball": {
       "name": "Fireball", "description": "Hurl a fireball that sets an enemy alight.",
       "tags": ["projectile", "debuff", "magical"],
-      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "los": "sight", "cooldown": 3, "mana": 40, "level": 3,
+      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "los": "sight", "cooldown": 3, "mana": 40, "level": 2,
       "hits": [{ "mAtk": 1.2 }],
       "applyStatus": [{ "status": "burn", "stacks": 1 }]
     },
     "iceblast": {
       "name": "Iceblast", "description": "Hurl a shard of ice that chills an enemy.",
       "tags": ["projectile", "debuff", "magical"],
-      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "los": "sight", "cooldown": 3, "mana": 40, "level": 3,
+      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "los": "sight", "cooldown": 3, "mana": 40, "level": 2,
       "hits": [{ "mAtk": 1.2 }],
       "applyStatus": [{ "status": "chilled", "stacks": 1 }]
     },
+    "draft": {
+      "name": "Draft", "description": "Blast a cross of tiles with wind pressure. It fans the flames: burning enemies burn longer, and fire on the ground spreads.",
+      "tags": ["area", "magical"],
+      "target": "ground", "affects": "enemy", "range": 5, "minRange": 0, "cooldown": 2, "mana": 40, "level": 4,
+      "shape": "cross", "hits": [{ "mAtk": 0.5 }], "shiftStatus": [{ "status": "burn", "stacks": 1 }], "spreadFire": 1.5
+    },
+    "rain": {
+      "name": "Rain", "description": "Call down rain on a 3x3 area for 3 turns. Anyone attacking from inside it hits weaker; walking through it chills the chilled further and dampens burning. Allies included.",
+      "tags": ["area", "debuff"],
+      "target": "ground", "affects": "any", "range": 5, "minRange": 0, "cooldown": 3, "mana": 40, "level": 4,
+      "zone": { "element": "water", "radius": 1.5, "turns": 3, "statPct": { "pAtk": -0.25, "mAtk": -0.25 }, "shiftStatus": [{ "status": "chilled", "stacks": 1 }, { "status": "burn", "stacks": -1 }], "endTurnHits": 0 }
+    },
+    "sonic_boom": {
+      "name": "Sonic Boom", "description": "Blast an enemy with wind and push it 2 tiles in the direction you choose. Being pushed out of an engagement or through overwatch triggers opportunity attacks, and being pushed through tile effects applies the tile effects.",
+      "tags": ["knockback", "magical"],
+      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "los": "sight", "cooldown": 3, "mana": 60, "level": 6,
+      "hits": [{ "mAtk": 0.5 }], "push": 2
+    },
     "firestorm": {
-      "name": "Firestorm", "description": "Cover a 3x3 area in a firestorm for 2 turns. Anyone moving through it or ending a turn in it burns.",
+      "name": "Firestorm", "description": "Cover a 3x3 area in a firestorm for 3 turns. Anyone moving through it or ending a turn in it burns.",
       "tags": ["area", "debuff", "magical"],
-      "target": "ground", "affects": "any", "range": 5, "minRange": 0, "cooldown": 4, "mana": 100, "level": 5,
-      "zone": { "radius": 1.5, "turns": 2, "hit": { "mAtk": 0.5 }, "applyStatus": [{ "status": "burn", "stacks": 1 }], "endTurnHits": 2 }
+      "target": "ground", "affects": "any", "range": 5, "minRange": 0, "cooldown": 4, "mana": 100, "level": 7, "ap": 2,
+      "zone": { "element": "fire", "radius": 1.5, "turns": 3, "hit": { "mAtk": 0.5 }, "applyStatus": [{ "status": "burn", "stacks": 1 }], "endTurnHits": 2 }
     },
     "blizzard": {
-      "name": "Blizzard", "description": "Cover a 3x3 area in a snowstorm for 2 turns. Anyone moving through it or ending a turn in it is chilled, and can freeze.",
+      "name": "Blizzard", "description": "Cover a 3x3 area in a snowstorm for 3 turns. Anyone moving through it or ending a turn in it is chilled, and can freeze.",
       "tags": ["area", "debuff", "magical"],
-      "target": "ground", "affects": "any", "range": 5, "minRange": 0, "cooldown": 4, "mana": 100, "level": 5,
-      "zone": { "radius": 1.5, "turns": 2, "hit": { "mAtk": 0.5 }, "applyStatus": [{ "status": "chilled", "stacks": 1 }], "endTurnHits": 2 }
+      "target": "ground", "affects": "any", "range": 5, "minRange": 0, "cooldown": 4, "mana": 100, "level": 7, "ap": 2,
+      "zone": { "element": "ice", "radius": 1.5, "turns": 3, "hit": { "mAtk": 0.5 }, "applyStatus": [{ "status": "chilled", "stacks": 1 }], "endTurnHits": 2 }
     },
     "heal": {
       "name": "Heal", "description": "Heal a unit.",
@@ -224,6 +275,18 @@
       "target": "unit", "affects": "ally", "range": 5, "minRange": 0, "cooldown": 2, "mana": 40, "level": 3,
       "shield": { "mAtk": 0.8, "turns": 1 }
     },
+    "smite": {
+      "name": "Smite", "description": "Strike a cross of tiles with holy light. Evil foes take double.",
+      "tags": ["area", "magical"],
+      "target": "ground", "affects": "enemy", "range": 5, "minRange": 0, "cooldown": 2, "mana": 60, "level": 5,
+      "shape": "cross", "hits": [{ "mAtk": 1.25 }], "bonusVsTag": { "tag": "evil", "mult": 2 }
+    },
+    "revelation": {
+      "name": "Revelation", "description": "Reveal every enemy within 15 tiles: they show through fog of war and lose Stealth until the end of their next turn.",
+      "tags": ["area", "debuff"],
+      "target": "self", "affects": "enemy", "range": 0, "minRange": 0, "aoeRadius": 15, "ap": 2, "cooldown": 4, "mana": 60, "level": 7,
+      "applyStatus": [{ "status": "revealed", "turns": 1 }]
+    },
     "engage": {
       "name": "Engage", "description": "Engage an adjacent enemy without attacking it.",
       "tags": ["free", "engage"],
@@ -234,6 +297,23 @@
       "tags": ["movement", "physical", "engage"],
       "target": "unit", "affects": "enemy", "range": 4, "rangeScale": 1, "minRange": 1, "cooldown": 3, "ap": 1, "mana": 30, "level": 3,
       "hits": [{ "pAtk": 0.6 }], "charge": true
+    },
+    "tough_it_out": {
+      "name": "Tough It Out", "description": "Grit your teeth: gain a shield and shrug off every debuff until your next turn.",
+      "tags": ["support"],
+      "target": "self", "affects": "ally", "range": 0, "minRange": 0, "cooldown": 3, "mana": 40, "level": 3,
+      "shield": { "maxHpPct": 0.1, "turns": 1 }, "applyStatus": [{ "status": "unyielding", "turns": 1 }]
+    },
+    "blitz": {
+      "name": "Blitz", "description": "Dash in and strike an enemy, then break away for free and dash at another one. No second strike if no other enemy can be reached.",
+      "tags": ["physical", "engage"],
+      "target": "unit", "affects": "enemy", "range": 3, "minRange": 1, "cooldown": 3, "mana": 50, "level": 5,
+      "hits": [{ "pAtk": 0.8 }], "charge": true, "followUp": true
+    },
+    "fighting_spirit": {
+      "name": "Fighting Spirit", "description": "Whenever you become engaged with an enemy (whoever started it), you hit them with a free basic attack at 50% damage.",
+      "tags": ["passive"],
+      "target": "passive", "affects": "enemy", "range": 0, "level": 5
     },
     "kick": {
       "name": "Kick", "description": "Kick an adjacent enemy.",
@@ -247,6 +327,17 @@
       "target": "unit", "affects": "enemy", "range": 3, "minRange": 1, "los": "sight", "cooldown": 3, "ap": 1, "mana": 20, "level": 3,
       "applyStatus": [{ "status": "blind", "turns": 1 }]
     },
+    "sucker_punch": {
+      "name": "Sucker Punch", "description": "A Sudden and Deliberate Strike that knocks the wind out of an enemy: it loses an AP on its next turn.",
+      "tags": ["melee", "physical", "engage", "debuff"],
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 3, "ap": 2, "mana": 40, "level": 4,
+      "hits": [{ "pAtk": 0.8 }], "applyStatus": [{ "status": "staggered", "turns": 1 }]
+    },
+    "tooth_for_tooth": {
+      "name": "Tooth for Tooth", "description": "When the enemy you're engaged with attacks you, you hit back with a free basic attack at 50% damage.",
+      "tags": ["passive"],
+      "target": "passive", "affects": "enemy", "range": 0, "level": 5
+    },
     "shadow_step": {
       "name": "Shadow Step", "description": "Teleport a short distance and slip out of sight.",
       "tags": ["disengage", "teleport", "stealth"],
@@ -254,17 +345,28 @@
       "teleport": true, "selfStatus": [{ "status": "stealth", "turns": 1 }]
     },
     "flicker_strike": {
-      "name": "Flicker Strike", "description": "Teleport next to an enemy and strike it.",
-      "tags": ["teleport", "physical", "engage"],
-      "target": "unit", "affects": "enemy", "range": 3, "minRange": 1, "cooldown": 3, "mana": 40, "level": 3,
-      "hits": [{ "pAtk": 1 }], "charge": true, "teleport": true
+      "name": "Flicker Strike", "description": "Teleport next to an enemy and strike it, leaving you an action.",
+      "tags": ["teleport", "physical"],
+      "target": "unit", "affects": "enemy", "range": 3, "minRange": 1, "cooldown": 3, "ap": 1, "mana": 40, "level": 3,
+      "hits": [{ "pAtk": 0.75 }], "charge": true, "teleport": true
+    },
+    "backstab": {
+      "name": "Backstab", "description": "Strike the back of an enemy that is busy fighting someone else.",
+      "tags": ["melee", "physical"],
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 1, "mana": 20, "level": 2,
+      "hits": [{ "pAtk": 1.5 }], "pPenPct": 25, "backstab": true
+    },
+    "scout": {
+      "name": "Scout", "description": "You start every battle Stealthed, and stay hidden until you first attack.",
+      "tags": ["passive", "stealth"],
+      "target": "passive", "affects": "ally", "range": 0, "level": 3
     },
     "life_risking_strike": {
       "name": "Life-Risking Strike", "description": "Drop your guard for a devastating strike. If the enemy survives, the blow hurts you too.",
       "tags": ["physical", "engage"],
       "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 4, "mana": 40, "level": 5,
       "selfStatus": [{ "status": "exposed", "turns": 1 }],
-      "hits": [{ "pAtk": 2.5 }], "recoilIfSurvives": { "pAtk": 1 }
+      "hits": [{ "pAtk": 2.5 }], "pPenPct": 25, "recoilIfSurvives": { "pAtk": 1 }
     },
     "double_strike": {
       "name": "Double Strike", "description": "Hit an enemy with your basic attack twice, the second time at half strength.",
@@ -278,11 +380,29 @@
       "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 3, "mana": 20, "level": 3,
       "basicAttack": 1, "missingHpBonus": { "max": 2, "atHealth": 0.25 }
     },
+    "power_strike": {
+      "name": "Power Strike", "description": "A heavy blow with your weapon that carries through to whoever stands behind the target, allies included.",
+      "tags": ["weapon"],
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 3, "mana": 50, "level": 4,
+      "basicAttack": 1, "basicAttackDamage": [1.5], "pierce": 1
+    },
+    "in_the_zone": {
+      "name": "In the Zone", "description": "Focus: next turn, two of your basic attacks are free.",
+      "tags": [],
+      "target": "self", "affects": "ally", "range": 0, "minRange": 0, "cooldown": 2, "mana": 40, "level": 6,
+      "applyStatus": [{ "status": "in_the_zone", "turns": 2, "stacks": 2 }]
+    },
     "circle_swing": {
       "name": "Circle Swing", "description": "Swing at every unit next to you, allies included, and knock them back.",
       "tags": ["weapon", "area", "knockback"],
-      "target": "self", "affects": "any", "range": 0, "minRange": 0, "aoeRadius": 1.5, "cooldown": 4, "mana": 50,
+      "target": "self", "affects": "any", "range": 0, "minRange": 0, "cooldown": 4, "mana": 50,
       "basicAttack": 1, "basicMode": "melee", "knockback": 1
+    },
+    "circle_swing_spear": {
+      "name": "Circle Swing (Spear)", "description": "Sweep the spear around you at a shorter reach but with more force, hitting every unit in reach, allies included, and knocking them back.",
+      "tags": ["weapon", "area", "knockback"],
+      "target": "self", "affects": "any", "range": 0, "minRange": 0, "cooldown": 4, "mana": 50, "weaponRangeBonus": -0.5,
+      "basicAttack": 1, "basicAttackDamage": [1.25], "basicMode": "melee", "knockback": 1
     },
 
     "_monsters": "Skills used only by monsters (see enemies.json). They are not in any skill tree.",
@@ -448,12 +568,12 @@
   ],
 
   "skillTrees": [
-    { "id": "arcanist", "name": "Arcanist", "tab": "mage", "skills": ["arcane_bolt", "arcane_pulse", "arcane_shift", "arcane_weapon"] },
-    { "id": "elementalist", "name": "Elementalist", "tab": "mage", "skills": ["ignite", "freeze", "fireball", "iceblast", "firestorm", "blizzard"] },
-    { "id": "cleric", "name": "Cleric", "tab": "mage", "skills": ["heal", "cleanse", "protection", "barrier"] },
-    { "id": "vanguard", "name": "Vanguard", "tab": "warrior", "skills": ["engage", "charge"] },
-    { "id": "infighter", "name": "Infighter", "tab": "warrior", "skills": ["kick", "pocket_sand"] },
-    { "id": "assassin", "name": "Assassin", "tab": "warrior", "skills": ["shadow_step", "flicker_strike", "life_risking_strike"] },
-    { "id": "weapon_master", "name": "Weapon Master", "tab": "warrior", "skills": ["double_strike", "execute"] }
+    { "id": "arcanist", "name": "Arcanist", "tab": "mage", "skills": ["arcane_bolt", "arcane_pulse", "arcane_shift", "arcane_weapon", "spellblade", "quick_cast"] },
+    { "id": "elementalist", "name": "Elementalist", "tab": "mage", "skills": ["ignite", "freeze", "fireball", "iceblast", "fire_weapon", "ice_weapon", "draft", "rain", "sonic_boom", "firestorm", "blizzard"] },
+    { "id": "cleric", "name": "Cleric", "tab": "mage", "skills": ["heal", "cleanse", "protection", "barrier", "smite", "revelation"] },
+    { "id": "vanguard", "name": "Vanguard", "tab": "warrior", "skills": ["engage", "charge", "tough_it_out", "blitz", "fighting_spirit"] },
+    { "id": "infighter", "name": "Infighter", "tab": "warrior", "skills": ["kick", "pocket_sand", "sucker_punch", "tooth_for_tooth"] },
+    { "id": "assassin", "name": "Assassin", "tab": "warrior", "skills": ["shadow_step", "backstab", "flicker_strike", "scout", "life_risking_strike"] },
+    { "id": "weapon_master", "name": "Weapon Master", "tab": "warrior", "skills": ["double_strike", "execute", "power_strike", "in_the_zone"] }
   ]
 }

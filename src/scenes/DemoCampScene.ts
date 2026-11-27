@@ -1,16 +1,13 @@
 import Phaser from 'phaser';
 import { statText } from '../game/battle';
-import { SKILLS, xpToNext } from '../data/content';
-
-/** Quick Battle keeps 4 recruits (one card each across the camp). */
-const DEMO_PARTY_SIZE = 4;
+import { SKILLS } from '../data/content';
 import type { Character } from '../data/types';
 import { bodyPoints, deriveStats, freePoints, skillPoints } from '../game/character';
-import { DEMO_STAGES, MOB_MULTIPLIER, newDemo, requireDemo } from '../game/demo';
+import { DEMO_LEVELS, DEMO_PARTY_SIZE, MOB_MULTIPLIER, autoMultiplier, newDemo, partyChanged, requireDemo, setDemoLevel } from '../game/demo';
 import { COLORS, HEIGHT, WIDTH, button, confirmDialog, figure, fittedList, panel, talentTag, text, setupCamera, clearScene } from '../ui/widgets';
 import { figureKit, weaponName, weaponOf } from '../game/gear';
 
-/** Quick Battle (demo) camp: recruit, customize and dismiss up to 4 Adventurers, then fight stages 1 to 5. */
+/** Quick Battle (demo) camp: recruit, customize and dismiss up to 4 Adventurers, pick their level, then fight. */
 export class DemoCampScene extends Phaser.Scene {
   constructor() {
     super('DemoCamp');
@@ -54,7 +51,7 @@ export class DemoCampScene extends Phaser.Scene {
     const { min, max, step } = MOB_MULTIPLIER;
     const pos = (v: number) => x + ((v - min) / (max - min)) * w;
     text(this, x - 12, y - 8, 'Enemies', { color: COLORS.dim, fontSize: '13px' }).setOrigin(1, 0.5);
-    text(this, x - 12, y + 8, `${d.mobMultiplier}x`, { color: d.mobMultiplier > 1 ? COLORS.bad : COLORS.text, fontSize: '15px', fontStyle: 'bold' }).setOrigin(1, 0.5);
+    text(this, x - 12, y + 8, `${d.mobMultiplier}x`, { color: d.mobMultiplier > autoMultiplier(d) ? COLORS.bad : COLORS.text, fontSize: '15px', fontStyle: 'bold' }).setOrigin(1, 0.5);
     const g = this.add.graphics();
     g.fillStyle(0x0b0d14).fillRect(x, y - 3, w, 6);
     g.fillStyle(0xc0392b).fillRect(x, y - 3, pos(d.mobMultiplier) - x, 6);
@@ -71,14 +68,27 @@ export class DemoCampScene extends Phaser.Scene {
     });
   }
 
+  /** Level 1 to 10 for the whole party; the enemies come at the same level. */
+  private levelPicker(): void {
+    const d = requireDemo();
+    text(this, 24, 58, 'Level', { color: COLORS.dim, fontSize: '13px' }).setOrigin(0, 0.5);
+    for (let lv: number = DEMO_LEVELS.min; lv <= DEMO_LEVELS.max; lv++) {
+      button(this, 70 + (lv - DEMO_LEVELS.min) * 31, 46, 28, 24, String(lv), () => {
+        setDemoLevel(d, lv);
+        this.render();
+      }, { selected: lv === d.level, fontSize: 13 });
+    }
+    text(this, 70 + 10 * 31 + 6, 58, 'adventurers and enemies', { color: COLORS.dim, fontSize: '12px' }).setOrigin(0, 0.5);
+  }
+
   private render(): void {
     clearScene(this);
     const d = requireDemo();
     const { party } = d;
 
-    text(this, 24, 18, 'Quick Battle: Camp', { fontSize: '32px', color: COLORS.gold });
-    text(this, 24, 58, `${d.complete ? 'Demo Complete!' : `Stage ${d.stage} of ${DEMO_STAGES}`}   ·   Victories ${d.victories}   ·   Defeats ${d.defeats}`, { color: d.complete ? COLORS.gold : COLORS.dim });
-    text(this, WIDTH - 24, 14, 'Demo: Progress Is Not Saved', { color: COLORS.dim, fontSize: '12px' }).setOrigin(1, 0);
+    text(this, 24, 14, 'Quick Battle: Camp', { fontSize: '28px', color: COLORS.gold });
+    text(this, WIDTH - 24, 14, `Victories ${d.victories}   ·   Defeats ${d.defeats}   ·   Demo: Not Saved`, { color: COLORS.dim, fontSize: '12px' }).setOrigin(1, 0);
+    this.levelPicker();
     this.difficultySlider();
 
     for (let i = 0; i < DEMO_PARTY_SIZE; i++) {
@@ -88,7 +98,8 @@ export class DemoCampScene extends Phaser.Scene {
       if (c) this.card(c, x, y);
       else {
         panel(this, x, y, 216, 440, 0x131726);
-        button(this, x + 28, y + 196, 160, 48, '+ Recruit', () => this.scene.start('CharacterCreator', { mode: 'demo' }), { fontSize: 18 });
+        // Only the first empty slot recruits (the party fills left to right).
+        if (i === party.length) button(this, x + 28, y + 196, 160, 48, '+ Recruit', () => this.scene.start('CharacterCreator', { mode: 'demo' }), { fontSize: 18 });
       }
     }
 
@@ -97,8 +108,8 @@ export class DemoCampScene extends Phaser.Scene {
       newDemo();
       this.render();
     }, 'Restart'));
-    button(this, WIDTH - 324, HEIGHT - 84, 300, 56, d.complete ? 'Demo Complete' : `Start Battle — Stage ${d.stage}`, () => this.scene.start('Battle', { demo: true }), {
-      enabled: party.length > 0 && !d.complete, fill: 0x4a2a22, fontSize: 18,
+    button(this, WIDTH - 324, HEIGHT - 84, 300, 56, `Start Battle — Level ${d.level}`, () => this.scene.start('Battle', { demo: true }), {
+      enabled: party.length > 0, fill: 0x4a2a22, fontSize: 18,
     });
     if (party.length === 0) {
       text(this, WIDTH - 174, HEIGHT - 20, 'Recruit at least one hero.', { color: COLORS.dim, fontSize: '13px' }).setOrigin(0.5);
@@ -109,16 +120,11 @@ export class DemoCampScene extends Phaser.Scene {
     const stats = deriveStats(c);
     const freeSlots = freePoints(c);
     panel(this, x, y, 216, 440);
-    const g = this.add.graphics();
     figure(this, x + 40, y + 70, 62, c.appearance, figureKit(c));
     text(this, x + 76, y + 18, c.name, { fontSize: '18px', wordWrap: { width: 134 } });
     text(this, x + 76, y + 44, `Lv ${c.level} Adventurer`, { color: COLORS.dim, fontSize: '14px' });
     talentTag(this, x + 76, y + 62, c, { fontSize: 12, detail: false });
 
-    // XP bar
-    g.fillStyle(0x0b0d14).fillRect(x + 14, y + 80, 188, 8);
-    g.fillStyle(0x7d6bd8).fillRect(x + 14, y + 80, 188 * Math.min(1, c.xp / xpToNext(c.level)), 8);
-    text(this, x + 202, y + 90, `${c.xp}/${xpToNext(c.level)} XP`, { color: COLORS.dim, fontSize: '11px' }).setOrigin(1, 0);
 
     const lines = [
       `HP ${stats.health}   MP ${stats.mana}`,
@@ -146,6 +152,7 @@ export class DemoCampScene extends Phaser.Scene {
       confirmDialog(this, `Dismiss ${c.name} from the party?\nThis cannot be undone.`, () => {
         const p = requireDemo().party;
         p.splice(p.indexOf(c), 1);
+        partyChanged(requireDemo());
         this.render();
       }, 'Dismiss');
     }, { fontSize: 13 });

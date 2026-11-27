@@ -28,7 +28,7 @@ describe('equipment data (Equipment Stats sheet)', () => {
     expect(row('staff')).toEqual({ range: 2, base: { pAtk: 10, mAtk: 20 }, modifiers: { pAtk: 0.8, mAtk: 1.2 }, skills: ['basic_attack', 'magic_bolt'] });
     expect(row('crystal')).toEqual({ range: 1.5, base: { pAtk: 5, mAtk: 20, mPen: 5 }, modifiers: { pAtk: 0.6, mPenPct: 50 }, skills: ['basic_attack', 'magic_bolt'] });
     expect(row('greatsword')).toEqual({ range: 1.5, base: { pAtk: 20, mAtk: 10 }, modifiers: { pAtk: 1.2, mAtk: 0.8 }, skills: ['basic_attack', 'circle_swing'] });
-    expect(row('spear')).toEqual({ range: 2, base: { pAtk: 20, mAtk: 10 }, modifiers: { mAtk: 0.8 }, skills: ['basic_attack', 'circle_swing'] });
+    expect(row('spear')).toEqual({ range: 2, base: { pAtk: 20, mAtk: 10 }, modifiers: { mAtk: 0.8 }, skills: ['basic_attack', 'circle_swing_spear'] });
     expect(row('sword_shield')).toEqual({ range: 1.5, base: { pAtk: 15, mAtk: 10, defense: 10 }, modifiers: { mAtk: 0.8 }, skills: ['basic_attack', 'shield_slam'] });
     expect(row('mace_shield')).toEqual({ range: 1.5, base: { pAtk: 15, mAtk: 10, defense: 10 }, modifiers: { pAtk: 0.8, mAtk: 0.8, pPenPct: 50 }, skills: ['basic_attack', 'shield_slam'] });
     expect(row('longbow')).toEqual({ range: 6, base: { pAtk: 20, mAtk: 10 }, modifiers: { mAtk: 0.8 }, skills: ['bow_attack', 'switch_mode'] });
@@ -170,22 +170,27 @@ describe('weapon skills', () => {
     expect(u).toMatchObject({ ap: 0, acted: true });
   });
 
-  it('Circle Swing belongs to the 2-handed weapons now, at a fixed 1.5 range', () => {
-    expect(SKILL_TREES.find((t) => t.id === 'weapon_master')!.skills).toEqual(['double_strike', 'execute']);
+  it('Circle Swing belongs to the 2-handed weapons: weapon range for the greatsword, range - 0.5 at 125% for the spear', () => {
+    expect(SKILL_TREES.find((t) => t.id === 'weapon_master')!.skills).toEqual(['double_strike', 'execute', 'power_strike', 'in_the_zone']);
     const u = makeUnit(kit('spear'), 'player', { x: 4, y: 3 });
     const near = makeUnit(kit('spear', ''), 'enemy', { x: 5, y: 4 });
     const far = makeUnit(kit('spear', ''), 'enemy', { x: 6, y: 3 });
     const battle = new Battle(openMap(), [u, near, far], makeRng(1));
-    expect(battle.skillIds(u)).toContain('circle_swing');
-    battle.perform(u, 'circle_swing', { x: 4, y: 3 });
+    expect(battle.skillIds(u)).toContain('circle_swing_spear');
+    expect(battle.skillFor(u, SKILLS.circle_swing_spear).aoeRadius).toBe(1.5);
+    const dmg = battle.previewHits(u, SKILLS.circle_swing_spear, near)[0];
+    expect(dmg).toBeCloseTo(battle.previewHits(u, battle.basicAttack(u), near)[0] * 1.25, -0.5);
+    battle.perform(u, 'circle_swing_spear', { x: 4, y: 3 });
     expect(near.hp).toBeLessThan(near.stats.health);
     expect(far.hp).toBe(far.stats.health); // 2 tiles: in the spear's reach, outside Circle Swing's
+    const gs = makeUnit(kit('greatsword'), 'player', { x: 4, y: 3 });
+    expect(new Battle(openMap(), [gs], makeRng(1)).skillFor(gs, SKILLS.circle_swing).aoeRadius).toBe(WEAPONS.greatsword.range);
   });
 
   it('every weapon class has its skill', () => {
     const second = (id: string) => WEAPONS[id].skills[1];
     expect(['staff', 'crystal'].map(second)).toEqual(['magic_bolt', 'magic_bolt']);
-    expect(['greatsword', 'spear'].map(second)).toEqual(['circle_swing', 'circle_swing']);
+    expect(['greatsword', 'spear'].map(second)).toEqual(['circle_swing', 'circle_swing_spear']);
     expect(['sword_shield', 'mace_shield'].map(second)).toEqual(['shield_slam', 'shield_slam']);
     expect(['longbow', 'shortbow'].map(second)).toEqual(['switch_mode', 'switch_mode']);
     expect(['dagger', 'twin_daggers'].map(second)).toEqual(['quick_attack', 'quick_attack']);

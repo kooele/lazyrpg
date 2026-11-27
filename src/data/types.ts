@@ -13,11 +13,11 @@ export const STAT_INFO: Record<StatKey, { name: string; short: string; descripti
   defense: { name: 'Defense', short: 'Def', description: 'Reduces damage taken: each point of Defense is +1% effective health.' },
   resist: { name: 'Resist', short: 'Res', description: 'Shrugs off debuffs: each point of Resist is +1% effective resistance to debuffs.' },
   movement: { name: 'Movement', short: 'Move', description: 'Movement points per turn (forest costs 2).' },
-  vision: { name: 'Vision', short: 'Vis', description: 'How far the unit can see (when fog of war is enabled).' },
+  vision: { name: 'Vision', short: 'Vis', description: 'How far the unit can see, in tiles. Enemies outside your units\' vision (or behind rocks) are hidden in fog of war.' },
   pPen: { name: 'Physical Penetration', short: 'P.Pen', description: 'Flat Defense ignored by your Physical damage (after the percent part).' },
-  pPenPct: { name: 'Physical Penetration %', short: 'P.Pen%', description: 'Percent of Defense ignored by your Physical damage.' },
+  pPenPct: { name: 'Physical Penetration %', short: 'P.Pen%', description: 'Percent of Defense ignored by your Physical damage. Percents from different sources multiply (50% and 25% = 62.5%).' },
   mPen: { name: 'Magic Penetration', short: 'M.Pen', description: 'Flat Defense ignored by your Magical damage (after the percent part).' },
-  mPenPct: { name: 'Magic Penetration %', short: 'M.Pen%', description: 'Percent of Defense ignored by your Magical damage.' },
+  mPenPct: { name: 'Magic Penetration %', short: 'M.Pen%', description: 'Percent of Defense ignored by your Magical damage. Percents from different sources multiply (50% and 25% = 62.5%).' },
 };
 
 /** Penetration stats: shown together as one line per damage type ("P.Pen: 50% | 10"), not in the usual stat lists. */
@@ -58,7 +58,7 @@ export interface QualityDef {
 interface GearStats {
   /** Flat stats added before the multipliers, times the quality's baseMultiplier. */
   base: Partial<Stats>;
-  /** Multipliers on the unit's stats (1.2 = 120%), applied after base stats. Penetration % (pPenPct, mPenPct) is added instead. */
+  /** Multipliers on the unit's stats (1.2 = 120%), applied after base stats. Penetration % (pPenPct, mPenPct) combines multiplicatively with other sources instead (see combinePenPct). */
   modifiers: Partial<Stats>;
 }
 
@@ -192,6 +192,26 @@ export interface StatusDef {
   manaPerTurn?: number;
   /** Weapon attacks (basic attacks, Overwatch, opportunity attacks, 'weapon' skills) add this hit to each target they hit. */
   weaponOnHit?: DamagePart;
+  /** Statuses each weapon on-hit adds to the target (Fire Weapon: a stack of Burn). */
+  weaponOnHitStatus?: { status: string; turns: number; stacks?: number }[];
+  /** A weapon enchantment (Arcane, Fire, Ice Weapon): a weapon holds one at a time, so switching one on switches the others off. */
+  enchantment?: boolean;
+  /** Can't be shrugged off by Resist (Revealed). */
+  unresisted?: boolean;
+  /** Visible to the other team through fog of war, and can't be Stealthed (Revealed). */
+  reveals?: boolean;
+  /** Immune to debuffs while active (Tough It Out). */
+  debuffImmune?: boolean;
+  /** Loses this many AP at the start of its turn, the movement AP first (Staggered from Sucker Punch). */
+  apLoss?: number;
+  /** The next Mage spell that costs 2 AP or ends the turn costs 1 AP instead; used up by it (Quick Cast). */
+  quickCast?: boolean;
+  /** A toggle that only lasts the turn it's switched on: it switches off by itself when the unit's turn ends (Quick Cast). */
+  thisTurnOnly?: boolean;
+  /** Basic attacks cost no AP and ignore their cooldown, one stack per attack (In the Zone). */
+  freeBasicAttacks?: boolean;
+  /** Leaves a zone on the unit's tile when applied (Explosion: Burning Ground), from the applier's stats. */
+  zone?: ZoneDef;
   /** Mana each weapon attack's extra hit costs; without it the status switches off. */
   manaPerHit?: number;
 }
@@ -222,9 +242,10 @@ export interface DamagePart {
  *  cone      – pick a direction; sets up an overwatch cone
  *  emptyTile – an empty, walkable tile (e.g. teleport)
  *  move      – a tile the unit can walk to (Dash)
- *  ground    – any tile in range; places a lasting zone there (see ZoneDef)
+ *  ground    – any tile in range; places a lasting zone there (see ZoneDef), or hits the `shape` around it (Smite)
+ *  passive   – never used: always in effect while learned (Fighting Spirit)
  */
-export type SkillTarget = 'unit' | 'self' | 'line' | 'cone' | 'emptyTile' | 'move' | 'ground';
+export type SkillTarget = 'unit' | 'self' | 'line' | 'cone' | 'emptyTile' | 'move' | 'ground' | 'passive';
 
 /**
  * A lasting area on the ground (Firestorm, Blizzard). Every tile a unit enters inside it
@@ -232,14 +253,31 @@ export type SkillTarget = 'unit' | 'self' | 'line' | 'cone' | 'emptyTile' | 'mov
  * A hit = `hit` damage (from the caster's stats) + `applyStatus`.
  */
 export interface ZoneDef {
+  /** Display name (status zones such as Burning Ground; skill zones use the skill's name). */
+  name?: string;
+  /**
+   * Fire, ice or water. A tile holds one elemental effect at a time: a new one replaces the old there.
+   * Draft spreads fire zones.
+   */
+  element?: ZoneElement;
   /** Tiles within this distance of the aimed tile (1.5 = a 3x3 square). */
   radius: number;
   /** How many of the caster's team's turns it lasts (it counts down at the start of each). */
   turns: number;
-  hit: DamagePart;
+  /** Damage per hit (none: the zone only applies statuses, e.g. Rain). */
+  hit?: DamagePart;
   applyStatus: { status: string; turns: number; stacks?: number }[];
+  /** Status stacks moved per hit, only on units that already have that status (Rain: +1 Chilled, -1 Burn). */
+  shiftStatus?: { status: string; stacks: number }[];
   endTurnHits: number;
+  /** Who it affects: everyone ('any', the default) or only the caster's enemies (Rain). */
+  affects?: 'any' | 'enemy';
+  /** Percent stat changes for affected units standing in it (Rain: -25% P.Atk and M.Atk). */
+  statPct?: Partial<Stats>;
 }
+
+export const ELEMENTS = ['fire', 'ice', 'water'] as const;
+export type ZoneElement = (typeof ELEMENTS)[number];
 
 /**
  * Action points a skill costs. Units have 2 AP a turn: a movement AP and an action AP.
@@ -313,7 +351,7 @@ export interface SkillDef {
   /** Engage the target (as the Engage tag does) only when it is within this many tiles (Basic Attack: adjacent = 1.5). */
   engageWithin?: number;
   /** Statuses put on the user before the skill resolves (never resisted). */
-  selfStatus?: { status: string; turns: number }[];
+  selfStatus?: { status: string; turns: number; stacks?: number }[];
   /** Damage the user takes (after its own Defense) when the target survives the hits. */
   recoilIfSurvives?: DamagePart;
   /** A basic attack with switchable modes (the Bow): skill ids, the first is the default. */
@@ -328,6 +366,26 @@ export interface SkillDef {
   switchMode?: boolean;
   /** Switch this status on (paying the skill's mana) or, if it's on, off again (free). */
   toggleStatus?: string;
+  /** For target 'ground' without a zone: the tiles it hits around the aimed tile ('cross' = the tile and its 4 neighbours). */
+  shape?: 'cross';
+  /** Damage multiplier against units with a unit tag (Smite: x2 against Evil). */
+  bonusVsTag?: { tag: string; mult: number };
+  /** Status stacks moved on targets that already have that status (Draft: +1 Burn on burning targets). */
+  shiftStatus?: { status: string; stacks: number }[];
+  /** Fire zones on the tiles hit spread to every tile within this distance of them, keeping their duration (Draft). */
+  spreadFire?: number;
+  /** After hitting the target, push it this many tiles in a direction the user picks (Sonic Boom). */
+  push?: number;
+  /** After the first strike, break away for free and charge a second target within `range` of where you landed (Blitz). */
+  followUp?: boolean;
+  /** Only on an engaged target (engaged with someone else), from one of the 3 tiles behind it (Backstab). */
+  backstab?: boolean;
+  /** Extra Physical Penetration % on this skill's hits, combined multiplicatively with the user's own. */
+  pPenPct?: number;
+  /** The unit right behind the target (away from the user) takes this share of the user's basic attack (Power Strike: 1 = 100%). */
+  pierce?: number;
+  /** For 'weapon' self areas without a radius: added to the weapon's range (Circle Swing (Spear): -0.5). */
+  weaponRangeBonus?: number;
 }
 
 export type SkillTab = string;
@@ -417,6 +475,8 @@ export interface EnemyDef {
   gearQuality: QualityId;
   /** 'basic' = only the weapon's basic attack; 'all' = every weapon skill. */
   weaponSkillUse: 'basic' | 'all';
+  /** Unit tags ("evil"): see enemies.json "unitTags". Skills can do more against some (Smite vs Evil). */
+  tags: string[];
   /** Non-human types: the trophy and junk item it drops ("{weapon}" in the junk name = its weapon's name). Humans drop their gear. */
   drops?: { trophy: string; junk: string };
 }
