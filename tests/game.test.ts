@@ -169,37 +169,12 @@ describe('save files', () => {
     expect(!r2.ok && r2.error).toMatch(/mainId "nobody" is not in the party/);
   });
 
-  it('upgrades version-1 saves (old classes) automatically', () => {
-    const v1 = {
-      format: 'lazyrpg-save', version: 1, savedAt: '', progress: { stage: 2, victories: 1, defeats: 0 },
-      party: [{
-        id: 'c_1', name: 'Old Cleric', classId: 'cleric', level: 2, xp: 10,
-        attributes: { str: 4, dex: 3, int: 11, vit: 8, spd: 3 }, unspentPoints: 3, weaponId: 'mace',
-        skillIds: ['heal', 'smite'], appearance: { color: '#3d7be0', emblem: 'circle' },
-      }],
-    };
-    const r = parseSave(JSON.stringify(v1));
-    expect(r.ok).toBe(true);
-    if (r.ok) expect(r.state.party[0]).toMatchObject({ name: 'Old Cleric', weapon: { type: 'staff', quality: 'crude' }, armor: { type: 'leather', quality: 'crude' }, skillIds: ['heal', 'cleanse'] });
-  });
-
-  it('moves version-2 parties to Arch City: first member is the main character, the rest companions', () => {
-    const v2 = {
-      format: 'lazyrpg-save', version: 2, savedAt: '', progress: { stage: 3, victories: 2, defeats: 1 },
-      party: [
-        { id: 'c_a', name: 'Ada', level: 3, xp: 0, weaponId: 'bow', skillIds: ['kick'], appearance: { color: '#3d7be0', model: 'f2' } },
-        { id: 'c_b', name: 'Bo', level: 3, xp: 0, weaponId: 'spear', skillIds: [], appearance: { color: '#36b37e', model: 'm3' } },
-      ],
-    };
-    const r = parseSave(JSON.stringify(v2));
-    expect(r.ok).toBe(true);
-    if (!r.ok) return;
-    expect(r.state.mainId).toBe('c_a');
-    expect(r.state.party[0].contract).toEqual({ type: 'main' });
-    expect(r.state.party[0].appearance.look).toMatchObject({ sex: 'female', hair: 'ponytail' });
-    expect(r.state.party[1].contract?.type).toBe('companion');
-    expect(r.state.lineup).toEqual(['c_a', 'c_b']);
-    expect(r.state.progress).toEqual({ victories: 2, defeats: 1 });
+  it('rejects version-1 and version-2 saves (from before the Arch City campaign) with a clear message', () => {
+    for (const version of [1, 2]) {
+      const r = parseSave(JSON.stringify({ format: 'lazyrpg-save', version, savedAt: '', progress: { stage: 2, victories: 1, defeats: 0 }, party: [] }));
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.error).toMatch(new RegExp(`Save version ${version} is from before the Arch City campaign`));
+    }
   });
 });
 
