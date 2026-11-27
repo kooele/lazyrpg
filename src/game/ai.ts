@@ -71,9 +71,15 @@ function tribe(battle: Battle, u: Unit): Unit[] {
 /** Teams whose tribal group has broken and is running (stays broken for the rest of the battle). */
 const routed = new WeakMap<Battle, Set<Team>>();
 
+/** A tribal group breaks once no more than this share of it is still standing (and its foes aren't outnumbered). */
+export const TRIBE_BREAK_SHARE = 1 / 3;
+/** ...or once its survivors are down to this share of their combined max Health. */
+export const TRIBE_BREAK_HEALTH = 0.3;
+
 /**
- * Has `team`'s tribal group broken? It breaks when half of it is gone (and the other side isn't
- * outnumbered), or when the survivors are badly hurt overall. Then every tribal fighter runs.
+ * Has `team`'s tribal group broken? It breaks when only a third of it is left standing (TRIBE_BREAK_SHARE, and
+ * the other side isn't outnumbered), or when the survivors are badly hurt overall (TRIBE_BREAK_HEALTH). Then every
+ * tribal fighter runs.
  */
 export function tribeRouted(battle: Battle, team: Team): boolean {
   if (routed.get(battle)?.has(team)) return true;
@@ -82,7 +88,7 @@ export function tribeRouted(battle: Battle, team: Team): boolean {
   if (all.length < 2 || standing.length === 0) return false;
   const hp = standing.reduce((a, x) => a + x.hp, 0) / standing.reduce((a, x) => a + x.stats.health, 0);
   const foes = battle.living().filter((f) => f.team !== team).length;
-  const broken = (standing.length <= all.length / 2 && foes >= standing.length) || hp < 0.3;
+  const broken = (standing.length <= all.length * TRIBE_BREAK_SHARE && foes >= standing.length) || hp < TRIBE_BREAK_HEALTH;
   if (broken) {
     if (!routed.has(battle)) routed.set(battle, new Set());
     routed.get(battle)!.add(team);
