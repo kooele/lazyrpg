@@ -366,6 +366,14 @@ function validateFood(raw: unknown, party: Character[]): GameState['food'] {
   return out;
 }
 
+/** Day each member was last healed at a church (unknown members and non-numbers are dropped). */
+function validateHealedDay(raw: unknown, party: Character[]): Record<string, number> {
+  const o = obj(raw, 'healedDay');
+  const out: Record<string, number> = {};
+  for (const [id, d] of Object.entries(o)) if (party.some((c) => c.id === id) && Number.isInteger(d)) out[id] = d as number;
+  return out;
+}
+
 const RINGS = ['outer', 'middle', 'inner'] as const;
 const CITY_LODGINGS = ['outside', 'standard', 'highEnd', 'luxury', ...RINGS] as const;
 
@@ -452,6 +460,8 @@ function validateState(raw: Record<string, unknown>): GameState {
     schedule: validateSchedule(raw.schedule, party),
     food: validateFood(raw.food, party),
     lodging: validateLodging(raw.lodging, party),
+    ...(raw.blessing === undefined ? {} : { blessing: num(raw.blessing, 'blessing', 0, 100) }),
+    ...(raw.healedDay === undefined ? {} : { healedDay: validateHealedDay(raw.healedDay, party) }),
     drinksDay: raw.drinksDay === undefined ? 0 : int(raw.drinksDay, 'drinksDay'),
     belowRankSince: raw.belowRankSince === undefined ? 0 : int(raw.belowRankSince, 'belowRankSince'),
     residences: raw.residences === undefined ? [] : [...new Set(arr(raw.residences, 'residences').map((r, i) => oneOf(r, RINGS, `residences[${i}]`)))],

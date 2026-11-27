@@ -616,7 +616,7 @@ export class PartyScene extends Phaser.Scene {
   }
 }
 
-/** " (x2: Protagonist)" when a member's traits multiply a gain, else "". */
+/** " (x1.5: Protagonist)" when a member's traits multiply a gain, else "". */
 function traitNote(c: Character, k: number): string {
   return k !== 1 ? ` (x${k}: ${(c.traits ?? []).map((t) => TRAITS[t].name).join(', ')})` : '';
 }

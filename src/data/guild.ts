@@ -50,6 +50,17 @@ export type FoodTier = 'poor' | 'common' | 'fine' | 'luxury';
 export const FOOD_TIERS: readonly FoodTier[] = ['poor', 'common', 'fine', 'luxury'];
 export const foodQuality = (t: FoodTier) => FOOD_TIERS.indexOf(t);
 
+/** The two churches: the Church in the Outer City and the Central Church (the cathedral) in the Inner City. */
+export type ChurchId = 'church' | 'central';
+export const CHURCHES: readonly ChurchId[] = ['church', 'central'];
+export interface ChurchConfig {
+  name: string;
+  /** Gold for a blessing: +blessingPct% to every battle stat on the next quest. */
+  donations: { gold: number; blessingPct: number }[];
+  /** Gold to restore `health` Health to one member at once. */
+  heal: { gold: number; health: number };
+}
+
 export type Activity = 'recover' | 'training' | 'oddJobs' | 'dayOff' | 'marketplace';
 export const ACTIVITIES: readonly Activity[] = ['dayOff', 'recover', 'training', 'oddJobs', 'marketplace'];
 
@@ -80,6 +91,8 @@ export interface GuildConfig {
     stablesPerPerson: number;
   };
   residences: Record<Ring, { name: string; price: number }> & { sellShare: number; capacity: number };
+  /** Days before a member can be healed again (at either church). */
+  churches: Record<ChurchId, ChurchConfig> & { healCooldownDays: number };
   condition: {
     maxHealthLoss: number;
     healthPerDay: number;
@@ -229,6 +242,26 @@ function parseFood(v: unknown): GuildConfig['food'] {
   return out;
 }
 
+function parseChurches(v: unknown): GuildConfig['churches'] {
+  const o = obj(v, 'churches');
+  const out = { healCooldownDays: num(o.healCooldownDays, 'churches.healCooldownDays', 0, 365) } as GuildConfig['churches'];
+  for (const id of CHURCHES) {
+    const c = obj(o[id], `churches.${id}`);
+    if (typeof c.name !== 'string' || !c.name) fail(`churches.${id}.name`, 'must be a name');
+    if (!Array.isArray(c.donations) || !c.donations.length) fail(`churches.${id}.donations`, 'must list donations');
+    out[id] = {
+      name: c.name as string,
+      donations: (c.donations as unknown[]).map((d, i) => {
+        const p = `churches.${id}.donations[${i}]`;
+        const x = obj(d, p);
+        return { gold: num(x.gold, `${p}.gold`, 1), blessingPct: num(x.blessingPct, `${p}.blessingPct`, 0, 100) };
+      }),
+      heal: { gold: num(obj(c.heal, `churches.${id}.heal`).gold, `churches.${id}.heal.gold`, 1), health: num(obj(c.heal, `churches.${id}.heal`).health, `churches.${id}.heal.health`, 1, 100) },
+    };
+  }
+  return out;
+}
+
 function parseResidences(v: unknown): GuildConfig['residences'] {
   const o = obj(v, 'residences');
   const out = { sellShare: num(o.sellShare, 'residences.sellShare', 0, 1), capacity: num(o.capacity ?? 6, 'residences.capacity', 1, 99) } as GuildConfig['residences'];
@@ -326,6 +359,7 @@ export function parseGuildConfig(data: unknown): GuildConfig {
       slaveDefault: defaultLodging(obj(d.lodging, 'lodging').slaveDefault, 'lodging.slaveDefault'),
     },
     residences: parseResidences(d.residences),
+    churches: parseChurches(d.churches),
     condition: numbers<GuildConfig['condition']>(d.condition, 'condition', ['maxHealthLoss', 'healthPerDay', 'startingMorale', 'moralePerTurn',
       'moraleFailedQuest', 'moralePerHealthLost', 'moraleMemberDied', 'lowMorale', 'lowMoraleRelationshipPerDay', 'highMorale', 'highMoraleRelationshipPerDay'], 100),
     xp: {

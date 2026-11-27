@@ -41,16 +41,15 @@ const PLACES: Record<District, Place[]> = {
     { name: 'Slave Market', blurb: 'Buy slaves, or sell your own.', at: [1160, 613], scene: 'Market' },
     { name: 'Slums', blurb: 'The poorest quarter, crowded against the outer wall.', at: [470, 765] },
     { name: 'Customs Office', blurb: 'Duties on everything that comes through the harbour.', at: [1335, 525] },
-    { name: 'Tailor', blurb: 'Clothes and fittings.', at: [497, 167] },
     { name: 'Smithy', blurb: 'Common weapons and armor on the spot; Fine and Masterwork made to order.', at: [690, 120], scene: 'Smithy' },
     { name: 'Auction House', blurb: 'Rare goods to the highest bidder.', at: [1010, 173] },
-    { name: 'Church', blurb: 'Prayer and healing.', at: [277, 343] },
+    { name: 'Church', blurb: `Donate for a blessing on the next quest (up to +${maxBlessing('church')}% all stats), or pay for healing (+${GUILD.churches.church.heal.health} Health).`, at: [438, 287], scene: 'Church', data: { church: 'church' } },
     { name: GUILD.inns.standard.name, blurb: `Inn: drinks for the party. Members can lodge here for ${GUILD.inns.standard.pricePerPerson} gold a night (Manage Party); what adventurers expect.`, at: [255, 480], scene: 'Inn', data: { tier: 'standard' } },
     { name: GUILD.residences.outer.name, blurb: `A home of your own (${GUILD.residences.outer.price} gold at the Estate Office): free nights for up to ${GUILD.residences.capacity}, as good as an inn.`, at: [900, 805], scene: 'Inn', data: { ring: 'outer' } },
   ],
   inner: [
     { name: "Lord's Manor", blurb: 'Seat of the Lord of Arch City.', at: [860, 378] },
-    { name: 'Central Church', blurb: 'The great cathedral at the heart of the city.', at: [655, 375] },
+    { name: 'Central Church', blurb: `The great cathedral at the heart of the city: stronger blessings (up to +${maxBlessing('central')}% all stats) and healing (+${GUILD.churches.central.heal.health} Health).`, at: [655, 375], scene: 'Church', data: { church: 'central' } },
     { name: 'Central Government Office', blurb: 'Permits, taxes and the city\'s business, in the long hall beside the Lord\'s Manor.', at: [890, 425] },
     { name: 'Library', blurb: 'Books, maps and old records.', at: [530, 300] },
     { name: 'Estate Office', blurb: 'Buy and sell residences across the city.', at: [990, 330], scene: 'Estate' },
@@ -60,6 +59,11 @@ const PLACES: Record<District, Place[]> = {
     { name: GUILD.residences.inner.name, blurb: `A mansion by the cathedral (${GUILD.residences.inner.price} gold at the Estate Office): free nights for up to ${GUILD.residences.capacity}, as good as a luxury inn.`, at: [640, 505], scene: 'Inn', data: { ring: 'inner' } },
   ],
 };
+
+/** Biggest blessing a church offers (%), for its blurb. */
+function maxBlessing(id: 'church' | 'central'): number {
+  return Math.max(...GUILD.churches[id].donations.map((d) => d.blessingPct));
+}
 
 /** Part of the map image each tab shows (x, y, width; height follows the frame). */
 const VIEWS: Record<District, { x: number; y: number; w: number }> = {
@@ -134,7 +138,7 @@ export class CityScene extends Phaser.Scene {
       const q = state.quest;
       rankBadge(this, RX + 12, 106, q.rank, 24);
       text(this, RX + 44, 106, q.title, { fontSize: '15px', wordWrap: { width: RW - 56 } });
-      text(this, RX + 12, 150, `${q.reward} Gold · ${q.days} Day${q.days > 1 ? 's' : ''} · Stage ${q.stage}`, { fontSize: '13px', color: COLORS.gold });
+      text(this, RX + 12, 150, `${q.reward} Gold · ${q.days} Day${q.days > 1 ? 's' : ''} · Stage ${q.stage}${state.blessing ? ` · Blessed: +${state.blessing}%` : ''}`, { fontSize: '13px', color: COLORS.gold });
       text(this, RX + 12, 170, `Lineup: ${lineupMembers(state).map((c) => c.name).join(', ')}`, { fontSize: '12px', color: COLORS.dim, wordWrap: { width: RW - 24 } });
       const block = departBlock(state);
       button(this, RX + 12, 196, RW - 24, 32, !block ? 'Set Out from the City Gate' : state.lastQuestDay === state.day ? 'Back from a Quest Today: Rest First' : 'No Adventurers in the Lineup', () => this.depart(), {

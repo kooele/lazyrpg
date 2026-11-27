@@ -1,7 +1,7 @@
 // The in-game Guide: short explanations of the rules that aren't obvious from the screens.
 // Pure (no Phaser). Numbers are read from the game data, so entries stay right when the balance changes.
 import { MAX_PARTY_SIZE, STATUSES, xpToNext } from '../data/content';
-import { FOOD_TIERS, GUILD, INN_TIERS, trainingXp } from '../data/guild';
+import { CHURCHES, FOOD_TIERS, GUILD, INN_TIERS, trainingXp } from '../data/guild';
 import { STAT_CONFIG } from '../data/stats';
 import { TRAITS } from '../data/traits';
 import { LOOT } from '../data/enemies';
@@ -62,6 +62,13 @@ export function glossaryEntries(): GlossaryEntry[] {
     `A member's spirits, out of 100. Below 100: all battle stats −${G.combat.percentPer5}% per 5 missing. Above ${C.highMorale}: companions and slaves gain ${C.highMoraleRelationshipPerDay} relationship a day; below ${C.lowMorale}: they lose ${C.lowMoraleRelationshipPerDay}. At 0: the member leaves the party (the main character stays). New members start at ${C.startingMorale}.\n\n`
     + `Rises (×${TRAITS.protagonist.moraleGain} for the Protagonist):\n• +${G.schedule.dayOffMorale} for taking a Day Off\n• +${Math.min(...drinks)} to +${Math.max(...drinks)} for a round of drinks at an inn (once a day)\n• +${G.food.moraleAbovePerStep} a day per level of quality above expected food\n• +${L.moraleAbovePerStep} a night per level of quality above expected lodging\n\n`
     + `Falls:\n• −${C.moralePerTurn} per turn in battle\n• −${C.moraleFailedQuest} for failing a quest\n• −1 per ${Math.round(1 / C.moralePerHealthLost)} Health lost\n• −${C.moraleMemberDied} when a party member dies\n• −${G.food.moraleBelowPerStep} a day per level of quality below expected food\n• −${L.moraleBelowPerStep} a night per level of quality below expected lodging`);
+  add('City Life', 'Churches',
+    `The Church (Outer City) and the Central Church (Inner City).\n\n`
+    + `Donate for a blessing: every battle stat of everyone on the next quest goes up, and the blessing fades when that quest ends. One blessing at a time: a bigger donation replaces a smaller one.\n`
+    + CHURCHES.map((id) => G.churches[id].donations.map((d) => `• ${G.churches[id].name}: ${d.gold} gold for +${d.blessingPct}%`).join('\n')).join('\n')
+    + `\n\nOr pay for healing, Health restored at once:\n`
+    + CHURCHES.map((id) => `• ${G.churches[id].name}: +${G.churches[id].heal.health} Health for ${G.churches[id].heal.gold} gold`).join('\n')
+    + `\n\nA healed member can't be healed again at either church for ${G.churches.healCooldownDays} days.`);
   add('City Life', 'Battle Penalties',
     `Injury, Morale and Obedience all weaken a member in battle, and the penalties multiply:\n\n`
     + `• Injury: −1/3 of missing Health.\n• Morale: −${G.combat.percentPer5}% per 5 Morale below 100.\n• Obedience (slaves): −${G.combat.percentPer5}% per 5 Obedience below 100.\n\n`

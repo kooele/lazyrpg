@@ -35,13 +35,13 @@ export function combatPenalty(c: Character): number {
 export const traitFactor = (c: Character, key: 'healthRecovery' | 'moraleGain') =>
   (c.traits ?? []).reduce((m, t) => m * (TRAITS[t] as TraitDef)[key], 1);
 
-/** Change Health. Recovery (a gain) is multiplied by traits (Protagonist: x2). */
+/** Change Health. Recovery (a gain) is multiplied by traits (Protagonist: x1.5). */
 export function changeHealth(c: Character, delta: number): void {
   const d = delta > 0 ? delta * traitFactor(c, 'healthRecovery') : delta;
   c.health = Math.round(clamp(healthOf(c) + d, MAX_HEALTH));
 }
 
-/** Change Morale. Gains are multiplied by traits (Protagonist: x2); losses aren't. */
+/** Change Morale. Gains are multiplied by traits (Protagonist: x1.5); losses aren't. */
 export function changeMorale(c: Character, delta: number): void {
   const d = delta > 0 ? delta * traitFactor(c, 'moraleGain') : delta;
   c.morale = Math.round(clamp(moraleOf(c) + d, MAX_MORALE));
@@ -81,7 +81,7 @@ export function lodgingName(l: Lodging): string {
 
 /**
  * Morale change for a night spent at `where` (better than expected: up; worse: down, per step), before traits:
- * changeMorale multiplies gains (Protagonist x2). See moraleGainOf for what the member actually gets.
+ * changeMorale multiplies gains (Protagonist x1.5). See moraleGainOf for what the member actually gets.
  */
 export function lodgingMorale(c: Character, where: CityLodging): number {
   const diff = LODGING_QUALITY[where] - expectedQuality(c);

@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { blessingBonus } from '../game/church';
 import { SKILLS, STATUSES, hasTag, isSupport, skillStatText } from '../data/content';
 import type { SkillDef, StatKey, Stats } from '../data/types';
 import { STAT_INFO } from '../data/types';
@@ -176,7 +177,7 @@ export class BattleScene extends Phaser.Scene {
     const eSpots = deploymentTiles(map, 'enemy', generated.length);
     const foes = generated.slice(0, eSpots.length); // never more than there is room for
     const units = [
-      ...party.map((c, i) => makeUnit(c, 'player', pSpots[i])),
+      ...party.map((c, i) => makeUnit(c, 'player', pSpots[i], d ? 0 : blessingBonus(requireState()))),
       ...foes.map((c, i) => makeUnit(c, 'enemy', eSpots[i])),
     ];
     this.battle = new Battle(map, units, rng);
