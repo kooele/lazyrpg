@@ -127,7 +127,7 @@ export type BattleEvent =
   | { type: 'bump'; source: string; target: string }
   /** A passive struck back for free (Fighting Spirit, Tooth for Tooth); its damage events follow. */
   | { type: 'counter'; source: string; target: string; name: string }
-  /** A skill failed (Shocked: `status`); its AP, mana and cooldown were still spent. */
+  /** A move or skill failed (Shocked: `status`); its AP, mana and cooldown were still spent. `name`: the skill, or "Move". */
   | { type: 'fail'; target: string; name: string; status: string };
 
 /** A lasting ground effect from a 'ground' skill (Firestorm, Blizzard). */
@@ -907,6 +907,13 @@ export class Battle {
     // What the side could see before, to tell what the move reveals (fog of war).
     const sightBefore = this.rules.vision.enabled ? new Set(this.visibleTiles(u.team)) : null;
     const foesBefore = sightBefore ? new Set(this.spottedFoes(u.team)) : null;
+    // Shocked: the move may fail. The AP is spent and it can't be undone (no rerolling).
+    const fail = this.shockFail(u, 'Move');
+    if (fail) {
+      u.walked = false;
+      u.locked = true;
+      return { path: [], triggers: [{ index: -1, events: [fail, ...this.bonusMoveCheck(u, before)] }], interrupted: false };
+    }
     const result = this.walk(u, this.routeTo(u, dest, avoidWatch, reach));
     // A move that spots an enemy, or brings more than UNDO_REVEAL_TILES new tiles into sight, can't be taken back:
     // otherwise it would be free scouting.
@@ -922,6 +929,13 @@ export class Battle {
     return result;
   }
 
+  /** Shocked: roll for `u`'s move or skill (`name`) to fail. The fail event if it does, else null. */
+  private shockFail(u: Unit, name: string): BattleEvent | null {
+    const shock = u.statuses.find((s) => STATUSES[s.id]?.failChance);
+    if (!shock || this.rng() >= STATUSES[shock.id].failChance!) return null;
+    return { type: 'fail', target: u.uid, name, status: shock.name };
+  }
+
   /** Enemies `team` can see right now (not Stealthed ones). */
   private spottedFoes(team: Team): Unit[] {
     return this.living().filter((f) => f.team !== team && this.canSee(team, f) && !this.isStealthed(f));
@@ -934,6 +948,8 @@ export class Battle {
     const reach = this.reachable(u);
     if (!reach.has(key(dest.x, dest.y)) || (dest.x === u.x && dest.y === u.y)) throw new Error('Destination not reachable');
     const bonus = this.payFor(u, id);
+    const fail = this.shockFail(u, SKILLS[id].name);
+    if (fail) return { path: [], triggers: [{ index: -1, events: [fail, ...bonus] }], interrupted: false };
     const result = this.walk(u, this.pathTo(reach, dest));
     if (bonus.length) result.triggers.push({ index: result.path.length - 1, events: bonus });
     this.updateSightings();
@@ -1885,11 +1901,10 @@ export class Battle {
     // Explosion! spends all of it.
     const spent = switchingOff ? 0 : this.manaSpent(u, skill);
     u.mp -= spent;
-    // Shocked: the skill may fail, spending its AP, mana and cooldown for nothing. Switching a toggle off always works.
-    const shock = switchingOff ? undefined : u.statuses.find((s) => STATUSES[s.id]?.failChance);
-    if (shock && this.rng() < STATUSES[shock.id].failChance!) {
-      events.push({ type: 'fail', target: u.uid, name: skill.name, status: shock.name });
-      events.push(...this.payFor(u, skillId, true, ap));
+    // Shocked: the skill may fail, spending its AP, mana and cooldown for nothing. Toggles always work.
+    const fail = skill.toggleStatus ? null : this.shockFail(u, skill.name);
+    if (fail) {
+      events.push(fail, ...this.payFor(u, skillId, true, ap));
       return events;
     }
     const origin = { x: u.x, y: u.y };

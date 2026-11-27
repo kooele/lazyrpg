@@ -1551,6 +1551,7 @@ export class BattleScene extends Phaser.Scene {
         const stopped = result.interrupted && i === result.path.length - 1 ? ' — movement stopped' : '';
         if (first?.type === 'zoneHit') this.addLog(`${this.who(u)} is caught in the ${first.name}: ${summary.join(', ')}${stopped}`);
         else if (first?.type === 'bump') this.addLog(`${summary.join(', ')} — movement stopped`);
+        else if (first?.type === 'fail') this.addLog(`${this.who(u)}: ${summary.join(', ')}`);
         else {
           const shooter = first && first.type === 'damage' && first.source ? this.who(this.battle.unit(first.source)) : 'Overwatch';
           this.addLog(`${shooter} reacts! ${summary.join(', ')}${stopped}`);

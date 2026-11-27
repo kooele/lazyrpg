@@ -41,7 +41,7 @@
     "allMana": "true = the skill spends all the user's remaining mana; \"mana\" is then the least it needs (Explosion!).",
     "hitPerMana": "Zones: extra Magical damage per hit for each point of mana the skill spent (Explosion!: 1.5 per mana).",
     "edgeDamage": "Zones: the hit falls off with distance from the aimed tile, down to this share at the zone's edge (Explosion!: 1/3).",
-    "failChance": "Statuses: each skill the unit uses fails with this chance; its AP, mana and cooldown are still spent (Shocked).",
+    "failChance": "Statuses: each move (walk, Dash) and skill the unit uses, toggles aside, fails with this chance; its AP, mana and cooldown are still spent (Shocked).",
     "stealthVision": "Passives: extra Vision (tiles) while the unit is Stealthed (Scout).",
     "basicSkills": "abilities every Adventurer has on top of weapon and tree skills"
   },
@@ -80,7 +80,7 @@
     "ice_weapon": { "name": "Ice Weapon", "debuff": false, "stacking": false, "tick": "start", "toggle": true, "enchantment": true, "manaPerHit": 10, "weaponOnHit": { "mAtk": 0.2 }, "weaponOnHitStatus": [{ "status": "chilled", "stacks": 1 }], "description": "Weapon attacks deal an extra 20% M.Atk (Magical) and add a stack of Chilled each time they hit, for 10 mana each. Switches off when there is no mana left to pay for a hit. A weapon holds one enchantment at a time." },
     "frenzy": { "name": "Frenzy", "debuff": false, "stacking": false, "tick": "end", "statMods": { "pAtk": 20 }, "description": "+20 P.Atk." },
     "chilled": { "name": "Chilled", "debuff": true, "stacking": true, "decay": true, "maxStacks": 2, "overflow": { "status": "frozen", "turns": 1 }, "tick": "end", "statPct": { "movement": -0.25 }, "description": "-25% Movement; loses a stack at the end of each turn. Each stack is a turn; more stacks last longer but don't slow more. Up to 2 stacks; a 3rd stack Freezes the unit instead." },
-    "shocked": { "name": "Shocked", "debuff": true, "stacking": true, "decay": true, "tick": "end", "failChance": 0.25, "description": "Each skill you use has a 25% chance to fail, still spending its AP, mana and cooldown. Loses a stack at the end of each turn." },
+    "shocked": { "name": "Shocked", "debuff": true, "stacking": true, "decay": true, "tick": "end", "failChance": 0.25, "description": "Each move or skill (not toggles) has a 25% chance to fail, still spending its AP, mana and cooldown. Loses a stack at the end of each turn." },
     "slow": { "name": "Slow", "debuff": true, "stacking": false, "tick": "end", "statPct": { "movement": -0.25 }, "description": "-25% Movement. Doesn't stack and can't Freeze; getting slowed again only renews it." },
     "frozen": { "name": "Frozen", "debuff": true, "stacking": false, "frozen": true, "tick": "end", "description": "Chilled's 3rd stack: can't move for one turn. It loses its movement AP, and Frozen wears off at the end of that turn." },
     "blind": { "name": "Blinded", "debuff": true, "stacking": false, "tick": "end", "statPct": { "pAtk": -0.3, "mAtk": -0.3 }, "description": "-30% P.Atk and M.Atk." },
@@ -278,7 +278,7 @@
     "explosion_spell": {
       "name": "Explosion!", "description": "The ultimate magic, the stuff of dreams! Pour all your mana into a blast that goes off at the start of your next turn, hitting everyone in a wide circle, friend or foe. It hits hardest at the center.",
       "tags": ["area", "magical"],
-      "target": "ground", "affects": "any", "range": 6, "minRange": 0, "cooldown": 1, "mana": 100, "allMana": true, "level": 9,
+      "target": "ground", "affects": "any", "range": 6, "minRange": 0, "cooldown": 5, "mana": 100, "allMana": true, "level": 9,
       "zone": { "radius": 3, "turns": 1, "hit": { "mAtk": 3 }, "hitPerMana": 1.5, "edgeDamage": 0.3333, "endTurnHits": 0, "delayed": true }
     },
     "heal": {

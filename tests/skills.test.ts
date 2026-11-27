@@ -703,9 +703,30 @@ describe('skill changes: Lightning Strike, Shocked, Explosion!, Draft and Smite 
     expect(e.hp).toBeLessThan(e.stats.health);
   });
 
+  it('Shocked: toggles never fail; walking and Dash can, spending the AP (and Dash its mana and cooldown)', () => {
+    const roll = () => 0.1;
+    const { battle, units: [m] } = withRng([
+      { c: mage(['arcane_weapon']), team: 'player', at: { x: 1, y: 3 } },
+      { c: hero(), team: 'enemy', at: { x: 8, y: 3 } },
+    ], roll);
+    m.statuses.push({ id: 'shocked', name: 'Shocked', debuff: true, stacks: 3, amount: 0, turns: Infinity, tick: 'end' });
+    battle.perform(m, 'arcane_weapon', m);
+    expect(battle.isToggledOn(m, 'arcane_weapon')).toBe(true);
+    const walk = battle.move(m, { x: 2, y: 3 });
+    expect(walk.path).toEqual([]);
+    expect(walk.triggers[0].events[0]).toEqual({ type: 'fail', target: m.uid, name: 'Move', status: 'Shocked' });
+    expect(m).toMatchObject({ x: 1, y: 3, ap: 1, moved: true, locked: true });
+    const mp = m.mp;
+    const dash = battle.dash(m, { x: 2, y: 3 });
+    expect(dash.path).toEqual([]);
+    expect(dash.triggers[0].events[0]).toMatchObject({ type: 'fail', name: 'Dash' });
+    expect(m).toMatchObject({ x: 1, y: 3, ap: 0, mp: mp - SKILLS.dash.mana });
+    expect(m.cooldowns.dash).toBe(SKILLS.dash.cooldown);
+  });
+
   it('Explosion!: spends all mana (100 at least); at the start of the next turn, 300% M.Atk + 150% of the mana spent at the center, down to 1/3 at 3 tiles', () => {
     const s = SKILLS.explosion_spell;
-    expect(s).toMatchObject({ name: 'Explosion!', level: 9, mana: 100, allMana: true, ap: 'end', zone: { radius: 3, delayed: true } });
+    expect(s).toMatchObject({ name: 'Explosion!', level: 9, mana: 100, cooldown: 5, allMana: true, ap: 'end', zone: { radius: 3, delayed: true } });
     const { battle, units: [m, center, edge, ally, out] } = withRng([
       { c: mage(['explosion_spell']), team: 'player', at: { x: 0, y: 3 } },
       { c: hero(), team: 'enemy', at: { x: 6, y: 3 } },

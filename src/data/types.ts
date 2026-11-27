@@ -223,7 +223,7 @@ export interface StatusDef {
   zone?: ZoneDef;
   /** Mana each weapon attack's extra hit costs; without it the status switches off. */
   manaPerHit?: number;
-  /** Each skill the unit uses fails with this chance (0-1); its AP, mana and cooldown are still spent (Shocked). */
+  /** Each move (walk, Dash) and skill the unit uses, toggles aside, fails with this chance (0-1); its AP, mana and cooldown are still spent (Shocked). */
   failChance?: number;
 }
 
