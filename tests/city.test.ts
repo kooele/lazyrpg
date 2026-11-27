@@ -6,7 +6,7 @@ import type { Character, GameState, Quest } from '../src/data/types';
 import { createCharacter, deriveStats, makeRng } from '../src/game/character';
 import { makeEnemy, makeUnit } from '../src/game/battle';
 import {
-  acceptQuest, advanceDay, advanceDays, askingPrice, buyDrinks, isShipmentDay, marketBuyPrice, marketDay, sellSlave, turnInPrisoner, buyResidence, buySlave, makeQuest, sellResidence, endDay, setLodging, boarders, lodgingCost, residents, canTakeQuest, dailyUpkeep, foodCost, departBlock, lineupMembers, mainCharacter, moveMember,
+  acceptQuest, advanceDay, advanceDays, askingPrice, buyDrinks, drinkers, drinksCost, drinksSkipped, isShipmentDay, marketBuyPrice, marketDay, sellSlave, turnInPrisoner, buyResidence, buySlave, makeQuest, sellResidence, endDay, setLodging, boarders, lodgingCost, residents, canTakeQuest, dailyUpkeep, foodCost, departBlock, lineupMembers, mainCharacter, moveMember,
   newCampaign, questMoraleLoss, questXpPool, questXpShares, registerPrisoner, resolveQuest, rewardShares, toggleLineup, weeklyTaxes, setLineupSlot, benchMember, releaseCompanion, moraleDepartures, relationshipDepartures, quitRenown, renewContract, weeklyWages, forecastNight, tabTotal,
 } from '../src/game/city';
 import { activityOf, defaultActivity, lodgingOf, combatPenalty, expectedQuality, foodMorale, healthOf, isInjured, moraleOf, moralePenalty, obediencePenalty } from '../src/game/condition';
@@ -744,6 +744,34 @@ describe('contracts', () => {
     const m = moraleOf(c);
     nightsAt(s, 'standard', 1, makeRng(1));
     expect(moraleOf(c)).toBe(m + GUILD.schedule.dayOffMorale);
+  });
+
+  it('drinks: only after a quest, only for the members who went; End Day warns if skipped', () => {
+    const s = start();
+    const c = companion(s);
+    if (c.contract?.type !== 'companion') throw new Error('not a companion');
+    c.contract.endDay = 100;
+    s.gold = 1000;
+    // No quest today: no drinks.
+    expect(drinkers(s)).toEqual([]);
+    expect(buyDrinks(s, 'standard')).toMatch(/after one/);
+    expect(drinksSkipped(s)).toBe(false);
+    // The main character goes alone; the companion stays home.
+    benchMember(s, c.id);
+    acceptQuest(s, s.guild.board.find((x) => canTakeQuest(s, x))!.id);
+    s.quest!.days = 1;
+    resolveQuest(s, 'victory', makeRng(3), [], [], undefined, 0);
+    const main = mainCharacter(s);
+    expect(drinkers(s).map((m) => m.id)).toEqual([main.id]);
+    expect(drinksSkipped(s)).toBe(true);
+    expect(drinksCost(s, 'standard')).toBe(GUILD.inns.standard.drinksPerPerson);
+    const cBefore = moraleOf(c);
+    const gold = s.gold;
+    expect(buyDrinks(s, 'standard')).toBeNull();
+    expect(s.gold).toBe(gold - GUILD.inns.standard.drinksPerPerson);
+    expect(moraleOf(c)).toBe(cBefore);
+    expect(drinksSkipped(s)).toBe(false);
+    expect(buyDrinks(s, 'standard')).toMatch(/already/);
   });
 
   it('a member whose Health reaches 0 dies; everyone else loses morale. The main character pulls through at 1', () => {

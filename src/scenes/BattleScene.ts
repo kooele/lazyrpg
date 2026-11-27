@@ -5,11 +5,12 @@ import type { SkillDef, StatKey, Stats } from '../data/types';
 import { STAT_INFO } from '../data/types';
 import { bestAction, bestFreeAction, planTurn, preferredMode, shouldDisengage, shouldEscape, shouldSurrender, watchesForOverwatch } from '../game/ai';
 import {
-  AP_PER_TURN, Battle, UNDO_LIMIT, UNDO_REVEAL_TILES, deploymentTiles, generateEnemies, makeUnit, penLine, penText, statEffectPct, statText,
+  AP_PER_TURN, Battle, UNDO_LIMIT, moveText, stepCost, UNDO_REVEAL_TILES, deploymentTiles, generateEnemies, makeUnit, penLine, penText, statEffectPct, statText,
   type BattleEvent, type MoveResult, type Unit,
 } from '../game/battle';
 import { BAR_PAGE, makeRng, skillBarLayout, swapBarSlots } from '../game/character';
 import { TERRAIN, generateMap, key, type Point } from '../game/grid';
+import { drawEffectTile, drawTerrainTile, type EffectLook } from '../art/tileArt';
 import { GUILD } from '../data/guild';
 import { lineupMembers, resolveQuest } from '../game/city';
 import { rankForStage, usualCount } from '../game/board';
@@ -65,15 +66,6 @@ interface UnitView {
   statusText: Phaser.GameObjects.Text;
 }
 
-/** Map tint for a zone by its element: fire orange, ice pale blue, water (Rain) deep blue. */
-function zoneColor(element: string | undefined, delayed?: boolean): number {
-  if (delayed) return 0xff3b3b;
-  if (element === 'fire') return 0xff7a2e;
-  if (element === 'ice') return 0x7fc8ff;
-  if (element === 'water') return 0x3b6fe0;
-  return 0xc18cff;
-}
-
 /** The unit on `tile` if the party can see it. */
 function shownTarget(b: Battle, tile: Point): Unit | undefined {
   const t = b.unitAt(tile.x, tile.y);
@@ -121,6 +113,10 @@ export class BattleScene extends Phaser.Scene {
   /** The selected unit's faded figure on the planned tile. */
   private ghost: Phaser.GameObjects.Container | null = null;
   private hoverTile: Point | null = null;
+  /** Tile effects layer (see drawZones), what it last drew, and the flicker animation's phase. */
+  private zoneLayer!: Phaser.GameObjects.Graphics;
+  private zoneKey = '';
+  private zonePhase = 0;
   /** A confirm dialog is open: ignore clicks on the board behind it. */
   private dialogOpen = false;
   /** The enemy whose next-turn reach is shown (click an enemy to toggle). */
@@ -183,6 +179,15 @@ export class BattleScene extends Phaser.Scene {
     this.battle = new Battle(map, units, rng);
 
     this.drawMap();
+    this.zoneLayer = this.add.graphics();
+    this.zoneKey = '';
+    this.zonePhase = 0;
+    // Tile effects flicker a little (flames, falling rain): redraw them a few times a second while there are any.
+    this.time.addEvent({ delay: 140, loop: true, callback: () => {
+      if (!this.battle.zones.length) return;
+      this.zonePhase = (this.zonePhase + 0.125) % 1;
+      this.drawZones(true);
+    } });
     this.overlay = this.add.graphics();
     this.rings = this.add.graphics();
     for (const u of units) this.createUnitView(u);
@@ -271,43 +276,40 @@ export class BattleScene extends Phaser.Scene {
   private drawMap(): void {
     const { map } = this.battle;
     const g = this.add.graphics();
+    const wet = (x: number, y: number) => x < 0 || y < 0 || x >= map.width || y >= map.height || map.tiles[y][x] === 'river' || map.tiles[y][x] === 'water';
     for (let y = 0; y < map.height; y++) {
       for (let x = 0; x < map.width; x++) {
-        const t = map.tiles[y][x];
         const px = MAP_X + x * TILE;
         const py = MAP_Y + y * TILE;
-        g.fillStyle(TERRAIN[t].color).fillRect(px, py, TILE, TILE);
-        if ((x + y) % 2 === 0) g.fillStyle(0xffffff, 0.03).fillRect(px, py, TILE, TILE);
-        if (t === 'forest') {
-          g.fillStyle(0x1f3f1d);
-          g.fillTriangle(px + 14 * K, py + 40 * K, px + 24 * K, py + 14 * K, px + 34 * K, py + 40 * K);
-          g.fillTriangle(px + 26 * K, py + 46 * K, px + 38 * K, py + 18 * K, px + 48 * K, py + 46 * K);
-        } else if (t === 'rock') {
-          g.fillStyle(0x8a8a93).fillCircle(px + 22 * K, py + 32 * K, 13 * K).fillCircle(px + 36 * K, py + 26 * K, 10 * K);
-          g.fillStyle(0x55555c).fillCircle(px + 30 * K, py + 38 * K, 8 * K);
-        } else if (t === 'water') {
-          g.lineStyle(2, 0x5b8fcf, 0.8);
-          g.lineBetween(px + 10 * K, py + 22 * K, px + 26 * K, py + 22 * K);
-          g.lineBetween(px + 28 * K, py + 36 * K, px + 46 * K, py + 36 * K);
-        } else if (t === 'river') {
-          // Shallow, fordable water: lighter, with ripples and sandy edges.
-          g.lineStyle(2, 0xa9d4f5, 0.7);
-          for (const ry of [16, 30, 44]) {
-            g.beginPath();
-            g.moveTo(px + 8 * K, py + ry * K);
-            g.lineTo(px + 18 * K, py + (ry - 4) * K);
-            g.lineTo(px + 28 * K, py + ry * K);
-            g.lineTo(px + 38 * K, py + (ry - 4) * K);
-            g.lineTo(px + 48 * K, py + ry * K);
-            g.strokePath();
-          }
-        }
+        drawTerrainTile(g, map.tiles[y][x], px, py, TILE, x, y, { n: wet(x, y - 1), s: wet(x, y + 1), w: wet(x - 1, y), e: wet(x + 1, y) });
+        if ((x + y) % 2 === 0) g.fillStyle(0xffffff, 0.025).fillRect(px, py, TILE, TILE);
       }
     }
-    g.lineStyle(1, 0x000000, 0.25);
+    g.lineStyle(1, 0x000000, 0.22);
     for (let x = 0; x <= map.width; x++) g.lineBetween(MAP_X + x * TILE, MAP_Y, MAP_X + x * TILE, MAP_Y + map.height * TILE);
     for (let y = 0; y <= map.height; y++) g.lineBetween(MAP_X, MAP_Y + y * TILE, MAP_X + map.width * TILE, MAP_Y + y * TILE);
     this.bakeMap(g, map.width * TILE, map.height * TILE);
+  }
+
+  /**
+   * Tile effects (Firestorm, Blizzard, Rain, Burning Ground, a Brutal Strike wind-up), each tile drawn in detail by
+   * its element, with a rim where the effect ends. Redrawn only when the effects change, or `animate` (the flicker timer).
+   */
+  private drawZones(animate = false): void {
+    const zones = this.battle.zones;
+    const sig = zones.map((z) => `${z.element}:${z.def.delayed ? 1 : 0}:${[...z.tiles].join(';')}`).join('|');
+    if (!animate && sig === this.zoneKey) return;
+    this.zoneKey = sig;
+    const g = this.zoneLayer;
+    g.clear();
+    for (const z of zones) {
+      const look: EffectLook = z.def.delayed ? 'delayed' : z.element === 'fire' || z.element === 'ice' || z.element === 'water' ? z.element : 'arcane';
+      const has = (x: number, y: number) => z.tiles.has(key(x, y));
+      for (const k of z.tiles) {
+        const [x, y] = k.split(',').map(Number);
+        drawEffectTile(g, look, MAP_X + x * TILE, MAP_Y + y * TILE, TILE, x, y, { n: has(x, y - 1), s: has(x, y + 1), w: has(x - 1, y), e: has(x + 1, y) }, this.zonePhase);
+      }
+    }
   }
 
   /** The map never changes during a battle: draw it once into a texture (see bakeGraphics). */
@@ -394,15 +396,8 @@ export class BattleScene extends Phaser.Scene {
       }
     }
 
-    // Ground zones (Firestorm, Blizzard): tinted by their status (fire orange, ice blue).
-    for (const z of b.zones) {
-      const color = zoneColor(z.element, z.def.delayed);
-      for (const k of z.tiles) {
-        const [x, y] = k.split(',').map(Number);
-        fill({ x, y }, color, 0.32);
-        outline({ x, y }, color, 0.7, 2);
-      }
-    }
+    // Tile effects (Firestorm, Blizzard, Rain...) are drawn on their own layer under this one.
+    this.drawZones();
 
     // Standing overwatch / intercept cones (enemy ones only when the watcher can be seen).
     for (const u of b.living()) {
@@ -868,7 +863,7 @@ export class BattleScene extends Phaser.Scene {
     }
     const v = b.stat(u, k);
     const base = u.stats[k];
-    const fromStatuses = v - base;
+    const fromStatuses = Math.round((v - base) * 10) / 10;
     const signed = (n: number) => `${n > 0 ? '+' : ''}${n}`;
     const parts = [`Base ${base}`, fromStatuses ? `Statuses ${signed(fromStatuses)}` : ''].filter(Boolean);
     const pct = statEffectPct(k, v);
@@ -1316,7 +1311,7 @@ export class BattleScene extends Phaser.Scene {
     const b = this.battle;
     const target = b.unitAt(tile.x, tile.y);
     const terrain = TERRAIN[b.map.tiles[tile.y][tile.x]];
-    let info = `${terrain.name}${terrain.moveCost === null ? ' (impassable)' : ` (move cost ${terrain.moveCost}${terrain.projectileCover ? `, -${Math.round(terrain.projectileCover * 100)}% damage from projectiles` : ''})`}${terrain.blocksSight ? ', Blocks Sight' : ''}`;
+    let info = `${terrain.name}${terrain.moveCost === null ? ' (impassable)' : ` (move cost ${terrain.moveCost}, ${moveText(stepCost(terrain.moveCost, true))} diagonally${terrain.projectileCover ? `, -${Math.round(terrain.projectileCover * 100)}% damage from projectiles` : ''})`}${terrain.blocksSight ? ', Blocks Sight' : ''}`;
     const shown = target && b.canSee('player', target) ? target : undefined;
     if (shown) info = `${shown.character.name} — Lv ${shown.character.level}`;
     const u = this.selected;
@@ -1355,6 +1350,7 @@ export class BattleScene extends Phaser.Scene {
     if (this.mode === 'select' && u && this.reach.has(key(tile.x, tile.y)) && (tile.x !== u.x || tile.y !== u.y)) {
       const path = b.pathTo(this.reach, tile);
       const hits = path.reduce((n, p) => n + b.zonesAt(p).filter((z) => !z.def.delayed).length, 0);
+      info = `Move Cost: ${moveText(this.reach.get(key(tile.x, tile.y))!.cost)} of ${moveText(b.stat(u, 'movement'))} Movement\n${info}`;
       if (hits) info = `⚠ Path Crosses ${hits} Zone Tile${hits === 1 ? '' : 's'} (~${b.zoneDanger(u, path)} dmg incl. ending here)\n${info}`;
     }
     if (this.threat && this.mode === 'select') info = `${this.threat.label}\n${info}`;

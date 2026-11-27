@@ -1289,6 +1289,36 @@ describe('progression and enemy behaviour', () => {
     expect(route(() => makeEnemy('wolf', 3, makeRng(1))).shot).toBe(1); // beast: straight through, shot
   });
 
+  it("a group isn't pinned down by one overwatch: someone walks into it so the rest can follow", () => {
+    // A pass (rock above and below) watched by an archer: no way around. Alone, an orc holds back at the edge of the
+    // arc; in a group they used to all wait for each other, forever. Now one goes in and draws the shot.
+    const run = (orcs: number) => {
+      const map = openMap(16, 5);
+      for (let x = 4; x < 16; x++) {
+        map.tiles[0][x] = 'rock';
+        map.tiles[4][x] = 'rock';
+      }
+      const { battle, units } = setup(map, [
+        { c: hero('bow'), team: 'player', at: { x: 1, y: 2 } },
+        ...Array.from({ length: orcs }, (_, i) => ({ c: makeEnemy('orc', 3, makeRng(i + 1)), team: 'enemy' as Team, at: { x: 12, y: 1 + i } })),
+      ], { ...STAT_CONFIG, vision: { enabled: false } }); // the orcs see the archer's watch
+      const archer = units[0];
+      const orcUnits = units.slice(1);
+      archer.stats.pAtk *= 3; // a shot that hurts (under half an orc's Health, but enough to fear)
+      let fired = false;
+      for (let round = 0; round < 4 && !fired; round++) {
+        battle.perform(archer, 'overwatch', { x: 5, y: 2 });
+        battle.endPhase();
+        for (const o of orcUnits) if (o.alive) runAiTurn(battle, o);
+        fired = !archer.overwatch;
+        battle.endPhase();
+      }
+      return { fired };
+    };
+    expect(run(3)).toMatchObject({ fired: true });
+    expect(run(1)).toMatchObject({ fired: false }); // alone, it's fine to hold back
+  });
+
   it('beast: runs once hurt (below 40%), a human of the same health doesn\'t', () => {
     const map = openMap(20, 13);
     const wolf = makeUnit(makeEnemy('wolf', 3, makeRng(1)), 'enemy', { x: 10, y: 6 });
@@ -1557,8 +1587,42 @@ describe('battles', () => {
     const reach = battle.reachable(u);
     expect(reach.get('1,1')?.cost).toBe(4);
     expect(reach.get('2,1')?.cost).toBe(10); // + forest 6
-    expect(reach.get('3,0')?.cost).toBe(16); // four grass tiles
-    expect(reach.has('3,1')).toBe(false); // river: 4 + 6 + 8 = 18 > 16
+    expect(reach.get('1,0')?.cost).toBeCloseTo(4 * 1.414); // a diagonal step: 1.414x
+    expect(reach.get('3,0')?.cost).toBeCloseTo(4 * 1.414 + 8); // diagonal, then two grass tiles
+    expect(reach.has('3,1')).toBe(false); // river: 4 + 6 + 8 = 18 > 16, and no cheaper way round
+    expect(battle.pathTo(reach, { x: 3, y: 0 })).toHaveLength(3);
+  });
+
+  it('movement is fractional and rounds up the Movement left for a step (3.5 left allows a 4-cost step)', () => {
+    const { battle, units: [u] } = setup(openMap(12, 5), [
+      { c: hero(), team: 'player', at: { x: 0, y: 2 } },
+      { c: hero(), team: 'enemy', at: { x: 11, y: 0 } },
+    ]);
+    u.stats.movement = 15.5;
+    expect(battle.stat(u, 'movement')).toBe(15.5);
+    let reach = battle.reachable(u);
+    expect(reach.get('4,2')?.cost).toBe(16); // 12 spent, 3.5 left: the 4th step still fits
+    expect(reach.has('5,2')).toBe(false);
+    // Two diagonals (11.3) leave 4.2, rounded up to 5: one more grass step, not a diagonal (5.66).
+    u.stats.movement = 16;
+    reach = battle.reachable(u);
+    expect(reach.get('3,4')?.cost).toBeCloseTo(2 * 4 * 1.414 + 4);
+    expect(reach.has('4,4')).toBe(false);
+    expect(reach.has('4,3')).toBe(false); // 3 grass (12) leaves 4: not enough for a diagonal (5.66)
+  });
+
+  it("diagonal steps can't cut the corner of rock or an enemy", () => {
+    const map = openMap(8, 5);
+    map.tiles[1][1] = 'rock';
+    const { battle, units: [u] } = setup(map, [
+      { c: hero(), team: 'player', at: { x: 1, y: 2 } },
+      { c: hero(), team: 'enemy', at: { x: 2, y: 3 } },
+    ]);
+    const reach = battle.reachable(u);
+    expect(reach.get('2,1')?.cost).toBe(8); // not diagonally past the rock: right, then up
+    expect(reach.get('3,2')?.cost).toBe(8);
+    expect(reach.get('1,3')?.cost).toBe(4);
+    expect(reach.get('2,4')?.cost).toBeGreaterThan(4 * 1.414 * 2 - 0.01); // not squeezing past the enemy at 2,3
   });
 
   it('generated maps use the configured size and keep deployment zones open', () => {
@@ -2194,7 +2258,7 @@ describe('zones (Firestorm, Blizzard), Chilled stacks and Frozen', () => {
     battle.perform(m, 'firestorm', { x: 5, y: 3 }); // covers x 4-6, y 2-4
     const u = makeUnit(hero('bow'), 'player', { x: 4, y: 1 });
     battle.units.push(u);
-    expect(battle.pathTo(battle.reachable(u), { x: 5, y: 2 })).toEqual([{ x: 5, y: 1 }, { x: 5, y: 2 }]);
+    expect(battle.pathTo(battle.reachable(u), { x: 6, y: 2 })).toEqual([{ x: 5, y: 1 }, { x: 6, y: 2 }]);
   });
 
   it('Chilled is -25% Movement however many stacks; 2 stacks just last a turn longer', () => {

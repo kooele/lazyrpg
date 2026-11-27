@@ -12,7 +12,7 @@ export const STAT_INFO: Record<StatKey, { name: string; short: string; descripti
   mAtk: { name: 'Magic Attack', short: 'M.Atk', description: 'Power of magic skills and healing.' },
   defense: { name: 'Defense', short: 'Def', description: 'Reduces damage taken: each point of Defense is +1% effective health.' },
   resist: { name: 'Resist', short: 'Res', description: 'Shrugs off debuffs: each point of Resist is +1% effective resistance to debuffs.' },
-  movement: { name: 'Movement', short: 'Move', description: 'Movement points per turn (forest costs 2).' },
+  movement: { name: 'Movement', short: 'Move', description: 'Movement points per turn: grass costs 4 a tile, forest 6, river 8; diagonal steps cost 1.414x.' },
   vision: { name: 'Vision', short: 'Vis', description: 'How far the unit can see, in tiles. Enemies outside your units\' vision (or behind rocks) are hidden in fog of war.' },
   pPen: { name: 'Physical Penetration', short: 'P.Pen', description: 'Flat Defense ignored by your Physical damage (after the percent part).' },
   pPenPct: { name: 'Physical Penetration %', short: 'P.Pen%', description: 'Percent of Defense ignored by your Physical damage. Percents from different sources multiply (50% and 25% = 62.5%).' },
@@ -752,7 +752,7 @@ export interface GameState {
   blessing?: number;
   /** Day each member was last healed at a church (by character id): they can't be healed again for churches.healCooldownDays. */
   healedDay?: Record<string, number>;
-  /** Day the party last bought a round of drinks (once a day). */
+  /** Day the party last bought a round of drinks (once, the day it's back from a quest). */
   drinksDay: number;
   /** First day of the current stretch below the rank's renown threshold (0 = not below). A full week drops a rank. */
   belowRankSince: number;

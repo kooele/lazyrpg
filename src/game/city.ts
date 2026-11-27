@@ -539,19 +539,35 @@ export function endDay(state: GameState, rng: Rng): string[] {
   return advanceDay(state, rng, 'city');
 }
 
-/** A round of drinks at an inn for the whole party (once a day). Returns an error message, or null. */
+/**
+ * Who can have a round of drinks today: only right after a quest, and only the members who went on it (and are still
+ * in the party). Empty on any other day, or once the round has been had.
+ */
+export function drinkers(state: GameState): Character[] {
+  if (state.lastQuestDay !== state.day || state.drinksDay === state.day) return [];
+  const went = new Set(state.questMembers);
+  return state.party.filter((c) => went.has(c.id));
+}
+
+/** Back from a quest today and the members who went haven't had their round of drinks yet (End Day warns about it). */
+export const drinksSkipped = (state: GameState) => drinkers(state).length > 0;
+
+/** A round of drinks at an inn for the members back from today's quest (once, after a quest). Returns an error message, or null. */
 export function buyDrinks(state: GameState, inn: InnTier): string | null {
+  if (state.drinksDay === state.day && state.lastQuestDay === state.day) return 'The party already had a round today.';
+  const who = drinkers(state);
+  if (!who.length) return 'Drinks are for celebrating a quest: come back after one.';
   const cost = drinksCost(state, inn);
-  if (state.drinksDay === state.day) return 'The party already had a round today.';
   if (state.gold < cost) return `Not enough gold (${cost} needed).`;
   state.gold -= cost;
   state.drinksDay = state.day;
-  for (const c of state.party) changeMorale(c, GUILD.inns[inn].drinksMorale);
-  note(state, `A round of drinks at ${GUILD.inns[inn].name} (${cost} gold): Morale +${GUILD.inns[inn].drinksMorale}.`);
+  for (const c of who) changeMorale(c, GUILD.inns[inn].drinksMorale);
+  note(state, `A round of drinks at ${GUILD.inns[inn].name} (${cost} gold): Morale +${GUILD.inns[inn].drinksMorale} for ${who.map((c) => c.name).join(', ')}.`);
   return null;
 }
 
-export const drinksCost = (state: GameState, inn: InnTier) => state.party.length * GUILD.inns[inn].drinksPerPerson;
+/** A round for the members back from today's quest: drinksPerPerson each. */
+export const drinksCost = (state: GameState, inn: InnTier) => drinkers(state).length * GUILD.inns[inn].drinksPerPerson;
 
 /** Members who follow their schedule today: everyone not on (or just back from) a quest. */
 export function scheduledMembers(state: GameState, away: string[] = []): Character[] {

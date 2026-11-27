@@ -60,7 +60,7 @@ export function glossaryEntries(): GlossaryEntry[] {
     + `Falls:\n• Up to −${C.maxHealthLoss} after each battle, the lower their HP fell (−${C.maxHealthLoss} if they fell)`);
   add('City Life', 'Morale',
     `A member's spirits, out of 100. Below 100: all battle stats −${G.combat.percentPer5}% per 5 missing. Above ${C.highMorale}: companions and slaves gain ${C.highMoraleRelationshipPerDay} relationship a day; below ${C.lowMorale}: they lose ${C.lowMoraleRelationshipPerDay}. At 0: the member leaves the party (the main character stays). New members start at ${C.startingMorale}.\n\n`
-    + `Rises (×${TRAITS.protagonist.moraleGain} for the Protagonist):\n• +${G.schedule.dayOffMorale} for taking a Day Off\n• +${Math.min(...drinks)} to +${Math.max(...drinks)} for a round of drinks at an inn (once a day)\n• +${G.food.moraleAbovePerStep} a day per level of quality above expected food\n• +${L.moraleAbovePerStep} a night per level of quality above expected lodging\n\n`
+    + `Rises (×${TRAITS.protagonist.moraleGain} for the Protagonist):\n• +${G.schedule.dayOffMorale} for taking a Day Off\n• +${Math.min(...drinks)} to +${Math.max(...drinks)} for a round of drinks at an inn (after a quest, for those who went)\n• +${G.food.moraleAbovePerStep} a day per level of quality above expected food\n• +${L.moraleAbovePerStep} a night per level of quality above expected lodging\n\n`
     + `Falls:\n• −${C.moralePerTurn} per turn in battle\n• −${C.moraleFailedQuest} for failing a quest\n• −1 per ${Math.round(1 / C.moralePerHealthLost)} Health lost\n• −${C.moraleMemberDied} when a party member dies\n• −${G.food.moraleBelowPerStep} a day per level of quality below expected food\n• −${L.moraleBelowPerStep} a night per level of quality below expected lodging`);
   add('City Life', 'Churches',
     `The Church (Outer City) and the Central Church (Inner City).\n\n`
@@ -234,6 +234,9 @@ export function glossaryEntries(): GlossaryEntry[] {
     `Passive skills are always in effect once learned and never go on the skill bar.\n\n`
     + `• Spellblade: your weapon's M.Atk penalty doesn't apply.\n• Fighting Spirit: whenever you become engaged, a free basic attack at 50%.\n• Tooth for Tooth: when your engaged opponent attacks you, a free basic attack back at 50%.\n• Scout: Stealthed from the start of each battle until you attack.\n\n`
     + `These free attacks never set off another free attack.`);
+  add('Battle', 'Movement',
+    `Movement points are spent on each tile entered: grass ${STAT_CONFIG.movementCosts.grass}, forest ${STAT_CONFIG.movementCosts.forest}, river ${STAT_CONFIG.movementCosts.river}; rock and deep water can't be entered.\n\n`
+    + `• Units can step diagonally for ${STAT_CONFIG.diagonalMoveCost}x the tile's cost (grass ${Math.round(STAT_CONFIG.movementCosts.grass * STAT_CONFIG.diagonalMoveCost * 10) / 10}), but not past the corner of rock, deep water or an enemy.\n• Movement is fractional (shown to one decimal), so slows and buffs count in full.\n• The Movement left rounds up for the next step: with 3.5 left, a unit can still take a 4-cost step.\n\nHover a tile in a unit's move range to see what getting there costs.`);
   add('Battle', 'Forest',
     `Forest costs 6 Movement to enter. A unit standing in forest takes ${Math.round(STAT_CONFIG.forestProjectileReduction * 100)}% less damage from projectiles: arrows and shots (Direct and Indirect) and thrown spells like Magic Bolt and Fireball. Melee attacks, area spells and zones hit it as usual.`);
   add('Battle', 'Equipment',
