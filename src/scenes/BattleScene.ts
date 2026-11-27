@@ -111,6 +111,13 @@ export class BattleScene extends Phaser.Scene {
   private pending: { tile: Point; kind: 'push' | 'followUp'; options: Point[] } | null = null;
   /** Skill whose range is previewed while hovering its button. */
   private previewAction: SkillDef | null = null;
+  /**
+   * A planned move for the selected unit: where it would end up and the path there. Nothing is processed (no AP
+   * spent, no overwatch, nothing new revealed) until the player confirms it; meanwhile skill ranges are shown from there.
+   */
+  private plan: { tile: Point; path: Point[] } | null = null;
+  /** The selected unit's faded figure on the planned tile. */
+  private ghost: Phaser.GameObjects.Container | null = null;
   private hoverTile: Point | null = null;
   /** A confirm dialog is open: ignore clicks on the board behind it. */
   private dialogOpen = false;
@@ -137,6 +144,8 @@ export class BattleScene extends Phaser.Scene {
     this.action = null;
     this.pending = null;
     this.previewAction = null;
+    this.plan = null;
+    this.ghost = null;
     this.hoverTile = null;
     this.dialogOpen = false;
     setupCamera(this);
@@ -194,6 +203,7 @@ export class BattleScene extends Phaser.Scene {
     });
     this.input.mouse?.disableContextMenu();
     this.input.keyboard?.on('keydown-ESC', () => this.cancel());
+    this.input.keyboard?.on('keydown-ENTER', () => void this.confirmMove());
     this.input.keyboard?.on('keydown-TAB', (e: KeyboardEvent) => {
       e.preventDefault();
       this.cycleUnit();
@@ -214,6 +224,11 @@ export class BattleScene extends Phaser.Scene {
 
   private get selected(): Unit | null {
     return this.selectedUid ? this.battle.unit(this.selectedUid) : null;
+  }
+
+  /** Where `u` is treated as standing for range previews: the planned tile while its move is being previewed. */
+  private aimFrom(u: Unit): Point {
+    return this.plan && u.uid === this.selectedUid ? this.plan.tile : u;
   }
 
   private tileCenter(p: Point): Point {
@@ -419,18 +434,25 @@ export class BattleScene extends Phaser.Scene {
       }
     }
 
+    // A previewed move: the path in gold, the planned tile outlined.
+    if (this.plan && sel && (this.mode === 'select' || this.mode === 'target')) {
+      for (const p of this.plan.path) fill(p, 0xffd166, 0.22);
+      outline(this.plan.tile, 0xffd166, 1, 4);
+    }
+
     // Skill range ("attack box"): while targeting, or while hovering a skill button.
     const shown = this.mode === 'target' ? this.action : this.mode === 'select' ? this.previewAction : null;
     // An enemy acting out of sight (fog of war, Stealth) shows nothing: no attack box, no target.
     const caster = this.casterUid ? this.visibleCaster() : sel;
     if (shown && caster) {
+      const from = this.aimFrom(caster);
       const color = isSupport(shown) ? 0x6fdc8c : 0xff6b6b;
-      for (const p of b.rangeTiles(caster, shown)) {
+      for (const p of b.rangeTiles(caster, shown, from)) {
         fill(p, color, 0.2);
         outline(p, color, 0.55);
       }
       // In range but the line is blocked: greyed out with a cross.
-      for (const p of b.blockedTiles(caster, shown)) {
+      for (const p of b.blockedTiles(caster, shown, from)) {
         fill(p, 0x000000, 0.3);
         const px = MAP_X + p.x * TILE;
         const py = MAP_Y + p.y * TILE;
@@ -448,13 +470,13 @@ export class BattleScene extends Phaser.Scene {
           const sk = b.skillFor(caster, shown);
           if (t) for (const p of b.pushPath(t, { x: Math.sign(pick.x - pend.tile.x), y: Math.sign(pick.y - pend.tile.y) }, sk.push ?? 0)) fill(p, 0x4aa3ff, 0.45);
         } else if (pick) fill(pick, 0xffd166, 0.5);
-      } else if (this.mode === 'target' && h && b.canAim(caster, shown, h)) {
-        for (const p of b.areaTiles(caster, shown, h)) fill(p, 0xffd166, 0.5);
+      } else if (this.mode === 'target' && h && b.canAim(caster, shown, h, from)) {
+        for (const p of b.areaTiles(caster, shown, h, from)) fill(p, 0xffd166, 0.5);
         if (shown.charge) {
-          const land = b.chargeDestination(caster, h, caster, shown);
+          const land = b.chargeDestination(caster, h, from, shown);
           if (land) outline(land, 0x4aa3ff, 1, 6);
         }
-        const behind = b.pierceVictim(caster, b.skillFor(caster, shown), h);
+        const behind = b.pierceVictim(caster, b.skillFor(caster, shown), h, from);
         if (behind) fill(behind, 0xffd166, 0.35);
       }
     }
@@ -533,7 +555,7 @@ export class BattleScene extends Phaser.Scene {
         const freeLeft = !u.acted && u.ap === 0 && b.usableFreeActions(u).length > 0;
         const done = u.acted || (u.ap === 0 && !freeLeft);
         const status = done ? 'Done This Turn' : freeLeft ? 'Out of AP — Free Action Available'
-          : u.moved ? 'Moved — 1 AP Left (act or Dash)' : 'Ready: Move + Act';
+          : u.moved ? 'Moved — 1 AP Left (act or Dash)' : this.plan ? 'Previewing a Move' : 'Ready: Move + Act';
         const pips = `${'●'.repeat(u.ap)}${'○'.repeat(Math.max(0, AP_PER_TURN - u.ap))}`;
         S.add(text(this, SIDE_X + 10, 156, `AP ${pips}  ${status}`, { fontSize: '12px', color: done ? COLORS.dim : COLORS.good }));
       }
@@ -555,6 +577,11 @@ export class BattleScene extends Phaser.Scene {
             const dmg = b.previewHits(opp, b.basicAttack(opp), u).reduce((a, c) => a + c, 0);
             this.showInfo(`Break away from ${opp.character.name}. They get a free ${b.basicAttack(opp).name} (~${dmg} dmg). You can then move and act normally.`);
           },
+        }));
+      } else if (this.plan) {
+        S.add(button(this, SIDE_X, y, 116, 30, 'Confirm Move', () => void this.confirmMove(), {
+          enabled: interactive, fontSize: 14, fill: 0x1f4a2a, selected: true,
+          onHover: () => this.showInfo('Make the planned move (or click the tile again, or press Enter). Until then nothing happens and nothing new is revealed. Right-click / Esc cancels it.'),
         }));
       } else {
         S.add(button(this, SIDE_X, y, 116, 30, `Undo Move (${b.undosLeft.player})`, () => this.undoMove(), {
@@ -905,9 +932,12 @@ export class BattleScene extends Phaser.Scene {
     this.pending = null;
     this.previewAction = null;
     if (this.selectedUid !== u.uid) this.barPage = 0;
+    // A planned move survives re-selecting the same unit (e.g. after a Switch Mode) while it's still possible.
+    const keepPlan = this.selectedUid === u.uid ? this.plan : null;
     this.selectedUid = u.uid;
     this.threat = null;
     this.reach = this.battle.canMove(u) ? this.battle.reachable(u) : new Map();
+    this.setPlan(keepPlan && this.reach.has(key(keepPlan.tile.x, keepPlan.tile.y)) ? keepPlan.tile : null);
     this.refresh();
   }
 
@@ -934,6 +964,10 @@ export class BattleScene extends Phaser.Scene {
     }
     this.renderSidebar();
     this.drawOverlay();
+    if (this.plan) {
+      this.showInfo(`${this.battle.skillFor(u, this.action).name}: showing its range from the planned tile. Confirm the move to use it (right-click / Esc to go back).`);
+      return;
+    }
     const how = this.action.target === 'cone' ? 'click to aim the cone'
       : this.action.target === 'move' ? 'click a tile to dash to'
       : this.action.target === 'line' ? 'click a tile to thrust toward'
@@ -944,7 +978,16 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private cancel(): void {
-    if (this.mode !== 'target' || this.dialogOpen) return;
+    if (this.dialogOpen) return;
+    // Out of targeting, right-click / Esc drops a previewed move.
+    if (this.mode === 'select' && this.plan) {
+      this.setPlan(null);
+      this.showInfo('');
+      this.renderSidebar();
+      this.drawOverlay();
+      return;
+    }
+    if (this.mode !== 'target') return;
     // A two-step skill goes back to its first pick.
     if (this.pending) {
       this.pending = null;
@@ -1014,6 +1057,8 @@ export class BattleScene extends Phaser.Scene {
 
     if (this.mode === 'target' && u && this.action) {
       const action = this.action;
+      // Previewing a move: skills only show what they'd reach from the planned tile; any click goes back to the preview.
+      if (this.plan) return this.cancel();
       // Second pick of a two-step skill: a push direction or a second target (anything else goes back a step).
       if (this.pending) {
         const first = this.pending.tile;
@@ -1141,22 +1186,56 @@ export class BattleScene extends Phaser.Scene {
     }
     if (clicked && clicked.team === 'player' && clicked !== u) return this.selectUnit(clicked);
 
-    const k = key(tile.x, tile.y);
-    if (u && b.canMove(u) && this.reach.has(k) && (tile.x !== u.x || tile.y !== u.y)) {
-      this.mode = 'busy';
-      const result = b.move(u, tile);
-      this.refresh();
-      await this.animateMove(u, result);
-      this.reach = new Map();
-      if (u.undoBlock) this.addLog(`${u.character.name} ${u.undoBlock === 'spotted' ? 'spots the enemy' : 'scouts new ground'}: this move can't be undone.`);
-      if (!u.alive) {
-        this.selectedUid = null;
-        this.afterUnitDone();
-        return;
-      }
-      this.mode = 'select';
-      this.refresh();
+    if (!u || !b.canMove(u)) return;
+    const here = tile.x === u.x && tile.y === u.y;
+    if (here && this.plan) return this.cancel(); // clicking the unit itself drops the plan
+    if (here || !this.reach.has(key(tile.x, tile.y))) return;
+    // First click previews the move; clicking the planned tile again makes it.
+    if (this.plan && this.plan.tile.x === tile.x && this.plan.tile.y === tile.y) return this.confirmMove();
+    this.setPlan(tile);
+    this.renderSidebar();
+    this.drawOverlay();
+    this.showInfo('Move preview: hover or pick skills to see what they would reach from here. Click the tile again or Confirm Move to go (right-click / Esc to cancel).');
+  }
+
+  /** Show (tile) or clear (null) the selected unit's planned move and its ghost. */
+  private setPlan(tile: Point | null): void {
+    this.ghost?.destroy();
+    this.ghost = null;
+    const u = this.selected;
+    if (!tile || !u) {
+      this.plan = null;
+      return;
     }
+    this.plan = { tile: { x: tile.x, y: tile.y }, path: this.battle.pathTo(this.reach, tile) };
+    const c = this.tileCenter(tile);
+    this.ghost = this.add.container(c.x, c.y, [this.unitFigure(u, 0, FEET_Y, 52 * K)]).setAlpha(0.5);
+  }
+
+  /** Make the previewed move. */
+  private async confirmMove(): Promise<void> {
+    const u = this.selected;
+    const b = this.battle;
+    if (!u || !this.plan || this.dialogOpen) return;
+    if (this.mode === 'target') this.cancel();
+    if (this.mode !== 'select') return;
+    const tile = this.plan.tile;
+    this.setPlan(null);
+    if (!b.canMove(u) || !this.reach.has(key(tile.x, tile.y))) return this.refresh();
+    this.mode = 'busy';
+    this.showInfo('');
+    const result = b.move(u, tile);
+    this.refresh();
+    await this.animateMove(u, result);
+    this.reach = new Map();
+    if (u.undoBlock) this.addLog(`${u.character.name} ${u.undoBlock === 'spotted' ? 'spots the enemy' : 'scouts new ground'}: this move can't be undone.`);
+    if (!u.alive) {
+      this.selectedUid = null;
+      this.afterUnitDone();
+      return;
+    }
+    this.mode = 'select';
+    this.refresh();
   }
 
   /** Show (or hide) where an enemy can move next turn and how far its longest-ranged attack reaches. */
@@ -1196,14 +1275,16 @@ export class BattleScene extends Phaser.Scene {
         : (shownTarget(b, tile) ? `→ Then Dash at ${shownTarget(b, tile)!.character.name}` : '');
       info = pick ? `${what}\n${info}` : `Pick a highlighted tile (right-click / Esc to go back).\n${info}`;
     } else if (this.mode === 'target' && this.action && u) {
-      const blocked = b.blockedTiles(u, this.action).some((p) => p.x === tile.x && p.y === tile.y);
+      const from = this.aimFrom(u);
+      const blocked = b.blockedTiles(u, this.action, from).some((p) => p.x === tile.x && p.y === tile.y);
       const los = b.skillLos(u, this.action);
-      const engaged = b.engagementBlock(u, this.action, tile);
-      const inReach = b.canTarget(u, this.action, tile);
+      const engaged = b.engagementBlock(u, this.action, tile, from);
+      const inReach = b.canTarget(u, this.action, tile, from);
       const why = engaged ?? (blocked
         ? los === 'fire' ? 'No line of fire: a rock or unit is in the way.' : 'No line of sight: a rock is in the way.'
-        : inReach ? `${b.targetError(u, this.action, tile)} Click to cancel.` : "Can't aim there — click to cancel.");
-      info = b.canAim(u, this.action, tile) ? `${this.preview(u, this.action, tile)}\n${info}` : `${why}\n${info}`;
+        : inReach ? `${b.targetError(u, this.action, tile, from)} Click to cancel.` : "Can't aim there — click to cancel.");
+      const plan = this.plan ? '(From the planned tile: confirm the move to use it.)\n' : '';
+      info = b.canAim(u, this.action, tile, from) ? `${plan}${this.preview(u, this.action, tile, from)}\n${info}` : `${why}\n${info}`;
     }
     for (const z of b.zonesAt(tile)) {
       const who = z.def.affects === 'enemy' ? `Affects ${z.team === 'player' ? 'Enemies' : 'Your Side'} Entering` : 'Hits Anyone Entering';
@@ -1221,7 +1302,7 @@ export class BattleScene extends Phaser.Scene {
     this.showInfo(info, shown);
   }
 
-  private preview(u: Unit, s: SkillDef, tile: Point): string {
+  private preview(u: Unit, s: SkillDef, tile: Point, from: Point = u): string {
     const b = this.battle;
     if (s.target === 'move') return `→ Dash Here (${s.mana} MP, uses your last AP)`;
     if (s.cone) return '→ Watch This Cone until Your Next Turn';
@@ -1234,10 +1315,10 @@ export class BattleScene extends Phaser.Scene {
     for (const a of s.selfStatus ?? []) lines.push(`→ You: ${STATUSES[a.status].name} (${STATUSES[a.status].description})`);
     if (s.teleport && !s.charge) return [...lines, '→ Teleport Here'].join('\n');
     if (s.charge) {
-      const land = b.chargeDestination(u, tile, u, s);
-      if (land && (land.x !== u.x || land.y !== u.y)) lines.push(s.teleport ? '→ Teleport In, Then Strike' : '→ Dash In, Then Strike');
+      const land = b.chargeDestination(u, tile, from, s);
+      if (land && (land.x !== from.x || land.y !== from.y)) lines.push(s.teleport ? '→ Teleport In, Then Strike' : '→ Dash In, Then Strike');
     }
-    const targets = b.targetsOf(u, s, tile);
+    const targets = b.targetsOf(u, s, tile, from);
     if (targets.length === 0 && lines.length === 0) return '→ Nobody Affected (action will be spent)';
     for (const t of targets) {
       const who = `${t.character.name}${t.team === u.team && s.hits ? ' (ALLY!)' : ''}`;
@@ -1262,13 +1343,13 @@ export class BattleScene extends Phaser.Scene {
       if (s.push) lines.push(`   Pushed ${s.push} Tiles: Pick the Direction Next`);
       for (const sh of s.shiftStatus ?? []) if (t.statuses.some((x) => x.id === sh.status)) lines.push(`   ${STATUSES[sh.status].name} ${sh.stacks > 0 ? '+' : ''}${sh.stacks}`);
     }
-    const behind = b.pierceVictim(u, s, tile);
+    const behind = b.pierceVictim(u, s, tile, from);
     if (behind) {
       const dmg = (b.basicAttack(u).hits ?? []).reduce((a, h) => a + b.hitDamage(u, behind, { pAtk: (h.pAtk ?? 0) * (s.pierce ?? 0), mAtk: (h.mAtk ?? 0) * (s.pierce ?? 0) }, false, s.pPenPct ?? 0), 0);
       lines.push(`→ Behind: ${behind.character.name}${behind.team === u.team ? ' (ALLY!)' : ''}: ${dmg} dmg`);
     }
     if (s.spreadFire) {
-      const fires = b.areaTiles(u, s, tile).filter((p) => b.zonesAt(p).some((z) => z.element === 'fire')).length;
+      const fires = b.areaTiles(u, s, tile, from).filter((p) => b.zonesAt(p).some((z) => z.element === 'fire')).length;
       if (fires) lines.push(`→ Fans the Flames on ${fires} Fire Tile${fires === 1 ? '' : 's'}`);
     }
     if (s.followUp) lines.push('→ Then Break Away and Dash at a Second Enemy');
@@ -1279,6 +1360,7 @@ export class BattleScene extends Phaser.Scene {
     if (this.mode !== 'select' && this.mode !== 'target') return;
     this.mode = 'busy';
     this.action = null;
+    this.setPlan(null);
     this.selectedUid = null;
     this.threat = null;
     const events = this.battle.endPhase();

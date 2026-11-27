@@ -195,6 +195,9 @@ export function glossaryEntries(): GlossaryEntry[] {
     `Every unit gets 2 AP a turn: a movement AP and an action AP.\n\n`
     + `• Free skills cost nothing and work until the turn ends.\n• 1 AP skills use the movement AP if it's unspent, otherwise the action AP.\n• 2 AP skills use both, so they can't follow a move.\n• Ends-turn skills (most attacks) use whatever is left.\n• Quick Cast makes your next 2 AP or Ends-turn Mage spell this turn cost 1 AP (use it again to cancel for a refund); In the Zone makes two basic attacks free.\n\n`
     + `Undo Move takes back a regular move (see Undo Move).`);
+  add('Battle', 'Moving',
+    `Clicking a tile in a unit's move range only previews the move: a faded copy of the unit shows where it would stand, and nothing happens yet (no AP spent, no overwatch, no fog lifted).\n\n`
+    + `While previewing, hover or pick the unit's skills to see what they would reach from the planned tile. Click the tile again, press Confirm Move or Enter to make the move; right-click or Esc cancels it.`);
   add('Battle', 'Undo Move',
     `Undo Move takes back a unit's regular move this turn, giving back its movement AP. You have ${UNDO_LIMIT} undos per battle; the button shows how many are left.\n\n`
     + `A move is locked in (it can't be undone) once:\n• that unit uses a skill or another unit on your team moves or acts,\n• it was shot by overwatch, caught in a zone or bumped into a hidden enemy on the way,\n• it spotted an enemy you couldn't see before, or\n• it revealed more than ${UNDO_REVEAL_TILES} new tiles of fog.\n\n`
