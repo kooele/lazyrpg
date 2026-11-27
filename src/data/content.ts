@@ -150,6 +150,7 @@ export function parseContent(skillsData: unknown, equipmentData: unknown): GameC
       manaPerTurn: S.optNum(st.manaPerTurn, `${p}.manaPerTurn`),
       hpPctPerTurn: S.optNum(st.hpPctPerTurn, `${p}.hpPctPerTurn`),
       bonusMove: S.bool(st.bonusMove, `${p}.bonusMove`) || undefined,
+      refundIfUnused: S.bool(st.refundIfUnused, `${p}.refundIfUnused`) || undefined,
       manaPerHit: S.optNum(st.manaPerHit, `${p}.manaPerHit`),
       weaponOnHit: st.weaponOnHit === undefined ? undefined : (() => {
         const o = S.obj(st.weaponOnHit, `${p}.weaponOnHit`);
@@ -275,7 +276,7 @@ export function parseContent(skillsData: unknown, equipmentData: unknown): GameC
       pierce: S.optNum(r.pierce, `${p}.pierce`),
       weaponRangeBonus: S.optNum(r.weaponRangeBonus, `${p}.weaponRangeBonus`),
       cooldownAfterOff: S.bool(r.cooldownAfterOff, `${p}.cooldownAfterOff`) || undefined,
-      selfStatusPerEnemyHit: r.selfStatusPerEnemyHit === undefined ? undefined : statusList([r.selfStatusPerEnemyHit], `${p}.selfStatusPerEnemyHit`)[0],
+      selfStatusPerUnitHit: r.selfStatusPerUnitHit === undefined ? undefined : statusList([r.selfStatusPerUnitHit], `${p}.selfStatusPerUnitHit`)[0],
       stealthVision: S.optNum(r.stealthVision, `${p}.stealthVision`),
     };
     if (skill.basicAttack !== undefined && (skill.basicAttack < 1 || !Number.isInteger(skill.basicAttack))) fail('skills.json', `${p}.basicAttack`, 'must be a whole number of 1 or more');
@@ -291,7 +292,7 @@ export function parseContent(skillsData: unknown, equipmentData: unknown): GameC
     if ((skillTags.includes('movement') || skillTags.includes('leap')) && skill.rangeScale === undefined) fail('skills.json', `${p}.rangeScale`, 'is required for "movement" and "leap" skills');
     if (skillTags.includes('movement') && skillTags.includes('leap')) fail('skills.json', `${p}.tags`, 'a skill is either "movement" or "leap", not both');
     if (skill.cooldownAfterOff && !skill.toggleStatus) fail('skills.json', `${p}.cooldownAfterOff`, 'goes with "toggleStatus"');
-    if (skill.selfStatusPerEnemyHit && !statuses[skill.selfStatusPerEnemyHit.status].stacking) fail('skills.json', `${p}.selfStatusPerEnemyHit`, 'needs a stacking status (a stack per enemy hit)');
+    if (skill.selfStatusPerUnitHit && !statuses[skill.selfStatusPerUnitHit.status].stacking) fail('skills.json', `${p}.selfStatusPerUnitHit`, 'needs a stacking status (a stack per unit hit)');
     if (skill.zone?.delayed && !skill.zone.hit) fail('skills.json', `${p}.zone.hit`, 'is required for a delayed zone (its strike)');
     skills[id] = skill;
   }
@@ -559,10 +560,10 @@ export function skillEffect(s: SkillDef): string {
     } else parts.push(statusText(a));
   }
   for (const a of s.selfStatus ?? []) parts.push(`You: ${STATUSES[a.status].name} (${turns(a.turns)})`);
-  if (s.selfStatusPerEnemyHit) {
-    const st = STATUSES[s.selfStatusPerEnemyHit.status];
+  if (s.selfStatusPerUnitHit) {
+    const st = STATUSES[s.selfStatusPerUnitHit.status];
     const gives = st.statPct ? Object.entries(st.statPct).map(([k, v]) => `${(v ?? 0) > 0 ? '+' : ''}${pct(v ?? 0)} ${STAT_INFO[k as keyof Stats].short}`).join(', ') : st.name;
-    parts.push(`You: ${gives} per enemy hit (${st.name}, ${turns(s.selfStatusPerEnemyHit.turns)})`);
+    parts.push(`You: ${gives} per unit hit (${st.name}, ${turns(s.selfStatusPerUnitHit.turns)})`);
   }
   if (s.recoilIfSurvives) {
     const r = s.recoilIfSurvives;
@@ -590,7 +591,7 @@ export function skillEffect(s: SkillDef): string {
     parts.push(`Toggle: ${hit}${upkeep ? `; ${upkeep} a turn while on${st.hpPctPerTurn ? ' (paid on switching on too)' : ''}` : ''}`);
     if (s.cooldownAfterOff) parts.push('Cooldown starts when it switches off');
   }
-  if (s.applyStatus?.some((a) => STATUSES[a.status].bonusMove)) parts.push('The next time you use up your last AP this turn: a free move (walk, or a Movement, Leap or Teleport skill)');
+  if (s.applyStatus?.some((a) => STATUSES[a.status].bonusMove)) parts.push('The next time you use up your last AP this turn: a free move (walk, or a Movement, Leap or Teleport skill); refunded if the turn ends without it');
   if (s.teleport) parts.push(s.charge ? 'Teleport next to the target' : 'Teleport');
   else if (hasTag(s, 'leap')) parts.push(s.charge ? 'Leap next to the target' : 'Leap to the tile');
   else if (s.charge) parts.push('Dash next to the target');

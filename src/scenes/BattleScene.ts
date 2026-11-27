@@ -1342,7 +1342,7 @@ export class BattleScene extends Phaser.Scene {
       if (z.def.delayed) {
         const hit = z.def.hit ? b.hitDamage(b.unit(z.casterUid), shownTarget(b, tile) ?? b.unit(z.casterUid), z.def.hit) : 0;
         const whose = z.team === 'player' ? 'Your' : "the Enemy's";
-        info = `${z.name}: Lands at the Start of ${whose} Next Turn (~${hit} dmg to ${z.team === 'player' ? 'an Enemy' : 'Your Unit'} Standing Here)\n${info}`;
+        info = `${z.name}: Lands at the Start of ${whose} Next Turn (~${hit} dmg to Anyone Standing Here)\n${info}`;
         continue;
       }
       const who = z.def.affects === 'enemy' ? `Affects ${z.team === 'player' ? 'Enemies' : 'Your Side'} Entering` : 'Hits Anyone Entering';
@@ -1366,7 +1366,7 @@ export class BattleScene extends Phaser.Scene {
     if (s.cone) return '→ Watch This Cone until Your Next Turn';
     if (s.zone?.delayed) {
       const t = shownTarget(b, tile);
-      const dmg = t && t.team !== u.team && s.zone.hit ? `\n→ ${t.character.name}: ~${b.hitDamage(u, t, s.zone.hit)} dmg If It's Still Here` : '';
+      const dmg = t && t !== u && s.zone.hit ? `\n→ ${t.character.name}${t.team === u.team ? ' (ALLY!)' : ''}: ~${b.hitDamage(u, t, s.zone.hit)} dmg If It's Still Here` : '';
       return `→ ${s.name} Lands Here at the Start of Your Next Turn${dmg}`;
     }
     if (s.zone) return `→ Place a ${s.name} Here for ${s.zone.turns} Turns`;
@@ -1418,10 +1418,10 @@ export class BattleScene extends Phaser.Scene {
       if (fires) lines.push(`→ Fans the Flames on ${fires} Fire Tile${fires === 1 ? '' : 's'}`);
     }
     if (s.followUp) lines.push('→ Then Break Away and Dash at a Second Enemy');
-    if (s.selfStatusPerEnemyHit) {
-      const n = targets.filter((t) => t.team !== u.team).length;
-      const pct = Math.round((STATUSES[s.selfStatusPerEnemyHit.status].statPct?.defense ?? 0) * 100 * n);
-      if (n) lines.push(`→ You: +${pct}% Def (${STATUSES[s.selfStatusPerEnemyHit.status].name} x${n}, 1 Turn)`);
+    if (s.selfStatusPerUnitHit) {
+      const n = targets.filter((t) => t !== u).length;
+      const pct = Math.round((STATUSES[s.selfStatusPerUnitHit.status].statPct?.defense ?? 0) * 100 * n);
+      if (n) lines.push(`→ You: +${pct}% Def (${STATUSES[s.selfStatusPerUnitHit.status].name} x${n}, 1 Turn)`);
     }
     return lines.join('\n');
   }
@@ -1706,7 +1706,7 @@ export class BattleScene extends Phaser.Scene {
     if (e.type === 'toggle') {
       const label = `${e.name} ${e.on ? 'On' : 'Off'}`;
       if (!this.seen(this.battle.unit(e.target))) summary.push('???');
-      else summary.push(e.reason === 'mana' ? `${e.name} fades (out of mana)` : e.reason === 'health' ? `${e.name} fades (not enough HP)` : e.reason === 'turn' ? `${e.name} fades (unused)` : `${e.name} ${e.on ? 'on' : 'off'}`);
+      else summary.push(e.reason === 'mana' ? `${e.name} fades (out of mana)` : e.reason === 'health' ? `${e.name} fades (not enough HP)` : e.reason === 'turn' ? `${e.name} fades unused (refunded)` : `${e.name} ${e.on ? 'on' : 'off'}`);
       this.floatText(this.battle.unit(e.target), label, '#c18cff', index * 120);
       return;
     }

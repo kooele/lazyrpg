@@ -518,7 +518,7 @@ export function shouldDisengage(battle: Battle, u: Unit): boolean {
   if (!canGetAway(battle, u, opp)) return false;
   const ranged = isRanged(battle, u);
   const hit = battle.previewHits(opp, battle.basicAttack(opp), u).reduce((a, b) => a + b, 0);
-  // A wind-up (Brutal Strike) aimed where it stands: worth taking the free hit to get off that tile.
+  // A wind-up (Brutal Strike) where it stands: worth taking the free hit to get off that tile.
   const windUp = battle.zonesAt(u).some((z) => z.def.delayed) ? battle.zoneDanger(u, []) : 0;
   if (windUp > hit && u.hp - hit > 0) return true;
   let wants: boolean;

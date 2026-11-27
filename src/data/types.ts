@@ -197,6 +197,8 @@ export interface StatusDef {
   hpPctPerTurn?: number;
   /** The next time the unit spends its last AP this turn, it gets one free movement action (Hit and Run). */
   bonusMove?: boolean;
+  /** Runs out unused at the end of the turn: the skill that gave it refunds its mana and cooldown (Hit and Run). */
+  refundIfUnused?: boolean;
   /** Weapon attacks (basic attacks, Overwatch, opportunity attacks, 'weapon' skills) add this hit to each target they hit. */
   weaponOnHit?: DamagePart;
   /** Statuses each weapon on-hit adds to the target (Fire Weapon: a stack of Burn). */
@@ -381,8 +383,8 @@ export interface SkillDef {
   toggleStatus?: string;
   /** Toggles: the cooldown starts when it switches off, not when it's switched on (Soul Ignition). */
   cooldownAfterOff?: boolean;
-  /** The user gets a stack of this status per enemy the skill hit (Heroic Leap: Heroic Guard). */
-  selfStatusPerEnemyHit?: { status: string; turns: number };
+  /** The user gets a stack of this status per unit the skill hit, allies included (Heroic Leap: Heroic Guard). */
+  selfStatusPerUnitHit?: { status: string; turns: number };
   /** Passives: extra Vision while Stealthed (Scout). */
   stealthVision?: number;
   /** For target 'ground' without a zone: the tiles it hits around the aimed tile ('cross' = the tile and its 4 neighbours). */

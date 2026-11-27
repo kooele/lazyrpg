@@ -2555,7 +2555,7 @@ describe('new skills: Emergency Heal, Soul Ignition, Heroic Leap, Brutal Strike,
     expect(u.cooldowns.soul_ignition).toBe(3);
   });
 
-  it('Heroic Leap flies over rocks, slams everyone around the landing (allies too) and gives +20% Def per enemy hit', () => {
+  it('Heroic Leap flies over rocks, slams everyone around the landing (allies too) and gives +20% Def per unit hit', () => {
     const map = openMap();
     for (let y = 0; y < map.height; y++) map.tiles[y][3] = 'rock'; // a wall nobody can walk through
     const { battle, units: [u, ally, e1, e2] } = setup(map, [
@@ -2570,8 +2570,8 @@ describe('new skills: Emergency Heal, Soul Ignition, Heroic Leap, Brutal Strike,
     expect(u).toMatchObject({ x: 5, y: 3, acted: true });
     expect(events[0]).toMatchObject({ type: 'move', kind: 'leap', to: { x: 5, y: 3 } });
     for (const t of [ally, e1, e2]) expect(t.hp).toBeLessThan(t.stats.health);
-    expect(u.statuses.find((s) => s.id === 'heroic_guard')?.stacks).toBe(2);
-    expect(battle.stat(u, 'defense')).toBe(Math.round(def * 1.4));
+    expect(u.statuses.find((s) => s.id === 'heroic_guard')?.stacks).toBe(3); // the ally counts too
+    expect(battle.stat(u, 'defense')).toBe(Math.round(def * 1.6));
     expect(u.mp).toBe(u.stats.mana - 80);
   });
 
@@ -2596,7 +2596,7 @@ describe('new skills: Emergency Heal, Soul Ignition, Heroic Leap, Brutal Strike,
     void e;
   });
 
-  it('Brutal Strike lands at the start of your next turn on an enemy still on the tile; engaged enemies break away from it', () => {
+  it('Brutal Strike lands at the start of your next turn on anyone still on the tile; engaged enemies break away from it', () => {
     const { battle, units: [u, e] } = setup(openMap(), [
       { c: hero('sword_shield', ['brutal_strike']), team: 'player', at: { x: 1, y: 3 } },
       { c: hero('bow'), team: 'enemy', at: { x: 2, y: 3 } },
@@ -2625,6 +2625,15 @@ describe('new skills: Emergency Heal, Soul Ignition, Heroic Leap, Brutal Strike,
     b2.battle.move(b2.units[1], { x: 4, y: 3 });
     b2.battle.endPhase();
     expect(b2.units[1].hp).toBe(b2.units[1].stats.health);
+    // Anyone on the tile gets hit, allies included.
+    const b3 = setup(openMap(), [
+      { c: hero('sword_shield', ['brutal_strike']), team: 'player', at: { x: 1, y: 3 } },
+      { c: hero('bow'), team: 'player', at: { x: 2, y: 3 } },
+    ]);
+    b3.battle.perform(b3.units[0], 'brutal_strike', { x: 2, y: 3 });
+    b3.battle.endPhase();
+    b3.battle.endPhase();
+    expect(b3.units[1].hp).toBe(b3.units[1].stats.health - 200);
   });
 
   it('Hit and Run: spending the last AP gives one free movement action (walk or a movement skill only)', () => {
@@ -2663,11 +2672,22 @@ describe('new skills: Emergency Heal, Soul Ignition, Heroic Leap, Brutal Strike,
     b2.battle.move(w, { x: 1, y: 1 });
     expect(w).toMatchObject({ x: 1, y: 1, ap: 0 });
     expect(b2.battle.canUndoMove(w)).toBe(false);
-    // Wait doesn't count.
-    const b3 = setup(openMap(), [{ c: hero('sword_shield', ['hit_and_run']), team: 'player', at: { x: 1, y: 3 } }]);
-    b3.battle.perform(b3.units[0], 'hit_and_run', { x: 1, y: 3 });
-    b3.battle.wait(b3.units[0]);
-    expect(b3.units[0].bonusMove).toBeFalsy();
+    // Wait and Overwatch don't count: the turn ends with it unused, and its mana and cooldown come back.
+    for (const end of ['wait', 'overwatch'] as const) {
+      const b3 = setup(openMap(), [{ c: hero('sword_shield', ['hit_and_run']), team: 'player', at: { x: 1, y: 3 } }]);
+      const r = b3.units[0];
+      b3.battle.perform(r, 'hit_and_run', { x: 1, y: 3 });
+      expect(r.mp).toBe(r.stats.mana - 20);
+      if (end === 'wait') b3.battle.wait(r);
+      else b3.battle.perform(r, 'overwatch', { x: 2, y: 3 });
+      expect(r.bonusMove).toBeFalsy();
+      const events = b3.battle.endPhase();
+      expect(events).toContainEqual({ type: 'toggle', target: r.uid, name: 'Hit and Run', on: false, reason: 'turn' });
+      expect(r.mp).toBe(r.stats.mana);
+      expect(r.cooldowns.hit_and_run ?? 0).toBe(0);
+    }
+    // Used: no refund.
+    expect(w.cooldowns.hit_and_run).toBe(3);
   });
 
   it('Scout sees 2 tiles further while Stealthed', () => {

@@ -34,9 +34,10 @@
     "cooldownAfterOff": "Toggles: the cooldown starts when the toggle switches off (by hand or because it can't be paid), not when it's switched on (Soul Ignition).",
     "hpPctPerTurn": "Toggle statuses: like manaPerTurn, but a share of max HP (ignores Defense and shields), paid when switched on and at the start of each turn. It can't be switched on, and switches off, when the unit has no more HP than that.",
     "aoeRadius (emptyTile)": "For 'emptyTile' skills (Heroic Leap): the skill's hits land on every unit within this distance of the tile it lands on.",
-    "selfStatusPerEnemyHit": "{ status, turns }: the user gets one stack of a stacking status per enemy the skill hit (Heroic Leap: Heroic Guard).",
+    "selfStatusPerUnitHit": "{ status, turns }: the user gets one stack of a stacking status per unit the skill hit, allies included (Heroic Leap: Heroic Guard).",
     "delayed": "Zones: harmless to walk through; strikes once, with `hit`, every unit it affects standing on it at the start of the caster's next turn, then it's gone (Brutal Strike).",
     "bonusMove": "Statuses: the next time the unit spends its last AP (not with Wait or a reaction), it gets one free movement action: walk, or a Movement, Leap or Teleport skill (Hit and Run).",
+    "refundIfUnused": "Statuses: if it runs out unused at the end of the turn, the skill that gave it refunds its mana and cooldown (Hit and Run).",
     "stealthVision": "Passives: extra Vision (tiles) while the unit is Stealthed (Scout).",
     "basicSkills": "abilities every Adventurer has on top of weapon and tree skills"
   },
@@ -87,8 +88,8 @@
     "staggered": { "name": "Staggered", "debuff": true, "stacking": false, "tick": "end", "apLoss": 1, "description": "Loses 1 AP at the start of its next turn: the movement AP if it still has it." },
     "quick_cast": { "name": "Quick Cast", "debuff": false, "stacking": false, "tick": "end", "toggle": true, "thisTurnOnly": true, "quickCast": true, "description": "Your next Mage spell this turn that costs 2 AP or ends your turn costs 1 AP instead. Using Quick Cast again cancels it, refunding its mana and cooldown; it also switches off (refunded) at the end of your turn if unused." },
     "soul_ignition": { "name": "Soul Ignition", "debuff": false, "stacking": false, "tick": "start", "toggle": true, "manaPerTurn": 25, "hpPctPerTurn": 0.1, "statPct": { "movement": 0.5, "mAtk": 0.25 }, "description": "+50% Movement and +25% M.Atk. Costs 25 mana and 10% of max HP at the start of each turn; switches off when you can't pay either." },
-    "heroic_guard": { "name": "Heroic Guard", "debuff": false, "stacking": true, "tick": "start", "statPct": { "defense": 0.2 }, "description": "+20% Defense per stack (one per enemy hit by Heroic Leap), until the start of your next turn." },
-    "hit_and_run": { "name": "Hit and Run", "debuff": false, "stacking": false, "tick": "end", "bonusMove": true, "description": "The next time you use up your last AP this turn (a turn-ending attack included), you get a free movement action: walk, or use a Movement, Leap or Teleport skill. Engagement still holds you in place." },
+    "heroic_guard": { "name": "Heroic Guard", "debuff": false, "stacking": true, "tick": "start", "statPct": { "defense": 0.2 }, "description": "+20% Defense per stack (one per unit hit by Heroic Leap), until the start of your next turn." },
+    "hit_and_run": { "name": "Hit and Run", "debuff": false, "stacking": false, "tick": "end", "bonusMove": true, "refundIfUnused": true, "description": "The next time you use up your last AP this turn (a turn-ending attack included), you get a free movement action: walk, or use a Movement, Leap or Teleport skill. Engagement still holds you in place. If the turn ends without it (Wait, Overwatch or End Turn), its mana and cooldown are refunded." },
     "in_the_zone": { "name": "In the Zone", "debuff": false, "stacking": true, "tick": "end", "freeBasicAttacks": true, "description": "Your basic attacks cost no AP and ignore their cooldown, one stack per attack." },
     "poison": { "name": "Poison", "debuff": true, "stacking": true, "tick": "start", "damagePctMaxHpPerStack": 0.03, "description": "Lose 3% of max Health per stack at the start of each turn. Ignores Defense and shields." }
   },
@@ -335,10 +336,10 @@
       "hits": [{ "pAtk": 0.8 }], "charge": true, "followUp": true
     },
     "heroic_leap": {
-      "name": "Heroic Leap", "description": "Leap to a tile and slam down, striking everyone around where you land. Each enemy hit hardens your guard.",
+      "name": "Heroic Leap", "description": "Leap to a tile and slam down, striking everyone around where you land. Each unit hit hardens your guard.",
       "tags": ["leap", "area", "physical"],
       "target": "emptyTile", "affects": "any", "range": 4, "rangeScale": 1, "minRange": 1, "cooldown": 4, "mana": 80, "level": 5,
-      "aoeRadius": 1.5, "hits": [{ "pAtk": 1 }], "selfStatusPerEnemyHit": { "status": "heroic_guard", "turns": 1 }
+      "aoeRadius": 1.5, "hits": [{ "pAtk": 1 }], "selfStatusPerUnitHit": { "status": "heroic_guard", "turns": 1 }
     },
     "fighting_spirit": {
       "name": "Fighting Spirit", "description": "Whenever you become engaged with an enemy (whoever started it), you hit them with a free basic attack at 50% damage.",
@@ -364,10 +365,10 @@
       "hits": [{ "pAtk": 0.8 }], "applyStatus": [{ "status": "staggered", "turns": 1 }]
     },
     "brutal_strike": {
-      "name": "Brutal Strike", "description": "Wind up a devastating blow on an adjacent tile. It lands at the start of your next turn on whatever enemy stands there.",
+      "name": "Brutal Strike", "description": "Wind up a devastating blow on an adjacent tile. It lands at the start of your next turn on whoever stands there, friend or foe.",
       "tags": ["physical"],
-      "target": "ground", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 2, "mana": 50, "level": 7,
-      "zone": { "radius": 0, "turns": 1, "hit": { "pAtk": 2 }, "endTurnHits": 0, "affects": "enemy", "delayed": true }
+      "target": "ground", "affects": "any", "range": 1.5, "minRange": 1, "cooldown": 2, "mana": 50, "level": 7,
+      "zone": { "radius": 0, "turns": 1, "hit": { "pAtk": 2 }, "endTurnHits": 0, "delayed": true }
     },
     "tooth_for_tooth": {
       "name": "Tooth for Tooth", "description": "When the enemy you're engaged with attacks you, you hit back with a free basic attack at 50% damage.",
@@ -398,7 +399,7 @@
       "target": "passive", "affects": "ally", "range": 0, "level": 3, "stealthVision": 2
     },
     "hit_and_run": {
-      "name": "Hit and Run", "description": "Strike, then slip away: the next time you use up your last AP this turn, you get a free movement action.",
+      "name": "Hit and Run", "description": "Strike, then slip away: the next time you use up your last AP this turn, you get a free movement action. Refunded if the turn ends without it (Wait, Overwatch or End Turn).",
       "tags": ["free"],
       "target": "self", "affects": "ally", "range": 0, "minRange": 0, "ap": 0, "cooldown": 3, "mana": 20, "level": 4,
       "applyStatus": [{ "status": "hit_and_run", "turns": 1 }]

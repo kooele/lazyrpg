@@ -1920,10 +1920,10 @@ export class Battle {
     // Power Strike: whoever stands behind the target, picked before anyone is pushed or falls.
     const pierced = this.pierceVictim(u, used, tile);
     this.strike(u, skill, used, targets, events);
-    // Heroic Leap: a stack of Heroic Guard per enemy hit.
-    const perHit = used.selfStatusPerEnemyHit;
-    const enemiesHit = targets.filter((t) => t.team !== u.team).length;
-    if (perHit && enemiesHit && u.alive) events.push(...this.applyStatus(u, u, perHit.status, perHit.turns, enemiesHit, true));
+    // Heroic Leap: a stack of Heroic Guard per unit hit (allies too).
+    const perHit = used.selfStatusPerUnitHit;
+    const unitsHit = targets.filter((t) => t !== u).length;
+    if (perHit && unitsHit && u.alive) events.push(...this.applyStatus(u, u, perHit.status, perHit.turns, unitsHit, true));
     if (pierced && pierced.alive && used.pierce) {
       for (const part of scaleHits(this.basicAttack(u).hits ?? [], used.pierce)) {
         if (!pierced.alive) break;
@@ -2261,6 +2261,15 @@ export class Battle {
       // Quick Cast unused at the end of the turn: it switches off, refunded like a cancel.
       if (def?.thisTurnOnly && !this.stillActive(s)) {
         this.refundToggle(u, s.id);
+        events.push({ type: 'toggle', target: u.uid, name: s.name, on: false, reason: 'turn' });
+      }
+      // Hit and Run unused (the turn ended with Wait, Overwatch or End Turn): its mana and cooldown come back.
+      if (def?.refundIfUnused && !this.stillActive(s)) {
+        const id = this.skillIds(u).find((sid) => SKILLS[sid].applyStatus?.some((a) => a.status === s.id));
+        if (id) {
+          u.mp = Math.min(u.stats.mana, u.mp + SKILLS[id].mana);
+          delete u.cooldowns[id];
+        }
         events.push({ type: 'toggle', target: u.uid, name: s.name, on: false, reason: 'turn' });
       }
     }
