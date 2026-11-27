@@ -480,6 +480,8 @@ export class Tooltip {
   private readonly bg: Phaser.GameObjects.Rectangle;
   private readonly label: Phaser.GameObjects.Text;
   private extra: Phaser.GameObjects.Container | null = null;
+  /** Called with the tooltip's box (in layout pixels) whenever it moves, and with null when it hides. */
+  onPlace: ((box: { x: number; y: number; w: number; h: number } | null) => void) | null = null;
 
   constructor(private readonly scene: Phaser.Scene, private readonly width = 280) {
     this.bg = scene.add.rectangle(0, 0, width, 10, 0x0b0e18, 0.96).setOrigin(0).setStrokeStyle(1.5, COLORS.accent);
@@ -512,6 +514,7 @@ export class Tooltip {
     this.box.setVisible(false);
     this.extra?.destroy();
     this.extra = null;
+    this.onPlace?.(null);
   }
 
   private place(): void {
@@ -522,6 +525,7 @@ export class Tooltip {
     if (x + this.width > WIDTH - 4) x = p.worldX - this.width - 12;
     if (y + h > HEIGHT - 4) y = p.worldY - h - 10;
     this.box.setPosition(Math.max(4, x), Math.max(4, y));
+    this.onPlace?.({ x: this.box.x, y: this.box.y, w: this.width, h });
   }
 }
 
