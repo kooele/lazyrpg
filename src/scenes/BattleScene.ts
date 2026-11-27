@@ -4,7 +4,7 @@ import type { SkillDef, StatKey, Stats } from '../data/types';
 import { STAT_INFO } from '../data/types';
 import { bestAction, bestFreeAction, planTurn, preferredMode, shouldDisengage, shouldEscape, shouldSurrender, watchesForOverwatch } from '../game/ai';
 import {
-  AP_PER_TURN, Battle, deploymentTiles, generateEnemies, makeUnit, penLine, penText, statEffectPct, statText,
+  AP_PER_TURN, Battle, UNDO_LIMIT, UNDO_REVEAL_TILES, deploymentTiles, generateEnemies, makeUnit, penLine, penText, statEffectPct, statText,
   type BattleEvent, type MoveResult, type Unit,
 } from '../game/battle';
 import { BAR_PAGE, makeRng, skillBarLayout, swapBarSlots } from '../game/character';
@@ -421,7 +421,8 @@ export class BattleScene extends Phaser.Scene {
 
     // Skill range ("attack box"): while targeting, or while hovering a skill button.
     const shown = this.mode === 'target' ? this.action : this.mode === 'select' ? this.previewAction : null;
-    const caster = this.casterUid ? b.unit(this.casterUid) : sel;
+    // An enemy acting out of sight (fog of war, Stealth) shows nothing: no attack box, no target.
+    const caster = this.casterUid ? this.visibleCaster() : sel;
     if (shown && caster) {
       const color = isSupport(shown) ? 0x6fdc8c : 0xff6b6b;
       for (const p of b.rangeTiles(caster, shown)) {
@@ -458,7 +459,8 @@ export class BattleScene extends Phaser.Scene {
       }
     }
 
-    if (this.hoverTile) {
+    // (Not an unseen enemy's aim: that would give away that it's there.)
+    if (this.hoverTile && !(this.casterUid && !this.visibleCaster())) {
       g.lineStyle(2, 0xffffff, 0.8).strokeRect(MAP_X + this.hoverTile.x * TILE + 1, MAP_Y + this.hoverTile.y * TILE + 1, TILE - 2, TILE - 2);
     }
 
@@ -470,10 +472,20 @@ export class BattleScene extends Phaser.Scene {
         const isSel = u === sel;
         this.rings.lineStyle(isSel ? 3 : 2, 0xffd166, isSel ? 1 : 0.4).strokeEllipse(c.x, c.y + FEET_Y, 46 * K, 18 * K);
       }
-    } else if (this.casterUid && this.mode !== 'over') {
-      const c = this.tileCenter(b.unit(this.casterUid));
-      this.rings.lineStyle(3, 0xff6b6b, 1).strokeEllipse(c.x, c.y + FEET_Y, 46 * K, 18 * K);
+    } else if (this.mode !== 'over') {
+      const acting = this.visibleCaster();
+      if (acting) {
+        const c = this.tileCenter(acting);
+        this.rings.lineStyle(3, 0xff6b6b, 1).strokeEllipse(c.x, c.y + FEET_Y, 46 * K, 18 * K);
+      }
     }
+  }
+
+  /** The unit acting now (casterUid), if the party can see it: an enemy in fog of war or Stealthed stays hidden. */
+  private visibleCaster(): Unit | null {
+    if (!this.casterUid) return null;
+    const u = this.battle.unit(this.casterUid);
+    return u.team === 'player' || (this.battle.canSee('player', u) && !this.battle.isStealthed(u)) ? u : null;
   }
 
   private renderTopBar(): void {
@@ -507,7 +519,7 @@ export class BattleScene extends Phaser.Scene {
     this.sidebar.removeAll(true);
     const S = this.sidebar;
     const b = this.battle;
-    const u = this.selected ?? (this.casterUid ? b.unit(this.casterUid) : null);
+    const u = this.selected ?? this.visibleCaster();
     S.add(panel(this, SIDE_X, 16, SIDE_W, 160));
     if (u) {
       S.add(this.unitFigure(u, SIDE_X + 28, 64, 46));
@@ -545,8 +557,12 @@ export class BattleScene extends Phaser.Scene {
           },
         }));
       } else {
-        S.add(button(this, SIDE_X, y, 116, 30, 'Undo Move', () => this.undoMove(), {
+        S.add(button(this, SIDE_X, y, 116, 30, `Undo Move (${b.undosLeft.player})`, () => this.undoMove(), {
           enabled: interactive && b.canUndoMove(u), fontSize: 14,
+          onHover: () => {
+            const why = b.undoBlockReason(u);
+            this.showInfo(`Take back this unit's move (${b.undosLeft.player} of ${UNDO_LIMIT} undos left this battle).${why ? `\nCan't undo: ${why}` : ''}\nA move that spots an enemy or reveals more than ${UNDO_REVEAL_TILES} new tiles can't be undone.`);
+          },
         }));
       }
     }
@@ -1132,6 +1148,7 @@ export class BattleScene extends Phaser.Scene {
       this.refresh();
       await this.animateMove(u, result);
       this.reach = new Map();
+      if (u.undoBlock) this.addLog(`${u.character.name} ${u.undoBlock === 'spotted' ? 'spots the enemy' : 'scouts new ground'}: this move can't be undone.`);
       if (!u.alive) {
         this.selectedUid = null;
         this.afterUnitDone();

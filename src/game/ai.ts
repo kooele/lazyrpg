@@ -71,9 +71,15 @@ function tribe(battle: Battle, u: Unit): Unit[] {
 /** Teams whose tribal group has broken and is running (stays broken for the rest of the battle). */
 const routed = new WeakMap<Battle, Set<Team>>();
 
+/** A tribal group breaks once no more than this share of it is still standing (and its foes aren't outnumbered). */
+export const TRIBE_BREAK_SHARE = 1 / 3;
+/** ...or once its survivors are down to this share of their combined max Health. */
+export const TRIBE_BREAK_HEALTH = 0.3;
+
 /**
- * Has `team`'s tribal group broken? It breaks when half of it is gone (and the other side isn't
- * outnumbered), or when the survivors are badly hurt overall. Then every tribal fighter runs.
+ * Has `team`'s tribal group broken? It breaks when only a third of it is left standing (TRIBE_BREAK_SHARE, and
+ * the other side isn't outnumbered), or when the survivors are badly hurt overall (TRIBE_BREAK_HEALTH). Then every
+ * tribal fighter runs.
  */
 export function tribeRouted(battle: Battle, team: Team): boolean {
   if (routed.get(battle)?.has(team)) return true;
@@ -82,7 +88,7 @@ export function tribeRouted(battle: Battle, team: Team): boolean {
   if (all.length < 2 || standing.length === 0) return false;
   const hp = standing.reduce((a, x) => a + x.hp, 0) / standing.reduce((a, x) => a + x.stats.health, 0);
   const foes = battle.living().filter((f) => f.team !== team).length;
-  const broken = (standing.length <= all.length / 2 && foes >= standing.length) || hp < 0.3;
+  const broken = (standing.length <= all.length * TRIBE_BREAK_SHARE && foes >= standing.length) || hp < TRIBE_BREAK_HEALTH;
   if (broken) {
     if (!routed.has(battle)) routed.set(battle, new Set());
     routed.get(battle)!.add(team);
@@ -399,9 +405,47 @@ function reachFor(battle: Battle, u: Unit): Map<string, ReachInfo> {
   return reach;
 }
 
-/** Tiles from `p` to the nearest map edge. */
-function edgeDistance(battle: Battle, p: Point): number {
-  return Math.min(p.x, p.y, battle.map.width - 1 - p.x, battle.map.height - 1 - p.y);
+/** Edge tiles within this many tiles of a foe are a worse way out, the closer the worse. */
+const ESCAPE_FOE_RADIUS = 8;
+
+/**
+ * How costly it is to get off the map from each tile, for a fleeing unit: walking distance (in tiles, ignoring units)
+ * to an edge tile, where an edge tile near a foe it knows of costs extra (2 tiles for every tile closer than
+ * ESCAPE_FOE_RADIUS), and so does every tile on the way that passes right by a foe (2 per foe within 2 tiles). So it
+ * runs for the side away from the party, not straight past an archer to the nearest edge.
+ */
+function escapeField(battle: Battle, u: Unit): Map<string, number> {
+  const foes = battle.knownFoes(u).map((f) => f.at);
+  const { width, height } = battle.map;
+  const nearFoe = (p: Point) => foes.reduce((n, f) => n + (dist(f, p) <= 2 + 1e-9 ? 1 : 0), 0);
+  const cost = new Map<string, number>();
+  const open: { p: Point; c: number }[] = [];
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const p = { x, y };
+      if (!battle.onEdge(p) || !passable(battle.map, x, y)) continue;
+      const exposed = foes.reduce((sum, f) => sum + Math.max(0, ESCAPE_FOE_RADIUS - dist(f, p)), 0);
+      const c = exposed * 2 + nearFoe(p) * 2;
+      cost.set(key(x, y), c);
+      open.push({ p, c });
+    }
+  }
+  // Dijkstra outward from the edges (the map is small: a sort per step is fine).
+  while (open.length) {
+    open.sort((a, b) => a.c - b.c);
+    const { p, c } = open.shift()!;
+    if (c > (cost.get(key(p.x, p.y)) ?? Infinity)) continue;
+    for (const d of DIRS) {
+      const n = { x: p.x + d.x, y: p.y + d.y };
+      if (!passable(battle.map, n.x, n.y)) continue;
+      const nc = c + 1 + nearFoe(n) * 2;
+      if (nc < (cost.get(key(n.x, n.y)) ?? Infinity)) {
+        cost.set(key(n.x, n.y), nc);
+        open.push({ p: n, c: nc });
+      }
+    }
+  }
+  return cost;
 }
 
 /** Tiles a unit can end its move on this turn (just its own tile if it can't move). */
@@ -520,13 +564,15 @@ export function planTurn(battle: Battle, u: Unit): AiPlan {
   const danger = new Map(tiles.map((t) => [key(t.x, t.y), threatAt(battle, u, t, threats)]));
   const hazard = (t: Point) => zoneHazard(battle, u, reach, t);
 
-  // Fleeing enemies run for the map edge: the safest edge tile if they can reach one this turn,
-  // otherwise as close to an edge as they can get (safest first among equals).
+  // Fleeing enemies run for the map edge: the safest edge tile if they can reach one this turn, otherwise along
+  // the safest way out (see escapeField): toward an edge away from their foes, not just the nearest one.
   if (wantsToFlee(battle, u) && battle.canMove(u)) {
     const risk = (t: Point) => danger.get(key(t.x, t.y))! + hazard(t);
     const exits = tiles.filter((t) => battle.onEdge(t));
     if (exits.length) return { moveTo: exits.reduce((a, b) => (risk(b) < risk(a) ? b : a)) };
-    const rank = (t: Point) => edgeDistance(battle, t) * 10000 + risk(t);
+    const field = escapeField(battle, u);
+    // Taking a hit worth 10% of its Health is worth a tile of extra running.
+    const rank = (t: Point) => (field.get(key(t.x, t.y)) ?? Infinity) + risk(t) / (u.stats.health * 0.1);
     return { moveTo: tiles.reduce((a, b) => (rank(b) < rank(a) ? b : a)) };
   }
 

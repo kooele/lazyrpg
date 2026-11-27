@@ -1274,7 +1274,7 @@ describe('progression and enemy behaviour', () => {
     expect(b.hp).toBeLessThan(Math.round(b.stats.health * 0.45));
   });
 
-  it('tribal: the whole group breaks and runs once half of it is gone', () => {
+  it('tribal: the whole group breaks and runs once only a third of it is left', () => {
     const map = openMap(20, 13);
     const goblins = [4, 5, 6, 7].map((y) => makeUnit(makeEnemy('goblin', 4, makeRng(y)), 'enemy', { x: 14, y }));
     const heroes = [5, 6, 7].map((y) => makeUnit(hero('sword_shield', [], `H${y}`), 'player', { x: 3, y }));
@@ -1284,7 +1284,9 @@ describe('progression and enemy behaviour', () => {
     expect(wantsToFlee(battle, goblins[2])).toBe(false);
     goblins[0].alive = false;
     goblins[1].alive = false;
-    expect(tribeRouted(battle, 'enemy')).toBe(true);
+    expect(tribeRouted(battle, 'enemy')).toBe(false); // half gone: they hold
+    goblins[3].alive = false;
+    expect(tribeRouted(battle, 'enemy')).toBe(true); // 1 of 4 left: broken
     // Even an unhurt goblin runs now.
     expect(goblins[2].hp).toBe(goblins[2].stats.health);
     expect(wantsToFlee(battle, goblins[2])).toBe(true);
@@ -1432,7 +1434,7 @@ describe('battles', () => {
       { c: hero(), team: 'player', at: { x: 1, y: 1 } },
       { c: hero('staff', ['arcane_pulse']), team: 'player', at: { x: 1, y: 3 } },
       { c: hero(), team: 'enemy', at: { x: 9, y: 6 } },
-    ]);
+    ], NO_FOG); // (fog of war has its own undo rules: see skills.test.ts)
     // An ally moving locks it in (no stepping aside to let it through, then stepping back).
     const moved = make();
     const [a, b] = moved.units;
@@ -1459,7 +1461,7 @@ describe('battles', () => {
       { c: hero(), team: 'player', at: { x: 0, y: 0 } },
       { c: hero('bow'), team: 'player', at: { x: 0, y: 2 } },
       { c: hero(), team: 'enemy', at: { x: 9, y: 6 } },
-    ]);
+    ], NO_FOG);
     expect(battle.canAct(e)).toBe(false);
     battle.move(b, { x: 2, y: 2 });
     battle.undoMove(b);

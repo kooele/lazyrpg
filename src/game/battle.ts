@@ -44,6 +44,11 @@ export interface Overwatch {
 /** Action points every unit gets each turn: one movement AP and one action AP. */
 export const AP_PER_TURN = 2;
 
+/** Moves each side can undo per battle (Undo Move). */
+export const UNDO_LIMIT = 3;
+/** A move that brings more than this many new tiles into its side's sight (fog of war) can't be undone. */
+export const UNDO_REVEAL_TILES = 10;
+
 export interface Unit {
   uid: string;
   team: Team;
@@ -80,6 +85,8 @@ export interface Unit {
   weaponDisabled: boolean;
   /** Selected mode of a weapon with modes (the Bow): index into its basic attack's modes. Kept on the character between battles. */
   weaponMode: number;
+  /** Why this turn's move can't be undone because of what it revealed (fog of war), if it can't. */
+  undoBlock?: 'spotted' | 'scouted';
   /** Fled off the edge of the map (counts as gone, not dead). */
   escaped?: boolean;
   /** Gave up (human enemies that can't escape): out of the fight, and taken prisoner if the party wins. */
@@ -265,6 +272,8 @@ export class Battle {
    * positions of units hidden in fog of war. Starts with where the enemies were deployed.
    */
   readonly lastSeen: Record<Team, Map<string, Point>> = { player: new Map(), enemy: new Map() };
+  /** Undo Move uses left this battle, per side (UNDO_LIMIT). */
+  readonly undosLeft: Record<Team, number> = { player: UNDO_LIMIT, enemy: UNDO_LIMIT };
   /**
    * Where each party member stood when the party's last turn began (not Stealthed ones). The enemy AI learns these when
    * its own turn begins: a rough, one-turn-old idea of where units out of sight are (see beginPhase). The player gets
@@ -857,9 +866,25 @@ export class Battle {
     u.walked = true;
     u.ap -= 1;
     this.lockTeammates(u);
+    // What the side could see before, to tell what the move reveals (fog of war).
+    const sightBefore = this.rules.vision.enabled ? new Set(this.visibleTiles(u.team)) : null;
+    const foesBefore = sightBefore ? new Set(this.spottedFoes(u.team)) : null;
     const result = this.walk(u, this.routeTo(u, dest, avoidWatch, reach));
+    // A move that spots an enemy, or brings more than UNDO_REVEAL_TILES new tiles into sight, can't be taken back:
+    // otherwise it would be free scouting.
+    if (sightBefore && foesBefore) {
+      const newTiles = [...this.visibleTiles(u.team)].filter((k) => !sightBefore.has(k)).length;
+      const spotted = this.spottedFoes(u.team).some((f) => !foesBefore.has(f));
+      u.undoBlock = spotted ? 'spotted' : newTiles > UNDO_REVEAL_TILES ? 'scouted' : undefined;
+      if (u.undoBlock) u.locked = true;
+    }
     this.updateSightings();
     return result;
+  }
+
+  /** Enemies `team` can see right now (not Stealthed ones). */
+  private spottedFoes(team: Team): Unit[] {
+    return this.living().filter((f) => f.team !== team && this.canSee(team, f) && !this.isStealthed(f));
   }
 
   /** Dash: after the regular move, spend the action AP (and its mana, cooldown) to move again. */
@@ -975,7 +1000,16 @@ export class Battle {
    */
   canUndoMove(u: Unit): boolean {
     const occupant = this.unitAt(u.startPos.x, u.startPos.y);
-    return u.alive && u.walked && !u.acted && !u.locked && (!occupant || occupant === u);
+    return u.alive && u.walked && !u.acted && !u.locked && this.undosLeft[u.team] > 0 && (!occupant || occupant === u);
+  }
+
+  /** Why the unit's move can't be undone right now (for the UI), or null if it can (or there's no move to undo). */
+  undoBlockReason(u: Unit): string | null {
+    if (!u.walked || u.acted || this.canUndoMove(u)) return null;
+    if (u.undoBlock === 'spotted') return 'This move spotted an enemy.';
+    if (u.undoBlock === 'scouted') return `This move revealed more than ${UNDO_REVEAL_TILES} new tiles.`;
+    if (this.undosLeft[u.team] <= 0) return `No undos left this battle (${UNDO_LIMIT} per battle).`;
+    return 'Something has happened since (an action, an attack on the way, or another unit moved).';
   }
 
   undoMove(u: Unit): void {
@@ -985,6 +1019,8 @@ export class Battle {
     u.moved = false;
     u.walked = false;
     u.ap += 1;
+    u.undoBlock = undefined;
+    this.undosLeft[u.team] -= 1;
   }
 
   /** End this unit's turn, giving up any AP left. */
@@ -2229,6 +2265,7 @@ export class Battle {
       u.acted = false;
       u.locked = false;
       u.startPos = { x: u.x, y: u.y };
+      u.undoBlock = undefined;
       u.overwatch = null;
       for (const k of Object.keys(u.cooldowns)) u.cooldowns[k] = Math.max(0, u.cooldowns[k] - 1);
       events.push(...this.tickStatuses(u, 'start'));

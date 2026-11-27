@@ -7,6 +7,7 @@ import { TRAITS } from '../data/traits';
 import { LOOT } from '../data/enemies';
 import { RANKS, type Rank } from '../data/types';
 import { lodgingName } from './condition';
+import { UNDO_LIMIT, UNDO_REVEAL_TILES } from './battle';
 
 export const GLOSSARY_TOPICS = ['City Life', 'Quests & Ranks', 'Experience', 'Party Members', 'Slaves', 'Battle'] as const;
 export type GlossaryTopic = (typeof GLOSSARY_TOPICS)[number];
@@ -193,7 +194,11 @@ export function glossaryEntries(): GlossaryEntry[] {
   add('Battle', 'Action Points',
     `Every unit gets 2 AP a turn: a movement AP and an action AP.\n\n`
     + `• Free skills cost nothing and work until the turn ends.\n• 1 AP skills use the movement AP if it's unspent, otherwise the action AP.\n• 2 AP skills use both, so they can't follow a move.\n• Ends-turn skills (most attacks) use whatever is left.\n• Quick Cast makes your next 2 AP or Ends-turn Mage spell this turn cost 1 AP (use it again to cancel for a refund); In the Zone makes two basic attacks free.\n\n`
-    + `Undo move works until that unit acts or another unit on your team moves.`);
+    + `Undo Move takes back a regular move (see Undo Move).`);
+  add('Battle', 'Undo Move',
+    `Undo Move takes back a unit's regular move this turn, giving back its movement AP. You have ${UNDO_LIMIT} undos per battle; the button shows how many are left.\n\n`
+    + `A move is locked in (it can't be undone) once:\n• that unit uses a skill or another unit on your team moves or acts,\n• it was shot by overwatch, caught in a zone or bumped into a hidden enemy on the way,\n• it spotted an enemy you couldn't see before, or\n• it revealed more than ${UNDO_REVEAL_TILES} new tiles of fog.\n\n`
+    + `So moving to scout and stepping back doesn't work. Dash and movement skills can never be undone. Hover the button to see why a move is locked.`);
   add('Battle', 'Mana',
     `Mana is spent by skills and doesn't come back during a battle. Units start each battle with full mana.`);
   add('Battle', 'Defense and Resist',
@@ -237,7 +242,7 @@ export function glossaryEntries(): GlossaryEntry[] {
     + `Stacks don't last a set number of turns: the unit loses one each turn. A unit with 2 stacks is affected just as much as with 1, for one more turn; a status shows its stacks as Burn (2).\n\n`
     + `${slow?.name ?? 'Slow'} (webs, goo and other non-ice effects): ${slow?.description ?? ''} Slow and Chilled are separate: a unit with both moves at 75% × 75% = 56%.`);
   add('Battle', 'Enemy Temperaments',
-    `• Beasts act alone, go for the nearest target and flee when badly hurt.\n• Tribal enemies fight as a group, and the whole group runs once half of it is gone.\n• Humans use cover and pick off the weak; when cornered and badly hurt they may surrender, and you take them prisoner if you win.\n• Evil enemies never flee and go for kills.\n• Humans and tribal enemies steer around your overwatch when they can; beasts and evil run and leap straight through it.\n\n`
+    `• Beasts act alone, go for the nearest target and flee when badly hurt.\n• Tribal enemies fight as a group, and the whole group runs once only a third of it is left (or the survivors are badly hurt).\n• Humans use cover and pick off the weak; when cornered and badly hurt they may surrender, and you take them prisoner if you win.\n• Evil enemies never flee and go for kills.\n• Humans and tribal enemies steer around your overwatch when they can; beasts and evil run and leap straight through it.\n\n`
     + `Click an enemy to see where it can move and hit next turn.`);
   add('Battle', 'Ranges',
     `Ranges use straight-line distance. Ranges of 2 or more round to the nearest tile, so shapes are roundish. Range 1 is the 4 neighbours; 1.5 adds the diagonals.`);
