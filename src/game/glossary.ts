@@ -42,6 +42,7 @@ export function glossaryEntries(): GlossaryEntry[] {
   const growth = STAT_CONFIG.talent.growthRate;
   const burn = STATUSES.burn;
   const chilled = STATUSES.chilled;
+  const shocked = STATUSES.shocked;
   const slow = STATUSES.slow;
   const out: GlossaryEntry[] = [];
   const add = (topic: GlossaryTopic, term: string, body: string) => out.push({ topic, term, body });
@@ -238,7 +239,7 @@ export function glossaryEntries(): GlossaryEntry[] {
     `Forest costs 6 Movement to enter. A unit standing in forest takes ${Math.round(STAT_CONFIG.forestProjectileReduction * 100)}% less damage from projectiles: arrows and shots (Direct and Indirect) and thrown spells like Magic Bolt and Fireball. Melee attacks, area spells and zones hit it as usual.`);
   add('Battle', 'Equipment',
     `Every Adventurer has a weapon and a body armor. Each piece adds base stats, then multiplies the total by its modifiers. Quality multiplies the base stats: Crude x1, Common x2, Fine x4, Masterwork x7.\n\n`
-    + `• Weapons set the Basic Attack's range and add one skill: Magic Bolt (Staff, Crystal), Circle Swing (Greatsword, Spear), Shield Slam (shields), Switch Mode (bows) or Quick Attack (daggers).\n• Mail and Plate are tougher but slower.\n• Without a weapon you fight Unarmed (x0.6 P.Atk, but x1.25 Movement); without armor, Defense and Health are x0.9.\n\n`
+    + `• Weapons set the Basic Attack's range and add one skill: Magic Bolt (Staff, Crystal), Circle Swing (Greatsword, Spear), Shield Slam (shields), Switch Mode (bows), Quick Attack or Swap to Crossbow (daggers).\n• Heavier armor is tougher but cuts max mana.\n• Unarmed: x0.6 P.Atk. No Armor: x0.8 Defense and Health.\n\n`
     + `The Smithy (Outer City) sells Common gear and makes Fine (5 days) and Masterwork (25 days) gear to order, up to 3 orders at a time.\n\n`
     + `Manage Party > Equipment swaps gear with the party's stash. Mercenaries use their own. A companion keeps the gear they brought: swapped out, it goes into their own pack (the party can't take it), and they put it back on when they leave, handing back what the party gave them; a slave who is sold leaves everything with the party.`);
   add('Battle', 'Engagement',
@@ -249,9 +250,10 @@ export function glossaryEntries(): GlossaryEntry[] {
     `Overwatch ends the turn and watches a 60° arc as far as your weapon reaches. The first enemy to move into it takes your basic attack and keeps moving.\n\n`
     + `Walking, Dash and movement skills that run to their target (Charge, Blitz) can all be caught, on any tile of the way, and so can a unit knocked back or pushed (Sonic Boom) through the arc. Leaps (Heroic Leap, and monsters' Pounce, Dive and Infernal Leap) fly over terrain and units, but are still shot at as they pass over the arc; a watch can't stop a leap in the air. Teleports (Arcane Shift, Shadow Step, Flicker Strike) skip the tiles in between, so they can't be caught.`);
   add('Battle', 'Wind-Ups',
-    `Brutal Strike marks an adjacent tile in red. At the start of your next turn the blow lands on anyone still standing there, allies included. Walking across the tile is safe; it's where a unit is when the blow comes that counts. Enemies know this: they step off it, even breaking away from an engagement to do it.`);
-  add('Battle', 'Burn and Chilled Stacks',
-    `${burn?.name ?? 'Burn'}: ${burn?.description ?? ''}\n\n${chilled?.name ?? 'Chilled'} (ice skills): ${chilled?.description ?? ''}\n\n`
+    `Brutal Strike, Lightning Strike and Explosion! mark tiles in red. At the start of your next turn the blow lands on anyone still standing there, allies included. Walking across is safe; it's where a unit is when the blow comes that counts. Enemies step off, even breaking away from an engagement to do it.\n\n`
+    + `Explosion! falls off from full at the center to a third at the edge, and spends all your mana: the more, the bigger the blast.`);
+  add('Battle', 'Burn, Chilled and Shocked Stacks',
+    `${burn?.name ?? 'Burn'}: ${burn?.description ?? ''}\n\n${chilled?.name ?? 'Chilled'} (ice skills): ${chilled?.description ?? ''}\n\n${shocked?.name ?? 'Shocked'} (Lightning Strike): ${shocked?.description ?? ''}\n\n`
     + `Stacks don't last a set number of turns: the unit loses one each turn. A unit with 2 stacks is affected just as much as with 1, for one more turn; a status shows its stacks as Burn (2).\n\n`
     + `${slow?.name ?? 'Slow'} (webs, goo and other non-ice effects): ${slow?.description ?? ''} Slow and Chilled are separate: a unit with both moves at 75% × 75% = 56%.`);
   add('Battle', 'Enemy Temperaments',

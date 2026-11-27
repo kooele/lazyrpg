@@ -185,7 +185,9 @@
           "name": "Bandit Cutthroat",
           "weapon": "dagger",
           "armor": "leather",
-          "skills": []
+          "skills": [
+            "swap_crossbow"
+          ]
         }
       ],
       "stats": {

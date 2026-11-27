@@ -38,6 +38,12 @@
     "delayed": "Zones: harmless to walk through; strikes once, with `hit`, every unit it affects standing on it at the start of the caster's next turn, then it's gone (Brutal Strike).",
     "bonusMove": "Statuses: the next time the unit spends its last AP (not with Wait or a reaction), it gets one free movement action: walk, or a Movement, Leap or Teleport skill (Hit and Run).",
     "refundIfUnused": "Statuses: if it runs out unused at the end of the turn, the skill that gave it refunds its mana and cooldown (Hit and Run).",
+    "allMana": "true = the skill spends all the user's remaining mana; \"mana\" is then the least it needs (Explosion!).",
+    "hitPerMana": "Zones: extra Magical damage per hit for each point of mana the skill spent (Explosion!: 1.5 per mana).",
+    "edgeDamage": "Zones: the hit falls off with distance from the aimed tile, down to this share at the zone's edge (Explosion!: 1/3).",
+    "weaponSwap": "Toggle statuses: { range, pPenPct }: the unit's next weapon attack (Basic Attack, Weapon skills, Overwatch) becomes a projectile shot with this range, line of sight and extra P.Pen %; it switches off once used (Hand Crossbow).",
+    "cooldownWhenSpent": "Toggles: no cooldown for switching on or off; it starts when the toggle's effect is used up (Swap to Crossbow).",
+    "failChance": "Statuses: each move (walk, Dash) and skill the unit uses, toggles aside, fails with this chance; its AP, mana and cooldown are still spent (Shocked).",
     "stealthVision": "Passives: extra Vision (tiles) while the unit is Stealthed (Scout).",
     "basicSkills": "abilities every Adventurer has on top of weapon and tree skills"
   },
@@ -76,6 +82,7 @@
     "ice_weapon": { "name": "Ice Weapon", "debuff": false, "stacking": false, "tick": "start", "toggle": true, "enchantment": true, "manaPerHit": 10, "weaponOnHit": { "mAtk": 0.2 }, "weaponOnHitStatus": [{ "status": "chilled", "stacks": 1 }], "description": "Weapon attacks deal an extra 20% M.Atk (Magical) and add a stack of Chilled each time they hit, for 10 mana each. Switches off when there is no mana left to pay for a hit. A weapon holds one enchantment at a time." },
     "frenzy": { "name": "Frenzy", "debuff": false, "stacking": false, "tick": "end", "statMods": { "pAtk": 20 }, "description": "+20 P.Atk." },
     "chilled": { "name": "Chilled", "debuff": true, "stacking": true, "decay": true, "maxStacks": 2, "overflow": { "status": "frozen", "turns": 1 }, "tick": "end", "statPct": { "movement": -0.25 }, "description": "-25% Movement; loses a stack at the end of each turn. Each stack is a turn; more stacks last longer but don't slow more. Up to 2 stacks; a 3rd stack Freezes the unit instead." },
+    "shocked": { "name": "Shocked", "debuff": true, "stacking": true, "decay": true, "tick": "end", "failChance": 0.25, "description": "Each move or skill (not toggles) has a 25% chance to fail, still spending its AP, mana and cooldown. Loses a stack at the end of each turn." },
     "slow": { "name": "Slow", "debuff": true, "stacking": false, "tick": "end", "statPct": { "movement": -0.25 }, "description": "-25% Movement. Doesn't stack and can't Freeze; getting slowed again only renews it." },
     "frozen": { "name": "Frozen", "debuff": true, "stacking": false, "frozen": true, "tick": "end", "description": "Chilled's 3rd stack: can't move for one turn. It loses its movement AP, and Frozen wears off at the end of that turn." },
     "blind": { "name": "Blinded", "debuff": true, "stacking": false, "tick": "end", "statPct": { "pAtk": -0.3, "mAtk": -0.3 }, "description": "-30% P.Atk and M.Atk." },
@@ -91,6 +98,7 @@
     "heroic_guard": { "name": "Heroic Guard", "debuff": false, "stacking": true, "tick": "start", "statPct": { "defense": 0.2 }, "description": "+20% Defense per stack (one per unit hit by Heroic Leap), until the start of your next turn." },
     "hit_and_run": { "name": "Hit and Run", "debuff": false, "stacking": false, "tick": "end", "bonusMove": true, "refundIfUnused": true, "description": "The next time you use up your last AP this turn (a turn-ending attack included), you get a free movement action: walk, or use a Movement, Leap or Teleport skill. Engagement still holds you in place. If the turn ends without it (Wait, Overwatch or End Turn), its mana and cooldown are refunded." },
     "in_the_zone": { "name": "In the Zone", "debuff": false, "stacking": true, "tick": "end", "freeBasicAttacks": true, "description": "Your basic attacks cost no AP and ignore their cooldown, one stack per attack." },
+    "hand_crossbow": { "name": "Hand Crossbow", "debuff": false, "stacking": false, "tick": "start", "toggle": true, "weaponSwap": { "range": 4, "pPenPct": 50 }, "description": "Your next weapon attack (Basic Attack, a Weapon skill or Overwatch) is a crossbow shot: 4 tiles of range, +50% P.Pen, needs line of sight. Firing puts the crossbow away." },
     "poison": { "name": "Poison", "debuff": true, "stacking": true, "tick": "start", "damagePctMaxHpPerStack": 0.03, "description": "Lose 3% of max Health per stack at the start of each turn. Ignores Defense and shields." }
   },
 
@@ -209,35 +217,35 @@
     "ignite": {
       "name": "Ignite", "description": "Set an enemy on fire.",
       "tags": ["debuff", "magical"],
-      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "ap": 1, "cooldown": 2, "mana": 30,
+      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "ap": 1, "cooldown": 1, "mana": 30,
       "hits": [{ "mAtk": 0.2 }],
       "applyStatus": [{ "status": "burn", "stacks": 1 }]
     },
     "freeze": {
       "name": "Freeze", "description": "Chill an enemy, slowing it down.",
       "tags": ["debuff", "magical"],
-      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "ap": 1, "cooldown": 2, "mana": 30,
+      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "ap": 1, "cooldown": 1, "mana": 30,
       "hits": [{ "mAtk": 0.2 }],
       "applyStatus": [{ "status": "chilled", "stacks": 1 }]
     },
     "fireball": {
       "name": "Fireball", "description": "Hurl a fireball that sets an enemy alight.",
       "tags": ["projectile", "debuff", "magical"],
-      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "los": "sight", "cooldown": 3, "mana": 40, "level": 2,
+      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "los": "sight", "cooldown": 2, "mana": 40, "level": 2,
       "hits": [{ "mAtk": 1.2 }],
       "applyStatus": [{ "status": "burn", "stacks": 1 }]
     },
     "iceblast": {
       "name": "Iceblast", "description": "Hurl a shard of ice that chills an enemy.",
       "tags": ["projectile", "debuff", "magical"],
-      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "los": "sight", "cooldown": 3, "mana": 40, "level": 2,
+      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "los": "sight", "cooldown": 2, "mana": 40, "level": 2,
       "hits": [{ "mAtk": 1.2 }],
       "applyStatus": [{ "status": "chilled", "stacks": 1 }]
     },
     "draft": {
-      "name": "Draft", "description": "Blast a cross of tiles with wind pressure. It fans the flames: burning enemies burn longer, and fire on the ground spreads.",
+      "name": "Draft", "description": "Blast a cross of tiles with wind pressure, allies included. It fans the flames: burning units burn longer, and fire on the ground spreads.",
       "tags": ["area", "magical"],
-      "target": "ground", "affects": "enemy", "range": 5, "minRange": 0, "cooldown": 2, "mana": 40, "level": 4,
+      "target": "ground", "affects": "any", "range": 5, "minRange": 0, "cooldown": 2, "mana": 40, "level": 4,
       "shape": "cross", "hits": [{ "mAtk": 0.5 }], "shiftStatus": [{ "status": "burn", "stacks": 1 }], "spreadFire": 1.5
     },
     "rain": {
@@ -249,20 +257,32 @@
     "sonic_boom": {
       "name": "Sonic Boom", "description": "Blast an enemy with wind and push it 2 tiles in the direction you choose. Being pushed out of an engagement or through overwatch triggers opportunity attacks, and being pushed through tile effects applies the tile effects.",
       "tags": ["knockback", "magical"],
-      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "los": "sight", "cooldown": 3, "mana": 60, "level": 6,
+      "target": "unit", "affects": "enemy", "range": 5, "minRange": 1, "los": "sight", "cooldown": 3, "mana": 60, "level": 5,
       "hits": [{ "mAtk": 0.5 }], "push": 2
     },
     "firestorm": {
       "name": "Firestorm", "description": "Cover a 3x3 area in a firestorm for 3 turns. Anyone moving through it or ending a turn in it burns.",
       "tags": ["area", "debuff", "magical"],
-      "target": "ground", "affects": "any", "range": 5, "minRange": 0, "cooldown": 4, "mana": 100, "level": 7, "ap": 2,
+      "target": "ground", "affects": "any", "range": 5, "minRange": 0, "cooldown": 4, "mana": 100, "level": 6, "ap": 2,
       "zone": { "element": "fire", "radius": 1.5, "turns": 3, "hit": { "mAtk": 0.5 }, "applyStatus": [{ "status": "burn", "stacks": 1 }], "endTurnHits": 2 }
     },
     "blizzard": {
       "name": "Blizzard", "description": "Cover a 3x3 area in a snowstorm for 3 turns. Anyone moving through it or ending a turn in it is chilled, and can freeze.",
       "tags": ["area", "debuff", "magical"],
-      "target": "ground", "affects": "any", "range": 5, "minRange": 0, "cooldown": 4, "mana": 100, "level": 7, "ap": 2,
+      "target": "ground", "affects": "any", "range": 5, "minRange": 0, "cooldown": 4, "mana": 100, "level": 6, "ap": 2,
       "zone": { "element": "ice", "radius": 1.5, "turns": 3, "hit": { "mAtk": 0.5 }, "applyStatus": [{ "status": "chilled", "stacks": 1 }], "endTurnHits": 2 }
+    },
+    "lightning_strike": {
+      "name": "Lightning Strike", "description": "Mark a tile. At the start of your next turn, lightning strikes whoever stands there, friend or foe, and shocks them.",
+      "tags": ["debuff", "magical"],
+      "target": "ground", "affects": "any", "range": 6, "minRange": 0, "cooldown": 3, "mana": 40, "level": 6,
+      "zone": { "radius": 0, "turns": 1, "hit": { "mAtk": 2 }, "applyStatus": [{ "status": "shocked", "stacks": 1 }], "endTurnHits": 0, "delayed": true }
+    },
+    "explosion_spell": {
+      "name": "Explosion!", "description": "The ultimate magic, the stuff of dreams! Pour all your mana into a blast that goes off at the start of your next turn, hitting everyone in a wide circle, friend or foe. It hits hardest at the center.",
+      "tags": ["area", "magical"],
+      "target": "ground", "affects": "any", "range": 6, "minRange": 0, "cooldown": 5, "mana": 100, "allMana": true, "level": 9,
+      "zone": { "radius": 3, "turns": 1, "hit": { "mAtk": 3 }, "hitPerMana": 1.5, "edgeDamage": 0.3333, "endTurnHits": 0, "delayed": true }
     },
     "heal": {
       "name": "Heal", "description": "Heal a unit.",
@@ -301,9 +321,9 @@
       "toggleStatus": "soul_ignition"
     },
     "smite": {
-      "name": "Smite", "description": "Strike a cross of tiles with holy light. Evil foes take double.",
+      "name": "Smite", "description": "Strike a cross of tiles with holy light, allies included. Evil foes take double.",
       "tags": ["area", "magical"],
-      "target": "ground", "affects": "enemy", "range": 5, "minRange": 0, "cooldown": 2, "mana": 60, "level": 5,
+      "target": "ground", "affects": "any", "range": 5, "minRange": 0, "cooldown": 2, "mana": 60, "level": 5,
       "shape": "cross", "hits": [{ "mAtk": 1.25 }], "bonusVsTag": { "tag": "evil", "mult": 2 }
     },
     "revelation": {
@@ -361,7 +381,7 @@
     "sucker_punch": {
       "name": "Sucker Punch", "description": "A Sudden and Deliberate Strike that knocks the wind out of an enemy: it loses an AP on its next turn.",
       "tags": ["melee", "physical", "engage", "debuff"],
-      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 3, "ap": 2, "mana": 40, "level": 4,
+      "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 3, "ap": 1, "mana": 40, "level": 4,
       "hits": [{ "pAtk": 0.8 }], "applyStatus": [{ "status": "staggered", "turns": 1 }]
     },
     "brutal_strike": {
@@ -410,6 +430,12 @@
       "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 4, "mana": 40, "level": 5,
       "selfStatus": [{ "status": "exposed", "turns": 1 }],
       "hits": [{ "pAtk": 2.5 }], "pPenPct": 25, "recoilIfSurvives": { "pAtk": 1 }
+    },
+    "swap_crossbow": {
+      "name": "Swap to Crossbow", "description": "Ready the hand crossbow: your next weapon attack is a long-range, armor-piercing shot. Use it again to put it away for free; the cooldown only starts once you fire.",
+      "tags": ["free", "toggle"],
+      "target": "self", "affects": "ally", "range": 0, "minRange": 0, "ap": 0, "cooldown": 3, "cooldownWhenSpent": true,
+      "toggleStatus": "hand_crossbow"
     },
     "double_strike": {
       "name": "Double Strike", "description": "Hit an enemy with your basic attack twice, the second time at half strength.",
@@ -612,7 +638,7 @@
 
   "skillTrees": [
     { "id": "arcanist", "name": "Arcanist", "tab": "mage", "skills": ["arcane_bolt", "arcane_pulse", "arcane_shift", "arcane_weapon", "spellblade", "quick_cast"] },
-    { "id": "elementalist", "name": "Elementalist", "tab": "mage", "skills": ["ignite", "freeze", "fireball", "iceblast", "fire_weapon", "ice_weapon", "draft", "rain", "sonic_boom", "firestorm", "blizzard"] },
+    { "id": "elementalist", "name": "Elementalist", "tab": "mage", "skills": ["ignite", "freeze", "fireball", "iceblast", "fire_weapon", "ice_weapon", "draft", "rain", "sonic_boom", "firestorm", "blizzard", "lightning_strike", "explosion_spell"] },
     { "id": "cleric", "name": "Cleric", "tab": "mage", "skills": ["heal", "cleanse", "protection", "barrier", "emergency_heal", "smite", "soul_ignition", "revelation"] },
     { "id": "vanguard", "name": "Vanguard", "tab": "warrior", "skills": ["engage", "charge", "tough_it_out", "blitz", "heroic_leap", "fighting_spirit"] },
     { "id": "infighter", "name": "Infighter", "tab": "warrior", "skills": ["kick", "pocket_sand", "sucker_punch", "tooth_for_tooth", "brutal_strike"] },

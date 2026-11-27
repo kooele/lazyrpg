@@ -58,11 +58,11 @@
       "skills": ["basic_attack", "shield_slam"]
     },
     "dagger": {
-      "name": "Single Dagger", "class": "Dagger", "tag": "DG", "art": "dagger", "range": 1.5,
-      "description": "A quick blade that slips past armor, and leaves the other hand free for spellcasting (no M.Atk penalty).",
+      "name": "Dagger and Hand Crossbow", "class": "Dagger", "tag": "DC", "art": "dagger", "range": 1.5,
+      "description": "A quick blade that slips past armor, with a hand crossbow in the other hand: swap to it for a single armor-piercing shot from range.",
       "base": { "pAtk": 15, "mAtk": 10, "pPen": 5 },
-      "modifiers": { "pAtk": 0.8 },
-      "skills": ["basic_attack", "quick_attack"]
+      "modifiers": { "mAtk": 0.8 },
+      "skills": ["basic_attack", "swap_crossbow"]
     },
     "twin_daggers": {
       "name": "Twin Daggers", "class": "Dagger", "tag": "TD", "art": "twin_daggers", "range": 1.5,
@@ -72,17 +72,17 @@
       "skills": ["basic_attack", "quick_attack"]
     },
     "shortbow": {
-      "name": "Shortbow", "class": "Bow", "tag": "SB", "art": "shortbow", "range": 4,
-      "description": "Light and compact, suitable for scouts: shorter range, but you move faster.\nSame modes as the Longbow (Direct, Indirect, Melee).",
-      "base": { "pAtk": 20, "mAtk": 10 },
-      "modifiers": { "mAtk": 0.8, "movement": 1.2 },
+      "name": "Shortbow", "class": "Bow", "tag": "SB", "art": "shortbow", "range": 5,
+      "description": "Light and compact: a little less power and range than the Longbow, but its arrows slip past armor and it doesn't slow you down.\nSame modes as the Longbow (Direct, Indirect, Melee).",
+      "base": { "pAtk": 15, "mAtk": 10, "pPen": 5 },
+      "modifiers": { "mAtk": 0.8 },
       "skills": ["bow_attack", "switch_mode"]
     },
     "longbow": {
       "name": "Longbow", "class": "Bow", "tag": "LB", "art": "bow", "range": 6,
-      "description": "The longest reach of any weapon, without the shortbow's speed. Three modes:\n• Direct: 100% P.Atk, weapon range\n• Indirect: 70% P.Atk, 1.5x range,\n   arcs over cover\n• Melee: 80% P.Atk, 1.5 tiles\nSwitch Mode is a free action.",
+      "description": "The longest reach of any weapon, and its arrows pierce armor (25% P.Pen), but it's cumbersome (-20% Movement). Three modes:\n• Direct: 100% P.Atk, weapon range\n• Indirect: 70% P.Atk, 1.5x range,\n   arcs over cover\n• Melee: 80% P.Atk, 1.5 tiles\nSwitch Mode is a free action.",
       "base": { "pAtk": 20, "mAtk": 10 },
-      "modifiers": { "mAtk": 0.8 },
+      "modifiers": { "mAtk": 0.8, "movement": 0.8, "pPenPct": 25 },
       "skills": ["bow_attack", "switch_mode"]
     },
     "crystal": {
@@ -103,7 +103,7 @@
       "name": "Unarmed", "class": "Unarmed", "tag": "UN", "art": "unarmed", "range": 1.5, "builtIn": true,
       "description": "Fists. What you fight with without a weapon.",
       "base": {},
-      "modifiers": { "pAtk": 0.6, "movement": 1.25 },
+      "modifiers": { "pAtk": 0.6 },
       "skills": ["basic_attack"]
     }
   },
@@ -111,27 +111,27 @@
   "armors": {
     "leather": {
       "name": "Leather", "outfit": "leatherArmor",
-      "description": "Light armor. Provides protection with little compromise.",
+      "description": "Light armor. Provides protection with little compromise to spellcasting.",
       "base": { "defense": 15, "health": 75 },
-      "modifiers": {}
+      "modifiers": { "mana": 0.9 }
     },
     "mail": {
       "name": "Mail", "outfit": "mail",
-      "description": "Medium armor. Better protection, but slows you down a little.",
+      "description": "Medium armor. Better protection, but it gets in the way of spellcasting.",
       "base": { "defense": 15, "health": 75 },
-      "modifiers": { "movement": 0.9, "defense": 1.1, "health": 1.1 }
+      "modifiers": { "mana": 0.7, "defense": 1.2, "health": 1.2 }
     },
     "plate": {
       "name": "Plate", "outfit": "plate",
-      "description": "Heavy Armor. The most protective, and the most cumbersome.",
+      "description": "Heavy armor. The most protective, and the hardest to cast in.",
       "base": { "defense": 15, "health": 75 },
-      "modifiers": { "movement": 0.8, "defense": 1.2, "health": 1.2 }
+      "modifiers": { "mana": 0.5, "defense": 1.4, "health": 1.4 }
     },
     "none": {
       "name": "No Armor", "outfit": "clothes", "builtIn": true,
       "description": "No Armor. Not recommended for an adventurer.",
       "base": {},
-      "modifiers": { "defense": 0.9, "health": 0.9 }
+      "modifiers": { "defense": 0.8, "health": 0.8 }
     }
   }
 }

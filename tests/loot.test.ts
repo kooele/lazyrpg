@@ -51,9 +51,9 @@ describe('enemy loot', () => {
     const bandit = makeEnemy('bandit', 5, makeRng(4));
     bandit.weapon = gear('dagger', 'common');
     bandit.armor = gear('leather', 'crude');
-    expect(enemyLoot(bandit, never).map((i) => [i.kind, itemName(i)])).toEqual([['weapon', 'Common Single Dagger'], ['armor', 'Crude Leather']]);
+    expect(enemyLoot(bandit, never).map((i) => [i.kind, itemName(i)])).toEqual([['weapon', 'Common Dagger and Hand Crossbow'], ['armor', 'Crude Leather']]);
     const broken = enemyLoot(bandit, always);
-    expect(broken.map((i) => [i.kind, itemName(i), itemValue(i)])).toEqual([['junk', 'Broken Common Single Dagger', 25], ['junk', 'Broken Crude Leather', 5]]);
+    expect(broken.map((i) => [i.kind, itemName(i), itemValue(i)])).toEqual([['junk', 'Broken Common Dagger and Hand Crossbow', 25], ['junk', 'Broken Crude Leather', 5]]);
     bandit.armor = null; // a Hexer wears no armor: only the staff drops
     expect(enemyLoot(bandit, never)).toHaveLength(1);
     // Over many drops, about 2 in 3 pieces are broken.
