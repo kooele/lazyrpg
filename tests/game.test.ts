@@ -1090,13 +1090,12 @@ describe('progression and enemy behaviour', () => {
     expect([c.level, c.xp]).toEqual([3, 10]);
   });
 
-  it('Quick Battle: each victory is worth exactly a level, so a winning party is level 3 at stage 3', () => {
+  it('Quick Battle: victories don\'t change the chosen level', () => {
     const d = newDemo();
     d.party.push(hero(), hero());
-    d.party[1].xp = 60; // part-way through a level: still exactly one level per win
     resolveDemoBattle(d, 'victory');
     resolveDemoBattle(d, 'victory');
-    expect(d.party.map((c) => [c.level, c.xp])).toEqual([[3, 0], [3, 60]]);
+    expect(d.party.map((c) => c.level)).toEqual([1, 1]);
   });
 
   it('badly hurt enemies retreat instead of trading blows; healthy ones attack', () => {

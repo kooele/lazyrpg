@@ -12,7 +12,7 @@ import { TERRAIN, generateMap, key, type Point } from '../game/grid';
 import { GUILD } from '../data/guild';
 import { lineupMembers, resolveQuest } from '../game/city';
 import { rankForStage, usualCount } from '../game/board';
-import { DEMO_STAGES, requireDemo, resolveDemoBattle } from '../game/demo';
+import { requireDemo, resolveDemoBattle } from '../game/demo';
 import { markDirty, requireState } from '../game/session';
 import {
   COLORS, HEIGHT, ScrollList, UI_SCALE, WIDTH, bakeGraphics, button, confirmDialog, figure, monsterFigure, panel, setupCamera, statGrid, text,
@@ -141,14 +141,14 @@ export class BattleScene extends Phaser.Scene {
     this.dialogOpen = false;
     setupCamera(this);
 
-    // Quick Battle (demo) fights the demo party at its stage; the campaign fights the accepted quest.
+    // Quick Battle (demo) fights random enemies at the party's chosen level; the campaign fights the accepted quest.
     const d = this.demo ? requireDemo() : null;
     const quest = d ? null : requireState().quest;
     if (!d && !quest) {
       this.scene.start('City');
       return;
     }
-    const stage = d ? d.stage : quest!.stage;
+    const stage = d ? d.level : quest!.stage;
     const rng = makeRng(Date.now() & 0xffffffff);
     const map = generateMap(rng);
     TILE = Math.floor(Math.min(BOARD_W / map.width, BOARD_H / map.height));
@@ -204,7 +204,7 @@ export class BattleScene extends Phaser.Scene {
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => this.onBarDragMove(p));
     this.input.on('pointerup', (p: Phaser.Input.Pointer) => this.onBarDragEnd(p));
 
-    const what = quest ? `${quest.title} (${quest.rank} rank)` : `Stage ${stage} of ${DEMO_STAGES}`;
+    const what = quest ? `${quest.title} (${quest.rank} rank)` : `Quick Battle at level ${stage}`;
     this.addLog(`${what}: ${foes.length} foe${foes.length > 1 ? 's' : ''} approach!`);
     void this.startPlayerPhase();
   }
@@ -1556,7 +1556,7 @@ export class BattleScene extends Phaser.Scene {
   private retreat(): void {
     if (this.mode !== 'select' && this.mode !== 'target') return;
     if (this.dialogOpen) return;
-    this.ask(this.demo ? 'Retreat to camp?\nThis counts as a defeat (no XP).' : 'Retreat to the city?\nThe quest fails (no reward, no XP).', () => this.endBattle('defeat'), 'Retreat');
+    this.ask(this.demo ? 'Retreat to camp?\nThis counts as a defeat.' : 'Retreat to the city?\nThe quest fails (no reward, no XP).', () => this.endBattle('defeat'), 'Retreat');
   }
 
   private endBattle(outcome: 'victory' | 'defeat'): void {

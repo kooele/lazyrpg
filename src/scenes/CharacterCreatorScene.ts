@@ -12,7 +12,7 @@ import { bodyGain, bodyStats, cloneCharacter, createCharacter, deriveStats, free
 import { newCampaign } from '../game/city';
 import { PARTY_NAME_MAX_LENGTH } from '../game/save';
 import { FACE_NAMES, HAIR_COLOR_NAMES, HAIR_NAMES, SEX_NAMES, SKIN_NAMES, fixLook, randomLook, randomName, randomPartyName } from '../game/people';
-import { requireDemo } from '../game/demo';
+import { fitToLevel, partyChanged, requireDemo } from '../game/demo';
 import { markDirty, requireState, session } from '../game/session';
 import { COLORS, ScrollList, Tooltip, button, figure, hex, overlayInput, panel, reachDiagram, setupCamera, text, toast, type ScrollItem } from '../ui/widgets';
 import { GUILD } from '../data/guild';
@@ -76,6 +76,8 @@ export class CharacterCreatorScene extends Phaser.Scene {
       const weapons = WEAPON_TYPES;
       const n = this.mode === 'demo' ? requireDemo().party.length : 0;
       this.draft = createCharacter(randomName(look.sex, Math.random), PALETTE[Math.floor(Math.random() * PALETTE.length)], weapons[n % weapons.length], look, rollTalents(Math.random));
+      // Quick Battle recruits come at the camp's chosen level (with its skill points).
+      if (this.mode === 'demo') fitToLevel(this.draft, requireDemo().level);
       this.partyName = randomPartyName(Math.random);
     }
   }
@@ -574,8 +576,10 @@ export class CharacterCreatorScene extends Phaser.Scene {
     }
     if (this.mode === 'demo' || this.mode === 'demoEdit') {
       const party = requireDemo().party;
-      if (this.mode === 'demo') party.push(d);
-      else party[party.findIndex((c) => c.id === d.id)] = d;
+      if (this.mode === 'demo') {
+        party.push(d);
+        partyChanged(requireDemo());
+      } else party[party.findIndex((c) => c.id === d.id)] = d;
       this.scene.start('DemoCamp');
       return;
     }

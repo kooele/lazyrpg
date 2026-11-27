@@ -1,19 +1,21 @@
-// Quick Battle (demo): the original 5-stage game. Build a party of up to 4 Adventurers at camp,
-// then fight stages 1 to 5. It lives apart from the Arch City campaign and isn't saved.
+// Quick Battle (demo): build a party of up to 4 Adventurers at camp, pick their level (1 to 10), and fight random
+// enemies of that level. It lives apart from the Arch City campaign and isn't saved.
 import type { Character } from '../data/types';
-import { xpToNext } from '../data/content';
-import { grantXp } from './character';
+import { sanitizeLoadout } from './character';
 
-export const DEMO_STAGES = 5;
+/** Levels the party can be set to. */
+export const DEMO_LEVELS = { min: 1, max: 10 } as const;
+
+/** Most Adventurers in a Quick Battle party. */
+export const DEMO_PARTY_SIZE = 4;
 
 export interface DemoState {
   party: Character[];
-  stage: number;
+  /** Every Adventurer's level, and the level of the enemies they fight (the battle stage). */
+  level: number;
   victories: number;
   defeats: number;
-  /** All 5 stages cleared. */
-  complete: boolean;
-  /** Difficulty: enemy count multiplier (1x to 5x), set with the slider at camp. */
+  /** Difficulty: enemy count multiplier (1x to 5x). Follows the party size (1x per Adventurer) until moved by hand. */
   mobMultiplier: number;
 }
 
@@ -22,8 +24,8 @@ export const MOB_MULTIPLIER = { min: 1, max: 5, step: 0.5 } as const;
 export const demo: { state: DemoState | null } = { state: null };
 
 export function newDemo(): DemoState {
-  // A restart keeps the chosen difficulty.
-  demo.state = { party: [], stage: 1, victories: 0, defeats: 0, complete: false, mobMultiplier: demo.state?.mobMultiplier ?? 1 };
+  // A restart keeps the chosen level.
+  demo.state = { party: [], level: demo.state?.level ?? 1, victories: 0, defeats: 0, mobMultiplier: 1 };
   return demo.state;
 }
 
@@ -31,22 +33,41 @@ export function requireDemo(): DemoState {
   return demo.state ?? newDemo();
 }
 
-/** Settle a demo battle: a victory gives every Adventurer one level's worth of XP and moves to the next stage. Returns report lines. */
+/** The Enemies slider's automatic setting: 1x per Adventurer (1x to 4x). */
+export const autoMultiplier = (d: DemoState) => Math.max(1, Math.min(DEMO_PARTY_SIZE, d.party.length));
+
+/** The party changed size: the Enemies slider follows it (1x per Adventurer). */
+export function partyChanged(d: DemoState): void {
+  d.mobMultiplier = autoMultiplier(d);
+}
+
+/**
+ * Set the party's level (1 to 10): every Adventurer is put at that level with no XP. Lowering it unlearns skills
+ * above the new level and refunds points past the new total (Body points first, see sanitizeLoadout).
+ */
+export function setDemoLevel(d: DemoState, level: number): void {
+  d.level = Math.max(DEMO_LEVELS.min, Math.min(DEMO_LEVELS.max, Math.round(level)));
+  for (const c of d.party) fitToLevel(c, d.level);
+}
+
+/** Put one Adventurer at the Quick Battle level (new recruits, and everyone when the level changes). */
+export function fitToLevel(c: Character, level: number): void {
+  c.level = level;
+  c.xp = 0;
+  const weapon = c.weapon;
+  const armor = c.armor;
+  sanitizeLoadout(c);
+  // sanitizeLoadout drops gear the party couldn't own; Quick Battle gear is whatever the recruit was made with.
+  c.weapon = weapon;
+  c.armor = armor;
+}
+
+/** Settle a Quick Battle: only counts the result (the level is chosen at camp, not earned). Returns report lines. */
 export function resolveDemoBattle(d: DemoState, outcome: 'victory' | 'defeat'): string[] {
-  const lines: string[] = [];
   if (outcome === 'defeat') {
     d.defeats += 1;
-    return ['Your party falls back to camp to recover.', 'Rethink your loadouts and try again.'];
+    return ['Your party falls back to camp to recover.', 'Rethink your loadouts, or pick a lower level, and try again.'];
   }
   d.victories += 1;
-  lines.push('Each adventurer gains a level\'s worth of XP.');
-  for (const c of d.party) if (grantXp(c, xpToNext(c.level)) > 0) lines.push(`${c.name} reached level ${c.level}! Stats grew, and they gained a skill point.`);
-  if (d.stage >= DEMO_STAGES) {
-    d.complete = true;
-    lines.push('', `All ${DEMO_STAGES} stages cleared: the demo is complete!`, 'Start a new game to visit Arch City.');
-  } else {
-    d.stage += 1;
-    lines.push('', `Next up: stage ${d.stage} of ${DEMO_STAGES}.`);
-  }
-  return lines;
+  return ['Victory! The enemies are driven off.', `Fight again at level ${d.level}, or pick another level at camp.`];
 }
