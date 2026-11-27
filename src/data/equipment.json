@@ -23,6 +23,11 @@
     "commonChancePerLevel": 0.03
   },
 
+  "adventurerGear": {
+    "_comment": "Adventurers at the guild hall come with Crude gear; each piece (weapon and armor) is Common instead with this chance per level (0.03 = 3% per level, so 30% at level 10).",
+    "commonChancePerLevel": 0.03
+  },
+
   "weapons": {
     "greatsword": {
       "name": "Greatsword", "class": "2 Handed", "tag": "GS", "art": "greatsword", "range": 1.5,

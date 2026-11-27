@@ -508,6 +508,11 @@ export interface Character {
   weapon?: Gear | null;
   /** Equipped armor (missing / null = No Armor). */
   armor?: Gear | null;
+  /**
+   * A companion's own gear they took off for a piece from the party's stash: it stays in their own pack (the party
+   * can't take it), and they put it back on when they leave.
+   */
+  ownGear?: { weapon?: Gear; armor?: Gear };
   /** Skills picked from the skill trees (weapon skills are always available). */
   skillIds: string[];
   appearance: Appearance;

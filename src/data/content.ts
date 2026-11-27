@@ -19,6 +19,8 @@ export interface GameContent {
   qualities: Record<string, QualityDef>;
   /** Enemy gear: chance per level of Common instead of Crude. */
   enemyGear: { commonChancePerLevel: number };
+  /** Guild hall adventurers' gear: chance per level of Common instead of Crude. */
+  adventurerGear: { commonChancePerLevel: number };
   /** The Smithy: the quality it sells on the spot, the days each orderable quality takes, and how many orders it works on at once. */
   smithy: { buyQuality: string; orderDays: Record<string, number>; workers: number };
   skills: Record<string, SkillDef>;
@@ -354,6 +356,8 @@ export function parseContent(skillsData: unknown, equipmentData: unknown): GameC
   };
   const eg = W.obj(eroot.enemyGear ?? {}, 'enemyGear');
   const enemyGear = { commonChancePerLevel: W.num(eg.commonChancePerLevel ?? 0, 'enemyGear.commonChancePerLevel') };
+  const ag = W.obj(eroot.adventurerGear ?? {}, 'adventurerGear');
+  const adventurerGear = { commonChancePerLevel: W.num(ag.commonChancePerLevel ?? 0, 'adventurerGear.commonChancePerLevel') };
   const gearStats = (o: Record<string, unknown>, p: string) => ({
     base: W.stats(o.base ?? {}, `${p}.base`),
     modifiers: W.stats(o.modifiers ?? {}, `${p}.modifiers`),
@@ -399,7 +403,7 @@ export function parseContent(skillsData: unknown, equipmentData: unknown): GameC
   builtIns(Object.values(weapons), 'weapons');
   builtIns(Object.values(armors), 'armors');
   if (!Object.values(weapons).some((w) => !w.builtIn)) fail(F, 'weapons', 'must define at least one weapon');
-  return { weapons, armors, qualities, enemyGear, smithy, skills, tags, statuses, skillTabs, skillTrees, basicSkills };
+  return { weapons, armors, qualities, enemyGear, adventurerGear, smithy, skills, tags, statuses, skillTabs, skillTrees, basicSkills };
 }
 
 export const CONTENT: GameContent = parseContent(skillsRaw, equipmentRaw);
@@ -407,6 +411,7 @@ export const WEAPONS = CONTENT.weapons;
 export const ARMORS = CONTENT.armors;
 export const QUALITIES = CONTENT.qualities;
 export const ENEMY_GEAR = CONTENT.enemyGear;
+export const ADVENTURER_GEAR = CONTENT.adventurerGear;
 export const SMITHY = CONTENT.smithy;
 export const SKILLS = CONTENT.skills;
 export const TAGS = CONTENT.tags;

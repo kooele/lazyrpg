@@ -475,7 +475,7 @@
     },
     "rend": {
       "name": "Rend", "description": "Tear into an adjacent enemy with both claws.",
-      "tags": ["monster", "melee", "physical"],
+      "tags": ["monster", "melee", "engage", "physical"],
       "target": "unit", "affects": "enemy", "range": 1.5, "minRange": 1, "cooldown": 3,
       "hits": [{ "pAtk": 1.6 }]
     },

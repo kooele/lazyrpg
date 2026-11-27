@@ -5,7 +5,7 @@ import { createCharacter, deriveStats, makeRng } from '../src/game/character';
 import { newCampaign, sellSlave } from '../src/game/city';
 import { leaveParty } from '../src/game/contracts';
 import { gear } from '../src/game/gear';
-import { addItem, equipBlock, equipItem, itemName, itemValue, returnGear, sortedInventory, statChanges, unequip } from '../src/game/inventory';
+import { addItem, equipBlock, equipItem, equipOwn, itemName, itemValue, returnGear, sortedInventory, statChanges, unequip } from '../src/game/inventory';
 import { randomAdventurer } from '../src/game/people';
 import { parseSave, serializeSave } from '../src/game/save';
 
@@ -66,18 +66,41 @@ describe('the stash', () => {
     expect(s.inventory).toHaveLength(1);
   });
 
-  it("a companion who leaves hands back the party's gear and keeps their own", () => {
+  it("a companion who leaves hands back the party's gear and puts their own back on", () => {
     const s = start();
     const c = companion(s);
     const own = c.weapon;
+    const ownArmor = { ...c.armor! };
     const plate = addItem(s, 'armor', gear('plate', 'fine'));
-    equipItem(s, c.id, plate.id); // their own Leather goes to the stash
-    expect(s.inventory.map(itemName)).toEqual(['Crude Leather']);
+    equipItem(s, c.id, plate.id); // their own Leather goes into their pack, not the stash
+    expect(s.inventory).toEqual([]);
+    expect(c.ownGear).toEqual({ armor: ownArmor });
     leaveParty(s, c);
-    expect(s.inventory.map(itemName).sort()).toEqual(['Crude Leather', 'Fine Plate']);
+    expect(s.inventory.map(itemName)).toEqual(['Fine Plate']);
     const back = s.guild.pool.find((a) => a.character.id === c.id)!.character;
-    expect([back.weapon, back.armor]).toEqual([own, null]);
+    expect([back.weapon, back.armor]).toEqual([own, ownArmor]);
+    expect(back.ownGear).toBeUndefined();
     expect(s.log.at(-1)!.text).toMatch(/handed back the party's Fine Plate/);
+  });
+
+  it("a companion's own gear can't be taken: unequipped, it goes into their pack, and they can wear it again", () => {
+    const s = start();
+    const c = companion(s);
+    const own = { ...c.weapon! };
+    expect(unequip(s, c.id, 'weapon')).toBeNull();
+    expect(s.inventory).toEqual([]);
+    expect(c.weapon).toBeNull();
+    expect(c.ownGear).toEqual({ weapon: own });
+    const bow = addItem(s, 'weapon', gear('longbow', 'fine'));
+    equipItem(s, c.id, bow.id);
+    expect(equipOwn(s, c.id, 'weapon')).toBeNull();
+    expect(c.weapon).toEqual(own);
+    expect(c.ownGear).toBeUndefined();
+    expect(s.inventory.map(itemName)).toEqual(['Fine Longbow']);
+    // Their pack survives a save and load.
+    unequip(s, c.id, 'weapon');
+    const r = parseSave(serializeSave(s));
+    expect(r.ok && r.state.party.find((m) => m.id === c.id)!.ownGear).toEqual({ weapon: own });
   });
 
   it('a slave is sold without their gear', () => {

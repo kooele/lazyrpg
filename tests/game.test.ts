@@ -329,6 +329,25 @@ describe('skills', () => {
     expect(archer.battle.skillRange(archer.units[0], SKILLS.double_strike)).toBe(5);
   });
 
+  it('double strike engages an adjacent target like the basic attack does (spear too), not one 2 tiles away', () => {
+    const near = setup(openMap(), [
+      { c: hero('spear', ['double_strike']), team: 'player', at: { x: 1, y: 1 } },
+      { c: hero('bow'), team: 'enemy', at: { x: 2, y: 1 } },
+    ]);
+    near.battle.perform(near.units[0], 'double_strike', { x: 2, y: 1 });
+    expect(near.units[0].engagedWith).toBe(near.units[1].uid);
+    const far = setup(openMap(), [
+      { c: hero('spear', ['double_strike']), team: 'player', at: { x: 1, y: 1 } },
+      { c: hero('bow'), team: 'enemy', at: { x: 3, y: 1 } },
+    ]);
+    far.battle.perform(far.units[0], 'double_strike', { x: 3, y: 1 });
+    expect(far.units[0].engagedWith).toBeNull();
+  });
+
+  it("a bear's Rend engages", () => {
+    expect(SKILLS.rend.tags).toContain('engage');
+  });
+
   it('cooldown 1 means the skill cannot be used on the next turn', () => {
     const { battle, units: [a] } = setup(openMap(), [
       { c: hero('sword_shield'), team: 'player', at: { x: 1, y: 1 } },

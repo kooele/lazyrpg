@@ -425,6 +425,12 @@ export class Battle {
           hits: out.basicAttack ? Array.from({ length: out.basicAttack }, (_, i) => scaleHits(basic.hits ?? [], out!.basicAttackDamage?.[i] ?? 1)).flat() : out.hits,
           aoeRadius: areaFromWeapon ? basic.range + (out.weaponRangeBonus ?? 0) : out.aoeRadius,
         };
+        // A basic attack skill (Double Strike, Execute) engages like the basic attack it swings: an adjacent target
+        // (engageWithin), or any target (a basic attack with the engage tag, e.g. Bow Strike).
+        if (out.basicAttack && out.target === 'unit' && !hasTag(out, 'engage') && out.engageWithin === undefined) {
+          const within = hasTag(basic, 'engage') ? Infinity : basic.engageWithin;
+          if (within !== undefined) out = { ...out, engageWithin: within };
+        }
       }
       perSkill.set(cacheKey, out);
     }

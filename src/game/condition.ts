@@ -124,13 +124,13 @@ export const ACTIVITY_INFO: Record<Activity, { name: string; describe: () => str
   dayOff: { name: 'Day Off', describe: () => `Take it easy: +${GUILD.schedule.dayOffMorale} Morale a day.` },
   marketplace: {
     name: 'Marketplace',
-    describe: () => `Mind the party's stall (companions and slaves): sells up to ${GUILD.schedule.marketplaceItemsPerDay} items a day from the Marketplace sale list.`,
+    describe: () => `Mind the party's stall: sells up to ${GUILD.schedule.marketplaceItemsPerDay} items a day from the Marketplace sale list.`,
   },
 };
 
-/** Can this member be given this activity? Only companions and slaves mind the Marketplace stall. */
+/** Can this member be given this activity? Anyone but a mercenary can mind the Marketplace stall. */
 export function canDoActivity(c: Character, a: Activity): boolean {
-  return a !== 'marketplace' || c.contract?.type === 'companion' || c.contract?.type === 'slave';
+  return a !== 'marketplace' || c.contract?.type !== 'mercenary';
 }
 
 /**

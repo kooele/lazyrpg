@@ -720,7 +720,7 @@ export class BattleScene extends Phaser.Scene {
       : s.target === 'move' && !u.moved ? '\nUse your regular move first.' : !b.canAct(u) ? '\nThis unit\'s turn is over.' : !b.canPay(u, s) ? '\nNot enough AP.' : '';
     const modeLine = raw.modes ? `\nBow Mode: ${b.modeName(u)} (Switch Mode changes it)` : raw.switchMode && b.modesOf(u) ? `\nNow: ${b.modeName(u)}. Next: ${SKILLS[b.modesOf(u)![(u.weaponMode + 1) % b.modesOf(u)!.length]].modeName}` : '';
     const cancel = b.isCancellable(u, raw) ? `\nOn this turn. Use again to cancel: refunds ${raw.mana} mana and the cooldown.` : '';
-    this.showInfo(`${s.name}\n${skillStatText(s)}${modeLine}${cancel || (cd > 0 ? `\nReady ${cd === 1 ? 'next turn' : `in ${cd} turns`}.` : '')}${why}\nDrag to another slot to move it.`);
+    this.showInfo(`${s.name}\n${skillStatText(s)}${modeLine}${cancel || (cd > 0 ? `\nReady ${cd === 1 ? 'next turn' : `in ${cd} turns`}.` : '')}${why}`);
   }
 
   /** Page up/down. While dragging a skill, ▼ past the last page opens an empty one to drop it on. */

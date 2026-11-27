@@ -251,6 +251,15 @@ function validateCharacter(raw: unknown, path: string, opts: { member?: boolean;
     appearance: { color: (a.color as string).toLowerCase(), look },
   };
   if (body && Object.keys(body).length) out.body = body;
+  if (r.ownGear !== undefined) {
+    const o = obj(r.ownGear, `${path}.ownGear`);
+    const own: NonNullable<Character['ownGear']> = {};
+    for (const kind of ['weapon', 'armor'] as const) {
+      const g = validateGear(o[kind], `${path}.ownGear.${kind}`, kind);
+      if (g) own[kind] = { type: g.type, quality: g.quality };
+    }
+    if (own.weapon || own.armor) out.ownGear = own;
+  }
   if (r.skillBar !== undefined) {
     // Unknown skills just become empty slots (skills change between versions; the bar shouldn't break a save).
     const bar = arr(r.skillBar, `${path}.skillBar`);
