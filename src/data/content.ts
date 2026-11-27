@@ -87,6 +87,7 @@ export function parseContent(skillsData: unknown, equipmentData: unknown): GameC
       mAtk: S.optNum(o.mAtk, `${path}.mAtk`),
       def: S.optNum(o.def, `${path}.def`),
       missingHp: S.optNum(o.missingHp, `${path}.missingHp`),
+      flatMagical: S.optNum(o.flatMagical, `${path}.flatMagical`),
     };
   };
   const statuses: Record<string, StatusDef> = {};
@@ -119,6 +120,8 @@ export function parseContent(skillsData: unknown, equipmentData: unknown): GameC
       affects: S.oneOf(o.affects ?? 'any', `${path}.affects`, ['any', 'enemy'] as const),
       statPct: o.statPct === undefined ? undefined : S.stats(o.statPct, `${path}.statPct`),
       delayed: S.bool(o.delayed, `${path}.delayed`) || undefined,
+      hitPerMana: S.optNum(o.hitPerMana, `${path}.hitPerMana`),
+      edgeDamage: S.optNum(o.edgeDamage, `${path}.edgeDamage`),
     };
   };
   const statusZones: [string, unknown][] = [];
@@ -161,6 +164,11 @@ export function parseContent(skillsData: unknown, equipmentData: unknown): GameC
       reveals: S.bool(st.reveals, `${p}.reveals`) || undefined,
       debuffImmune: S.bool(st.debuffImmune, `${p}.debuffImmune`) || undefined,
       apLoss: S.optNum(st.apLoss, `${p}.apLoss`),
+      failChance: S.optNum(st.failChance, `${p}.failChance`),
+      weaponSwap: st.weaponSwap === undefined ? undefined : (() => {
+        const o = S.obj(st.weaponSwap, `${p}.weaponSwap`);
+        return { range: S.num(o.range, `${p}.weaponSwap.range`), pPenPct: S.num(o.pPenPct ?? 0, `${p}.weaponSwap.pPenPct`) };
+      })(),
       quickCast: S.bool(st.quickCast, `${p}.quickCast`) || undefined,
       thisTurnOnly: S.bool(st.thisTurnOnly, `${p}.thisTurnOnly`) || undefined,
       freeBasicAttacks: S.bool(st.freeBasicAttacks, `${p}.freeBasicAttacks`) || undefined,
@@ -221,6 +229,7 @@ export function parseContent(skillsData: unknown, equipmentData: unknown): GameC
         ? (r.ap ?? (skillTags.includes('free') ? 0 : 'end')) as ApCost
         : fail('skills.json', `${p}.ap`, 'must be 0, 1, 2 or "end"'),
       mana: S.num(r.mana ?? 0, `${p}.mana`),
+      allMana: S.bool(r.allMana, `${p}.allMana`) || undefined,
       hits,
       heal: r.heal === undefined ? undefined : (() => {
         const o = S.obj(r.heal, `${p}.heal`);
@@ -276,6 +285,7 @@ export function parseContent(skillsData: unknown, equipmentData: unknown): GameC
       pierce: S.optNum(r.pierce, `${p}.pierce`),
       weaponRangeBonus: S.optNum(r.weaponRangeBonus, `${p}.weaponRangeBonus`),
       cooldownAfterOff: S.bool(r.cooldownAfterOff, `${p}.cooldownAfterOff`) || undefined,
+      cooldownWhenSpent: S.bool(r.cooldownWhenSpent, `${p}.cooldownWhenSpent`) || undefined,
       selfStatusPerUnitHit: r.selfStatusPerUnitHit === undefined ? undefined : statusList([r.selfStatusPerUnitHit], `${p}.selfStatusPerUnitHit`)[0],
       stealthVision: S.optNum(r.stealthVision, `${p}.stealthVision`),
     };
@@ -291,8 +301,11 @@ export function parseContent(skillsData: unknown, equipmentData: unknown): GameC
     if (skill.followUp && !skill.charge) fail('skills.json', `${p}.followUp`, 'needs "charge" (the follow-up is a second charge)');
     if ((skillTags.includes('movement') || skillTags.includes('leap')) && skill.rangeScale === undefined) fail('skills.json', `${p}.rangeScale`, 'is required for "movement" and "leap" skills');
     if (skillTags.includes('movement') && skillTags.includes('leap')) fail('skills.json', `${p}.tags`, 'a skill is either "movement" or "leap", not both');
+    if (skill.cooldownWhenSpent && !skill.toggleStatus) fail('skills.json', `${p}.cooldownWhenSpent`, 'goes with "toggleStatus"');
     if (skill.cooldownAfterOff && !skill.toggleStatus) fail('skills.json', `${p}.cooldownAfterOff`, 'goes with "toggleStatus"');
     if (skill.selfStatusPerUnitHit && !statuses[skill.selfStatusPerUnitHit.status].stacking) fail('skills.json', `${p}.selfStatusPerUnitHit`, 'needs a stacking status (a stack per unit hit)');
+    if (skill.zone?.hitPerMana && !skill.zone.hit) fail('skills.json', `${p}.zone.hitPerMana`, 'goes with "hit"');
+    if (skill.zone?.edgeDamage !== undefined && !skill.zone.hit) fail('skills.json', `${p}.zone.edgeDamage`, 'goes with "hit"');
     if (skill.zone?.delayed && !skill.zone.hit) fail('skills.json', `${p}.zone.hit`, 'is required for a delayed zone (its strike)');
     skills[id] = skill;
   }
@@ -487,6 +500,7 @@ function damageText(h: DamagePart): string {
     h.mAtk ? `${pct(h.mAtk)} ${STAT_INFO.mAtk.short}` : '',
     h.def ? `${pct(h.def)} ${STAT_INFO.defense.short}` : '',
     h.missingHp ? `${pct(h.missingHp)} of target's missing HP` : '',
+    h.flatMagical ? `${Math.round(h.flatMagical)} Magical` : '',
   ].filter(Boolean).join(' + ');
 }
 
@@ -515,8 +529,11 @@ function shiftText(sh: { status: string; stacks: number }): string {
 export function zoneText(z: ZoneDef): string {
   const side = 2 * Math.floor(z.radius) + 1;
   if (z.delayed) {
-    const where = side === 1 ? 'the tile' : `a ${side}x${side} area`;
-    return `Strikes ${where} at the start of your next turn: ${z.hit ? damageText(z.hit) : ''}${z.affects === 'enemy' ? ' to an enemy standing there' : ' to anyone standing there'}`;
+    const where = side === 1 ? 'the tile' : z.edgeDamage !== undefined ? `every tile within ${tiles(z.radius)}` : `a ${side}x${side} area`;
+    const dmg = [z.hit ? damageText(z.hit) : '', z.hitPerMana ? `${pct(z.hitPerMana)} of the mana spent (Magical)` : ''].filter(Boolean).join(' + ');
+    const statuses = z.applyStatus.length ? `, ${z.applyStatus.map(statusText).join(', ')}` : '';
+    const falloff = z.edgeDamage !== undefined ? `, falling off to ${pct(z.edgeDamage)} at the edge` : '';
+    return `Strikes ${where} at the start of your next turn: ${dmg}${statuses}${z.affects === 'enemy' ? ' to an enemy standing there' : ' to anyone standing there'}${falloff}`;
   }
   const hit = [z.hit ? damageText(z.hit) : '', ...z.applyStatus.map(statusText), ...(z.shiftStatus ?? []).map(shiftText)].filter(Boolean).join(', ');
   const who = z.affects === 'enemy' ? ' (enemies only)' : '';
@@ -582,6 +599,7 @@ export function skillEffect(s: SkillDef): string {
     const onHit = [st.weaponOnHit ? `+${damageText(st.weaponOnHit)}` : '', ...(st.weaponOnHitStatus ?? []).map(statusText)].filter(Boolean).join(' and ');
     const hit = onHit ? `Weapon attacks ${onHit} per hit${st.manaPerHit ? ` (${st.manaPerHit} mana each)` : ''}`
       : st.quickCast ? 'your next Mage spell of 2 AP or Ends Turn costs 1 AP'
+        : st.weaponSwap ? `your next weapon attack is a shot: range ${tiles(st.weaponSwap.range)}, +${st.weaponSwap.pPenPct}% P.Pen, needs line of sight`
         : st.statPct ? Object.entries(st.statPct).map(([k, v]) => `${(v ?? 0) > 0 ? '+' : ''}${pct(v ?? 0)} ${STAT_INFO[k as keyof Stats].short}`).join(', ') : st.name;
     if (st.thisTurnOnly) {
       parts.push(`Toggle: ${hit}; use again to cancel for a refund of its mana and cooldown (also refunded if the turn ends unused)`);
@@ -590,6 +608,7 @@ export function skillEffect(s: SkillDef): string {
     const upkeep = [st.manaPerTurn ? `${st.manaPerTurn} mana` : '', st.hpPctPerTurn ? `${pct(st.hpPctPerTurn)} of max HP` : ''].filter(Boolean).join(' and ');
     parts.push(`Toggle: ${hit}${upkeep ? `; ${upkeep} a turn while on${st.hpPctPerTurn ? ' (paid on switching on too)' : ''}` : ''}`);
     if (s.cooldownAfterOff) parts.push('Cooldown starts when it switches off');
+    if (s.cooldownWhenSpent) parts.push('Cooldown starts once it is used up');
   }
   if (s.applyStatus?.some((a) => STATUSES[a.status].bonusMove)) parts.push('The next time you use up your last AP this turn: a free move (walk, or a Movement, Leap or Teleport skill); refunded if the turn ends without it');
   if (s.teleport) parts.push(s.charge ? 'Teleport next to the target' : 'Teleport');
@@ -613,7 +632,8 @@ export function skillStats(s: SkillDef): SkillStat[] {
   const c = s.modes ? SKILLS[s.modes[0]] : s;
   if (c.target === 'passive') return rows;
   rows.push({ label: 'AP', value: apLabel(c) });
-  if (c.mana) rows.push({ label: 'Mana', value: String(c.mana) });
+  if (c.allMana) rows.push({ label: 'Mana', value: `All (min ${c.mana})` });
+  else if (c.mana) rows.push({ label: 'Mana', value: String(c.mana) });
   if (c.cooldown > 0) rows.push({ label: 'Cooldown', value: `${c.cooldown} Turn${c.cooldown === 1 ? '' : 's'}` });
   return rows;
 }

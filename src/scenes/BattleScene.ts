@@ -3,7 +3,7 @@ import { blessingBonus } from '../game/church';
 import { SKILLS, STATUSES, hasTag, isSupport, skillStatText } from '../data/content';
 import type { SkillDef, StatKey, Stats } from '../data/types';
 import { STAT_INFO } from '../data/types';
-import { bestAction, bestFreeAction, planTurn, preferredMode, shouldDisengage, shouldEscape, shouldSurrender, watchesForOverwatch } from '../game/ai';
+import { bestAction, bestFreeAction, planTurn, preferredMode, preferredSwap, shouldDisengage, shouldEscape, shouldSurrender, watchesForOverwatch } from '../game/ai';
 import {
   AP_PER_TURN, Battle, UNDO_LIMIT, moveText, stepCost, UNDO_REVEAL_TILES, deploymentTiles, generateEnemies, makeUnit, penLine, penText, statEffectPct, statText,
   type BattleEvent, type MoveResult, type Unit,
@@ -1336,7 +1336,8 @@ export class BattleScene extends Phaser.Scene {
     }
     for (const z of b.zonesAt(tile)) {
       if (z.def.delayed) {
-        const hit = z.def.hit ? b.hitDamage(b.unit(z.casterUid), shownTarget(b, tile) ?? b.unit(z.casterUid), z.def.hit) : 0;
+        const part = b.zoneHitPart(z.def, tile, z.center, z.manaSpent);
+        const hit = part ? b.hitDamage(b.unit(z.casterUid), shownTarget(b, tile) ?? b.unit(z.casterUid), part) : 0;
         const whose = z.team === 'player' ? 'Your' : "the Enemy's";
         info = `${z.name}: Lands at the Start of ${whose} Next Turn (~${hit} dmg to Anyone Standing Here)\n${info}`;
         continue;
@@ -1362,9 +1363,17 @@ export class BattleScene extends Phaser.Scene {
     if (s.target === 'move') return `→ Dash Here (${s.mana} MP, uses your last AP)`;
     if (s.cone) return '→ Watch This Cone until Your Next Turn';
     if (s.zone?.delayed) {
-      const t = shownTarget(b, tile);
-      const dmg = t && t !== u && s.zone.hit ? `\n→ ${t.character.name}${t.team === u.team ? ' (ALLY!)' : ''}: ~${b.hitDamage(u, t, s.zone.hit)} dmg If It's Still Here` : '';
-      return `→ ${s.name} Lands Here at the Start of Your Next Turn${dmg}`;
+      const z = s.zone;
+      const spent = b.manaSpent(u, s);
+      const lines = [`→ ${s.name} Lands Here at the Start of Your Next Turn`];
+      if (s.allMana) lines.push(`→ Spends All Your Mana (${spent} MP)`);
+      for (const p of b.areaTiles(u, s, tile, from)) {
+        const t = shownTarget(b, p);
+        const part = b.zoneHitPart(z, p, tile, spent);
+        if (!t || t === u || !part) continue;
+        lines.push(`→ ${t.character.name}${t.team === u.team ? ' (ALLY!)' : ''}: ~${b.hitDamage(u, t, part)} dmg If It's Still There`);
+      }
+      return lines.join('\n');
     }
     if (s.zone) return `→ Place a ${s.name} Here for ${s.zone.turns} Turns`;
     s = b.skillFor(u, s);
@@ -1467,6 +1476,12 @@ export class BattleScene extends Phaser.Scene {
         this.addLog(`${this.who(u)} switches to ${this.seen(u) ? b.modeName(u) : '???'} mode.`);
         this.floatText(u, b.modeName(u)!, '#e0b44c');
       }
+      const swap = preferredSwap(b, u);
+      if (swap) {
+        b.perform(u, swap, u);
+        this.addLog(`${this.who(u)} readies a ${this.seen(u) ? STATUSES[SKILLS[swap].toggleStatus!].name.toLowerCase() : '???'}.`);
+        this.floatText(u, STATUSES[SKILLS[swap].toggleStatus!].name, '#e0b44c');
+      }
       const plan = planTurn(b, u);
       if (b.canMove(u) && (plan.moveTo.x !== u.x || plan.moveTo.y !== u.y)) {
         const result = b.move(u, plan.moveTo, watchesForOverwatch(u));
@@ -1538,6 +1553,7 @@ export class BattleScene extends Phaser.Scene {
         const stopped = result.interrupted && i === result.path.length - 1 ? ' — movement stopped' : '';
         if (first?.type === 'zoneHit') this.addLog(`${this.who(u)} is caught in the ${first.name}: ${summary.join(', ')}${stopped}`);
         else if (first?.type === 'bump') this.addLog(`${summary.join(', ')} — movement stopped`);
+        else if (first?.type === 'fail') this.addLog(`${this.who(u)}: ${summary.join(', ')}`);
         else {
           const shooter = first && first.type === 'damage' && first.source ? this.who(this.battle.unit(first.source)) : 'Overwatch';
           this.addLog(`${shooter} reacts! ${summary.join(', ')}${stopped}`);
@@ -1670,6 +1686,11 @@ export class BattleScene extends Phaser.Scene {
     if (e.type === 'zone') {
       summary.push(`${e.tiles.length}-tile ${e.name} placed`);
       this.drawOverlay();
+      return;
+    }
+    if (e.type === 'fail') {
+      this.floatText(this.battle.unit(e.target), 'Fails!', '#ffe066', index * 180);
+      summary.push(`${e.name} fails (${e.status})`);
       return;
     }
     if (e.type === 'counter') {
