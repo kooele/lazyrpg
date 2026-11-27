@@ -722,6 +722,10 @@ export interface GameState {
   food: Record<string, 'poor' | 'common' | 'fine' | 'luxury'>;
   /** Where each housed member sleeps in the city (by character id; missing = their default, see defaultLodging): the stables ('outside'), an inn tier or an owned residence. */
   lodging: Record<string, 'outside' | 'standard' | 'highEnd' | 'luxury' | 'outer' | 'middle' | 'inner'>;
+  /** A church blessing on the next quest: +this % to every battle stat of everyone who goes (0 or missing = none). */
+  blessing?: number;
+  /** Day each member was last healed at a church (by character id): they can't be healed again for churches.healCooldownDays. */
+  healedDay?: Record<string, number>;
   /** Day the party last bought a round of drinks (once a day). */
   drinksDay: number;
   /** First day of the current stretch below the rank's renown threshold (0 = not below). A full week drops a rank. */

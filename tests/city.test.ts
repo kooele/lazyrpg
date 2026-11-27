@@ -11,6 +11,7 @@ import {
 } from '../src/game/city';
 import { activityOf, defaultActivity, lodgingOf, combatPenalty, expectedQuality, foodMorale, healthOf, isInjured, moraleOf, moralePenalty, obediencePenalty } from '../src/game/condition';
 import { parseSave, serializeSave } from '../src/game/save';
+import { blessingBonus, donate, heal, healCooldown } from '../src/game/church';
 import {
   companionContract, companionDemand, evaluateOffer, foodLodgingWeekly, joinParty, mercenaryRates, offerValue, openingTerms, punishSlave, slaveContract, bounty, registrationFee, slaveTax, slaveValue, leaveParty, isCompanion, releaseCost, proratedWages, wagesBetween,
 } from '../src/game/contracts';
@@ -1600,5 +1601,71 @@ describe('quick battle (demo)', () => {
     expect(demoEncounter(d, 3, 12)).toEqual({ budget: 1.5, cap: 6 });
     d.mobMultiplier = 4;
     expect(demoEncounter(d, 3, 12)).toEqual({ budget: 6, cap: 24 });
+  });
+});
+
+describe('churches', () => {
+  it('donations bless the party for the next quest: bigger replaces smaller, and it fades when the quest ends', () => {
+    const s = start();
+    s.gold = 1000;
+    expect(donate(s, 'church', 0)).toBeNull();
+    expect(s.blessing).toBe(2);
+    expect(s.gold).toBe(980);
+    expect(donate(s, 'church', 0)).toMatch(/already/);
+    expect(donate(s, 'central', 2)).toBeNull();
+    expect(s.blessing).toBe(12);
+    expect(blessingBonus(s)).toBeCloseTo(0.12);
+    expect(donate(s, 'church', 2)).toMatch(/already/);
+    // Every stat but penetration goes up by the blessing.
+    const main = mainCharacter(s);
+    const plain = makeUnit(main, 'player', { x: 0, y: 0 });
+    const blessed = makeUnit(main, 'player', { x: 0, y: 0 }, blessingBonus(s));
+    expect(blessed.stats.health).toBe(Math.round(plain.stats.health * 1.12));
+    const q = s.guild.board[0];
+    s.quest = q;
+    resolveQuest(s, 'victory', makeRng(1));
+    expect(s.blessing).toBeUndefined();
+  });
+
+  it('refuses a donation the party can\'t afford', () => {
+    const s = start();
+    s.gold = 100;
+    expect(donate(s, 'central', 0)).toMatch(/Not enough gold/);
+    expect(s.blessing).toBeUndefined();
+  });
+
+  it('healing restores Health at once, with a cooldown shared by both churches', () => {
+    const s = start();
+    s.gold = 1000;
+    const main = mainCharacter(s);
+    expect(heal(s, 'church', main.id)).toMatch(/full Health/);
+    main.health = 50;
+    expect(heal(s, 'church', main.id)).toBeNull();
+    expect(healthOf(main)).toBe(60); // not multiplied by the Protagonist trait
+    expect(s.gold).toBe(1000 - GUILD.churches.church.heal.gold);
+    expect(healCooldown(s, main)).toBe(GUILD.churches.healCooldownDays);
+    expect(heal(s, 'central', main.id)).toMatch(/healed recently/);
+    s.day += GUILD.churches.healCooldownDays - 1;
+    expect(heal(s, 'central', main.id)).toMatch(/again in 1 day\./);
+    s.day += 1;
+    expect(heal(s, 'central', main.id)).toBeNull();
+    expect(healthOf(main)).toBe(80);
+    main.health = 95;
+    s.day += GUILD.churches.healCooldownDays;
+    expect(heal(s, 'central', main.id)).toBeNull();
+    expect(healthOf(main)).toBe(100); // capped
+  });
+
+  it('saves the blessing and heal cooldowns', () => {
+    const s = start();
+    s.gold = 1000;
+    mainCharacter(s).health = 50;
+    donate(s, 'church', 1);
+    heal(s, 'church', s.mainId);
+    const r = parseSave(serializeSave(s));
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.state.blessing).toBe(4);
+    expect(r.state.healedDay).toEqual({ [s.mainId]: s.day });
   });
 });

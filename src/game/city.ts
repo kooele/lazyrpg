@@ -369,6 +369,11 @@ export function resolveQuest(
     lines.push(`${c.name}'s mercenary contract is complete.`);
   }
   state.quest = null;
+  // A church blessing lasts one quest.
+  if (state.blessing) {
+    lines.push(`The church's blessing (+${state.blessing}% all stats) has faded.`);
+    delete state.blessing;
+  }
   note(state, outcome === 'victory' ? `Completed "${q.title}" (${q.rank} rank): ${q.reward} gold reward.` : `Failed "${q.title}" (${q.rank} rank).`);
   const ids = members.map((c) => c.id);
   // Multi-day trips: nights on the road; the members away don't follow their schedule.
