@@ -44,6 +44,8 @@ export interface StatConfig {
   xpPerLevel: { a: number; b: number; c: number };
   map: MapRules;
   movementCosts: MovementCosts;
+  /** Diagonal steps cost this many times the tile's Movement cost (1.414 ~ the square root of 2). */
+  diagonalMoveCost: number;
   rangeRounding: RangeRoundingRules;
   vision: VisionRules;
 }
@@ -110,6 +112,7 @@ export function parseStatConfig(data: unknown): StatConfig {
       forest: num(costs.forest, 'movementCosts.forest'),
       river: num(costs.river, 'movementCosts.river'),
     },
+    diagonalMoveCost: num(rec.diagonalMoveCost ?? 1.414, 'diagonalMoveCost'),
     rangeRounding: { fromRange: num(rounding.fromRange, 'rangeRounding.fromRange') },
     vision: { enabled: vision.enabled === true },
   };
@@ -118,6 +121,7 @@ export function parseStatConfig(data: unknown): StatConfig {
   if (cfg.forestProjectileReduction < 0 || cfg.forestProjectileReduction > 1) throw new Error('stats.json: "forestProjectileReduction" must be from 0 to 1');
   if (cfg.base.movement < 1) throw new Error('stats.json: "base.movement" must be at least 1');
   if (!(cfg.movementCosts.grass > 0)) throw new Error('stats.json: "movementCosts.grass" must be positive');
+  if (cfg.diagonalMoveCost < 1) throw new Error('stats.json: "diagonalMoveCost" must be at least 1');
   if (cfg.map.width < 8 || cfg.map.height < 6) throw new Error('stats.json: "map" must be at least 8 x 6 tiles');
   return cfg;
 }
