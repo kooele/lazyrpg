@@ -1582,10 +1582,26 @@ export class BattleScene extends Phaser.Scene {
     this.flashArea(s, u, target);
     const detail = summary.length ? `: ${summary.join(', ')}`
       : s.cone ? ' and watches the area.' : s.teleport ? '.' : s.hits?.length ? ' — it hits nothing.' : ' — it has no effect.';
-    // An unseen caster's skill stays hidden too (its effects on units the party can see still show).
-    this.addLog(this.seen(u) ? `${u.character.name} uses ${s.name}${detail}` : `??? uses ???${summary.length ? `: ${summary.join(', ')}` : '.'}`);
+    // An unseen caster stays ???; its skill shows only if it lands where the party can see (else its effects on
+    // units the party can see still show).
+    const skill = this.seen(u) || this.skillInSight(u, s, target, events) ? s.name : null;
+    this.addLog(skill ? `${this.who(u)} uses ${skill}${detail}` : `??? uses ???${summary.length ? `: ${summary.join(', ')}` : '.'}`);
     this.refresh();
     await this.wait(events.length ? 800 : 400);
+  }
+
+  /**
+   * Did `u`'s skill land where the party can see: aimed at or covering a tile in sight, placing a zone on one, or
+   * affecting a unit the party can see?
+   */
+  private skillInSight(u: Unit, s: SkillDef, target: Point, events: BattleEvent[]): boolean {
+    const b = this.battle;
+    if (!b.rules.vision.enabled) return true;
+    const sight = b.visibleTiles('player');
+    const inSight = (p: Point) => sight.has(key(p.x, p.y));
+    if (inSight(target) || b.areaTiles(u, s, target).some(inSight)) return true;
+    return events.some((e) => (e.type === 'zone' && e.tiles.some(inSight))
+      || (e.type !== 'move' && 'target' in e && e.target !== u.uid && this.seen(b.unit(e.target))));
   }
 
   private async animateDisplacement(e: Extract<BattleEvent, { type: 'move' }>): Promise<void> {

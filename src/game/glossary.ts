@@ -214,7 +214,7 @@ export function glossaryEntries(): GlossaryEntry[] {
     + `Penetration never takes Defense below 0, and does nothing to Defense that is already 0 or less.`);
   add('Battle', 'Fog of War',
     `Each side sees only the tiles within its units' Vision (${STAT_CONFIG.base.vision} tiles) that they have line of sight to: rocks block it. Enemies outside that are hidden, and the map shows those tiles darkened.\n\n`
-    + `• You can't aim at a unit you can't see, but area attacks and zones still hit it.\n• Overwatch only fires on units its side can see.\n• Walking into an unseen enemy stops you in front of it.\n• Enemies play by the same rules: they go where they last saw you, and each turn they learn where your units stood at the start of your last turn (not Stealthed ones).\n\n`
+    + `• You can't aim at a unit you can't see, but area attacks and zones still hit it.\n• Overwatch only fires on units its side can see.\n• Walking into an unseen enemy stops you in front of it.\n• The battle log shows units you can't see as ???. A hidden enemy's skill is named only when it lands where you can see.\n• Enemies play by the same rules: they go where they last saw you, and each turn they learn where your units stood at the start of your last turn (not Stealthed ones).\n\n`
     + `Revelation (Cleric) reveals every enemy within 15 tiles for a turn.`);
   add('Battle', 'Stealth',
     `A Stealthed unit can't be targeted directly or set off overwatch; area attacks still hit it. It stays hidden until it attacks.\n\n`
