@@ -43,7 +43,7 @@ const PLACES: Record<District, Place[]> = {
     { name: 'Customs Office', blurb: 'Duties on everything that comes through the harbour.', at: [1335, 525] },
     { name: 'Smithy', blurb: 'Common weapons and armor on the spot; Fine and Masterwork made to order.', at: [690, 120], scene: 'Smithy' },
     { name: 'Auction House', blurb: 'Rare goods to the highest bidder.', at: [1010, 173] },
-    { name: 'Church', blurb: `Donate for a blessing on the next quest (up to +${maxBlessing('church')}% all stats), or pay for healing (+${GUILD.churches.church.heal.health} Health).`, at: [527, 167], scene: 'Church', data: { church: 'church' } },
+    { name: 'Church', blurb: `Donate for a blessing on the next quest (up to +${maxBlessing('church')}% all stats), or pay for healing (+${GUILD.churches.church.heal.health} Health).`, at: [438, 287], scene: 'Church', data: { church: 'church' } },
     { name: GUILD.inns.standard.name, blurb: `Inn: drinks for the party. Members can lodge here for ${GUILD.inns.standard.pricePerPerson} gold a night (Manage Party); what adventurers expect.`, at: [255, 480], scene: 'Inn', data: { tier: 'standard' } },
     { name: GUILD.residences.outer.name, blurb: `A home of your own (${GUILD.residences.outer.price} gold at the Estate Office): free nights for up to ${GUILD.residences.capacity}, as good as an inn.`, at: [900, 805], scene: 'Inn', data: { ring: 'outer' } },
   ],

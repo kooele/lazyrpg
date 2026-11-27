@@ -1641,7 +1641,7 @@ describe('churches', () => {
     expect(heal(s, 'church', main.id)).toMatch(/full Health/);
     main.health = 50;
     expect(heal(s, 'church', main.id)).toBeNull();
-    expect(healthOf(main)).toBe(60); // not doubled by the Protagonist trait
+    expect(healthOf(main)).toBe(60); // not multiplied by the Protagonist trait
     expect(s.gold).toBe(1000 - GUILD.churches.church.heal.gold);
     expect(healCooldown(s, main)).toBe(GUILD.churches.healCooldownDays);
     expect(heal(s, 'central', main.id)).toMatch(/healed recently/);
