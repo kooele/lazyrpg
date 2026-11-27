@@ -1,7 +1,7 @@
 // The skill expansion: new Arcanist, Elementalist, Cleric, Vanguard, Infighter, Assassin and Weapon Master skills,
 // elemental tiles, the Stealth rules and fog of war (Vision).
 import { describe, expect, it } from 'vitest';
-import { ARMORS, SKILLS, WEAPONS, skillEffect } from '../src/data/content';
+import { ARMORS, SKILLS, STATUSES, WEAPONS, skillEffect } from '../src/data/content';
 import { STAT_CONFIG } from '../src/data/stats';
 import type { Character } from '../src/data/types';
 import { bestAction, planTurn } from '../src/game/ai';
@@ -305,9 +305,11 @@ describe('Arcanist', () => {
 describe('Elementalist', () => {
   const caster = (skills: string[], level = 7) => hero('staff', skills, 'M', level);
 
-  it('levels: Fireball and Iceblast 2; Firestorm and Blizzard 7, 2 AP and 3 turns', () => {
+  it('levels: Fireball and Iceblast 2 (2-turn cooldown); Sonic Boom 5; Firestorm and Blizzard 6, 2 AP and 3 turns', () => {
     expect([SKILLS.fireball.level, SKILLS.iceblast.level]).toEqual([2, 2]);
-    for (const id of ['firestorm', 'blizzard']) expect(SKILLS[id]).toMatchObject({ level: 7, ap: 2, zone: { turns: 3 } });
+    expect([SKILLS.fireball.cooldown, SKILLS.iceblast.cooldown]).toEqual([2, 2]);
+    expect(SKILLS.sonic_boom.level).toBe(5);
+    for (const id of ['firestorm', 'blizzard']) expect(SKILLS[id]).toMatchObject({ level: 6, ap: 2, zone: { turns: 3 } });
   });
 
   it('Explosion sets the ground under its target on fire for 2 turns', () => {
@@ -512,7 +514,7 @@ describe('Infighter', () => {
     ]);
     battle.perform(p, 'sucker_punch', e);
     expect(e.hp).toBe(e.stats.health - 80);
-    expect(p).toMatchObject({ ap: 0, acted: false }); // 2 AP
+    expect(p).toMatchObject({ ap: 1, acted: false }); // 1 AP
     battle.endPhase();
     expect(e).toMatchObject({ ap: 1, moved: true });
   });
@@ -626,5 +628,104 @@ describe('fog of war off (rules switch)', () => {
       { c: hero(), team: 'enemy', at: { x: 9, y: 6 } },
     ], openMap(), NO_FOG);
     expect(battle.canSee('player', e)).toBe(true);
+  });
+});
+
+describe('skill changes: Lightning Strike, Shocked, Explosion!, Draft and Smite hit allies', () => {
+  const mage = (skills: string[], level = 9) => hero('staff', skills, 'M', level);
+  const withRng = (specs: { c: Character; team: Team; at: Point }[], rng: () => number) => {
+    const units = specs.map((s) => makeUnit(s.c, s.team, s.at));
+    return { battle: new Battle(openMap(), units, rng, STAT_CONFIG), units };
+  };
+
+  it('Draft and Smite hit allies on the cross too (never the caster)', () => {
+    for (const id of ['draft', 'smite']) {
+      const { battle, units: [m, ally, e] } = setup([
+        { c: mage([id]), team: 'player', at: { x: 4, y: 3 } },
+        { c: hero(), team: 'player', at: { x: 5, y: 3 } },
+        { c: hero(), team: 'enemy', at: { x: 6, y: 3 } },
+      ]);
+      expect(SKILLS[id].affects).toBe('any');
+      const events = battle.perform(m, id, { x: 5, y: 3 }); // the cross covers the caster's tile too
+      expect(damageTo(events, ally), id).toBeGreaterThan(0);
+      expect(damageTo(events, e), id).toBeGreaterThan(0);
+      expect(damageTo(events, m), id).toBe(0);
+    }
+  });
+
+  it('Sucker Punch costs 1 AP, and its Stagger can be resisted', () => {
+    expect(SKILLS.sucker_punch.ap).toBe(1);
+    const { battle, units: [p, e] } = withRng([
+      { c: hero('sword_shield', ['sucker_punch'], 'P', 4), team: 'player', at: { x: 3, y: 3 } },
+      { c: hero(), team: 'enemy', at: { x: 4, y: 3 } },
+    ], () => 0);
+    e.stats.resist = 1000;
+    const events = battle.perform(p, 'sucker_punch', e);
+    expect(events).toContainEqual(expect.objectContaining({ type: 'resist', name: 'Staggered' }));
+    expect(e.statuses.some((s) => s.id === 'staggered')).toBe(false);
+  });
+
+  it('Lightning Strike: marks a tile; at the start of the next turn it hits whoever is there for 200% M.Atk and Shocks them', () => {
+    expect(SKILLS.lightning_strike).toMatchObject({ level: 6, mana: 40, range: 6, cooldown: 3, ap: 'end' });
+    const { battle, units: [m, e] } = withRng([
+      { c: mage(['lightning_strike']), team: 'player', at: { x: 1, y: 3 } },
+      { c: hero(), team: 'enemy', at: { x: 6, y: 3 } },
+    ], () => 0.99);
+    battle.perform(m, 'lightning_strike', { x: 6, y: 3 });
+    expect(e.hp).toBe(e.stats.health); // not yet
+    battle.endPhase();
+    const events = battle.endPhase();
+    expect(damageTo(events, e)).toBe(Math.round(2 * battle.stat(m, 'mAtk')));
+    expect(e.statuses.find((s) => s.id === 'shocked')?.stacks).toBe(1);
+    expect(battle.zones).toHaveLength(0);
+  });
+
+  it('Shocked: each skill has a 25% chance to fail, still spending its AP, mana and cooldown; loses a stack a turn', () => {
+    expect(STATUSES.shocked).toMatchObject({ debuff: true, stacking: true, decay: true, failChance: 0.25 });
+    let roll = 0.2; // under 25%: fails
+    const { battle, units: [m, e] } = withRng([
+      { c: mage(['arcane_bolt']), team: 'player', at: { x: 1, y: 3 } },
+      { c: hero(), team: 'enemy', at: { x: 4, y: 3 } },
+    ], () => roll);
+    m.statuses.push({ id: 'shocked', name: 'Shocked', debuff: true, stacks: 2, amount: 0, turns: Infinity, tick: 'end' });
+    const mp = m.mp;
+    const events = battle.perform(m, 'arcane_bolt', e);
+    expect(events).toContainEqual({ type: 'fail', target: m.uid, name: 'Arcane Bolt', status: 'Shocked' });
+    expect(e.hp).toBe(e.stats.health);
+    expect(m.mp).toBe(mp - 30);
+    expect(m.ap).toBe(0);
+    expect(m.cooldowns.arcane_bolt).toBe(1);
+    battle.endPhase();
+    battle.endPhase();
+    expect(m.statuses.find((s) => s.id === 'shocked')?.stacks).toBe(1);
+    roll = 0.3; // 25% or more: works
+    battle.perform(m, 'arcane_bolt', e);
+    expect(e.hp).toBeLessThan(e.stats.health);
+  });
+
+  it('Explosion!: spends all mana (100 at least); at the start of the next turn, 300% M.Atk + 150% of the mana spent at the center, down to 1/3 at 3 tiles', () => {
+    const s = SKILLS.explosion_spell;
+    expect(s).toMatchObject({ name: 'Explosion!', level: 9, mana: 100, allMana: true, ap: 'end', zone: { radius: 3, delayed: true } });
+    const { battle, units: [m, center, edge, ally, out] } = withRng([
+      { c: mage(['explosion_spell']), team: 'player', at: { x: 0, y: 3 } },
+      { c: hero(), team: 'enemy', at: { x: 6, y: 3 } },
+      { c: hero(), team: 'enemy', at: { x: 9, y: 3 } },
+      { c: hero(), team: 'player', at: { x: 6, y: 5 } },
+      { c: hero(), team: 'enemy', at: { x: 6, y: 0 } }, // 3 tiles: the edge
+    ], () => 0.99);
+    m.mp = 99;
+    expect(battle.canUseSkill(m, 'explosion_spell')).toBe(false);
+    m.mp = 160;
+    battle.perform(m, 'explosion_spell', { x: 6, y: 3 });
+    expect(m.mp).toBe(0);
+    battle.endPhase();
+    const events = battle.endPhase();
+    const atk = battle.stat(m, 'mAtk');
+    const full = 3 * atk + 1.5 * 160;
+    expect(damageTo(events, center)).toBe(Math.round(full));
+    expect(damageTo(events, ally)).toBe(Math.round(full * (1 - (2 / 3) * (2 / 3))));
+    expect(damageTo(events, out)).toBe(Math.round(full * 0.3333));
+    expect(damageTo(events, edge)).toBe(Math.round(full * 0.3333));
+    expect(skillEffect(s)).toContain('150% of the mana spent');
   });
 });

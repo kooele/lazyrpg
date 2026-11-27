@@ -131,9 +131,9 @@ describe('stats and content files', () => {
       expect(labels, id).toEqual(want);
     }
     expect(skillStatText(SKILLS.fireball)).toBe(
-      'Effect: 120% M.Atk, a stack of Burn\nTags: Projectile, Debuff, Magical\nAP: Ends Turn\nMana: 40\nCooldown: 3 Turns');
+      'Effect: 120% M.Atk, a stack of Burn\nTags: Projectile, Debuff, Magical\nAP: Ends Turn\nMana: 40\nCooldown: 2 Turns');
     expect(skillStatText(SKILLS.ignite)).toBe(
-      'Effect: 20% M.Atk, a stack of Burn\nTags: Debuff, Magical\nAP: 1 AP\nMana: 30\nCooldown: 2 Turns');
+      'Effect: 20% M.Atk, a stack of Burn\nTags: Debuff, Magical\nAP: 1 AP\nMana: 30\nCooldown: 1 Turn');
     expect(skillStats(SKILLS.arcane_weapon)[0].value).toBe('Toggle: Weapon attacks +50% M.Atk per hit (10 mana each)');
     expect(skillStatText(SKILLS.basic_attack)).toBe('Effect: 100% P.Atk, Engages an adjacent target\nTags: Melee, Physical\nAP: Ends Turn\nCooldown: 1 Turn');
     expect(SKILLS.bow_attack.name).toBe('Basic Attack');
@@ -2337,9 +2337,9 @@ describe('Elementalist rework: Ignite, Freeze, Fireball, Iceblast and Burn explo
     return { battle: new Battle(openMap(), [m, e], () => 0.99), m, e };
   };
 
-  it('Ignite: 1 AP, 30 mana, 2-turn cooldown, 20% M.Atk and one Burn stack; Freeze does the same with Chilled', () => {
-    expect(SKILLS.ignite).toMatchObject({ ap: 1, mana: 30, cooldown: 2, level: 1, hits: [{ mAtk: 0.2 }] });
-    expect(SKILLS.freeze).toMatchObject({ ap: 1, mana: 30, cooldown: 2, level: 1, hits: [{ mAtk: 0.2 }] });
+  it('Ignite: 1 AP, 30 mana, 1-turn cooldown, 20% M.Atk and one Burn stack; Freeze does the same with Chilled', () => {
+    expect(SKILLS.ignite).toMatchObject({ ap: 1, mana: 30, cooldown: 1, level: 1, hits: [{ mAtk: 0.2 }] });
+    expect(SKILLS.freeze).toMatchObject({ ap: 1, mana: 30, cooldown: 1, level: 1, hits: [{ mAtk: 0.2 }] });
     const { battle, m, e } = duelOf(['ignite', 'freeze']);
     battle.perform(m, 'ignite', { x: 4, y: 3 });
     expect(e.hp).toBe(750 - 15); // 24 M.Atk x 100/163

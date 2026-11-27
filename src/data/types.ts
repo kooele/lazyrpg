@@ -223,6 +223,8 @@ export interface StatusDef {
   zone?: ZoneDef;
   /** Mana each weapon attack's extra hit costs; without it the status switches off. */
   manaPerHit?: number;
+  /** Each skill the unit uses fails with this chance (0-1); its AP, mana and cooldown are still spent (Shocked). */
+  failChance?: number;
 }
 
 /**
@@ -241,6 +243,8 @@ export interface DamagePart {
   def?: number;
   /** Fraction of the target's missing health. */
   missingHp?: number;
+  /** Flat Magical damage (Explosion!: worked out from the mana it spent). */
+  flatMagical?: number;
 }
 
 /**
@@ -288,6 +292,10 @@ export interface ZoneDef {
    * every unit it affects standing on it once, then it's gone.
    */
   delayed?: boolean;
+  /** Extra Magical damage per hit for each point of mana the skill spent (Explosion!). */
+  hitPerMana?: number;
+  /** The hit falls off with distance from the aimed tile, down to this share at the zone's edge (Explosion!: 1/3). */
+  edgeDamage?: number;
 }
 
 export const ELEMENTS = ['fire', 'ice', 'water'] as const;
@@ -331,6 +339,8 @@ export interface SkillDef {
   ap: ApCost;
   /** Mana spent on use. */
   mana: number;
+  /** Spends all the user's remaining mana; `mana` is then the least it needs (Explosion!). */
+  allMana?: boolean;
   /** Classification tags (see skills.json "tags"). engage / movement / weapon / free change behavior. */
   tags: string[];
   /** For 'movement' skills: range = floor(rangeScale x Movement). */

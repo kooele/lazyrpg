@@ -126,7 +126,9 @@ export type BattleEvent =
   /** A unit walked into an enemy it couldn't see (Stealthed, or in fog of war): it stops, and the hidden unit is found. */
   | { type: 'bump'; source: string; target: string }
   /** A passive struck back for free (Fighting Spirit, Tooth for Tooth); its damage events follow. */
-  | { type: 'counter'; source: string; target: string; name: string };
+  | { type: 'counter'; source: string; target: string; name: string }
+  /** A skill failed (Shocked: `status`); its AP, mana and cooldown were still spent. */
+  | { type: 'fail'; target: string; name: string; status: string };
 
 /** A lasting ground effect from a 'ground' skill (Firestorm, Blizzard). */
 export interface Zone {
@@ -141,6 +143,10 @@ export interface Zone {
   tiles: Set<string>;
   turnsLeft: number;
   def: ZoneDef;
+  /** The aimed tile (Explosion!'s hit falls off from it, see ZoneDef.edgeDamage). */
+  center?: Point;
+  /** Mana the skill spent (Explosion!'s hitPerMana). */
+  manaSpent?: number;
 }
 
 export interface MoveResult {
@@ -1520,7 +1526,7 @@ export class Battle {
   hitPortions(attacker: Unit, target: Unit, part: DamagePart, projectile = false, pPenBonus = 0): { type: DamageType; amount: number }[] {
     const raw: Record<DamageType, number> = {
       physical: (part.pAtk ?? 0) * this.stat(attacker, 'pAtk') + (part.def ?? 0) * this.stat(attacker, 'defense') + (part.missingHp ?? 0) * (target.stats.health - target.hp),
-      magical: (part.mAtk ?? 0) * this.stat(attacker, 'mAtk'),
+      magical: (part.mAtk ?? 0) * this.stat(attacker, 'mAtk') + (part.flatMagical ?? 0),
     };
     const cover = projectile ? 1 - this.coverFrom(target) : 1;
     const out = DAMAGE_TYPES.filter((t) => raw[t] > 0).map((type) => ({
@@ -1666,10 +1672,33 @@ export class Battle {
     this.zones = this.zones.filter((o) => o.tiles.size > 0);
   }
 
-  /** Place a zone from `def` on `tiles` for `caster`'s side. */
-  private addZone(skillId: string, name: string, caster: Unit, def: ZoneDef, tiles: Point[]): BattleEvent {
-    this.paintZone({ skillId, name, element: def.element, casterUid: caster.uid, team: caster.team, tiles: new Set(), turnsLeft: def.turns, def }, tiles);
+  /** Place a zone from `def` on `tiles` for `caster`'s side, aimed at `center` (spending `manaSpent`: Explosion!). */
+  private addZone(skillId: string, name: string, caster: Unit, def: ZoneDef, tiles: Point[], center?: Point, manaSpent = 0): BattleEvent {
+    this.paintZone({ skillId, name, element: def.element, casterUid: caster.uid, team: caster.team, tiles: new Set(), turnsLeft: def.turns, def, center: center && { x: center.x, y: center.y }, manaSpent }, tiles);
     return { type: 'zone', source: caster.uid, name, tiles };
+  }
+
+  /**
+   * One hit of a zone made from `def` and aimed at `center`, on a unit standing at `at`: its `hit`, plus Magical
+   * damage per mana spent (hitPerMana), falling off with distance from the center down to `edgeDamage` at the edge
+   * (Explosion!). Undefined for zones without a hit.
+   */
+  zoneHitPart(def: ZoneDef, at: Point, center?: Point, manaSpent = 0): DamagePart | undefined {
+    if (!def.hit) return undefined;
+    const part: DamagePart = def.hitPerMana ? { ...def.hit, flatMagical: (def.hit.flatMagical ?? 0) + def.hitPerMana * manaSpent } : def.hit;
+    if (def.edgeDamage === undefined || !center || def.radius <= 0) return part;
+    const m = 1 - (1 - def.edgeDamage) * Math.min(1, dist(center, at) / def.radius);
+    return scaleHits([part], m)[0];
+  }
+
+  /** `zoneHitPart` for a placed zone. */
+  private placedZonePart(z: Zone, at: Point): DamagePart | undefined {
+    return this.zoneHitPart(z.def, at, z.center, z.manaSpent);
+  }
+
+  /** Mana `u` would spend on `skill` now: all it has for an allMana skill (Explosion!), else its cost. */
+  manaSpent(u: Unit, skill: SkillDef): number {
+    return skill.allMana ? Math.max(skill.mana, u.mp) : skill.mana;
   }
 
   /**
@@ -1710,7 +1739,8 @@ export class Battle {
     const events: BattleEvent[] = [];
     for (let i = 0; i < times && u.alive; i++) {
       events.push({ type: 'zoneHit', source: caster.uid, target: u.uid, name: z.name });
-      if (z.def.hit) events.push(...this.dealHit(caster, u, z.def.hit, 'zone'));
+      const part = this.placedZonePart(z, u);
+      if (part) events.push(...this.dealHit(caster, u, part, 'zone'));
       if (!u.alive) break;
       for (const a of z.def.applyStatus) events.push(...this.applyStatus(caster, u, a.status, a.turns, a.stacks ?? 1));
       for (const sh of z.def.shiftStatus ?? []) events.push(...this.shiftStatus(caster, u, sh.status, sh.stacks));
@@ -1722,10 +1752,13 @@ export class Battle {
   zoneDanger(u: Unit, path: Point[]): number {
     let total = 0;
     const end = path[path.length - 1] ?? u;
-    const hit = (z: Zone) => (z.def.hit && this.zoneAffects(z, u) ? this.hitDamage(this.unit(z.casterUid), u, z.def.hit) : 0);
-    for (const p of path) for (const z of this.zonesAt(p)) if (!z.def.delayed) total += hit(z);
+    const hit = (z: Zone, at: Point) => {
+      const part = this.zoneAffects(z, u) ? this.placedZonePart(z, at) : undefined;
+      return part ? this.hitDamage(this.unit(z.casterUid), u, part) : 0;
+    };
+    for (const p of path) for (const z of this.zonesAt(p)) if (!z.def.delayed) total += hit(z, p);
     // A wind-up (Brutal Strike) hits whoever is still on it at the start of its caster's next turn.
-    for (const z of this.zonesAt(end)) total += (z.def.delayed ? 1 : z.def.endTurnHits) * hit(z);
+    for (const z of this.zonesAt(end)) total += (z.def.delayed ? 1 : z.def.endTurnHits) * hit(z, end);
     return total;
   }
 
@@ -1849,7 +1882,16 @@ export class Battle {
     // Worked out before anything changes (Quick Cast and In the Zone lower it, and are used up when it's paid).
     const ap = this.apCost(u, skill);
     // The skill's own mana comes first, so per-hit costs during it (Arcane Weapon) only spend what's left.
-    if (!switchingOff) u.mp -= skill.mana;
+    // Explosion! spends all of it.
+    const spent = switchingOff ? 0 : this.manaSpent(u, skill);
+    u.mp -= spent;
+    // Shocked: the skill may fail, spending its AP, mana and cooldown for nothing. Switching a toggle off always works.
+    const shock = switchingOff ? undefined : u.statuses.find((s) => STATUSES[s.id]?.failChance);
+    if (shock && this.rng() < STATUSES[shock.id].failChance!) {
+      events.push({ type: 'fail', target: u.uid, name: skill.name, status: shock.name });
+      events.push(...this.payFor(u, skillId, true, ap));
+      return events;
+    }
     const origin = { x: u.x, y: u.y };
     // Aim first (Flicker Strike picks its victim before it moves), then resolve.
     const aimed = skill.charge ? this.targetsOf(u, skill, tile) : null;
@@ -1901,7 +1943,7 @@ export class Battle {
         return events;
       }
     }
-    if (skill.zone) events.push(this.addZone(skillId, skill.name, u, skill.zone, this.zoneTiles(skill.zone, tile)));
+    if (skill.zone) events.push(this.addZone(skillId, skill.name, u, skill.zone, this.zoneTiles(skill.zone, tile), tile, spent));
     if (skill.cone) {
       u.overwatch = {
         skillId,

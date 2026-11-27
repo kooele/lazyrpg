@@ -1574,7 +1574,7 @@ describe('quick battle (demo)', () => {
     const c = createCharacter('A');
     d.party.push(c);
     setDemoLevel(d, 7);
-    c.skillIds = ['heal', 'cleanse', 'firestorm', 'smite']; // Firestorm needs level 7, Smite level 5
+    c.skillIds = ['heal', 'cleanse', 'firestorm', 'smite']; // Firestorm needs level 6, Smite level 5
     c.body = { health: 2 };
     setDemoLevel(d, 3); // 4 points: Firestorm and Smite go, Heal + Cleanse + 2 Body fit
     expect(c.skillIds).toEqual(['heal', 'cleanse']);
