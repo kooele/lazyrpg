@@ -21,6 +21,18 @@ export interface DemoState {
 
 export const MOB_MULTIPLIER = { min: 1, max: 5, step: 0.5 } as const;
 
+/**
+ * What 1x on the Enemies slider is worth: this share of the usual group of the level's rank (which is sized for a
+ * whole party). With 1x per Adventurer, a full party of 4 meets 2 usual groups.
+ */
+export const DEMO_GROUP_SHARE = 0.5;
+
+/** Threat budget and enemy cap for a Quick Battle: the usual group (`usual`) x the slider x DEMO_GROUP_SHARE. */
+export function demoEncounter(d: DemoState, usual: number, maxEnemies: number): { budget: number; cap: number } {
+  const scale = d.mobMultiplier * DEMO_GROUP_SHARE;
+  return { budget: usual * scale, cap: Math.max(1, Math.round(maxEnemies * scale)) };
+}
+
 export const demo: { state: DemoState | null } = { state: null };
 
 export function newDemo(): DemoState {

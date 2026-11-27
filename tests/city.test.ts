@@ -14,7 +14,7 @@ import { parseSave, serializeSave } from '../src/game/save';
 import {
   companionContract, companionDemand, evaluateOffer, foodLodgingWeekly, joinParty, mercenaryRates, offerValue, openingTerms, punishSlave, slaveContract, bounty, registrationFee, slaveTax, slaveValue, leaveParty, isCompanion, releaseCost, proratedWages, wagesBetween,
 } from '../src/game/contracts';
-import { DEMO_LEVELS, autoMultiplier, newDemo, partyChanged, resolveDemoBattle, setDemoLevel } from '../src/game/demo';
+import { DEMO_LEVELS, autoMultiplier, demoEncounter, newDemo, partyChanged, resolveDemoBattle, setDemoLevel } from '../src/game/demo';
 import { dangerRating, expectedEnemies, fairReward, payRatio, questRenown, strength, totalThreat, usualCount } from '../src/game/board';
 import { adventurerCount, adventurerRank, deathFactor, leaderboard, promotionReady, questDifficulty, rankDifficulty, rivalPickQuest, rivalQuestChance, rankCounts, simulateGuildDay } from '../src/game/guild';
 
@@ -1592,5 +1592,13 @@ describe('quick battle (demo)', () => {
     d.party.pop();
     partyChanged(d); // ...until the party changes again
     expect(d.mobMultiplier).toBe(3);
+  });
+
+  it('1x on the Enemies slider is half a usual group: a full party at 4x meets two', () => {
+    const d = newDemo();
+    d.mobMultiplier = 1;
+    expect(demoEncounter(d, 3, 12)).toEqual({ budget: 1.5, cap: 6 });
+    d.mobMultiplier = 4;
+    expect(demoEncounter(d, 3, 12)).toEqual({ budget: 6, cap: 24 });
   });
 });

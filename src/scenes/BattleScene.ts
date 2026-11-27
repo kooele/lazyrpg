@@ -12,7 +12,7 @@ import { TERRAIN, generateMap, key, type Point } from '../game/grid';
 import { GUILD } from '../data/guild';
 import { lineupMembers, resolveQuest } from '../game/city';
 import { rankForStage, usualCount } from '../game/board';
-import { requireDemo, resolveDemoBattle } from '../game/demo';
+import { demoEncounter, requireDemo, resolveDemoBattle } from '../game/demo';
 import { markDirty, requireState } from '../game/session';
 import {
   COLORS, HEIGHT, ScrollList, UI_SCALE, WIDTH, bakeGraphics, button, confirmDialog, figure, monsterFigure, panel, setupCamera, statGrid, text,
@@ -158,9 +158,10 @@ export class BattleScene extends Phaser.Scene {
     const party = d ? d.party : lineupMembers(requireState());
     const pSpots = deploymentTiles(map, 'player', party.length);
     // Encounter size comes from the quest (its rolled group size), never from the party. Quick Battle uses the usual
-    // group of the rank its stage falls in, and its Enemies slider multiplies it and the cap on how many come.
+    // group of the rank its stage falls in: 1x on its Enemies slider is half of it (see demoEncounter).
+    const quick = d ? demoEncounter(d, usualCount(rankForStage(stage)), ENCOUNTER.maxEnemies) : null;
     const generated = d
-      ? generateEnemies(stage, rng, usualCount(rankForStage(stage)) * d.mobMultiplier, undefined, Math.round(ENCOUNTER.maxEnemies * d.mobMultiplier))
+      ? generateEnemies(stage, rng, quick!.budget, undefined, quick!.cap)
       : generateEnemies(stage, rng, quest!.count, quest!.foes);
     const eSpots = deploymentTiles(map, 'enemy', generated.length);
     const foes = generated.slice(0, eSpots.length); // never more than there is room for
