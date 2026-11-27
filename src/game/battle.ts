@@ -154,12 +154,14 @@ export interface ReachInfo {
   hazards?: number;
 }
 
-export function makeUnit(character: Character, team: Team, pos: Point): Unit {
+/** `blessing`: a church blessing's share added to every stat (0.06 = +6%), on top of any penalty. */
+export function makeUnit(character: Character, team: Team, pos: Point, blessing = 0): Unit {
   const stats = deriveStats(character);
-  // Party members fight with every stat lowered by injuries, low Morale and (slaves) low Obedience (not penetration:
-  // that's the weapon's, not the fighter's).
+  // Party members fight with every stat lowered by injuries, low Morale and (slaves) low Obedience, and raised by a
+  // church blessing (not penetration: that's the weapon's, not the fighter's).
   const penalty = character.enemyType ? 0 : combatPenalty(character);
-  if (penalty > 0) for (const k of Object.keys(stats) as StatKey[]) if (!(PEN_KEYS as readonly string[]).includes(k)) stats[k] = Math.round(stats[k] * (1 - penalty));
+  const factor = (1 - penalty) * (1 + blessing);
+  if (factor !== 1) for (const k of Object.keys(stats) as StatKey[]) if (!(PEN_KEYS as readonly string[]).includes(k)) stats[k] = Math.round(stats[k] * factor);
   return {
     uid: newId('u'),
     team,

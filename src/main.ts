@@ -7,6 +7,7 @@ import { EstateScene } from './scenes/EstateScene';
 import { CityScene } from './scenes/CityScene';
 import { GuildScene } from './scenes/GuildScene';
 import { InnScene } from './scenes/InnScene';
+import { ChurchScene } from './scenes/ChurchScene';
 import { MarketScene } from './scenes/MarketScene';
 import { NegotiateScene } from './scenes/NegotiateScene';
 import { PartyScene } from './scenes/PartyScene';
@@ -34,7 +35,7 @@ const game = new Phaser.Game({
   // Which graphics chip to ask for on computers with two (Settings).
   render: { powerPreference: STARTUP_GRAPHICS.gpu },
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-  scene: [BootScene, MainMenuScene, CityScene, GuildScene, MarketScene, InnScene, EstateScene, NegotiateScene, PartyScene, EquipmentScene, SmithyScene, MarketplaceScene, DemoCampScene, CharacterCreatorScene, SaveLoadScene, GlossaryScene, SettingsScene, BattleScene],
+  scene: [BootScene, MainMenuScene, CityScene, GuildScene, MarketScene, InnScene, ChurchScene, EstateScene, NegotiateScene, PartyScene, EquipmentScene, SmithyScene, MarketplaceScene, DemoCampScene, CharacterCreatorScene, SaveLoadScene, GlossaryScene, SettingsScene, BattleScene],
 });
 
 // Handy for debugging from the browser console: `lazyrpg.scene.getScenes(true)`,

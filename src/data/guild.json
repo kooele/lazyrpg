@@ -78,6 +78,20 @@
     "middle": { "name": "Inner City Townhouse", "price": 10000 },
     "inner": { "name": "Inner City Mansion", "price": 25000 }
   },
+  "churches": {
+    "_comment": "The Church (Outer City) and the Central Church (Inner City). donations: give gold for a blessing on the party's next quest: every battle stat of everyone who goes +blessingPct% (one blessing at a time; a bigger donation replaces a smaller one, and it ends when that quest does). heal: pay gold to restore health Health to one member at once. After a healing, that member can't be healed again at either church for healCooldownDays days.",
+    "healCooldownDays": 7,
+    "church": {
+      "name": "Church",
+      "donations": [{ "gold": 20, "blessingPct": 2 }, { "gold": 60, "blessingPct": 4 }, { "gold": 120, "blessingPct": 6 }],
+      "heal": { "gold": 25, "health": 10 }
+    },
+    "central": {
+      "name": "Central Church",
+      "donations": [{ "gold": 200, "blessingPct": 8 }, { "gold": 300, "blessingPct": 10 }, { "gold": 420, "blessingPct": 12 }],
+      "heal": { "gold": 100, "health": 20 }
+    }
+  },
   "condition": {
     "_comment": "Health (0-100, not battle HP) and Morale (0-100) of party members. After a battle, Health drops by maxHealthLoss x the share of HP the unit lost at its lowest point (falling = the full amount). Below 100 Health a member is injured and can't go on quests; everyone recovers healthPerDay each night. A member whose Health reaches 0 dies (the main character is left at 1 instead). Morale changes: moralePerTurn for each battle turn (round) of a quest, for each member who went, moraleFailedQuest more if it fails, moralePerHealthLost per Health point lost to injuries, moraleMemberDied for everyone when a member dies. Food and lodging also move Morale every day (see food and lodging). New members start at startingMorale. Below lowMorale, companions and slaves lose lowMoraleRelationshipPerDay relationship each day; above highMorale they gain highMoraleRelationshipPerDay; a member at 0 Morale leaves the party (not the main character).",
     "maxHealthLoss": 60,
