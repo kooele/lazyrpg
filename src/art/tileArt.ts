@@ -66,9 +66,12 @@ type At = (u: number, v: number) => readonly [number, number];
 function grass(g: G, px: number, py: number, size: number, k: number, r: () => number, at: At, base = 0x4f7a3a): void {
   g.fillStyle(shade(base, (r() - 0.5) * 0.08)).fillRect(px, py, size, size);
   // Soft patches of lighter and darker ground.
+  // (Kept inside the tile, so neighbours don't paint over each other.)
   for (let i = 0; i < 5; i++) {
-    const [cx, cy] = at(4 + r() * 48, 4 + r() * 48);
-    g.fillStyle(shade(base, r() < 0.5 ? -0.12 : 0.08), 0.5).fillEllipse(cx, cy, (10 + r() * 16) * k, (6 + r() * 10) * k);
+    const w = 10 + r() * 16;
+    const h = 6 + r() * 10;
+    const [cx, cy] = at(w / 2 + r() * (56 - w), h / 2 + r() * (56 - h));
+    g.fillStyle(shade(base, r() < 0.5 ? -0.12 : 0.08), 0.5).fillEllipse(cx, cy, w * k, h * k);
   }
   // Tufts: a few blades fanning up from a point.
   for (let i = 0; i < 9; i++) {
@@ -99,22 +102,22 @@ function grass(g: G, px: number, py: number, size: number, k: number, r: () => n
 function forest(g: G, k: number, r: () => number, at: At): void {
   // Undergrowth: dark bushes along the bottom.
   for (let i = 0; i < 4; i++) {
-    const [bx, by] = at(6 + r() * 44, 44 + r() * 8);
+    const [bx, by] = at(7 + r() * 42, 44 + r() * 5);
     g.fillStyle(0x284d23, 0.95).fillCircle(bx, by, (3 + r() * 2.5) * k);
     g.fillStyle(0x3c6a31, 0.9).fillCircle(bx - 1 * k, by - 1 * k, (1.5 + r() * 1.5) * k);
   }
-  const trees = r() < 0.5 ? [[17, 44, 0.9], [37, 48, 1.05]] : [[14, 42, 0.78], [40, 43, 0.82], [27, 50, 1]];
+  const trees = r() < 0.5 ? [[18, 43, 0.85], [37, 47, 0.95]] : [[15, 41, 0.72], [40, 42, 0.76], [27, 49, 0.9]];
   for (const [tx, ty, s] of trees) {
     const sx = tx + (r() - 0.5) * 4;
     const sc = s * 1.15 * (0.92 + r() * 0.16);
     const [bx, by] = at(sx, ty);
     // Shadow on the ground.
-    g.fillStyle(0x0f2410, 0.4).fillEllipse(bx + 3 * k, by, 18 * sc * k, 5 * sc * k);
+    g.fillStyle(0x0f2410, 0.4).fillEllipse(bx + 2 * k, by, 15 * sc * k, 4 * sc * k);
     // Trunk.
     g.fillStyle(0x4a3220).fillRect(bx - 1.6 * sc * k, by - 7 * sc * k, 3.2 * sc * k, 7 * sc * k);
     // Three tiers of needles, each a dark triangle with a lighter left half.
     for (let tier = 0; tier < 3; tier++) {
-      const w = (15 - tier * 3.5) * sc * k;
+      const w = (13 - tier * 3) * sc * k;
       const bottom = by - (5 + tier * 8) * sc * k;
       const top = bottom - (13 - tier * 1.5) * sc * k;
       g.fillStyle(0x1c3d1b).fillTriangle(bx - w, bottom, bx, top, bx + w, bottom);
@@ -196,12 +199,12 @@ function banks(g: G, px: number, py: number, size: number, k: number, r: () => n
 
 /** Rock: a cluster of faceted boulders (lit top-left, shadowed bottom-right), with cracks and moss. */
 function rock(g: G, k: number, r: () => number, at: At): void {
-  const stones: [number, number, number][] = [[20 + r() * 4, 32, 17], [38 + r() * 3, 25, 13], [32, 44, 10]];
+  const stones: [number, number, number][] = [[21 + r() * 3, 31, 16], [37 + r() * 2, 24, 12], [32, 43, 10]];
   for (const [cx, cy, rad] of stones) {
     const [x, y] = at(cx, cy);
     const R = rad * k * (0.9 + r() * 0.2);
     // Ground shadow, the dark body, then lit facets.
-    g.fillStyle(0x1f2420, 0.45).fillEllipse(x + R * 0.3, y + R * 0.75, R * 2.2, R * 0.8);
+    g.fillStyle(0x1f2420, 0.45).fillEllipse(x + R * 0.2, y + R * 0.7, R * 1.9, R * 0.7);
     const pts = (scale: number, dx = 0, dy = 0) => Array.from({ length: 7 }, (_, i) => {
       const a = (i / 7) * Math.PI * 2 + 0.3;
       const rr = R * scale * (0.82 + r() * 0.25);

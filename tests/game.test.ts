@@ -1289,10 +1289,10 @@ describe('progression and enemy behaviour', () => {
     expect(route(() => makeEnemy('wolf', 3, makeRng(1))).shot).toBe(1); // beast: straight through, shot
   });
 
-  it("a group isn't pinned down by one overwatch: someone walks into it so the rest can follow", () => {
-    // A pass (rock above and below) watched by an archer: no way around. Alone, an orc holds back at the edge of the
+  it("a group isn't pinned down by one overwatch: someone walks into it so the rest can follow (every tribal and human type)", () => {
+    // A pass (rock above and below) watched by an archer: no way around. Alone, a unit holds back at the edge of the
     // arc; in a group they used to all wait for each other, forever. Now one goes in and draws the shot.
-    const run = (orcs: number) => {
+    const run = (type: string, count: number) => {
       const map = openMap(16, 5);
       for (let x = 4; x < 16; x++) {
         map.tiles[0][x] = 'rock';
@@ -1300,23 +1300,29 @@ describe('progression and enemy behaviour', () => {
       }
       const { battle, units } = setup(map, [
         { c: hero('bow'), team: 'player', at: { x: 1, y: 2 } },
-        ...Array.from({ length: orcs }, (_, i) => ({ c: makeEnemy('orc', 3, makeRng(i + 1)), team: 'enemy' as Team, at: { x: 12, y: 1 + i } })),
-      ], { ...STAT_CONFIG, vision: { enabled: false } }); // the orcs see the archer's watch
+        ...Array.from({ length: count }, (_, i) => ({ c: makeEnemy(type, 3, makeRng(i + 1)), team: 'enemy' as Team, at: { x: 12, y: 1 + i } })),
+      ], { ...STAT_CONFIG, vision: { enabled: false } }); // they see the archer's watch
       const archer = units[0];
-      const orcUnits = units.slice(1);
-      archer.stats.pAtk *= 3; // a shot that hurts (under half an orc's Health, but enough to fear)
+      const group = units.slice(1);
+      // A shot worth about a third of a member's Health: enough to fear, not enough to stop one from taking it.
+      battle.perform(archer, 'overwatch', { x: 5, y: 2 });
+      const hit = archer.overwatch!.hits.reduce((sum, part) => sum + battle.hitDamage(archer, group[0], part, archer.overwatch!.projectile), 0);
+      archer.stats.pAtk *= (group[0].stats.health * 0.35) / hit;
       let fired = false;
       for (let round = 0; round < 4 && !fired; round++) {
-        battle.perform(archer, 'overwatch', { x: 5, y: 2 });
+        if (!archer.overwatch && battle.canUseSkill(archer, 'overwatch')) battle.perform(archer, 'overwatch', { x: 5, y: 2 });
         battle.endPhase();
-        for (const o of orcUnits) if (o.alive) runAiTurn(battle, o);
+        for (const o of group) if (o.alive) runAiTurn(battle, o);
         fired = !archer.overwatch;
         battle.endPhase();
       }
-      return { fired };
+      return fired;
     };
-    expect(run(3)).toMatchObject({ fired: true });
-    expect(run(1)).toMatchObject({ fired: false }); // alone, it's fine to hold back
+    for (const type of ['goblin', 'orc', 'troll', 'bandit', 'sellsword', 'renegade']) {
+      expect(ENEMIES[type].ai === 'tribal' || ENEMIES[type].ai === 'human').toBe(true);
+      expect({ type, fired: run(type, 3) }).toEqual({ type, fired: true });
+      expect({ type, fired: run(type, 1) }).toEqual({ type, fired: false }); // alone, it's fine to hold back
+    }
   });
 
   it('beast: runs once hurt (below 40%), a human of the same health doesn\'t', () => {
