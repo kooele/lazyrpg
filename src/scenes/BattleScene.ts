@@ -517,11 +517,21 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
+  /** Can the party see `u` right now (not in fog of war, not Stealthed)? Its own units always. */
+  private seen(u: Unit): boolean {
+    return u.team === 'player' || (this.battle.canSee('player', u) && !this.battle.isStealthed(u));
+  }
+
+  /** `u`'s name for the battle log: ??? while it's hidden from the party (fog of war, Stealth). */
+  private who(u: Unit): string {
+    return this.seen(u) ? u.character.name : '???';
+  }
+
   /** The unit acting now (casterUid), if the party can see it: an enemy in fog of war or Stealthed stays hidden. */
   private visibleCaster(): Unit | null {
     if (!this.casterUid) return null;
     const u = this.battle.unit(this.casterUid);
-    return u.team === 'player' || (this.battle.canSee('player', u) && !this.battle.isStealthed(u)) ? u : null;
+    return this.seen(u) ? u : null;
   }
 
   private renderTopBar(): void {
@@ -1039,7 +1049,7 @@ export class BattleScene extends Phaser.Scene {
     const summary: string[] = [];
     events.forEach((e, i) => this.showEvent(e, summary, i));
     const hits = summary.filter((x) => !x.startsWith('breaks away'));
-    this.addLog(`${u.character.name} disengages${hits.length ? ` — opportunity attack: ${hits.join(', ')}` : ''}.`);
+    this.addLog(`${this.who(u)} disengages${hits.length ? ` — opportunity attack: ${hits.join(', ')}` : ''}.`);
     this.refresh();
     await this.wait(800);
   }
@@ -1427,7 +1437,7 @@ export class BattleScene extends Phaser.Scene {
         const v = this.views.get(u.uid)!;
         await this.tween({ targets: v.container, alpha: 0.25, duration: 400 });
         v.container.setVisible(false);
-        this.addLog(`${u.character.name} throws down their weapons and surrenders!`);
+        this.addLog(`${this.who(u)} throws down their weapons and surrenders!`);
         this.refreshUnits();
         continue;
       }
@@ -1438,7 +1448,7 @@ export class BattleScene extends Phaser.Scene {
       const mode = preferredMode(b, u);
       if (mode !== null) {
         b.setWeaponMode(u, mode);
-        this.addLog(`${u.character.name} switches to ${b.modeName(u)} mode.`);
+        this.addLog(`${this.who(u)} switches to ${this.seen(u) ? b.modeName(u) : '???'} mode.`);
         this.floatText(u, b.modeName(u)!, '#e0b44c');
       }
       const plan = planTurn(b, u);
@@ -1451,7 +1461,7 @@ export class BattleScene extends Phaser.Scene {
         const v = this.views.get(u.uid)!;
         await this.tween({ targets: v.container, alpha: 0, scale: 0.6, duration: 400 });
         v.container.setVisible(false);
-        this.addLog(`${u.character.name} flees the battlefield!`);
+        this.addLog(`${this.who(u)} flees the battlefield!`);
         this.refreshUnits();
         continue;
       }
@@ -1463,7 +1473,8 @@ export class BattleScene extends Phaser.Scene {
       if (action) await this.enemyUse(u, action.id, action.target);
       else {
         b.wait(u);
-        this.addLog(`${u.character.name} ${u.x !== start.x || u.y !== start.y ? 'advances' : 'waits'}.`);
+        // Out of sight, whether it moved is hidden too.
+        this.addLog(`${this.who(u)} ${!this.seen(u) ? 'acts' : u.x !== start.x || u.y !== start.y ? 'advances' : 'waits'}.`);
       }
       // Free actions still work if the turn didn't end.
       if (!free && u.alive && !b.outcome()) {
@@ -1509,10 +1520,10 @@ export class BattleScene extends Phaser.Scene {
         trigger.events.forEach((e, n) => this.showEvent(e, summary, n));
         const first = trigger.events[0];
         const stopped = result.interrupted && i === result.path.length - 1 ? ' — movement stopped' : '';
-        if (first?.type === 'zoneHit') this.addLog(`${u.character.name} is caught in the ${first.name}: ${summary.join(', ')}${stopped}`);
+        if (first?.type === 'zoneHit') this.addLog(`${this.who(u)} is caught in the ${first.name}: ${summary.join(', ')}${stopped}`);
         else if (first?.type === 'bump') this.addLog(`${summary.join(', ')} — movement stopped`);
         else {
-          const shooter = first && first.type === 'damage' && first.source ? this.battle.unit(first.source).character.name : 'Overwatch';
+          const shooter = first && first.type === 'damage' && first.source ? this.who(this.battle.unit(first.source)) : 'Overwatch';
           this.addLog(`${shooter} reacts! ${summary.join(', ')}${stopped}`);
         }
         this.refresh();
@@ -1560,7 +1571,7 @@ export class BattleScene extends Phaser.Scene {
         continue;
       }
       if ('cause' in e && e.cause === 'overwatch') {
-        reaction ??= { shooter: e.source ? this.battle.unit(e.source).character.name : 'Overwatch', summary: [] };
+        reaction ??= { shooter: e.source ? this.who(this.battle.unit(e.source)) : 'Overwatch', summary: [] };
         this.showEvent(e, reaction.summary, reaction.summary.length);
         continue;
       }
@@ -1571,7 +1582,8 @@ export class BattleScene extends Phaser.Scene {
     this.flashArea(s, u, target);
     const detail = summary.length ? `: ${summary.join(', ')}`
       : s.cone ? ' and watches the area.' : s.teleport ? '.' : s.hits?.length ? ' — it hits nothing.' : ' — it has no effect.';
-    this.addLog(`${u.character.name} uses ${s.name}${detail}`);
+    // An unseen caster's skill stays hidden too (its effects on units the party can see still show).
+    this.addLog(this.seen(u) ? `${u.character.name} uses ${s.name}${detail}` : `??? uses ???${summary.length ? `: ${summary.join(', ')}` : '.'}`);
     this.refresh();
     await this.wait(events.length ? 800 : 400);
   }
@@ -1614,14 +1626,15 @@ export class BattleScene extends Phaser.Scene {
     }
     if (e.type === 'counter') {
       this.floatText(this.battle.unit(e.source), e.name, '#ff9f43', index * 180);
-      summary.push(`${this.battle.unit(e.source).character.name}'s ${e.name}`);
+      const src = this.battle.unit(e.source);
+      summary.push(this.seen(src) ? `${src.character.name}'s ${e.name}` : "???'s ???");
       return;
     }
     if (e.type === 'bump') {
       const hidden = this.battle.unit(e.target);
       this.views.get(hidden.uid)?.container.setVisible(true);
       this.floatText(hidden, 'Spotted!', '#ffd166', index * 180);
-      summary.push(`${this.battle.unit(e.source).character.name} runs into ${hidden.character.name}`);
+      summary.push(`${this.who(this.battle.unit(e.source))} runs into ${hidden.character.name}`); // the one run into is found
       return;
     }
     if (e.type === 'zoneHit') {
@@ -1629,23 +1642,24 @@ export class BattleScene extends Phaser.Scene {
       return;
     }
     if (e.type === 'mode') {
-      summary.push(`switches to ${e.name} mode`);
+      summary.push(`switches to ${this.seen(this.battle.unit(e.target)) ? e.name : '???'} mode`);
       this.floatText(this.battle.unit(e.target), e.name, '#e0b44c', index * 120);
       return;
     }
     if (e.type === 'toggle') {
       const label = `${e.name} ${e.on ? 'On' : 'Off'}`;
-      summary.push(e.reason === 'mana' ? `${e.name} fades (out of mana)` : e.reason === 'turn' ? `${e.name} fades (unused)` : `${e.name} ${e.on ? 'on' : 'off'}`);
+      if (!this.seen(this.battle.unit(e.target))) summary.push('???');
+      else summary.push(e.reason === 'mana' ? `${e.name} fades (out of mana)` : e.reason === 'turn' ? `${e.name} fades (unused)` : `${e.name} ${e.on ? 'on' : 'off'}`);
       this.floatText(this.battle.unit(e.target), label, '#c18cff', index * 120);
       return;
     }
     if (e.type === 'disengage') {
-      const other = this.battle.unit(e.target).character.name;
+      const other = this.who(this.battle.unit(e.target));
       summary.push(e.reason === 'escaped' ? `slips away from ${other}` : e.reason === 'separated' ? 'engagement broken' : `breaks away from ${other}`);
       return;
     }
     const t = this.battle.unit(e.target);
-    const name = t.character.name;
+    const name = this.who(t);
     const delay = index * 180;
     switch (e.type) {
       case 'damage': {
