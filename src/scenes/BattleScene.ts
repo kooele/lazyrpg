@@ -606,7 +606,10 @@ export class BattleScene extends Phaser.Scene {
         // What it costs this unit now (Quick Cast and In the Zone lower it).
         const cost = b.apCost(u, s);
         const ap = cancellable ? 'Cancel' : toggledOn ? 'ON · Free' : cost === 0 ? 'Free' : cost === 'end' ? 'Ends Turn' : `${cost}AP`;
-        B.add(text(this, x + SLOT_W / 2, y + SLOT_H - 4, ap, { fontSize: '10px', color: COLORS.dim }).setOrigin(0.5, 1));
+        // Quick Cast is on: costs it lowers (2 AP / Ends Turn down to 1 AP) are highlighted green.
+        const quickened = !toggledOn && cost === 1 && s.ap !== 1;
+        if (quickened) B.add(this.add.rectangle(x + 3, y + SLOT_H - 16, SLOT_W - 6, 13, 0x6fdc8c, 0.22).setOrigin(0).setStrokeStyle(1, 0x6fdc8c, 0.8));
+        B.add(text(this, x + SLOT_W / 2, y + SLOT_H - 4, ap, { fontSize: '10px', color: quickened ? COLORS.good : COLORS.dim, fontStyle: quickened ? 'bold' : 'normal' }).setOrigin(0.5, 1));
         if (s.mana && !toggledOn) B.add(text(this, x + SLOT_W / 2, y + 3, `${s.mana}MP`, { fontSize: '10px', color: u.mp < s.mana ? COLORS.bad : COLORS.dim }).setOrigin(0.5, 0));
         if (cd > 0) B.add(text(this, x + SLOT_W - 5, y + 2, String(cd), { fontSize: '13px', color: COLORS.bad, fontStyle: 'bold' }).setOrigin(1, 0));
       }
