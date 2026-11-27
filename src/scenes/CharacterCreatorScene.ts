@@ -147,19 +147,33 @@ export class CharacterCreatorScene extends Phaser.Scene {
     return { onHover: () => this.showTip(info()), onOut: () => this.hideTip() };
   }
 
-  /**
-   * Show / hide the tooltip. The text fields (name, party name) are HTML laid over the canvas, so they'd cover it:
-   * they're hidden while it shows.
-   */
+  /** Show / hide the tooltip (see coverInputs for the text fields under it). */
   private showTip(value: string): void {
     this.tooltip.show(value);
-    for (const el of [this.nameInput, this.partyInput]) if (el) el.style.visibility = 'hidden';
   }
 
   private hideTip(): void {
     this.tooltip.hide();
-    for (const el of [this.nameInput, this.partyInput]) if (el) el.style.visibility = '';
   }
+
+  /**
+   * The text fields (name, party name) are HTML laid over the canvas, so a tooltip can't be drawn over them: a field
+   * is hidden only while the tooltip's box overlaps it, and comes back as soon as it moves off.
+   */
+  private coverInputs(box: { x: number; y: number; w: number; h: number } | null): void {
+    const fields: [HTMLInputElement | null, { x: number; y: number; w: number; h: number }][] = [
+      [this.nameInput, CharacterCreatorScene.NAME_BOX], [this.partyInput, CharacterCreatorScene.PARTY_BOX],
+    ];
+    for (const [el, r] of fields) {
+      if (!el) continue;
+      const overlaps = !!box && box.x < r.x + r.w && r.x < box.x + box.w && box.y < r.y + r.h && r.y < box.y + box.h;
+      el.style.visibility = overlaps ? 'hidden' : '';
+    }
+  }
+
+  /** Where the name and party name fields sit (layout pixels). */
+  private static readonly NAME_BOX = { x: 24, y: 90, w: 290, h: 36 };
+  private static readonly PARTY_BOX = { x: 636, y: 498, w: 300, h: 36 };
 
   /** "S 160% (5%) · A 140% (10%) ..." one grade per line. */
   private gradeTable(): string {
@@ -184,7 +198,8 @@ export class CharacterCreatorScene extends Phaser.Scene {
     this.focus = null;
 
     // Name field is a real HTML input so typing works everywhere (incl. mobile keyboards).
-    const input = overlayInput(this, 24, 90, 290, 36);
+    const nb = CharacterCreatorScene.NAME_BOX;
+    const input = overlayInput(this, nb.x, nb.y, nb.w, nb.h);
     input.maxLength = NAME_MAX_LENGTH;
     input.value = this.draft.name;
     input.disabled = !this.lookEditable;
@@ -195,7 +210,8 @@ export class CharacterCreatorScene extends Phaser.Scene {
     this.nameInput = input;
     this.partyInput = null;
     if (this.mode === 'main') {
-      const p = overlayInput(this, 636, 498, 300, 36);
+      const pb = CharacterCreatorScene.PARTY_BOX;
+      const p = overlayInput(this, pb.x, pb.y, pb.w, pb.h);
       p.maxLength = PARTY_NAME_MAX_LENGTH;
       p.value = this.partyName;
       p.addEventListener('input', () => (this.partyName = p.value));
@@ -203,6 +219,7 @@ export class CharacterCreatorScene extends Phaser.Scene {
     }
 
     this.tooltip = new Tooltip(this);
+    this.tooltip.onPlace = (box) => this.coverInputs(box);
     this.render();
   }
 
