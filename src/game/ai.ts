@@ -710,6 +710,38 @@ export function preferredMode(battle: Battle, u: Unit): number | null {
 }
 
 /**
+ * The weapon swap (Swap to Crossbow) to switch on this turn, or null. A unit that has one ready to use readies it when
+ * its best turn with the swapped weapon (a ranged, armor-piercing shot) beats its best turn without.
+ */
+export function preferredSwap(battle: Battle, u: Unit): string | null {
+  if (battle.weaponSwap(u)) return null;
+  const id = battle.skillIds(u).find((sid) => {
+    const st = SKILLS[sid].toggleStatus;
+    return st && STATUSES[st]?.weaponSwap && battle.isUsable(u, sid) && battle.canPay(u, SKILLS[sid]);
+  });
+  if (!id) return null;
+  const reach = reachFor(battle, u);
+  const tiles = [...reach.keys()].map((k) => {
+    const [x, y] = k.split(',').map(Number);
+    return { x, y };
+  });
+  const threats = foeThreats(battle, u);
+  const danger = new Map(tiles.map((t) => [key(t.x, t.y), threatAt(battle, u, t, threats)]));
+  const care = caution(battle, u);
+  const without = attackPlan(battle, u, tiles, reach, danger, care)?.score ?? 0;
+  const st = STATUSES[SKILLS[id].toggleStatus!];
+  const trial = { id: st.id, name: st.name, debuff: false, stacks: 1, amount: 0, turns: Infinity, tick: st.tick };
+  u.statuses.push(trial);
+  let withSwap = 0;
+  try {
+    withSwap = attackPlan(battle, u, tiles, reach, danger, care)?.score ?? 0;
+  } finally {
+    u.statuses = u.statuses.filter((s) => s !== trial);
+  }
+  return withSwap > without ? id : null;
+}
+
+/**
  * Cost of standing on `tile` for a tribal fighter's loose formation: straying more than TRIBE_SPREAD tiles
  * from the nearest member of its group, or crowding right next to several of them. 0 for everyone else.
  */
@@ -754,6 +786,8 @@ export function runAiTurn(battle: Battle, u: Unit): void {
   if (!u.alive) return;
   const mode = preferredMode(battle, u);
   if (mode !== null) battle.setWeaponMode(u, mode);
+  const swap = preferredSwap(battle, u);
+  if (swap) battle.perform(u, swap, u);
   const plan = planTurn(battle, u);
   if (battle.canMove(u) && (plan.moveTo.x !== u.x || plan.moveTo.y !== u.y)) battle.move(u, plan.moveTo, watchesForOverwatch(u));
   if (shouldEscape(battle, u)) {

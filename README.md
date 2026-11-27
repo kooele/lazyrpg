@@ -298,7 +298,7 @@ Each enemy type has a fixed level range and its own stats and skills (`src/data/
 | Green Slime | 2–3 | Beast | Slam (Engage); Sticky Spit at level 3 (ranged Slow and Corrode). |
 | Grey Wolf | 3–6 | Beast | Bite (Engage), Pounce (leaps in); Howl at level 4 (Frenzy for nearby allies). |
 | Goblin | 3–7 | Tribal | Spearmen, archers (Shortbow) and shamans (Fireball) with Goblin-Made gear; War Cry at level 5. Small and many. |
-| Bandit | 4–8 | Human | Thugs (Sword and Shield, Shield Slam), lancers, archers (Shortbow, Execute), hexers (Staff, Fireball) and cutthroats (Dagger), mostly in Leather; basic attack only otherwise; Kick at level 5. |
+| Bandit | 4–8 | Human | Thugs (Sword and Shield, Shield Slam), lancers, archers (Shortbow, Execute), hexers (Staff, Fireball) and cutthroats (Dagger and Hand Crossbow: they ready the crossbow whenever the shot beats a dagger strike), mostly in Leather; basic attack only otherwise; Kick at level 5. |
 | Giant Spider | 5–9 | Beast | Poison Bite (Engage, Poison: 3% max HP per stack each turn), Web (ranged Slow). |
 | Skeleton | 6–11 | Evil | Warriors, spearmen and archers (Longbow) with Rusted gear; basic attacks only. |
 | Orc | 7–13 | Tribal | Warriors (Sword and Shield) and brutes (Greatsword) with Orc-Made gear and Cleave (hits everyone adjacent); War Cry at level 9. |

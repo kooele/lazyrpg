@@ -3,7 +3,7 @@ import { blessingBonus } from '../game/church';
 import { SKILLS, STATUSES, hasTag, isSupport, skillStatText } from '../data/content';
 import type { SkillDef, StatKey, Stats } from '../data/types';
 import { STAT_INFO } from '../data/types';
-import { bestAction, bestFreeAction, planTurn, preferredMode, shouldDisengage, shouldEscape, shouldSurrender, watchesForOverwatch } from '../game/ai';
+import { bestAction, bestFreeAction, planTurn, preferredMode, preferredSwap, shouldDisengage, shouldEscape, shouldSurrender, watchesForOverwatch } from '../game/ai';
 import {
   AP_PER_TURN, Battle, UNDO_LIMIT, UNDO_REVEAL_TILES, deploymentTiles, generateEnemies, makeUnit, penLine, penText, statEffectPct, statText,
   type BattleEvent, type MoveResult, type Unit,
@@ -1479,6 +1479,12 @@ export class BattleScene extends Phaser.Scene {
         b.setWeaponMode(u, mode);
         this.addLog(`${this.who(u)} switches to ${this.seen(u) ? b.modeName(u) : '???'} mode.`);
         this.floatText(u, b.modeName(u)!, '#e0b44c');
+      }
+      const swap = preferredSwap(b, u);
+      if (swap) {
+        b.perform(u, swap, u);
+        this.addLog(`${this.who(u)} readies a ${this.seen(u) ? STATUSES[SKILLS[swap].toggleStatus!].name.toLowerCase() : '???'}.`);
+        this.floatText(u, STATUSES[SKILLS[swap].toggleStatus!].name, '#e0b44c');
       }
       const plan = planTurn(b, u);
       if (b.canMove(u) && (plan.moveTo.x !== u.x || plan.moveTo.y !== u.y)) {

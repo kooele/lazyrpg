@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { ARMORS, QUALITIES, SKILLS, SKILL_TREES, WEAPONS } from '../src/data/content';
 import { ENEMIES } from '../src/data/enemies';
+import { preferredSwap, runAiTurn } from '../src/game/ai';
 import type { Character, Gear } from '../src/data/types';
 import { Battle, isProjectile, makeEnemy, makeUnit, penLine, penetrate } from '../src/game/battle';
 import { createCharacter, deriveStats, makeRng, sanitizeLoadout } from '../src/game/character';
@@ -219,6 +220,27 @@ describe('weapon skills', () => {
     expect(battle.isToggledOn(u, 'hand_crossbow')).toBe(false);
     expect(u.cooldowns.swap_crossbow).toBe(3);
     expect(battle.skillRange(u, SKILLS.basic_attack)).toBe(1.5);
+  });
+
+  it('Bandit Cutthroats carry Swap to Crossbow, and the AI readies it whenever the shot beats the dagger', () => {
+    expect(ENEMIES.bandit.loadouts.find((l) => l.name === 'Bandit Cutthroat')).toMatchObject({ weapon: 'dagger', skills: ['swap_crossbow'] });
+    const map = openMap(12, 7);
+    for (let y = 0; y < 7; y++) map.tiles[y][6] = 'water'; // the foe is across a river: shoot it or nothing
+    const c = makeUnit(kit('dagger'), 'enemy', { x: 9, y: 3 });
+    c.character.skillIds = ['swap_crossbow'];
+    const foe = makeUnit(kit('spear'), 'player', { x: 5, y: 3 });
+    const battle = new Battle(map, [foe, c], makeRng(1));
+    battle.endPhase(); // the enemy's turn
+    expect(preferredSwap(battle, c)).toBe('swap_crossbow');
+    runAiTurn(battle, c);
+    expect(foe.hp).toBeLessThan(foe.stats.health);
+    expect(c.cooldowns.swap_crossbow).toBe(3);
+    // Up close too: the shot's +50% P.Pen out-hits the dagger, so it readies the crossbow whenever it can.
+    const near = makeUnit(kit('dagger'), 'enemy', { x: 6, y: 3 });
+    const foe2 = makeUnit(kit('spear'), 'player', { x: 5, y: 3 });
+    const b2 = new Battle(openMap(), [foe2, near], makeRng(1));
+    b2.endPhase();
+    expect(preferredSwap(b2, near)).toBe('swap_crossbow');
   });
 
   it('every weapon class has its skill', () => {
