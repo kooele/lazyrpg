@@ -4,6 +4,7 @@ import equipmentJson from '../src/data/equipment.json';
 import { ARMORS, SKILLS, STATUSES, TREE_SKILLS, WEAPONS, maxBodyRank, modeWithTag, parseContent, resolveWeaponSkill, skillEffect, skillPointsForLevel, skillStatText, skillStats, xpToNext } from '../src/data/content';
 import enemiesJson from '../src/data/enemies.json';
 import { ENEMIES, parseEnemies } from '../src/data/enemies';
+import { classic } from './classic';
 import statsJson from '../src/data/stats.json';
 import { STAT_CONFIG, parseStatConfig } from '../src/data/stats';
 import type { Character, SkillDef } from '../src/data/types';
@@ -975,8 +976,9 @@ describe('enemies', () => {
   it('enemy stats and skills come from enemies.json, growing within the level range', () => {
     const rat1 = makeEnemy('rat', 1, makeRng(1));
     const rat2 = makeEnemy('rat', 2, makeRng(1));
-    expect(deriveStats(rat1)).toMatchObject({ health: 220, pAtk: 70, movement: 20 });
-    expect(deriveStats(rat2)).toMatchObject({ health: 250, pAtk: 78 });
+    const r = ENEMIES.rat;
+    expect(deriveStats(rat1)).toMatchObject({ health: r.stats.health, pAtk: r.stats.pAtk, movement: r.stats.movement });
+    expect(deriveStats(rat2)).toMatchObject({ health: Math.round(r.stats.health + (r.growthPerLevel.health ?? 0)), pAtk: Math.round(r.stats.pAtk + (r.growthPerLevel.pAtk ?? 0)) });
     expect(allSkills(rat1)).toEqual(['gnaw']);
     expect(allSkills(makeEnemy('slime', 2, makeRng(1)))).toEqual(['slam']);
     expect(allSkills(makeEnemy('slime', 3, makeRng(1)))).toEqual(['slam', 'sticky_spit']);
@@ -994,6 +996,7 @@ describe('enemies', () => {
     const slime = makeUnit(makeEnemy('slime', 3, makeRng(1)), 'enemy', { x: 5, y: 3 });
     const a = makeUnit(hero('spear'), 'player', { x: 3, y: 3 });
     const b = makeUnit(hero('spear'), 'player', { x: 4, y: 4 });
+    b.stats.health = b.hp = 99999; // survives the Slam, so it stays engaged
     const battle = new Battle(openMap(), [a, b, slime], makeRng(1));
     battle.endPhase();
     a.stats.resist = 0; // no chance to shrug it off
@@ -1095,9 +1098,9 @@ describe('progression and enemy behaviour', () => {
   it('badly hurt enemies retreat instead of trading blows; healthy ones attack', () => {
     const map = openMap(16, 7);
     const make = () => {
-      const archer = makeUnit(makeEnemy('bandit', 4, makeRng(5)), 'enemy', { x: 9, y: 3 });
+      const archer = classic(makeUnit(makeEnemy('bandit', 4, makeRng(5)), 'enemy', { x: 9, y: 3 }));
       archer.character.weapon = gear(W('bow'));
-      const friend = makeUnit(makeEnemy('bandit', 4, makeRng(6)), 'enemy', { x: 15, y: 3 }); // a healthy ally to fall back on
+      const friend = classic(makeUnit(makeEnemy('bandit', 4, makeRng(6)), 'enemy', { x: 15, y: 3 })); // a healthy ally to fall back on
       const knights = [2, 3, 4].map((y) => makeUnit(hero('sword_shield', ['charge'], `K${y}`), 'player', { x: 2, y }));
       const battle = new Battle(map, [archer, friend, ...knights], makeRng(1), NO_FOG);
       battle.endPhase(); // enemy turn
@@ -1132,9 +1135,9 @@ describe('progression and enemy behaviour', () => {
   it('human: holds firm while its friends fight on and the odds are fair; gives up once the fight is lost', () => {
     const map = openMap(30, 21);
     const make = (friendsHp: number) => {
-      const archer = makeUnit(makeEnemy('bandit', 4, makeRng(5)), 'enemy', { x: 15, y: 10 });
+      const archer = classic(makeUnit(makeEnemy('bandit', 4, makeRng(5)), 'enemy', { x: 15, y: 10 }));
       archer.character.weapon = gear(W('bow'));
-      const friends = [8, 12, 14].map((y, i) => makeUnit(makeEnemy('bandit', 4, makeRng(10 + i)), 'enemy', { x: 25, y }));
+      const friends = [8, 12, 14].map((y, i) => classic(makeUnit(makeEnemy('bandit', 4, makeRng(10 + i)), 'enemy', { x: 25, y })));
       const knights = [9, 10, 11].map((y) => makeUnit(hero('sword_shield', ['charge'], `K${y}`), 'player', { x: 12, y }));
       const battle = new Battle(map, [archer, ...friends, ...knights], makeRng(1));
       battle.endPhase();
@@ -1159,8 +1162,8 @@ describe('progression and enemy behaviour', () => {
   it('human: fear is a sliding scale; more hurt or more foes that could kill it asks for better odds to hold firm', () => {
     const map = openMap(30, 21);
     const make = (hpShare: number, knightCount: number, friendsHp: number) => {
-      const bandit = makeUnit(makeEnemy('bandit', 4, makeRng(5)), 'enemy', { x: 15, y: 10 });
-      const friends = [8, 12].map((y, i) => makeUnit(makeEnemy('bandit', 4, makeRng(10 + i)), 'enemy', { x: 25, y }));
+      const bandit = classic(makeUnit(makeEnemy('bandit', 4, makeRng(5)), 'enemy', { x: 15, y: 10 }));
+      const friends = [8, 12].map((y, i) => classic(makeUnit(makeEnemy('bandit', 4, makeRng(10 + i)), 'enemy', { x: 25, y })));
       const knights = [9, 10, 11, 12].slice(0, knightCount).map((y) => makeUnit(hero('sword_shield', [], `K${y}`), 'player', { x: 13, y }));
       const battle = new Battle(map, [bandit, ...friends, ...knights], makeRng(1));
       battle.endPhase();
@@ -1188,7 +1191,7 @@ describe('progression and enemy behaviour', () => {
 
   it('human: a hurt enemy that isn\'t in mortal danger runs for the edge instead of surrendering', () => {
     const map = openMap(30, 21);
-    const bandit = makeUnit(makeEnemy('bandit', 4, makeRng(5)), 'enemy', { x: 15, y: 10 });
+    const bandit = classic(makeUnit(makeEnemy('bandit', 4, makeRng(5)), 'enemy', { x: 15, y: 10 }));
     const far = makeUnit(hero('sword_shield', [], 'Far'), 'player', { x: 3, y: 10 });
     const battle = new Battle(map, [bandit, far], makeRng(1));
     battle.endPhase();
@@ -1304,6 +1307,8 @@ describe('progression and enemy behaviour', () => {
       ], { ...STAT_CONFIG, vision: { enabled: false } }); // they see the archer's watch
       const archer = units[0];
       const group = units.slice(1);
+      // The odds a lone unit weighs: humans at their pre-balance strength (see classic.ts), as the test was set up.
+      if (ENEMIES[type].ai === 'human') group.forEach(classic);
       // A shot worth about a third of a member's Health: enough to fear, not enough to stop one from taking it.
       battle.perform(archer, 'overwatch', { x: 5, y: 2 });
       const hit = archer.overwatch!.hits.reduce((sum, part) => sum + battle.hitDamage(archer, group[0], part, archer.overwatch!.projectile), 0);
@@ -1346,6 +1351,7 @@ describe('progression and enemy behaviour', () => {
     skel.character.weapon = gear(W('sword_shield'));
     const a = makeUnit(hero('sword_shield', [], 'Healthy'), 'player', { x: 1, y: 6 });
     const b = makeUnit(hero('sword_shield', [], 'Hurt'), 'player', { x: 1, y: 7 });
+    for (const h of [a, b]) h.stats.health = h.hp = 5000; // neither can be killed in one blow
     const battle = new Battle(map, [skel, a, b], makeRng(1));
     battle.endPhase();
     skel.hp = Math.round(skel.stats.health * 0.05);
@@ -1453,7 +1459,7 @@ describe('progression and enemy behaviour', () => {
     // A healthy bandit archer would rather shoot point-blank (then Kick, re-engaging) than walk off:
     // breaking away first would only hand the hero a free attack.
     for (let seed = 1; seed < 60; seed++) {
-      const b = makeUnit(makeEnemy('bandit', 6, makeRng(seed)), 'enemy', { x: 5, y: 3 });
+      const b = classic(makeUnit(makeEnemy('bandit', 6, makeRng(seed)), 'enemy', { x: 5, y: 3 }));
       if (!['shortbow', 'longbow', 'spear'].includes(weaponType(b.character))) continue;
       const a = makeUnit(hero(), 'player', { x: 4, y: 3 });
       const battle = new Battle(openMap(), [a, b], makeRng(1));
@@ -2448,7 +2454,7 @@ describe('Elementalist rework: Ignite, Freeze, Fireball, Iceblast and Burn explo
 
   it('Wraiths attack with Spectral Touch; Chill Touch (Chilled) has a 2-turn cooldown', () => {
     expect(SKILLS.chill_touch.cooldown).toBe(2);
-    const w = makeUnit(makeEnemy('wraith', 12, makeRng(1)), 'enemy', { x: 4, y: 3 });
+    const w = classic(makeUnit(makeEnemy('wraith', 12, makeRng(1)), 'enemy', { x: 4, y: 3 }));
     const h = makeUnit(hero(), 'player', { x: 3, y: 3 });
     const battle = new Battle(openMap(), [h, w], () => 0.99);
     expect(battle.basicAttack(w).id).toBe('spectral_touch');

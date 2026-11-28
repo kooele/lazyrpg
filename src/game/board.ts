@@ -6,6 +6,7 @@ import { RANKS, type GameState, type Quest, type Rank } from '../data/types';
 import { enemyTypesForStage, pickFoes } from './battle';
 import { newId, type Rng } from './character';
 import { randInt } from './people';
+import { questParLevel, questValue, strengthOfValue } from './power';
 
 const PLACES = ['the Old Sewers', 'Mill Road', 'Briar Farm', 'the Eastern Woods', "Gallow's Pass", 'the Salt Marsh', 'Kestrel Ford',
   'the Ruined Chapel', 'Hollow Creek', 'the Quarry', 'Thornfield', 'the North Gate', 'Lantern Hill', 'the Old Watchtower',
@@ -17,7 +18,7 @@ export function rankForStage(stage: number): Rank {
   return (tiers.find(({ t }) => stage <= t.stages[1]) ?? tiers[tiers.length - 1]).r;
 }
 
-const T = GUILD.threat;
+const S = GUILD.strength;
 
 /** The middle of a rank's enemy count range (a usual group; promotion quests and Quick Battle use it). */
 export function usualCount(rank: Rank): number {
@@ -25,24 +26,39 @@ export function usualCount(rank: Rank): number {
   return (lo + hi) / 2;
 }
 
-/** How strong one enemy (one threat point) is at `level`: strengthAtLevel1 x strengthGrowth^(level - 1). */
-export const strength = (level: number) => T.strengthAtLevel1 * T.strengthGrowth ** (Math.max(1, level) - 1);
-
-/** A quest's total threat: its enemy count (threat points) x the strength of one enemy at its level. */
-export const totalThreat = (q: Pick<Quest, 'stage' | 'count'>) => q.count * strength(q.stage);
-
-/** The usual gold for a quest: its total threat x goldPerThreat (before the board's pay roll). */
-export const fairReward = (q: Pick<Quest, 'stage' | 'count'>) => totalThreat(q) * T.goldPerThreat;
+/**
+ * A quest's strength, from the enemies it can be expected to field (src/game/power.ts): its value (the fighting
+ * strength of its enemies, which grows with their number and their stats) and its par level (the level at which the
+ * reference party, AI-played, would win strength.parWinRate of the time). Cached per enemy level, size and types.
+ */
+const cache = new Map<string, { value: number; par: number }>();
+function questPower(q: Pick<Quest, 'stage' | 'count' | 'foes'>): { value: number; par: number } {
+  const k = `${q.stage}|${q.count}|${(q.foes ?? []).join(',')}`;
+  let hit = cache.get(k);
+  if (!hit) {
+    hit = { value: questValue(q), par: questParLevel(q) };
+    if (cache.size > 2000) cache.clear();
+    cache.set(k, hit);
+  }
+  return hit;
+}
 
 /**
- * Renown for completing a quest, from its danger in skulls (dangerRating): threat.renown a x D^2 + b x D + c, then
- * x (1 + renownPayFactor x (1 - pay)), so a quest that pays below the usual rate earns more renown and one that pays
- * above it earns less. `pay` is the quest's pay roll (1 = usual).
+ * A quest's strength: the fighting power of its expected enemies (the square of their summed values, see
+ * strengthOfValue), so a group twice the size is four times as strong. Its gold and renown are proportional to it.
  */
-export function questRenown(q: Pick<Quest, 'stage' | 'count'>, pay = 1): number {
-  const { a, b, c } = T.renown;
-  const d = dangerRating(q);
-  return Math.max(1, Math.round((a * d * d + b * d + c) * Math.max(0, 1 + T.renownPayFactor * (1 - pay))));
+export const questStrength = (q: Pick<Quest, 'stage' | 'count' | 'foes'>) => strengthOfValue(questPower(q).value);
+
+/** The usual gold for a quest: its strength x goldPerStrength (before the board's pay roll). */
+export const fairReward = (q: Pick<Quest, 'stage' | 'count' | 'foes'>) => questStrength(q) * S.goldPerStrength;
+
+/**
+ * Renown for completing a quest: its strength x renownPerStrength, then x (1 + renownPayFactor x (1 - pay)), so a
+ * quest that pays below the usual rate earns more renown and one that pays above it earns less. `pay` is the quest's
+ * pay roll (1 = usual).
+ */
+export function questRenown(q: Pick<Quest, 'stage' | 'count' | 'foes'>, pay = 1): number {
+  return Math.max(1, Math.round(questStrength(q) * S.renownPerStrength * Math.max(0, 1 + S.renownPayFactor * (1 - pay))));
 }
 
 /**
@@ -56,33 +72,42 @@ export function expectedEnemies(q: Pick<Quest, 'count' | 'foes'>): number {
 }
 
 /**
- * How hard a quest is, as the average party level it calls for: the level at which a group of
- * threat.standardCount enemies would have the quest's total threat, minus 1. A usual-sized group at level L is
- * about L - 1; every ~16.5% more total threat (a level's worth of strength) adds a level.
+ * How hard a quest is, as the party level it calls for: its par level, the level at which the reference party (four
+ * Adventurers of average B talent with the gear expected at their level, played by the AI) would win
+ * strength.parWinRate of its battles against it.
  */
-export function questDifficulty(q: Pick<Quest, 'stage' | 'count'>): number {
-  const t = GUILD.threat;
-  return Math.log(totalThreat(q) / t.standardCount / strength(1)) / Math.log(t.strengthGrowth);
-}
+export const questDifficulty = (q: Pick<Quest, 'stage' | 'count' | 'foes'>) => questPower(q).par;
 
 /** The top of the skull scale: five white skulls, then five red ones over them. */
 export const MAX_SKULLS = 10;
 
 /**
- * Danger, shown as skulls: 0.5 to 10 in half steps, rising evenly with the quest's difficulty (questDifficulty)
- * on one fixed scale for the whole game, from threat.skulls.from (half a skull) to threat.skulls.to (ten).
+ * Danger, shown as skulls: 0.5 to 10 in half steps, rising evenly with the quest's par level (questDifficulty) on one
+ * fixed scale for the whole game, from strength.skulls.from (half a skull) to strength.skulls.to (ten). A level's
+ * worth of party strength is a fixed share more power, so skulls grow with the log of a quest's strength.
  * Cards show 0.5-5 as white skulls and 5.5-10 as red skulls laid over them.
  */
-export function dangerRating(q: Pick<Quest, 'stage' | 'count'>): number {
-  const { from, to } = GUILD.threat.skulls;
-  const f = (questDifficulty(q) - from) / (to - from);
+export function dangerRating(q: Pick<Quest, 'stage' | 'count' | 'foes'>): number {
+  return skullsForLevel(questDifficulty(q));
+}
+
+/** The skulls a quest with this par level shows. */
+export function skullsForLevel(par: number): number {
+  const { from, to } = S.skulls;
+  const f = (par - from) / (to - from);
   return Math.max(0.5, Math.min(MAX_SKULLS, Math.round((0.5 + (MAX_SKULLS - 0.5) * f) * 2) / 2));
+}
+
+/** The par level a number of skulls stands for (the middle of its half step). */
+export function levelForSkulls(skulls: number): number {
+  const { from, to } = S.skulls;
+  return from + ((skulls - 0.5) / (MAX_SKULLS - 0.5)) * (to - from);
 }
 
 const roll = ([lo, hi]: [number, number], rng: Rng) => lo + rng() * (hi - lo);
 const round5 = (v: number) => Math.max(5, Math.round(v / 5) * 5);
 
-/** How well a quest pays for its danger: reward / the usual reward for its total threat (1 = fair). */
+/** How well a quest pays for its danger: reward / the usual reward for its strength (1 = fair). */
 export function payRatio(q: Quest): number {
   return q.reward / fairReward(q);
 }
@@ -104,7 +129,7 @@ export function makeQuest(rank: Rank, day: number, rng: Rng, promotion = false):
   const tier = GUILD.quests[rank];
   // A promotion quest is a fair test: the easier half of its rank's levels, a usual-sized group, usual pay.
   const stage = promotion ? randInt(tier.stages[0], Math.ceil((tier.stages[0] + tier.stages[1]) / 2), rng) : randInt(tier.stages[0], tier.stages[1], rng);
-  // Group size and level are rolled independently; together they make the quest's total threat.
+  // Group size and level are rolled independently; together (with the enemy types) they make the quest's strength.
   const count = promotion ? Math.round(usualCount(rank)) : randInt(tier.count[0], tier.count[1], rng);
   const pay = promotion ? 1 : roll(GUILD.board.pay, rng);
   const foes = pickFoes(stage, rng);
@@ -119,8 +144,8 @@ export function makeQuest(rank: Rank, day: number, rng: Rng, promotion = false):
     title: promotion ? `Promotion: ${title}` : title,
     rank,
     stage,
-    reward: round5(fairReward({ stage, count }) * pay),
-    renown: questRenown({ stage, count }, pay),
+    reward: round5(fairReward({ stage, count, foes }) * pay),
+    renown: questRenown({ stage, count, foes }, pay),
     days: randInt(tier.days[0], tier.days[1], rng),
     expires: day + (promotion ? 365 : randInt(4, 8, rng)),
     description: `${promotion ? `The guild's ${rank}-rank trial. ` : ''}${names.join(' and ')} reported at ${place}.${size}`,

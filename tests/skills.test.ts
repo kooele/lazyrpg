@@ -9,6 +9,7 @@ import { Battle, makeEnemy, makeUnit, type Team, type Unit } from '../src/game/b
 import { createCharacter, deriveStats, makeRng, skillBarLayout } from '../src/game/character';
 import { combinePenPct } from '../src/game/gear';
 import type { BattleMap, Point, Terrain } from '../src/game/grid';
+import { classic } from './classic';
 
 // As in game.test.ts: no base Defense or Resist (no random resists, round damage numbers) and no gear base stats.
 STAT_CONFIG.base.defense = 0;
@@ -130,6 +131,7 @@ describe('fleeing', () => {
       { c: hero('longbow', [], 'Archer'), team: 'player', at: { x: archerX, y: 9 } },
       { c: makeEnemy('bandit', 4, makeRng(5)), team: 'enemy', at: { x: 8, y: 9 } },
     ], openMap(24, 19)); // edges: west 8 tiles, top and bottom 9, east 15 (it moves 4 a turn)
+    classic(b);
     b.hp = Math.round(b.stats.health * 0.2); // badly hurt and alone: it runs
     battle.endPhase();
     expect(battle.canMove(b)).toBe(true);

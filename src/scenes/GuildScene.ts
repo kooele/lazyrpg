@@ -5,7 +5,7 @@ import { ENEMIES } from '../data/enemies';
 import type { FreeAdventurer, Quest } from '../data/types';
 import { acceptQuest, canTakeQuest, lineupMembers, toggleLineup } from '../game/city';
 import { joinParty, mercenaryRates, rosterFull, talentPriceFactor } from '../game/contracts';
-import { dangerRating, expectedEnemies, payRating } from '../game/board';
+import { dangerRating, expectedEnemies, payRating, questDifficulty } from '../game/board';
 import { adventurerCount, adventurerRank, leaderboard, nextRank, rankThreshold } from '../game/guild';
 import { markDirty, requireState, session } from '../game/session';
 import { PEOPLE_SORTS, QUEST_SORTS, nextSort, sortPeople, sortQuests, type PeopleSort, type QuestSort, type SortDir } from '../game/sorting';
@@ -174,7 +174,11 @@ export class GuildScene extends Phaser.Scene {
     const box = this.add.container(0, 0);
     // Drawn off the display list, then baked into a texture once everything is drawn (see bakeGraphics).
     const g = this.make.graphics({}, false);
-    for (let i = 0; i < enemies; i++) this.foeIcon(box, g, x + 9 + i * 16, y, allowed, types[i % types.length]);
+    // Up to MAX_ICONS icons fit before the skulls; a bigger group shows the rest as "+N".
+    const MAX_ICONS = 14;
+    const shown = Math.min(enemies, enemies > MAX_ICONS ? MAX_ICONS - 1 : MAX_ICONS);
+    for (let i = 0; i < shown; i++) this.foeIcon(box, g, x + 9 + i * 16, y, allowed, types[i % types.length]);
+    if (shown < enemies) box.add(text(this, x + 3 + shown * 16, y, `+${enemies - shown}`, { fontSize: '12px', color: allowed ? COLORS.text : COLORS.dim }).setOrigin(0, 0.5));
     // Skulls: white up to `danger` (in halves) for 0.5-5, then red laid over them for 5.5-10; the rest dark.
     const fromX = cardW - 12 - 5 * 18;
     const white = !allowed ? 0x9aa3bd : 0xe8dcc0;
@@ -222,6 +226,8 @@ export class GuildScene extends Phaser.Scene {
     const days = ['', "A day's", 'A two-day', 'A three-day', 'A four-day', 'A five-day'][q.days] ?? `A ${q.days}-day`;
     const when = q.promotion ? 'The guild holds this trial open' : `The notice comes down after day ${q.expires}`;
     c.add(text(this, 10, 86, `${days} journey · ${when}.`, { fontSize: '11px', color: COLORS.dim, fontStyle: 'italic', wordWrap: { width: W - 140 } }));
+    // Left of the skulls: the party level the quest is par for (see power.ts).
+    c.add(text(this, W - 108, 40, `Par Lv ${Math.max(1, Math.round(questDifficulty(q)))}`, { fontSize: '11px', color: COLORS.dim }).setOrigin(1, 0.5));
     c.add(text(this, 10, 100, `${q.reward} Gold`, { fontSize: '17px', color: COLORS.gold }));
     const pay = payRating(q);
     if (pay !== 'fair') c.add(text(this, 100, 104, pay === 'generous' ? 'Generous Pay' : 'Poor Pay', { fontSize: '12px', color: pay === 'generous' ? '#6fdc8c' : COLORS.bad }));

@@ -491,6 +491,11 @@ export interface EnemyDef {
   levels: [number, number];
   /** Share of the encounter budget one unit uses. */
   threat: number;
+  /**
+   * How much its value counts in the strength model (src/game/power.ts), for what its stats don't show (skills,
+   * speed, how it fights). Fitted by the balance simulations (tools/balance). 1 = its stats alone.
+   */
+  power: number;
   /** How it fights. */
   ai: EnemyAi;
   /** Name of quests where this type is the main foe ("Wolf Pack"). */
@@ -501,6 +506,11 @@ export interface EnemyDef {
   /** Stats at the lowest level. */
   stats: Stats;
   growthPerLevel: Partial<Stats>;
+  /**
+   * A bend in the growth line: added x (levels above the lowest)^2 (balance tuning, tools/balance), so a type's
+   * stats can follow the party's strength across a wide level range. Missing = a straight line.
+   */
+  growthBend: Partial<Stats>;
   /** First skill = basic attack (for human types with a weapon, the weapon's basic attack comes first). */
   skills: string[];
   skillsByLevel: Record<number, string[]>;

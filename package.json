@@ -1,14 +1,15 @@
 {
   "name": "lazyrpg",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "balance": "node tools/balance/run.mjs"
   },
   "dependencies": {
     "phaser": "^4.2.1"
