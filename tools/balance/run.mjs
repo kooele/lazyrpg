@@ -65,6 +65,8 @@ const summary = meta.map((m, c) => {
     ...m,
     n: rs.length,
     winRate: avg(rs, (r) => (r.win ? 1 : 0)),
+    score: avg(rs, (r) => r.score ?? (r.win ? 1 : 0)),
+    healthLoss: avg(rs, (r) => r.healthLoss ?? 0),
     rounds: avg(rs, (r) => r.rounds),
     hpLeft: avg(rs, (r) => r.hpLeft),
     survivors: avg(rs, (r) => r.survivors),
@@ -76,9 +78,9 @@ const runs = meta.map((_, c) => byCell.get(c) ?? []);
 writeFileSync(join(outDir, `${args.name}.json`), JSON.stringify({ args, seconds: (Date.now() - t0) / 1000, summary, runs }));
 
 const pct = (v) => `${Math.round(v * 100)}%`.padStart(4);
-const extra = (s) => Object.entries(s).filter(([k, v]) => typeof v === 'number' && !['n', 'winRate', 'rounds', 'hpLeft', 'survivors', 'defeated', 'timeouts'].includes(k))
+const extra = (s) => Object.entries(s).filter(([k, v]) => typeof v === 'number' && !['n', 'winRate', 'score', 'healthLoss', 'rounds', 'hpLeft', 'survivors', 'defeated', 'timeouts'].includes(k))
   .map(([k, v]) => `${k} ${Math.round(v * 100) / 100}`).join(' ');
 console.log(`${args.name}: ${summary.length} cells x ${args.seeds} seeds in ${Math.round((Date.now() - t0) / 1000)}s`);
 for (const s of summary) {
-  console.log(`${s.id.padEnd(44)} win ${pct(s.winRate)} rd ${s.rounds.toFixed(1).padStart(4)} hp ${pct(s.hpLeft)} kill ${pct(s.defeated)}${s.timeouts ? ` to ${s.timeouts}` : ''}  ${extra(s)}`);
+  console.log(`${s.id.padEnd(44)} win ${pct(s.winRate)} score ${pct(s.score)} rd ${s.rounds.toFixed(1).padStart(4)} hp ${pct(s.hpLeft)} kill ${pct(s.defeated)}${s.timeouts ? ` to ${s.timeouts}` : ''}  ${extra(s)}`);
 }

@@ -8,7 +8,7 @@
   "_partyRankWeights": "How the rival parties are spread over the ranks when a new game starts, as relative weights (a rank's share is its weight over the total: D is 40/126, about 32%); there is always at least one A-rank party. After that, ranks follow renown (see ranks). Quest postings have their own weights (board.rankWeights).",
   "ranks": {
     "_comment": "Party ranks. renown: the renown a party needs for each rank (D needs none): tuned so a party of 2 at D, 3 at C and 4 at B is promoted at about level 6, 11 and 16 (about 4 D quests, 11 C and 18 B). highestPromotion: the highest rank a promotion quest can reach (A for now: no party can be promoted to S; S's renown only matters for rivals that start at S). Reaching the next rank's renown puts a promotion quest of that rank on the board; completing it promotes the party. A party whose renown stays below its own rank's threshold for demotionDays days in a row drops a rank. Renown doesn't fade: a failed quest loses failedQuestRenown x that quest's renown, and each member who dies loses deathRenown x the quest's renown. A member who quits (unpaid wages, or Morale 0) costs quitRenownPerLevel x their level.",
-    "renown": {"C": 55, "B": 540, "A": 3700, "S": 16800},
+    "renown": {"C": 65, "B": 675, "A": 4050, "S": 12800},
     "highestPromotion": "A",
     "demotionDays": 7,
     "failedQuestRenown": 1,
@@ -27,22 +27,22 @@
     "pay": [0.75, 1.35]
   },
   "quests": {
-    "_comment": "Per quest rank: stages (the enemy level range), count (the enemy group's size in threat points: enemies.json threat per unit, so a bandit is 1.3 and a rat 0.5, and weak types come in bigger packs), and days. Each quest rolls its level and its count independently; together with its enemy types they make its strength (see strength), and its gold and renown follow from that. D starts at a single threat point (a lone bandit, two rats), the quests one level-1 adventurer can take on alone. Encounter size comes from the quest alone, never from the party that takes it. Quick Battle stages use the middle count of the rank their stage falls in.",
-    "D": { "stages": [1, 5], "count": [1, 8], "days": [1, 2] },
-    "C": { "stages": [6, 10], "count": [6, 12], "days": [1, 3] },
-    "B": { "stages": [11, 15], "count": [8, 14], "days": [2, 3] },
-    "A": { "stages": [16, 20], "count": [10, 16], "days": [2, 4] },
-    "S": { "stages": [21, 25], "count": [12, 18], "days": [3, 5] }
+    "_comment": "Per quest rank: skulls (the range of danger its quests are posted at; above 10 is still shown as 10), stages (the party levels the rank is for, used for promotion trials and Quick Battle), and days. A quest rolls its skulls in its rank's range, then an enemy type and a level of that type whose usual group (enemies.json group) is about that dangerous, then its group size: 75% to 133% of the usual group, whatever fits the skulls. Its gold and renown come from its strength (see strength). Encounter size comes from the quest alone, never from the party that takes it.",
+    "D": { "stages": [1, 5], "skulls": [0.5, 3], "days": [1, 2] },
+    "C": { "stages": [6, 10], "skulls": [2.5, 5.5], "days": [1, 3] },
+    "B": { "stages": [11, 15], "skulls": [5, 8], "days": [2, 3] },
+    "A": { "stages": [16, 20], "skulls": [7.5, 10], "days": [2, 4] },
+    "S": { "stages": [21, 25], "skulls": [9.5, 11.5], "days": [3, 5] }
   },
   "strength": {
-    "_comment": "Quest strength comes from the strength model (src/game/power.ts): the enemies a quest can be expected to field, valued as sqrt(effective HP x damage per turn) each and summed, so it grows with their stats and their number. A quest's par level is the level at which the reference party (four Adventurers of average B talent with the gear expected at that level, played by the AI) would win parWinRate of its battles against it; winCurve is the fitted AI win chance, 1 / (1 + e^-(a + b ln ratio)) for a party with power ratio `ratio` against the quest (tools/balance fits it). The usual gold for a quest is its strength x goldPerStrength (then x the board's pay roll); its renown is strength x renownPerStrength, then x (1 + renownPayFactor x (1 - pay roll)), so a quest paying 0.75 of the usual gold earns 1.25x the renown and one paying 1.35 earns 0.65x. Quest cards show the par level as skulls: half a skull at par level skulls.from up to ten at skulls.to, rising evenly in half steps (five white skulls, then red skulls over them).",
+    "_comment": "The strength model (src/game/power.ts): a fighter's value is sqrt(effective HP x damage per turn); a group's power is N^numbersExponent x (average value)^2. winCurve maps a party's power ratio against a quest to its expected score on autopilot: 1 / (1 + e^-(a + b ln ratio)); a battle's score is 1 for a win or the share of enemies defeated for a loss, less half the share of the party's Health lost (tools/balance fits it). A quest's threat is the log of its expected enemies' power against a four-member reference party of matching strength; skulls come from threat through the skulls points ([threat, skulls]: half a skull where random level-1 trios come out with about 90%, ten where five level-20 adventurers score half; tools/balance/skulls.sim.ts writes them). The usual gold for a quest is its strength (power, in readable units) x goldPerStrength, then x the board's pay roll; its renown is strength x renownPerStrength, then x (1 + renownPayFactor x (1 - pay roll)), so a quest paying 0.75 of the usual gold earns 1.25x the renown and one paying 1.35 earns 0.65x. parWinRate is the score that defines a quest's par level (the reference party's level for an even fight), used by the balance tools.",
     "parWinRate": 0.5,
     "numbersExponent": 1.75,
-    "winCurve": { "a": 2.547, "b": 10.317 },
-    "goldPerStrength": 0.16,
-    "renownPerStrength": 0.04,
+    "winCurve": { "a": 0.301, "b": 2.979 },
+    "goldPerStrength": 0.4,
+    "renownPerStrength": 0.1,
     "renownPayFactor": 1,
-    "skulls": [[-0.52, 0.5], [-0.1, 1], [28.47, 10]]
+    "skulls": [[12.137,0.5],[14.617,2.5],[16.19,5],[17.285,7.5],[17.87,10]]
   },
   "food": {
     "_comment": "Food for every member the party feeds (the main character, slaves, and companions with food & lodging in their contract), set per member in Manage Party. Each day, a fed member costs that tier's pricePerPerson. Quality: poor 0, common 1, fine 2, luxury 3, compared with what they expect (lodging.expectedQuality, or lodging.slaveExpectedQuality for slaves) like a night's lodging: every fed member gains moraleAbovePerStep Morale for each step better than they expect and loses moraleBelowPerStep for each step worse. default is the tier for members nobody has set.",
@@ -107,8 +107,8 @@
     "highMoraleRelationshipPerDay": 1
   },
   "xp": {
-    "_comment": "XP for a won quest. Every member who comes back gets the same as a day of training (schedule.trainingXp), plus an equal share of the quest's pool XP split among all of them (so smaller parties learn faster). The pool is pool.a x D^2 + pool.b x D + pool.c, where D is the quest's danger in skulls (0.5 to 10): 105 at half a skull, 560 at 4 skulls, 2480 at 10. The members' levels don't change it: the level-up cost curve (stats.json xpPerLevel) already makes easy quests worth little to veterans. Failed quests give no XP.",
-    "pool": { "a": 20, "b": 40, "c": 80 }
+    "_comment": "XP for a won quest. Every member who comes back gets the same as a day of training (schedule.trainingXp), plus an equal share of the quest's pool XP split among all of them (so smaller parties learn faster). The pool is pool.a x D^2 + pool.b x D + pool.c, where D is the quest's danger in skulls (0.5 to 10): 275 at half a skull, 1130 at 5, 2080 at 10 (tools/balance/campaign.sim.ts fits it so the expected party reaches level 6, 11, 16 and 20 after 5 D, 9 C, 15 B and 20 A quests). The members' levels don't change it: the level-up cost curve (stats.json xpPerLevel) already makes easy quests worth little to veterans. Failed quests give no XP.",
+    "pool": { "a": 0, "b": 190, "c": 180 }
   },
   "schedule": {
     "_comment": "What members who aren't on a quest do each day (Manage Party). recover: recovers recoverMultiplier x healthPerDay. training: trainingXp.perLevel x level + trainingXp.flat XP (22 at level 1, 70 at level 25). oddJobs: oddJobsGold gold. dayOff: dayOffMorale Morale. marketplace (anyone but mercenaries): sells up to marketplaceItemsPerDay items from the top of the Marketplace sale list, at their full value.",

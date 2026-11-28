@@ -1,5 +1,5 @@
-// Rescale enemy stats so the AI-played reference party at a level wins a usual-sized group of each type
-// (usualCountAt) at that level TARGET_WIN of the time: 50% at D rank, 40% at C, 33% (par) from B on. Health, P.Atk and M.Atk scale
+// Rescale enemy stats so the AI-played reference party at a level scores TARGET_WIN against a usual group of each
+// type (its `group`) at that level (95% at level 1, 70% at 5, 60% at 10, 50% at 20: targets.json). Health, P.Atk and M.Atk scale
 // together (each enemy's value scales with them); Defense and the rest stay. Solved at the bottom and top of each
 // type's levels, so base stats and growth per level stay a straight line. Writes src/data/enemies.json.
 //
@@ -14,7 +14,7 @@ import { GUILD } from '../../src/data/guild';
 import type { EnemyDef } from '../../src/data/types';
 import type { Stats } from '../../src/data/types';
 import { defenseMultiplier } from '../../src/game/battle';
-import { clearEnemyCache, powerRatio, questFighters, referenceParty, usualCountAt } from '../../src/game/power';
+import { clearEnemyCache, powerRatio, questFighters, referenceParty } from '../../src/game/power';
 
 const SCALED = ['health', 'pAtk', 'mAtk'] as const;
 /**
@@ -161,7 +161,7 @@ test('rebalance enemies', () => {
         def.growthBend = {};
         // stats are read at levels[0] + growth x steps: with no growth, put L's stats at every level
         clearEnemyCache();
-        return powerRatio(referenceParty(L), questFighters({ stage: L, count: usualCountAt(L), foes: [def.id] }, { smooth: true }));
+        return powerRatio(referenceParty(L), questFighters({ stage: L, count: def.group, foes: [def.id] }, { smooth: true }));
       };
       // Fix the other stats at L too (Defense etc. as they would be at L).
       for (const k of Object.keys(base) as (keyof Stats)[]) def.stats[k] = base[k];

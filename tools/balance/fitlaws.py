@@ -7,7 +7,7 @@ cells = []
 for name in sys.argv[1:]:
     d = json.load(open(f'{here}/out/{name}.json'))
     for s, runs in zip(d['summary'], d['runs']):
-        cells.append((s, [1 if r['win'] else 0 for r in runs]))
+        cells.append((s, [r.get('score', 1 if r['win'] else 0) for r in runs]))
 sig = lambda z: 1 / (1 + math.exp(-max(-50, min(50, z))))
 eps = 1e-9
 def side(s, k, law):

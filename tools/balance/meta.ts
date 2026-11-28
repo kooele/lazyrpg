@@ -1,11 +1,13 @@
 // Model predictions recorded next to each simulated cell, so a report compares the strength model with the battles.
-import { groupDefense, groupValue, partyFighters, powerRatio, questFighters, questParLevel, strengthAt, tempo, winChance } from '../../src/game/power';
+import { groupDefense, groupValue, partyFighters, referenceParty, referenceSize, powerRatio, questFighters, questParLevel, strengthAt, tempo, winChance } from '../../src/game/power';
 import { dangerRating } from '../../src/game/board';
 import type { Cell } from './jobs';
 import { buildParty } from './sim';
 
 export function cellMeta(c: Cell): Record<string, number> {
-  const party = partyFighters(buildParty(c.party));
+  // Expected gear (rolled per battle): the model fights the averaged reference party.
+  const p = c.party;
+  const party = p.quality === 'expected' && p.random === undefined && !p.builds ? referenceParty(p.level, p.size ?? referenceSize(p.level)) : partyFighters(buildParty(p));
   const quest = questFighters(c.quest);
   const ratio = powerRatio(party, quest);
   // The raw sums, so fits can try other ways of counting numbers (fitalpha.py).

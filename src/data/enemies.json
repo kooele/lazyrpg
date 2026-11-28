@@ -19,18 +19,19 @@
       "name": "Giant Rat",
       "levels": [
         1,
-        2
+        3
       ],
       "threat": 0.5,
-      "power": 0.886,
+      "power": 0.891,
+      "group": 2,
       "art": {
         "kind": "rat",
         "color": "#8a7a70"
       },
       "stats": {
-        "health": 362,
+        "health": 391,
         "mana": 0,
-        "pAtk": 76,
+        "pAtk": 68,
         "mAtk": 0,
         "defense": 20,
         "resist": 20,
@@ -42,10 +43,14 @@
         "mPenPct": 0
       },
       "growthPerLevel": {
-        "health": 75,
-        "pAtk": 17.7,
+        "health": 636.5,
+        "pAtk": 27.6,
         "defense": 3,
         "resist": 3
+      },
+      "growthBend": {
+        "health": -190.24,
+        "pAtk": 14.03
       },
       "skills": [
         "gnaw"
@@ -60,20 +65,21 @@
     "slime": {
       "name": "Green Slime",
       "levels": [
-        2,
-        3
+        1,
+        4
       ],
       "threat": 0.75,
-      "power": 0.675,
+      "power": 0.762,
+      "group": 2.25,
       "art": {
         "kind": "slime",
         "color": "#5fcf6a"
       },
       "stats": {
-        "health": 499,
+        "health": 447,
         "mana": 0,
-        "pAtk": 225,
-        "mAtk": 224,
+        "pAtk": 101,
+        "mAtk": 101,
         "defense": 40,
         "resist": 40,
         "movement": 12,
@@ -84,11 +90,16 @@
         "mPenPct": 0
       },
       "growthPerLevel": {
-        "health": 35.1,
-        "pAtk": 28.1,
-        "mAtk": 34,
+        "health": 307.9,
+        "pAtk": 95.6,
+        "mAtk": 101.4,
         "defense": 5,
         "resist": 5
+      },
+      "growthBend": {
+        "health": -8.29,
+        "pAtk": -8.97,
+        "mAtk": -8.91
       },
       "skills": [
         "slam"
@@ -108,19 +119,20 @@
     "wolf": {
       "name": "Grey Wolf",
       "levels": [
-        3,
+        2,
         6
       ],
       "threat": 1,
-      "power": 0.905,
+      "power": 0.924,
+      "group": 3,
       "art": {
         "kind": "wolf",
         "color": "#7f8ea3"
       },
       "stats": {
-        "health": 1247,
+        "health": 1131,
         "mana": 0,
-        "pAtk": 113,
+        "pAtk": 96,
         "mAtk": 0,
         "defense": 40,
         "resist": 40,
@@ -132,14 +144,14 @@
         "mPenPct": 0
       },
       "growthPerLevel": {
-        "health": -337,
-        "pAtk": -5.6,
+        "health": 414.3,
+        "pAtk": 26.9,
         "defense": 5,
         "resist": 5
       },
       "growthBend": {
-        "health": 102.78,
-        "pAtk": 10
+        "health": -4.06,
+        "pAtk": 2.62
       },
       "skills": [
         "bite",
@@ -160,11 +172,12 @@
     "bandit": {
       "name": "Bandit",
       "levels": [
-        4,
+        3,
         8
       ],
       "threat": 1.3,
-      "power": 1.018,
+      "power": 1.052,
+      "group": 3.9,
       "art": {
         "kind": "human",
         "models": [
@@ -219,10 +232,10 @@
         }
       ],
       "stats": {
-        "health": 1070,
+        "health": 1042,
         "mana": 260,
-        "pAtk": 71,
-        "mAtk": 60,
+        "pAtk": 76,
+        "mAtk": 62,
         "defense": 60,
         "resist": 60,
         "movement": 16,
@@ -233,17 +246,17 @@
         "mPenPct": 0
       },
       "growthPerLevel": {
-        "health": -106.8,
+        "health": -18.4,
         "mana": 20,
-        "pAtk": 33.1,
-        "mAtk": 26.5,
+        "pAtk": 40.5,
+        "mAtk": 37.5,
         "defense": 5,
         "resist": 5
       },
       "growthBend": {
-        "health": 36.19,
-        "pAtk": -0.55,
-        "mAtk": 0.61
+        "health": 59.85,
+        "pAtk": 1.93,
+        "mAtk": 1.75
       },
       "weaponSkillUse": "basic",
       "skills": [],
@@ -259,11 +272,12 @@
       "name": "Goblin",
       "ai": "tribal",
       "levels": [
-        3,
+        1,
         7
       ],
       "threat": 0.6,
-      "power": 1.04,
+      "power": 1.049,
+      "group": 3,
       "art": {
         "kind": "human",
         "models": [
@@ -295,10 +309,10 @@
       ],
       "gearQuality": "goblin",
       "stats": {
-        "health": 713,
+        "health": 317,
         "mana": 240,
-        "pAtk": 77,
-        "mAtk": 61,
+        "pAtk": 36,
+        "mAtk": 26,
         "defense": 36,
         "resist": 36,
         "movement": 16,
@@ -309,17 +323,17 @@
         "mPenPct": 0
       },
       "growthPerLevel": {
-        "health": -68.6,
-        "pAtk": -5.5,
-        "mAtk": -4.7,
+        "health": 328.1,
+        "pAtk": 23.7,
+        "mAtk": 18.9,
         "defense": 3,
         "resist": 3,
         "mana": 20
       },
       "growthBend": {
-        "health": 19.56,
-        "pAtk": 7.46,
-        "mAtk": 6.3
+        "health": -16.01,
+        "pAtk": 2.15,
+        "mAtk": 1.94
       },
       "weaponSkillUse": "basic",
       "skills": [],
@@ -338,19 +352,20 @@
       "name": "Giant Spider",
       "ai": "beast",
       "levels": [
-        5,
+        4,
         9
       ],
       "threat": 0.8,
-      "power": 1.219,
+      "power": 1.342,
+      "group": 4,
       "art": {
         "kind": "spider",
         "color": "#5a4a6a"
       },
       "stats": {
-        "health": 574,
+        "health": 876,
         "mana": 0,
-        "pAtk": 95,
+        "pAtk": 80,
         "mAtk": 0,
         "defense": 42,
         "resist": 42,
@@ -362,14 +377,14 @@
         "mPenPct": 0
       },
       "growthPerLevel": {
-        "health": 87.7,
-        "pAtk": 35.9,
+        "health": -180.2,
+        "pAtk": 40.8,
         "defense": 3,
         "resist": 3
       },
       "growthBend": {
-        "health": 13.62,
-        "pAtk": -6.22
+        "health": 119.86,
+        "pAtk": -3.48
       },
       "skills": [
         "poison_bite",
@@ -386,11 +401,12 @@
       "ai": "evil",
       "tags": ["evil"],
       "levels": [
-        6,
+        5,
         11
       ],
       "threat": 0.8,
-      "power": 0.925,
+      "power": 0.968,
+      "group": 4.8,
       "art": {
         "kind": "human",
         "models": [
@@ -420,10 +436,10 @@
       ],
       "gearQuality": "rusted",
       "stats": {
-        "health": 853,
+        "health": 607,
         "mana": 300,
-        "pAtk": 241,
-        "mAtk": 75,
+        "pAtk": 249,
+        "mAtk": 70,
         "defense": 52,
         "resist": 52,
         "movement": 14,
@@ -434,16 +450,16 @@
         "mPenPct": 0
       },
       "growthPerLevel": {
-        "health": 180.3,
-        "pAtk": -54.8,
+        "health": 285.9,
+        "pAtk": 21.5,
         "mAtk": 5,
         "defense": 3.5,
         "resist": 3.5,
         "mana": 20
       },
       "growthBend": {
-        "health": -6.16,
-        "pAtk": 21.15
+        "health": 28.37,
+        "pAtk": 6.28
       },
       "weaponSkillUse": "basic",
       "skills": [],
@@ -461,7 +477,8 @@
         13
       ],
       "threat": 1.1,
-      "power": 0.877,
+      "power": 0.938,
+      "group": 5.5,
       "art": {
         "kind": "human",
         "models": [
@@ -487,9 +504,9 @@
       ],
       "gearQuality": "orc",
       "stats": {
-        "health": 1316,
+        "health": 1502,
         "mana": 320,
-        "pAtk": 263,
+        "pAtk": 302,
         "mAtk": 96,
         "defense": 72,
         "resist": 72,
@@ -501,16 +518,16 @@
         "mPenPct": 0
       },
       "growthPerLevel": {
-        "health": 197.2,
-        "pAtk": -3.5,
+        "health": 675,
+        "pAtk": 64.5,
         "mAtk": 6,
         "defense": 4.5,
         "resist": 4.5,
         "mana": 20
       },
       "growthBend": {
-        "health": 10.59,
-        "pAtk": 15.19
+        "health": -36.65,
+        "pAtk": 4.43
       },
       "weaponSkillUse": "basic",
       "skills": [],
@@ -533,7 +550,8 @@
         14
       ],
       "threat": 1.4,
-      "power": 1.102,
+      "power": 1.065,
+      "group": 5.6,
       "art": {
         "kind": "human"
       },
@@ -583,10 +601,10 @@
         }
       ],
       "stats": {
-        "health": 904,
+        "health": 1616,
         "mana": 340,
-        "pAtk": 164,
-        "mAtk": 157,
+        "pAtk": 295,
+        "mAtk": 283,
         "defense": 85,
         "resist": 85,
         "movement": 16,
@@ -597,17 +615,17 @@
         "mPenPct": 0
       },
       "growthPerLevel": {
-        "health": 80.9,
-        "pAtk": 55.1,
-        "mAtk": 54,
+        "health": 53.4,
+        "pAtk": 36.1,
+        "mAtk": 35,
         "defense": 5,
         "resist": 5,
         "mana": 20
       },
       "growthBend": {
-        "health": 4.89,
-        "pAtk": 4.52,
-        "mAtk": 3.68
+        "health": 7.49,
+        "pAtk": 18.08,
+        "mAtk": 16.57
       },
       "weaponSkillUse": "all",
       "skills": [],
@@ -621,15 +639,16 @@
         14
       ],
       "threat": 1.4,
-      "power": 0.859,
+      "power": 0.802,
+      "group": 5.6,
       "art": {
         "kind": "bear",
         "color": "#7a5a42"
       },
       "stats": {
-        "health": 1869,
+        "health": 3068,
         "mana": 0,
-        "pAtk": 333,
+        "pAtk": 641,
         "mAtk": 0,
         "defense": 81,
         "resist": 81,
@@ -641,14 +660,14 @@
         "mPenPct": 0
       },
       "growthPerLevel": {
-        "health": 224.5,
-        "pAtk": 158.3,
+        "health": 365.9,
+        "pAtk": 28.7,
         "defense": 4.5,
         "resist": 4.5
       },
       "growthBend": {
-        "health": 16.88,
-        "pAtk": -10.25
+        "health": 30.14,
+        "pAtk": 30.05
       },
       "skills": [
         "maul",
@@ -674,16 +693,17 @@
         16
       ],
       "threat": 1.1,
-      "power": 1.119,
+      "power": 1.197,
+      "group": 6.6,
       "art": {
         "kind": "wraith",
         "color": "#6a7a9a"
       },
       "stats": {
-        "health": 1754,
+        "health": 2417,
         "mana": 0,
-        "pAtk": 114,
-        "mAtk": 276,
+        "pAtk": 135,
+        "mAtk": 325,
         "defense": 57,
         "resist": 57,
         "movement": 20,
@@ -694,16 +714,16 @@
         "mPenPct": 0
       },
       "growthPerLevel": {
-        "health": 381.7,
-        "pAtk": 39.9,
-        "mAtk": 96.3,
+        "health": 205.1,
+        "pAtk": 30.8,
+        "mAtk": 75,
         "defense": 3,
         "resist": 3
       },
       "growthBend": {
-        "health": -31.39,
-        "pAtk": -1.42,
-        "mAtk": -3.44
+        "health": 19.73,
+        "pAtk": 1.69,
+        "mAtk": 4.05
       },
       "skills": [
         "spectral_touch",
@@ -724,15 +744,16 @@
         20
       ],
       "threat": 1.6,
-      "power": 1.168,
+      "power": 1.047,
+      "group": 6.4,
       "art": {
         "kind": "troll",
         "color": "#6a8a6a"
       },
       "stats": {
-        "health": 4106,
+        "health": 5705,
         "mana": 0,
-        "pAtk": 400,
+        "pAtk": 726,
         "mAtk": 110,
         "defense": 99,
         "resist": 99,
@@ -744,15 +765,15 @@
         "mPenPct": 0
       },
       "growthPerLevel": {
-        "health": -172.5,
-        "pAtk": 106.6,
+        "health": 725.4,
+        "pAtk": 75.4,
         "mAtk": 5,
         "defense": 4.5,
         "resist": 4.5
       },
       "growthBend": {
-        "health": 25.92,
-        "pAtk": -1.23
+        "health": -38.8,
+        "pAtk": 5.05
       },
       "skills": [
         "club",
@@ -773,7 +794,8 @@
         25
       ],
       "threat": 1.8,
-      "power": 1.272,
+      "power": 1.129,
+      "group": 7.2,
       "art": {
         "kind": "human"
       },
@@ -828,10 +850,10 @@
         }
       ],
       "stats": {
-        "health": 2164,
+        "health": 2833,
         "mana": 460,
-        "pAtk": 316,
-        "mAtk": 316,
+        "pAtk": 607,
+        "mAtk": 607,
         "defense": 115,
         "resist": 115,
         "movement": 16,
@@ -842,17 +864,17 @@
         "mPenPct": 0
       },
       "growthPerLevel": {
-        "health": -42.2,
-        "pAtk": 69.7,
-        "mAtk": 69.7,
+        "health": -9.3,
+        "pAtk": 92.9,
+        "mAtk": 92.9,
         "defense": 5,
         "resist": 5,
         "mana": 20
       },
       "growthBend": {
-        "health": -1.03,
-        "pAtk": 1.2,
-        "mAtk": 1.2
+        "health": -2.35,
+        "pAtk": 7.33,
+        "mAtk": 7.33
       },
       "weaponSkillUse": "all",
       "skills": [],
@@ -863,18 +885,19 @@
       "ai": "beast",
       "levels": [
         15,
-        23
+        25
       ],
       "threat": 1.5,
-      "power": 1.05,
+      "power": 0.98,
+      "group": 7.5,
       "art": {
         "kind": "wyvern",
         "color": "#4f7a6a"
       },
       "stats": {
-        "health": 4256,
+        "health": 6053,
         "mana": 0,
-        "pAtk": 598,
+        "pAtk": 817,
         "mAtk": 240,
         "defense": 108,
         "resist": 108,
@@ -886,15 +909,15 @@
         "mPenPct": 0
       },
       "growthPerLevel": {
-        "health": 315.3,
-        "pAtk": 67.2,
+        "health": 368.4,
+        "pAtk": 114.6,
         "mAtk": 10,
         "defense": 4.5,
         "resist": 4.5
       },
       "growthBend": {
-        "health": -26.85,
-        "pAtk": -0.09
+        "health": -22.99,
+        "pAtk": 1.9
       },
       "skills": [
         "wyvern_bite",
@@ -916,16 +939,17 @@
         25
       ],
       "threat": 2,
-      "power": 1.323,
+      "power": 1.23,
+      "group": 8,
       "art": {
         "kind": "demon",
         "color": "#a83a32"
       },
       "stats": {
-        "health": 5200,
+        "health": 5367,
         "mana": 0,
-        "pAtk": 532,
-        "mAtk": 514,
+        "pAtk": 969,
+        "mAtk": 938,
         "defense": 125,
         "resist": 125,
         "movement": 20,
@@ -936,16 +960,16 @@
         "mPenPct": 0
       },
       "growthPerLevel": {
-        "health": -319,
-        "pAtk": 139.4,
-        "mAtk": 132.2,
+        "health": 188.6,
+        "pAtk": 109.5,
+        "mAtk": 102.4,
         "defense": 5,
         "resist": 5
       },
       "growthBend": {
-        "health": 20.27,
-        "pAtk": -3.05,
-        "mAtk": -2.85
+        "health": -15.96,
+        "pAtk": 4.57,
+        "mAtk": 4.53
       },
       "skills": [
         "demon_claw",

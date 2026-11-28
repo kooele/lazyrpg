@@ -110,6 +110,7 @@ export function parseEnemies(data: unknown): { enemies: Record<string, EnemyDef>
       levels: [levels[0], levels[1]],
       threat: num(d.threat ?? 1, `${p}.threat`),
       power: num(d.power ?? 1, `${p}.power`),
+      group: num(d.group ?? 4, `${p}.group`),
       questTitle: typeof d.questTitle === 'string' && d.questTitle ? d.questTitle : `${str(d.name, `${p}.name`)} Sighting`,
       ai: (ENEMY_AIS as readonly unknown[]).includes(d.ai) ? (d.ai as EnemyAi) : fail(`${p}.ai`, `must be one of: ${ENEMY_AIS.join(', ')}`),
       art: { kind, color: typeof art.color === 'string' ? art.color : undefined, models },

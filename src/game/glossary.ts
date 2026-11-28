@@ -92,14 +92,13 @@ export function glossaryEntries(): GlossaryEntry[] {
 
   // ---- Quests & ranks ---------------------------------------------------------------------------
   add('Quests & Ranks', 'Skulls (danger)',
-    `A quest's skulls (½ to 10, in halves) rate how hard it is on one fixed scale for the whole game. ½–5 fill white skulls; 5½–10 lay red skulls over them.\n\n`
-    + `Skulls follow the quest's par level: the party level it calls for (see Quest Strength). A bigger group or higher-level enemies both raise it. Half a skull is a job three level-1 recruits nearly always win; one skull, one they win about three times in four; ten skulls, the hardest S-rank quests.\n\n`
-    + `Skulls also set the quest's XP (see Quest XP).`);
+    `A quest's skulls (½ to 10, in halves) rate how dangerous its enemies are on one fixed scale for the whole game, whatever their level. ½–5 fill white skulls; 5½–10 lay red skulls over them.\n\n`
+    + `Half a skull is a job three level-1 recruits come out of well (few injuries) nearly every time. Ten skulls is one that five level-20 adventurers come out of well about half the time. More enemies, or stronger ones, add skulls; each skull is the same step up in danger.\n\n`
+    + `Each quest rank posts its own range of skulls: D about ½–3, C 2½–5½, B 5–8, A 7½–10, and S the most dangerous quests of all. Skulls also set the quest's XP (see Quest XP).`);
   add('Quests & Ranks', 'Quest Strength',
-    `A quest's strength is how hard its enemies hit and how much it takes to bring them down, added up over the whole group: twice the enemies is twice the strength.\n\n`
-    + `Its par level is the level at which a typical party (3 adventurers at D rank, 4 at C, 5 from B, of average B talent with the gear you'd expect) wins ${pct(T.parWinRate)} of the time when fighting on autopilot. A party that plays well wins more often; one below par, or short of gear or members, less.\n\n`
-    + `Quests get harder as they climb: on autopilot, a party of the quest's level wins nearly every half-skull quest, about three in four one-skull quests, half of five-skull quests and a quarter of ten-skull ones.\n\n`
-    + `Your own party's strength works the same way: levels, talent, gear and numbers all count, and injuries and low Morale take away from it. Group size comes from the quest, never from your party: a lone adventurer meets as many enemies as a full lineup.`);
+    `A quest's strength is how hard its enemies hit and how much it takes to bring them down, over the whole group: more enemies count for nearly as much as stronger ones.\n\n`
+    + `A party's strength works the same way: levels, talent, gear and numbers all count, and injuries and low Morale take away from it. Quests are tuned against a typical party: three adventurers to start, four by the middle of C rank, five by the middle of B rank, with the gear you'd expect. On autopilot, such a party comes out of the quests that suit its level well about 95% of the time at level 1, 70% by level 5, 60% by level 10 and half the time at level 20. A party that plays well does better.\n\n`
+    + `Group size comes from the quest, never from your party: a lone adventurer meets as many enemies as a full lineup. A quest's group is between three quarters and a third more than its enemy type's usual one.`);
   add('Quests & Ranks', 'Pay Roll',
     `Gold is proportional to a quest's strength (strength × ${T.goldPerStrength}), and then each quest rolls its pay: ${payLo}–${payHi}× the usual gold. Cards flag Generous pay and Poor pay.\n\n`
     + `Pay works against renown: a poorly paid quest earns more renown, a generous one less (see Renown). Promotion quests always pay the usual rate.`);

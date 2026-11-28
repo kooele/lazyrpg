@@ -19,12 +19,12 @@ describe('strength model', () => {
     }
   });
 
-  it('reference gear follows its curve: Crude through 5, Common at 8, Fine at 13, Masterwork at 20', () => {
-    expect(referenceGearMultiplier(1)).toBe(1);
-    expect(referenceGearMultiplier(5)).toBe(1);
-    expect(referenceGearMultiplier(8)).toBe(2);
-    expect(referenceGearMultiplier(13)).toBe(4);
-    expect(referenceGearMultiplier(25)).toBe(7);
+  it('reference gear is the average of 10% a level Common, 5% Fine, 2% Masterwork (cumulative chances)', () => {
+    expect(referenceGearMultiplier(1)).toBeCloseTo(1.26, 5); // 90% Crude, 5% Common, 3% Fine, 2% Masterwork
+    expect(referenceGearMultiplier(5)).toBeCloseTo(2.3, 5);
+    expect(referenceGearMultiplier(10)).toBeCloseTo(3.6, 5);
+    expect(referenceGearMultiplier(20)).toBeCloseTo(5.2, 5);
+    expect(referenceGearMultiplier(50)).toBeCloseTo(7, 5); // all Masterwork
   });
 
   it('level, talent, gear and numbers all add strength', () => {

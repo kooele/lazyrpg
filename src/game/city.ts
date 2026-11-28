@@ -207,7 +207,7 @@ export function acceptQuest(state: GameState, questId: string): string | null {
   return null;
 }
 
-/** A quest's XP pool from its danger D in skulls (dangerRating, 0.5-10): xp.pool a x D^2 + b x D + c (105 at half a skull, 2480 at ten). */
+/** A quest's XP pool from its danger D in skulls (dangerRating, 0.5-10): xp.pool a x D^2 + b x D + c (275 at half a skull, 2080 at ten). */
 export function questXpPool(q: Pick<Quest, 'stage' | 'count'>): number {
   const { a, b, c } = GUILD.xp.pool;
   const d = dangerRating(q);

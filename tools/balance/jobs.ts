@@ -1,11 +1,13 @@
 // Balance jobs: the cross product of party and quest settings, each cell fought over the same seeds
 // (common random numbers, so neighbouring cells compare on the same maps).
+import { readFileSync } from 'node:fs';
 import { ENCOUNTER, ENEMIES } from '../../src/data/enemies';
-import { QUALITIES } from '../../src/data/content';
 import { GUILD } from '../../src/data/guild';
-import { partyFighters, powerRatio, questFighters, questParLevel, referenceGearMultiplier, referenceSize, usualCountAt } from '../../src/game/power';
+import { QUALITIES } from '../../src/data/content';
+import { partyFighters, powerRatio, questFighters, referenceGearMultiplier, referenceParty, referenceSize } from '../../src/game/power';
 import { RANKS } from '../../src/data/types';
-import { makeQuest } from '../../src/game/board';
+import { enemiesForSkulls, makeQuest } from '../../src/game/board';
+import { adventurerRank } from '../../src/game/guild';
 import { makeRng } from '../../src/game/character';
 import { buildParty, type PartySpec, type QuestSpec } from './sim';
 
@@ -47,7 +49,7 @@ export function referenceQuality(level: number): string {
 
 /** The group size (threat points) at which `party` has power ratio `ratio` against `foes` at `stage`. */
 export function countFor(party: PartySpec, stage: number, foes: string[] | undefined, ratio: number, cap: number): number {
-  const p = partyFighters(buildParty(party));
+  const p = party.quality === 'expected' ? referenceParty(party.level, party.size ?? referenceSize(party.level)) : partyFighters(buildParty(party));
   let lo = 0.25, hi = cap;
   if (powerRatio(p, questFighters({ stage, count: hi, foes })) > ratio) return hi;
   for (let i = 0; i < 40; i++) {
@@ -56,6 +58,15 @@ export function countFor(party: PartySpec, stage: number, foes: string[] | undef
     else hi = mid;
   }
   return Math.round(((lo + hi) / 2) * 20) / 20;
+}
+
+/** The score wanted at a level (targets.json) and the power ratio that gives it by the game's curve. */
+function targetRatio(level: number): number {
+  const t: [number, number][] = JSON.parse(readFileSync('tools/balance/targets.json', 'utf8')).targets;
+  const near = t.reduce((a, b) => (Math.abs(b[0] - level) < Math.abs(a[0] - level) ? b : a));
+  const p = near[1];
+  const { a, b } = GUILD.strength.winCurve;
+  return Math.exp((Math.log(p / (1 - p)) - a) / b);
 }
 
 /**
@@ -68,8 +79,11 @@ function typeCells(a: JobArgs): Cell[] {
   for (const type of types) {
     const [lo, hi] = ENEMIES[type].levels;
     for (const stage of [...new Set([lo, Math.round((lo + hi) / 2), hi])]) {
-      const party: PartySpec = { level: stage, talent: 'profile', quality: referenceQuality(stage), size: a.size?.[0] ?? referenceSize(stage) };
-      for (const ratio of list(a.ratio, [0.35, 0.5, 0.7])) {
+      const party: PartySpec = { level: stage, talent: 'profile', quality: 'expected', size: a.size?.[0] ?? referenceSize(stage) };
+      // Power ratios: `ratio`, or by default around the one at which the party scores its level's target
+      // (targets.json; times 0.8, 1 and 1.25), so fights are tested at the odds the game aims for.
+      const want = targetRatio(stage);
+      for (const ratio of a.ratio?.length ? a.ratio : [0.8, 1, 1.25].map((m) => Math.round(want * m * 1000) / 1000)) {
         const count = countFor(party, stage, [type], ratio, ENCOUNTER.maxEnemies * ENEMIES[type].threat);
         out.push({ id: `${type} St${stage} ${party.quality} r${ratio} c${count}`, party, quest: { stage, count, foes: [type] } });
       }
@@ -80,33 +94,10 @@ function typeCells(a: JobArgs): Cell[] {
 
 const list = <T>(v: T[] | undefined, d: T[]): T[] => (v && v.length ? v : d);
 
-/** The skulls of the usual quest at each level 1-25 (smooth group sizes), for matching quests to party levels. */
-let usualSkulls: number[] | null = null;
-function skullsOfUsual(level: number): number {
-  usualSkulls ??= Array.from({ length: 25 }, (_, i) => skullsAt(questParLevel({ stage: i + 1, count: usualCountAt(i + 1) }, { smooth: true })));
-  return usualSkulls[Math.max(1, Math.min(25, level)) - 1];
-}
-/** Unrounded skulls for a par level (as skullsForLevel, before the half steps). */
-function skullsAt(par: number): number {
-  const pts = GUILD.strength.skulls;
-  let i = 1;
-  while (i < pts.length - 1 && par > pts[i][0]) i++;
-  const [x0, y0] = pts[i - 1];
-  const [x1, y1] = pts[i];
-  return Math.max(0.5, Math.min(10, y0 + ((y1 - y0) * (par - x0)) / (x1 - x0)));
-}
-/** The party level a quest's skulls suit: the level whose usual quest shows the nearest skulls. */
-export function levelForQuest(q: QuestSpec): number {
-  const s = skullsAt(questParLevel(q));
-  let best = 1;
-  for (let L = 1; L <= 25; L++) if (Math.abs(skullsOfUsual(L) - s) < Math.abs(skullsOfUsual(best) - s)) best = L;
-  return best;
-}
-
 /**
  * Real board quests: `seeds` is per battle, and each rank gets `count[0]` (default 12) quests from makeQuest, fought
- * by the reference builds (3, 4 or 5 by level) with the reference gear: at the quest's enemy level, or with plan
- * 'board-skulls' at the level its skulls suit (levelForQuest); stageOffset moves it.
+ * by the reference builds (3, 4 or 5 by level) with the reference gear at the quest's enemy level; stageOffset
+ * moves it.
  */
 function boardCells(a: JobArgs): Cell[] {
   const out: Cell[] = [];
@@ -114,10 +105,10 @@ function boardCells(a: JobArgs): Cell[] {
   for (const rank of RANKS) {
     for (let i = 0; i < per; i++) {
       const q = makeQuest(rank, 1, makeRng(1000 + i * 17 + RANKS.indexOf(rank)));
-      const base = a.plan === 'board-skulls' ? levelForQuest({ stage: q.stage, count: q.count, foes: q.foes }) : q.stage;
+      const base = q.stage;
       for (const off of list(a.stageOffset, [0])) {
         const level = Math.max(1, base + off);
-        const party: PartySpec = { level, talent: 'profile', quality: referenceQuality(level), size: a.size?.[0] ?? referenceSize(level) };
+        const party: PartySpec = { level, talent: 'profile', quality: 'expected', size: a.size?.[0] ?? referenceSize(level) };
         out.push({ id: `${rank} ${q.foes?.join('+')} St${q.stage} c${q.count} L${level}`, party, quest: { stage: q.stage, count: q.count, foes: q.foes } });
       }
     }
@@ -125,15 +116,75 @@ function boardCells(a: JobArgs): Cell[] {
   return out;
 }
 
+/**
+ * The campaign check: for each `level`, the expected party (its size and gear for the level) against `count[0]`
+ * (default 12) quests posted for its adventurer rank (makeQuest).
+ */
+function rankCells(a: JobArgs): Cell[] {
+  const out: Cell[] = [];
+  const per = a.count?.[0] ?? 12;
+  for (const level of list(a.level, [1, 3, 5, 8, 10, 13, 15, 18, 20])) {
+    const rank = adventurerRank(level);
+    for (let i = 0; i < per; i++) {
+      const q = makeQuest(rank, 1, makeRng(2000 + i * 13 + level));
+      const party: PartySpec = { level, talent: 'profile', quality: 'expected', size: a.size?.[0] ?? referenceSize(level) };
+      out.push({ id: `L${level} ${rank} ${q.foes?.join('+')} St${q.stage} c${q.count}`, party, quest: { stage: q.stage, count: q.count, foes: q.foes } });
+    }
+  }
+  return out;
+}
+
+/**
+ * Quests at given skulls (`stage` is read as skulls here), `count[0]` (default 12) of each from enemiesForSkulls,
+ * against the party of `level` / `size` / `random` (random recruits) or the expected party.
+ */
+function skullCells(a: JobArgs): Cell[] {
+  const out: Cell[] = [];
+  const per = a.count?.[0] ?? 12;
+  for (const skulls of list(a.stage, [0.5]))
+    for (const level of list(a.level, [1]))
+      for (const random of a.random?.length ? a.random : [undefined])
+        for (let i = 0; i < per; i++) {
+          const q = enemiesForSkulls(skulls, makeRng(3000 + i * 17));
+          const party: PartySpec = { level, talent: 'profile', quality: random !== undefined ? 'crude' : 'expected', size: a.size?.[0] ?? referenceSize(level), ...(random !== undefined ? { random } : {}) };
+          out.push({ id: `${skulls} skulls L${level} ${random !== undefined ? `rand${random}` : 'ref'} ${q.foes.join('+')} St${q.stage} c${q.count}`, party, quest: q });
+        }
+  return out;
+}
+
+/**
+ * The score curve check: for each `level`, the expected party against `count[0]` (default 12) quests near the
+ * skulls typical for that level (out/skulls.json, from skulls.sim.ts; within a quarter skull), as a player would
+ * pick quests that suit the party.
+ */
+function levelCells(a: JobArgs): Cell[] {
+  const typical: { level: number; skulls: number }[] = JSON.parse(readFileSync('tools/balance/out/skulls.json', 'utf8')).typical;
+  const out: Cell[] = [];
+  const per = a.count?.[0] ?? 12;
+  for (const level of list(a.level, [1, 3, 5, 8, 10, 13, 15, 18, 20])) {
+    const s = typical[level - 1].skulls;
+    for (let i = 0; i < per; i++) {
+      const rng = makeRng(5000 + i * 19 + level);
+      const q = enemiesForSkulls(Math.max(0.5, s - 0.25 + rng() * 0.5), rng);
+      const party: PartySpec = { level, talent: 'profile', quality: 'expected', size: a.size?.[0] ?? referenceSize(level) };
+      out.push({ id: `L${level} typical ${q.foes.join('+')} St${q.stage} c${q.count}`, party, quest: q });
+    }
+  }
+  return out;
+}
+
 export function cells(a: JobArgs): Cell[] {
   if (a.plan === 'types') return typeCells(a);
-  if (a.plan === 'board' || a.plan === 'board-skulls') return boardCells(a);
+  if (a.plan === 'levels') return levelCells(a);
+  if (a.plan === 'ranks') return rankCells(a);
+  if (a.plan === 'skulls') return skullCells(a);
+  if (a.plan === 'board') return boardCells(a);
   const out: Cell[] = [];
   const builds = a.builds?.length ? a.builds : undefined;
   for (const level of list(a.level, [5]))
     for (const talent of list(a.talent, ['profile']))
       for (const quality of list(a.quality, ['crude']))
-        for (const size of list(a.size, [4]))
+        for (const size of a.size?.length ? a.size : [referenceSize(level)])
           for (const random of a.random?.length ? a.random : [undefined])
           for (const stage of a.stage?.length ? a.stage : list(a.stageOffset, [0]).map((o) => Math.max(1, level + o)))
             for (const count of list(a.count, [4])) {

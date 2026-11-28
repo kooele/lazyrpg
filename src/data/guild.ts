@@ -5,8 +5,8 @@ import { RANKS, type Rank } from './types';
 export interface QuestTier {
   /** Enemy level range. */
   stages: [number, number];
-  /** Enemy group size range, in threat points (enemies.json threat per unit). */
-  count: [number, number];
+  /** The skulls its quests are posted at (above 10 is shown as 10). */
+  skulls: [number, number];
   days: [number, number];
 }
 
@@ -22,7 +22,7 @@ export interface StrengthConfig {
   renownPerStrength: number;
   /** Renown x (1 + renownPayFactor x (1 - pay roll)): low-paying quests earn more renown, high-paying ones less. */
   renownPayFactor: number;
-  /** Skulls by par level: [par level, skulls] points, rising; linear between them (rounded to halves). */
+  /** Skulls by threat (power.ts questThreat, a log of power): [threat, skulls] points, rising, linear between. */
   skulls: [number, number][];
 }
 
@@ -296,7 +296,7 @@ export function parseGuildConfig(data: unknown): GuildConfig {
     const t = obj(q[r], `quests.${r}`);
     quests[r] = {
       stages: range(t.stages, `quests.${r}.stages`, 1),
-      count: range(t.count, `quests.${r}.count`, 0.5),
+      skulls: range(t.skulls, `quests.${r}.skulls`, 0.5),
       days: range(t.days, `quests.${r}.days`, 1),
     };
   }
@@ -346,12 +346,12 @@ export function parseGuildConfig(data: unknown): GuildConfig {
         renownPerStrength: num(t.renownPerStrength, 'strength.renownPerStrength', 0),
         renownPayFactor: num(t.renownPayFactor, 'strength.renownPayFactor', 0, 10),
         skulls: (() => {
-          if (!Array.isArray(t.skulls) || t.skulls.length < 2) fail('strength.skulls', 'must be a list of at least 2 [par level, skulls] points');
+          if (!Array.isArray(t.skulls) || t.skulls.length < 2) fail('strength.skulls', 'must be a list of at least 2 [threat, skulls] points');
           const pts = (t.skulls as unknown[]).map((p, i): [number, number] => {
-            if (!Array.isArray(p) || p.length !== 2) fail(`strength.skulls[${i}]`, 'must be [par level, skulls]');
-            return [num(p[0], `strength.skulls[${i}][0]`, -100), num(p[1], `strength.skulls[${i}][1]`, 0.5, 10)];
+            if (!Array.isArray(p) || p.length !== 2) fail(`strength.skulls[${i}]`, 'must be [threat, skulls]');
+            return [num(p[0], `strength.skulls[${i}][0]`, -1000, 1000), num(p[1], `strength.skulls[${i}][1]`, 0.5, 10)];
           });
-          for (let i = 1; i < pts.length; i++) if (!(pts[i][0] > pts[i - 1][0] && pts[i][1] > pts[i - 1][1])) fail(`strength.skulls[${i}]`, 'must rise in both par level and skulls');
+          for (let i = 1; i < pts.length; i++) if (!(pts[i][0] > pts[i - 1][0] && pts[i][1] > pts[i - 1][1])) fail(`strength.skulls[${i}]`, 'must rise in both threat and skulls');
           return pts;
         })(),
       };

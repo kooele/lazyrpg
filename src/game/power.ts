@@ -11,7 +11,6 @@
 import { ENEMY_GEAR, QUALITIES, SKILLS } from '../data/content';
 import { ENCOUNTER, ENEMIES } from '../data/enemies';
 import { GUILD } from '../data/guild';
-import { RANKS } from '../data/types';
 import type { Character, Stats } from '../data/types';
 import { defenseMultiplier, enemyTypesForStage, makeEnemy, makeUnit, penetrate } from './battle';
 import { deriveStats } from './character';
@@ -21,13 +20,13 @@ import { BUILDS, buildCharacter } from './reference';
 export const POWER = {
   /** The reference party: build ids (reference.ts), the first referenceSize(level) of them. */
   referenceParty: ['guardian', 'caster', 'archer', 'cleric', 'bruiser'],
-  /** How many the reference party has, by level: [from level, members]. 3 at D rank, 4 at C, 5 from B. */
-  referenceSizes: [[-99, 3], [6, 4], [11, 5]] as [number, number][],
+  /** How many the reference party has, by level: [from level, members]. 3 to start, 4 by mid C rank, 5 by mid B. */
+  referenceSizes: [[-99, 3], [8, 4], [13, 5]] as [number, number][],
   /**
-   * Gear quality the reference party has by level, as the base-stat multiplier (Crude 1, Common 2, Fine 4,
-   * Masterwork 7); linear in between. Crude through D rank: a new party can't afford better.
+   * The reference party's gear: per level, the chance a piece is at least Common, at least Fine, and Masterwork
+   * (10%, 5%, 2% a level, at most 100%); it fights with the average of that (see referenceGearMultiplier).
    */
-  referenceGear: [[5, 1], [8, 2], [13, 4], [20, 7]] as [number, number][],
+  gearChancePerLevel: { common: 0.1, fine: 0.05, masterwork: 0.02 },
   /** Lowest and highest strength the model reports. */
   range: [-5, 40] as [number, number],
 };
@@ -113,16 +112,21 @@ export function powerRatio(a: Fighter[], b: Fighter[]): number {
 
 // ---- the reference party -------------------------------------------------------------------------------------
 
-/** The reference gear's base-stat multiplier at a level. */
+/** The chances a reference piece of gear is Crude, Common, Fine or Masterwork at a level (gearChancePerLevel). */
+export function referenceGearOdds(level: number): Record<'crude' | 'common' | 'fine' | 'masterwork', number> {
+  const g = POWER.gearChancePerLevel;
+  const L = Math.max(0, level);
+  const atLeast = (p: number) => Math.min(1, p * L);
+  const mw = atLeast(g.masterwork);
+  const fine = Math.max(mw, atLeast(g.fine));
+  const common = Math.max(fine, atLeast(g.common));
+  return { crude: 1 - common, common: common - fine, fine: fine - mw, masterwork: mw };
+}
+
+/** The reference gear's average base-stat multiplier at a level (1.3 at level 1, 2.3 at 5, 3.6 at 10, 5.2 at 20). */
 export function referenceGearMultiplier(level: number): number {
-  const pts = POWER.referenceGear;
-  if (level <= pts[0][0]) return pts[0][1];
-  for (let i = 1; i < pts.length; i++) {
-    const [l1, m1] = pts[i - 1];
-    const [l2, m2] = pts[i];
-    if (level <= l2) return m1 + ((m2 - m1) * (level - l1)) / (l2 - l1);
-  }
-  return pts[pts.length - 1][1];
+  const odds = referenceGearOdds(level);
+  return (Object.keys(odds) as (keyof typeof odds)[]).reduce((t, q) => t + odds[q] * (QUALITIES[q]?.baseMultiplier ?? 1), 0);
 }
 
 /** Qualities players can own, by base multiplier (Crude 1 ... Masterwork 7). */
@@ -132,10 +136,20 @@ const lerpStats = (a: Stats, b: Stats, t: number): Stats =>
   Object.fromEntries(Object.keys(a).map((k) => [k, a[k as keyof Stats] + (b[k as keyof Stats] - a[k as keyof Stats]) * t])) as Stats;
 
 /** A reference build's stats at a whole level and a gear multiplier (between the qualities around it). */
+/** A build's stats per whole level and quality (they never change during a game). */
+const buildCache = new Map<string, Stats>();
 function buildStats(build: string, level: number, mult: number): Stats {
   const lo = [...PLAYER_QUALITIES].reverse().find((q) => q.baseMultiplier <= mult) ?? PLAYER_QUALITIES[0];
   const hi = PLAYER_QUALITIES.find((q) => q.baseMultiplier >= mult) ?? PLAYER_QUALITIES[PLAYER_QUALITIES.length - 1];
-  const at = (q: string) => deriveStats(buildCharacter(build, level, 'profile', q));
+  const at = (q: string) => {
+    const k = `${build}@${level}@${q}`;
+    let s = buildCache.get(k);
+    if (!s) {
+      s = deriveStats(buildCharacter(build, level, 'profile', q));
+      buildCache.set(k, s);
+    }
+    return s;
+  };
   if (lo === hi) return at(lo.id);
   return lerpStats(at(lo.id), at(hi.id), (mult - lo.baseMultiplier) / (hi.baseMultiplier - lo.baseMultiplier));
 }
@@ -145,19 +159,20 @@ export function referenceSize(level: number): number {
   return [...POWER.referenceSizes].reverse().find(([from]) => level >= from)?.[1] ?? 4;
 }
 
-const refCache = new Map<number, Fighter[]>();
+const refCache = new Map<string, Fighter[]>();
 
 /** The reference party at a level (fractional levels blend the whole levels around them). */
-export function referenceParty(level: number): Fighter[] {
+export function referenceParty(level: number, size = referenceSize(level)): Fighter[] {
   const L = Math.round(level * 100) / 100;
-  const hit = refCache.get(L);
+  const key = `${L}x${size}`;
+  const hit = refCache.get(key);
   if (hit) return hit;
   const lo = Math.floor(L);
   const t = L - lo;
   const mult = referenceGearMultiplier(L);
   // Below level 1 the stats keep falling at the level-1 to level-2 rate.
   const whole = (l: number, b: string) => buildStats(b, Math.max(1, l), mult);
-  const out = POWER.referenceParty.slice(0, referenceSize(L)).map((b) => {
+  const out = POWER.referenceParty.slice(0, size).map((b) => {
     if (lo < 1) {
       const s1 = whole(1, b);
       const s2 = whole(2, b);
@@ -166,7 +181,7 @@ export function referenceParty(level: number): Fighter[] {
     return { stats: t ? lerpStats(whole(lo, b), whole(lo + 1, b), t) : whole(lo, b), ranged: RANGED_WEAPONS.has(BUILDS[b].weapon) };
   });
   if (refCache.size > 5000) refCache.clear();
-  refCache.set(L, out);
+  refCache.set(key, out);
   return out;
 }
 
@@ -174,12 +189,12 @@ export function referenceParty(level: number): Fighter[] {
  * The level at which the reference party's power ratio against `g` is `ratio` (1: an even match). The reference
  * party grows stronger with level, so this is a simple search.
  */
-export function strengthAt(g: Fighter[], ratio = 1): number {
+export function strengthAt(g: Fighter[], ratio = 1, size?: number): number {
   let [lo, hi] = POWER.range;
-  const f = (L: number) => powerRatio(referenceParty(L), g) - ratio;
+  const f = (L: number) => powerRatio(referenceParty(L, size ?? referenceSize(L)), g) - ratio;
   if (f(lo) >= 0) return lo;
   if (f(hi) <= 0) return hi;
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; i < 24; i++) {
     const mid = (lo + hi) / 2;
     if (f(mid) < 0) lo = mid;
     else hi = mid;
@@ -203,7 +218,10 @@ export const enemyFactor = (type: string) => ENEMIES[type]?.power ?? 1;
 const enemyCache = new Map<string, Fighter[]>();
 
 /** Forget cached enemy fighters (after enemy stats change, as the balance tools do). */
-export const clearEnemyCache = () => enemyCache.clear();
+export const clearEnemyCache = () => {
+  enemyCache.clear();
+  questCache.clear();
+};
 
 /**
  * One enemy of a type at a level, as the fighters it may turn out to be: each loadout, and crude gear that may be
@@ -251,7 +269,18 @@ export interface QuestLike {
  * the threat budget is spent, so each type comes count / (average threat) / types times on average (and the last
  * pick overshoots the budget by about half a pick when the types differ in size). Past the top level range the budget grows 25% a level.
  */
+const questCache = new Map<string, Fighter[]>();
 export function questFighters(q: QuestLike, opts: { smooth?: boolean } = {}): Fighter[] {
+  const key = `${q.stage}|${q.count}|${(q.foes ?? []).join(',')}|${opts.smooth ? 1 : 0}`;
+  const hit = questCache.get(key);
+  if (hit) return hit;
+  const out = questFightersUncached(q, opts);
+  if (questCache.size > 5000) questCache.clear();
+  questCache.set(key, out);
+  return out;
+}
+
+function questFightersUncached(q: QuestLike, opts: { smooth?: boolean }): Fighter[] {
   const types = enemyTypesFor(q);
   const top = Math.max(...Object.values(ENEMIES).map((d) => d.levels[1]));
   const budget = q.count * (1 + Math.max(0, q.stage - top) * 0.25);
@@ -277,21 +306,6 @@ export const questStrength = (q: QuestLike) => strengthAt(questFighters(q));
 /** The power ratio of a party against a quest (1 = an even match by the model). */
 export const matchup = (members: Character[], q: QuestLike, blessing = 0) => powerRatio(partyFighters(members, blessing), questFighters(q));
 
-/**
- * The usual group size (threat points) at an enemy level: the middle of each rank's count range at the middle of its
- * levels, linear in between (and flat past the first and last rank).
- */
-export function usualCountAt(stage: number): number {
-  const pts = RANKS.map((r) => GUILD.quests[r]).map((t) => [(t.stages[0] + t.stages[1]) / 2, (t.count[0] + t.count[1]) / 2])
-    .sort((a, b) => a[0] - b[0]);
-  if (stage <= pts[0][0]) return pts[0][1];
-  for (let i = 1; i < pts.length; i++) {
-    const [l1, c1] = pts[i - 1];
-    const [l2, c2] = pts[i];
-    if (stage <= l2) return c1 + ((c2 - c1) * (stage - l1)) / (l2 - l1);
-  }
-  return pts[pts.length - 1][1];
-}
 
 // ---- win chances, par and quest strength --------------------------------------------------------------------------
 
@@ -337,4 +351,42 @@ export const strengthOfPower = (power: number) => power / STRENGTH_UNIT ** 2;
 export function rivalFighter(level: number, index: number): Fighter {
   const ref = referenceParty(level);
   return ref[index % ref.length];
+}
+
+// ---- threat and skulls -----------------------------------------------------------------------------------------
+
+/** The fixed party threat is measured against (so a quest's threat doesn't depend on who takes it). */
+const RULER_SIZE = 4;
+
+/**
+ * A quest's threat: the log of its expected enemies' power (groupPower), against the Defense of a four-member
+ * reference party of matching strength. It doesn't depend on levels: more enemies, or stronger ones, raise it.
+ */
+export function questThreat(q: QuestLike, opts: { smooth?: boolean } = {}): number {
+  const foes = questFighters(q, opts);
+  const even = strengthAt(foes, 1, RULER_SIZE);
+  return Math.log(Math.max(1e-9, groupPower(foes, groupDefense(referenceParty(even, RULER_SIZE)))));
+}
+
+/** Linear through rising [x, y] points, extended past the ends along the first and last segments. */
+function through(pts: [number, number][], x: number): number {
+  let i = 1;
+  while (i < pts.length - 1 && x > pts[i][0]) i++;
+  const [x0, y0] = pts[i - 1];
+  const [x1, y1] = pts[i];
+  return y0 + ((y1 - y0) * (x - x0)) / (x1 - x0);
+}
+
+/**
+ * Skulls for a threat, unrounded: through strength.skulls, [threat, skulls] points. Half a skull is the threat
+ * random level-1 recruits, three of them, score 95% on; ten skulls the threat five level-20 Adventurers score 50%
+ * on; the points between spread each rank's typical quests evenly (tools/balance/skulls.sim.ts). Not clamped.
+ */
+export function skullsOfThreat(threat: number): number {
+  return through(GUILD.strength.skulls, threat);
+}
+
+/** The threat a number of skulls stands for. */
+export function threatOfSkulls(skulls: number): number {
+  return through(GUILD.strength.skulls.map(([t, s]) => [s, t] as [number, number]), skulls);
 }

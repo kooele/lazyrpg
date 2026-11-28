@@ -18,8 +18,7 @@ import { parseSave, serializeSave } from '../src/game/save';
 import { skillShape } from '../src/game/reach';
 import { advanceDays, newCampaign } from '../src/game/city';
 import { newDemo, resolveDemoBattle } from '../src/game/demo';
-import { makeQuest, rankForStage, usualCount } from '../src/game/board';
-import { GUILD } from '../src/data/guild';
+import { makeQuest, questDifficulty, rankForStage, usualQuest } from '../src/game/board';
 
 function openMap(w = 10, h = 7): BattleMap {
   return { width: w, height: h, tiles: Array.from({ length: h }, () => Array<Terrain>(w).fill('grass')) };
@@ -945,12 +944,12 @@ function randomParty(size: number, level: number, rng: () => number): Character[
 describe('enemies', () => {
   it('each stage uses the enemy types whose level range contains it', () => {
     const at = (stage: number) => enemyTypesForStage(stage).map((t) => `${t.type}:${t.level}`).sort();
-    expect(at(1)).toEqual(['rat:1']);
-    expect(at(2)).toEqual(['rat:2', 'slime:2']);
-    expect(at(3)).toEqual(['goblin:3', 'slime:3', 'wolf:3']);
-    expect(at(4)).toEqual(['bandit:4', 'goblin:4', 'wolf:4']);
+    const want = (stage: number) => Object.values(ENEMIES).filter((d) => d.levels[0] <= stage && stage <= d.levels[1]).map((d) => `${d.id}:${stage}`).sort();
+    for (const stage of [1, 2, 3, 4, 12, 20]) expect(at(stage)).toEqual(want(stage));
+    // At least three types at every level of the game (variety).
+    for (let stage = 1; stage <= 25; stage++) expect(at(stage).length).toBeGreaterThanOrEqual(3);
     expect(at(20)).toEqual(['demon:20', 'renegade:20', 'troll:20', 'wyvern:20']);
-    expect(at(30)).toEqual(['demon:25', 'renegade:25']); // past the last range: the toughest types, capped level
+    expect(at(30)).toEqual(['demon:25', 'renegade:25', 'wyvern:25']); // past the last range: the toughest types, capped level
   });
 
   it('every level from 1 to 25 has enemies, and every category shows up in every quest rank', () => {
@@ -977,8 +976,9 @@ describe('enemies', () => {
     const rat1 = makeEnemy('rat', 1, makeRng(1));
     const rat2 = makeEnemy('rat', 2, makeRng(1));
     const r = ENEMIES.rat;
+    const at = (k: 'health' | 'pAtk', steps: number) => Math.round(r.stats[k] + (r.growthPerLevel[k] ?? 0) * steps + (r.growthBend[k] ?? 0) * steps * steps);
     expect(deriveStats(rat1)).toMatchObject({ health: r.stats.health, pAtk: r.stats.pAtk, movement: r.stats.movement });
-    expect(deriveStats(rat2)).toMatchObject({ health: Math.round(r.stats.health + (r.growthPerLevel.health ?? 0)), pAtk: Math.round(r.stats.pAtk + (r.growthPerLevel.pAtk ?? 0)) });
+    expect(deriveStats(rat2)).toMatchObject({ health: at('health', 1), pAtk: at('pAtk', 1) });
     expect(allSkills(rat1)).toEqual(['gnaw']);
     expect(allSkills(makeEnemy('slime', 2, makeRng(1)))).toEqual(['slam']);
     expect(allSkills(makeEnemy('slime', 3, makeRng(1)))).toEqual(['slam', 'sticky_spit']);
@@ -1033,7 +1033,7 @@ describe('enemies', () => {
   });
 
   it('weak types come in bigger packs (threat budget)', () => {
-    const rats = generateEnemies(1, makeRng(3), 4);
+    const rats = generateEnemies(1, makeRng(3), 4, ['rat']);
     expect(rats).toHaveLength(8); // 0.5 threat each, budget 4
     expect(rats.every((e) => e.enemyType === 'rat' && e.level === 1)).toBe(true);
     const wolves = generateEnemies(4, makeRng(3), 4, ['wolf']);
@@ -1045,14 +1045,14 @@ describe('enemies', () => {
     // A party-sized budget used to mean a single bandit for a solo adventurer. Now the quest's group size decides.
     const small = makeQuest('D', 1, makeRng(1));
     const bandits = generateEnemies(5, makeRng(3), small.count, ['bandit']);
-    expect(bandits.length).toBe(Math.ceil(small.count)); // threat 1 each
-    expect(bandits.length).toBeGreaterThanOrEqual(GUILD.quests.D.count[0]);
+    expect(bandits.length).toBe(Math.ceil(small.count / ENEMIES.bandit.threat - 1e-9));
+    expect(bandits.length).toBeGreaterThanOrEqual(1);
     // Rats (0.5 threat each) come twice as many for the same group size.
-    expect(generateEnemies(1, makeRng(3), 3)).toHaveLength(6);
-    // Harder ranks bring bigger groups.
-    expect(usualCount('A')).toBeGreaterThan(usualCount('B'));
-    expect(usualCount('B')).toBeGreaterThan(usualCount('C'));
-    expect(usualCount('C')).toBeGreaterThan(usualCount('D'));
+    expect(generateEnemies(1, makeRng(3), 3, ['rat'])).toHaveLength(6);
+    // Harder ranks bring more dangerous groups (more skulls).
+    expect(questDifficulty(usualQuest('A'))).toBeGreaterThan(questDifficulty(usualQuest('B')));
+    expect(questDifficulty(usualQuest('B'))).toBeGreaterThan(questDifficulty(usualQuest('C')));
+    expect(questDifficulty(usualQuest('C'))).toBeGreaterThan(questDifficulty(usualQuest('D')));
     // Quick Battle stages use the rank they fall in.
     expect(rankForStage(1)).toBe('D');
     expect(rankForStage(5)).toBe('D');
@@ -1588,7 +1588,7 @@ describe('battles', () => {
       }
       expect(battle.outcome()).not.toBeNull();
     }
-  });
+  }, 15000); // a long simulation
 
   it('movement costs: grass 4, forest 6, river 8 points (Movement 16)', () => {
     const map = openMap(12, 3);
