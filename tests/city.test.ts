@@ -16,7 +16,7 @@ import {
   companionContract, companionDemand, evaluateOffer, foodLodgingWeekly, joinParty, mercenaryRates, offerValue, openingTerms, punishSlave, slaveContract, bounty, registrationFee, slaveTax, slaveValue, leaveParty, isCompanion, releaseCost, proratedWages, wagesBetween,
 } from '../src/game/contracts';
 import { DEMO_LEVELS, autoMultiplier, demoEncounter, newDemo, partyChanged, resolveDemoBattle, setDemoLevel } from '../src/game/demo';
-import { dangerRating, expectedEnemies, fairReward, payRatio, questRenown, strength, totalThreat, usualCount } from '../src/game/board';
+import { dangerRating, expectedEnemies, fairReward, levelForSkulls, payRatio, questRenown, questStrength, skullsForLevel, usualCount } from '../src/game/board';
 import { adventurerCount, adventurerRank, deathFactor, leaderboard, promotionReady, questDifficulty, rankDifficulty, rivalPickQuest, rivalQuestChance, rankCounts, simulateGuildDay } from '../src/game/guild';
 
 /** Everyone the party houses lodges at `where`, then `n` days end in the city (what stayAtInn and friends used to do). */
@@ -190,23 +190,25 @@ describe('ranks and the leaderboard', () => {
     }
   });
 
-  it('a quest rolls its enemy level and group size; together they make its total threat, which sets gold, renown and difficulty', () => {
-    const t = GUILD.threat;
+  it('a quest rolls its enemy level and group size; together they make its strength, which sets gold, renown and difficulty', () => {
+    const t = GUILD.strength;
     const q = (stage: number, count: number) => ({ stage, count });
-    // Strength grows by strengthGrowth per level; total threat = count x strength.
-    expect(strength(1)).toBeCloseTo(t.strengthAtLevel1);
-    expect(strength(11) / strength(10)).toBeCloseTo(t.strengthGrowth);
-    expect(totalThreat(q(8, 5))).toBeCloseTo(5 * strength(8));
-    // Gold follows total threat; renown follows danger in skulls, and the opposite way to the pay roll.
-    expect(fairReward(q(8, 5))).toBeCloseTo(totalThreat(q(8, 5)) * t.goldPerThreat);
-    const d = dangerRating(q(8, 5));
-    const base = t.renown.a * d * d + t.renown.b * d + t.renown.c;
+    // Strength is power (Lanchester): it grows with the square of the group (a little under 4x for twice the size, as
+    // the last enemy drawn overshoots a small budget proportionally more); higher levels are stronger.
+    expect(questStrength(q(8, 6)) / questStrength(q(8, 3))).toBeGreaterThan(2.5);
+    expect(questStrength(q(8, 6)) / questStrength(q(8, 3))).toBeLessThan(4.5);
+    expect(questStrength(q(9, 4))).toBeGreaterThan(questStrength(q(8, 4)));
+    // Gold and renown are proportional to strength; renown goes the opposite way to the pay roll.
+    expect(fairReward(q(8, 5))).toBeCloseTo(questStrength(q(8, 5)) * t.goldPerStrength);
+    const base = questStrength(q(8, 5)) * t.renownPerStrength;
     expect(questRenown(q(8, 5))).toBe(Math.round(base));
     expect(questRenown(q(8, 5), 0.75)).toBe(Math.round(base * (1 + t.renownPayFactor * (1 - 0.75)))); // poor pay: more renown
     expect(questRenown(q(8, 5), 1.35)).toBe(Math.round(base * (1 + t.renownPayFactor * (1 - 1.35)))); // generous pay: less
-    // Difficulty: a standard-sized group at level L is about L - 1; more enemies or higher levels make it harder.
-    expect(questDifficulty(q(8, t.standardCount))).toBeCloseTo(7);
-    expect(questDifficulty(q(8, t.standardCount * t.strengthGrowth))).toBeCloseTo(8); // a level's worth of extra threat
+    // Difficulty is the par level: a usual-sized group at level L is par for a party of about level L.
+    for (const r of ['D', 'C', 'B', 'A'] as const) {
+      const stage = Math.round((GUILD.quests[r].stages[0] + GUILD.quests[r].stages[1]) / 2);
+      expect(Math.abs(questDifficulty(q(stage, usualCount(r))) - stage)).toBeLessThan(1.5);
+    }
     expect(questDifficulty(q(8, 6))).toBeGreaterThan(questDifficulty(q(8, 3)));
     expect(questDifficulty(q(9, 4))).toBeGreaterThan(questDifficulty(q(8, 4)));
     // Ranks get harder in order.
@@ -270,15 +272,11 @@ describe('ranks and the leaderboard', () => {
   });
 
   it('quest XP pool: 20 x skulls^2 + 40 x skulls + 80, from half a skull (105) to ten (2480)', () => {
-    const at = (skulls: number) => {
-      const { from, to } = GUILD.threat.skulls;
-      // A level-1 quest whose difficulty sits exactly on this skull step, sized by its threat count.
-      const difficulty = from + ((skulls - 0.5) / 9.5) * (to - from);
-      return { stage: 1, count: GUILD.threat.standardCount * GUILD.threat.strengthGrowth ** difficulty };
-    };
-    expect(dangerRating(at(0.5))).toBe(0.5);
-    expect(dangerRating(at(10))).toBe(10);
-    expect([0.5, 1, 4, 10].map((s) => questXpPool(at(s)))).toEqual([105, 140, 560, 2480]);
+    for (let i = 0; i < 100; i++) {
+      const q = makeQuest((['D', 'C', 'B', 'A', 'S'] as const)[i % 5], 1, makeRng(i));
+      const d = dangerRating(q);
+      expect(questXpPool(q)).toBe(Math.round(20 * d * d + 40 * d + 80));
+    }
   });
 
   it('quest cards: about how many foes to expect, and skulls (0.5-10 in halves) on one scale for the whole game', () => {
@@ -287,14 +285,15 @@ describe('ranks and the leaderboard', () => {
     expect(expectedEnemies({ count: 4, foes: ['rat'] })).toBe(8);
     expect(expectedEnemies({ count: 4, foes: ['goblin'] })).toBe(7);
     expect(expectedEnemies({ count: 20, foes: ['rat'] })).toBe(12); // at most the field's cap
-    // Skulls follow actual difficulty, not rank: half a skull at skulls.from, ten at skulls.to, evenly between.
-    const { from, to } = GUILD.threat.skulls;
-    // A level-1 group sized so its difficulty is exactly `d` (questDifficulty = log(count / standardCount) / log(growth)).
-    const at = (d: number) => dangerRating({ stage: 1, count: GUILD.threat.standardCount * GUILD.threat.strengthGrowth ** d });
-    expect(at(from)).toBe(0.5);
-    expect(at(to)).toBe(10);
-    expect(at((from + to) / 2)).toBe(5.5); // 0.5 + 9.5 / 2 = 5.25, rounded to the nearest half
-    expect(at(from + (to - from) / 19)).toBe(1); // each nineteenth of the scale is another half skull
+    // Skulls follow the par level, not rank: half a skull at skulls.from, ten at skulls.to, evenly between.
+    const { from, to } = GUILD.strength.skulls;
+    expect(skullsForLevel(from)).toBe(0.5);
+    expect(skullsForLevel(from - 5)).toBe(0.5);
+    expect(skullsForLevel(to)).toBe(10);
+    expect(skullsForLevel(to + 5)).toBe(10);
+    expect(skullsForLevel((from + to) / 2)).toBe(5.5); // 0.5 + 9.5 / 2 = 5.25, rounded to the nearest half
+    expect(skullsForLevel(from + (to - from) / 19)).toBe(1); // each nineteenth of the scale is another half skull
+    for (const s of [0.5, 1, 3.5, 7, 10]) expect(skullsForLevel(levelForSkulls(s))).toBe(s);
     for (const q of Array.from({ length: 200 }, (_, i) => makeQuest((['D', 'C', 'B', 'A'] as const)[i % 4], 1, makeRng(i)))) {
       expect((dangerRating(q) * 2) % 1).toBe(0); // whole or half skulls
     }
@@ -332,7 +331,7 @@ describe('ranks and the leaderboard', () => {
   it('rivals take the best deal they can handle: good pay for the risk, never above their rank or too dangerous', () => {
     const s = start();
     const p = s.guild.rivals.find((r) => r.rank === 'C')!;
-    p.members.forEach((m) => (m.level = 8));
+    p.members.forEach((m) => (m.level = 10)); // a couple of levels above the quests' par
     const q = (o: Partial<Quest>): Quest => ({ ...makeQuest('C', s.day, makeRng(1)), stage: 7, count: 4, ...o });
     const cheap = q({ reward: 150 });
     const rich = q({ reward: 300 });
@@ -1595,12 +1594,12 @@ describe('quick battle (demo)', () => {
     expect(d.mobMultiplier).toBe(3);
   });
 
-  it('1x on the Enemies slider is half a usual group: a full party at 4x meets two', () => {
+  it('1x on the Enemies slider is a quarter of a usual group: a full party at 4x meets one', () => {
     const d = newDemo();
     d.mobMultiplier = 1;
-    expect(demoEncounter(d, 3, 12)).toEqual({ budget: 1.5, cap: 6 });
+    expect(demoEncounter(d, 3, 12)).toEqual({ budget: 0.75, cap: 3 });
     d.mobMultiplier = 4;
-    expect(demoEncounter(d, 3, 12)).toEqual({ budget: 6, cap: 24 });
+    expect(demoEncounter(d, 3, 12)).toEqual({ budget: 3, cap: 12 });
   });
 });
 

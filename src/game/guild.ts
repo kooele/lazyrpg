@@ -5,6 +5,7 @@ import { gear, weaponType } from './gear';
 import { GUILD } from '../data/guild';
 import { RANKS, type AdventurerRank, type FreeAdventurer, type GameState, type GuildState, type Quest, type Rank, type RivalMember, type RivalParty } from '../data/types';
 import { postQuests, questDifficulty, questRenown, usualCount } from './board';
+import { powerRatio, questFighters, rivalFighter, winChance } from './power';
 
 export { questDifficulty };
 import { newId, type Rng } from './character';
@@ -183,10 +184,13 @@ export function deathFactor(level: number): number {
   return Math.max(SIM.minDeathFactor, SIM.deathLevelFalloff ** (Math.max(1, level) - 1));
 }
 
-/** A rival party's chance to complete a quest of a rank. */
-export function rivalSuccessChance(p: RivalParty, rank: Rank): number {
-  const power = avg(p.members.map((m) => m.level)) + 0.25 * (p.members.length - 4);
-  return Math.max(0.1, Math.min(0.95, 0.55 + SIM.successPerLevel * (power - rankDifficulty(rank))));
+/** A rival party as the strength model sees it: each member a reference Adventurer of their level (src/game/power.ts). */
+export const rivalFighters = (p: RivalParty) => p.members.map((m, i) => rivalFighter(m.level, i));
+
+/** A rival party's chance to complete a quest: the AI win curve (strength.winCurve) on its power ratio against it. */
+export function rivalQuestChance(p: RivalParty, q: Pick<Quest, 'stage' | 'count' | 'foes'>): number {
+  if (!p.members.length) return 0;
+  return Math.max(SIM.minSuccess, Math.min(SIM.maxSuccess, winChance(powerRatio(rivalFighters(p), questFighters(q)))));
 }
 
 /** A usual quest of `rank`: mid-rank enemy level and group size. */
@@ -195,16 +199,13 @@ function usualQuest(rank: Rank): Pick<Quest, 'stage' | 'count'> {
   return { stage: Math.round((lo + hi) / 2), count: usualCount(rank) };
 }
 
-/** How hard a usual quest of `rank` is: what rival parties weigh when picking a rank. */
+/** How hard a usual quest of `rank` is (its par level): what rival parties weigh when picking a rank. */
 export function rankDifficulty(rank: Rank): number {
   return questDifficulty(usualQuest(rank));
 }
 
-/** A rival party's chance to complete a board quest. */
-export function rivalQuestChance(p: RivalParty, q: Quest): number {
-  const power = avg(p.members.map((m) => m.level)) + 0.25 * (p.members.length - 4);
-  return Math.max(0.1, Math.min(0.95, 0.55 + SIM.successPerLevel * (power - questDifficulty(q))));
-}
+/** A rival party's chance to complete a usual quest of a rank. */
+export const rivalSuccessChance = (p: RivalParty, rank: Rank) => rivalQuestChance(p, usualQuest(rank));
 
 /**
  * The board quest a rival party takes: at its rank or below (never promotion quests), at least a 55% chance,

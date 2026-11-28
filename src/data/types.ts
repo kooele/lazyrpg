@@ -491,6 +491,11 @@ export interface EnemyDef {
   levels: [number, number];
   /** Share of the encounter budget one unit uses. */
   threat: number;
+  /**
+   * How much its value counts in the strength model (src/game/power.ts), for what its stats don't show (skills,
+   * speed, how it fights). Fitted by the balance simulations (tools/balance). 1 = its stats alone.
+   */
+  power: number;
   /** How it fights. */
   ai: EnemyAi;
   /** Name of quests where this type is the main foe ("Wolf Pack"). */

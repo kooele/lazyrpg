@@ -10,17 +10,17 @@ export interface QuestTier {
   days: [number, number];
 }
 
-/** How a quest's total threat (count x strength at its level) turns into gold, renown and difficulty. */
-export interface ThreatConfig {
-  strengthAtLevel1: number;
-  strengthGrowth: number;
-  goldPerThreat: number;
-  /** Renown for a quest: a x skulls^2 + b x skulls + c (skulls: its danger, 0.5-10). */
-  renown: { a: number; b: number; c: number };
+/** How a quest's strength (src/game/power.ts) turns into gold, renown and skulls. */
+export interface StrengthConfig {
+  /** The AI party's win rate at a quest's par level. */
+  parWinRate: number;
+  /** AI win chance: 1 / (1 + e^-(a + b ln ratio)), ratio being the party's power ratio against the quest. */
+  winCurve: { a: number; b: number };
+  goldPerStrength: number;
+  renownPerStrength: number;
   /** Renown x (1 + renownPayFactor x (1 - pay roll)): low-paying quests earn more renown, high-paying ones less. */
   renownPayFactor: number;
-  standardCount: number;
-  /** Difficulty shown as half a skull (from) and ten skulls (to); evenly in between. */
+  /** Par level shown as half a skull (from) and ten skulls (to); evenly in between. */
   skulls: { from: number; to: number };
 }
 
@@ -76,7 +76,7 @@ export interface GuildConfig {
   boardSize: number;
   board: { maxPostsPerDay: number; rankWeights: Record<Rank, number>; pay: [number, number] };
   quests: Record<Rank, QuestTier>;
-  threat: ThreatConfig;
+  strength: StrengthConfig;
   food: Record<FoodTier, { name: string; pricePerPerson: number }> & { default: FoodTier; moraleAbovePerStep: number; moraleBelowPerStep: number };
   inns: Record<InnTier, InnConfig>;
   lodging: {
@@ -164,7 +164,9 @@ export interface GuildConfig {
     poolTarget: number;
     partySize: [number, number];
     questChancePerDay: number;
-    successPerLevel: number;
+    /** Rival parties' chance to complete a quest is clamped to minSuccess-maxSuccess. */
+    minSuccess: number;
+    maxSuccess: number;
     lossChanceOnSuccess: number;
     lossChanceOnFailure: number;
     wipeChanceOnFailure: number;
@@ -331,20 +333,20 @@ export function parseGuildConfig(data: unknown): GuildConfig {
       };
     })(),
     quests,
-    threat: (() => {
-      const t = obj(d.threat, 'threat');
+    strength: (() => {
+      const t = obj(d.strength, 'strength');
+      const curve = obj(t.winCurve, 'strength.winCurve');
       return {
-        strengthAtLevel1: num(t.strengthAtLevel1, 'threat.strengthAtLevel1', 0.01),
-        strengthGrowth: num(t.strengthGrowth, 'threat.strengthGrowth', 1, 3),
-        goldPerThreat: num(t.goldPerThreat, 'threat.goldPerThreat', 0),
-        renown: numbers(t.renown, 'threat.renown', ['a', 'b', 'c']),
-        renownPayFactor: num(t.renownPayFactor, 'threat.renownPayFactor', 0, 10),
-        standardCount: num(t.standardCount, 'threat.standardCount', 0.5),
+        parWinRate: num(t.parWinRate, 'strength.parWinRate', 0.01, 0.99),
+        winCurve: { a: num(curve.a, 'strength.winCurve.a', -100, 100), b: num(curve.b, 'strength.winCurve.b', 0.01, 100) },
+        goldPerStrength: num(t.goldPerStrength, 'strength.goldPerStrength', 0),
+        renownPerStrength: num(t.renownPerStrength, 'strength.renownPerStrength', 0),
+        renownPayFactor: num(t.renownPayFactor, 'strength.renownPayFactor', 0, 10),
         skulls: (() => {
-          const k = obj(t.skulls, 'threat.skulls');
-          const from = num(k.from, 'threat.skulls.from', -100);
-          const to = num(k.to, 'threat.skulls.to', -100);
-          if (!(to > from)) fail('threat.skulls.to', 'must be above threat.skulls.from');
+          const k = obj(t.skulls, 'strength.skulls');
+          const from = num(k.from, 'strength.skulls.from', -100);
+          const to = num(k.to, 'strength.skulls.to', -100);
+          if (!(to > from)) fail('strength.skulls.to', 'must be above strength.skulls.from');
           return { from, to };
         })(),
       };
@@ -402,7 +404,7 @@ export function parseGuildConfig(data: unknown): GuildConfig {
     })(),
     simulation: {
       ...numbers<Omit<GuildConfig['simulation'], 'partySize'>>(s, 'simulation',
-        ['targetAdventurers', 'targetParties', 'poolTarget', 'questChancePerDay', 'successPerLevel', 'lossChanceOnSuccess',
+        ['targetAdventurers', 'targetParties', 'poolTarget', 'questChancePerDay', 'minSuccess', 'maxSuccess', 'lossChanceOnSuccess',
           'lossChanceOnFailure', 'wipeChanceOnFailure', 'levelUpChanceOnSuccess', 'levelUpFalloff', 'deathLevelFalloff', 'minDeathFactor', 'recruitLevelGap', 'retireChancePerDay', 'maxLevel']),
       partySize: range(s.partySize, 'simulation.partySize', 1),
     },

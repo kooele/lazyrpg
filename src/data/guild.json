@@ -1,5 +1,5 @@
 {
-  "_readme": "Management and simulation numbers for Arch City and its Adventurer Guild. Gold amounts are whole numbers. Every day the party pays for food (see food: each fed member eats at the quality set for them in Manage Party) and for each housed member's night where they lodge (set per member in Manage Party): an inn (priced per person by inns), a residence the party owns (free), outside (see lodging), or on the road during quests (free: only food is paid). Nothing is paid on the road: a multi-day quest's food and lodging, and any payday on the trip, go on a tab (GameState.tab) settled at the next End Day, and contracts only lapse at End Day in the city. When negotiating, a companion values food & lodging at what the party would pay for the food and night an adventurer expects (lodging.expectedQuality). Party ranks come from renown (see ranks). Quests: stages is the enemy level range (an adventurer rank's levels; see adventurerRanks), count the enemy group size range, days how long the trip takes; gold and renown come from total threat (see threat). companion.expectedWeeklyLoot is how much gold a candidate thinks a party of that rank earns per week; they use it to value a loot cut. simulation tunes the rival parties: the chance a party goes on a quest each day, its chance of success (0.55 + successPerLevel x (average level - the quest's difficulty, from its total threat: see threat), clamped), and what can go wrong. Each member levels up after a success with levelUpChanceOnSuccess x levelUpFalloff^(level - 1), so high levels come slowly. A party tries its promotion quest once it has the renown and at least a 50% chance. Experienced adventurers die less: each member's chance to be lost on a quest is multiplied by deathLevelFalloff^(level - 1) (at least minDeathFactor), and a party's wipe chance by the same factor for its average level. Parties recruit from the guild hall only adventurers within recruitLevelGap levels of their average (or anyone, when down to 2 members). New adventurers arrive at about the rate adventurers are lost, nudged toward targetAdventurers.",
+  "_readme": "Management and simulation numbers for Arch City and its Adventurer Guild. Gold amounts are whole numbers. Every day the party pays for food (see food: each fed member eats at the quality set for them in Manage Party) and for each housed member's night where they lodge (set per member in Manage Party): an inn (priced per person by inns), a residence the party owns (free), outside (see lodging), or on the road during quests (free: only food is paid). Nothing is paid on the road: a multi-day quest's food and lodging, and any payday on the trip, go on a tab (GameState.tab) settled at the next End Day, and contracts only lapse at End Day in the city. When negotiating, a companion values food & lodging at what the party would pay for the food and night an adventurer expects (lodging.expectedQuality). Party ranks come from renown (see ranks). Quests: stages is the enemy level range (an adventurer rank's levels; see adventurerRanks), count the enemy group size range, days how long the trip takes; gold and renown come from the quest's strength (see strength). companion.expectedWeeklyLoot is how much gold a candidate thinks a party of that rank earns per week; they use it to value a loot cut. simulation tunes the rival parties: the chance a party goes on a quest each day, its chance of success (the strength model's AI win chance, strength.winCurve, for its members counted as reference Adventurers of their level against the quest's enemies, clamped to minSuccess-maxSuccess), and what can go wrong. Each member levels up after a success with levelUpChanceOnSuccess x levelUpFalloff^(level - 1), so high levels come slowly. A party tries its promotion quest once it has the renown and at least a 50% chance. Experienced adventurers die less: each member's chance to be lost on a quest is multiplied by deathLevelFalloff^(level - 1) (at least minDeathFactor), and a party's wipe chance by the same factor for its average level. Parties recruit from the guild hall only adventurers within recruitLevelGap levels of their average (or anyone, when down to 2 members). New adventurers arrive at about the rate adventurers are lost, nudged toward targetAdventurers.",
   "city": "Arch City",
   "startingGold": 500,
   "startingRenown": 0,
@@ -8,7 +8,7 @@
   "_partyRankWeights": "How the rival parties are spread over the ranks when a new game starts, as relative weights (a rank's share is its weight over the total: D is 40/126, about 32%); there is always at least one A-rank party. After that, ranks follow renown (see ranks). Quest postings have their own weights (board.rankWeights).",
   "ranks": {
     "_comment": "Party ranks. renown: the renown a party needs for each rank (D needs none): tuned so a party of 2 at D, 3 at C and 4 at B is promoted at about level 6, 11 and 16 (about 4 D quests, 11 C and 18 B). highestPromotion: the highest rank a promotion quest can reach (A for now: no party can be promoted to S; S's renown only matters for rivals that start at S). Reaching the next rank's renown puts a promotion quest of that rank on the board; completing it promotes the party. A party whose renown stays below its own rank's threshold for demotionDays days in a row drops a rank. Renown doesn't fade: a failed quest loses failedQuestRenown x that quest's renown, and each member who dies loses deathRenown x the quest's renown. A member who quits (unpaid wages, or Morale 0) costs quitRenownPerLevel x their level.",
-    "renown": {"C": 80, "B": 600, "A": 2400, "S": 8000},
+    "renown": {"C": 55, "B": 530, "A": 3200, "S": 14500},
     "highestPromotion": "A",
     "demotionDays": 7,
     "failedQuestRenown": 1,
@@ -34,15 +34,14 @@
     "A": { "stages": [16, 20], "count": [5, 8], "days": [2, 4] },
     "S": { "stages": [21, 25], "count": [4, 7], "days": [3, 5] }
   },
-  "threat": {
-    "_comment": "A quest's total threat is its enemy count (threat points) x the strength of one enemy at its level: strengthAtLevel1 x strengthGrowth^(level - 1), so each level makes an enemy about 16.5% stronger (a level-20 enemy is about 18x a level-1 one). The usual gold for a quest is total threat x goldPerThreat (then x the board's pay roll). Its renown comes from its danger in skulls D: renown.a x D^2 + renown.b x D + renown.c, then x (1 + renownPayFactor x (1 - pay roll)), so a quest paying 0.75 of the usual gold earns 1.25x the renown and one paying 1.35 earns 0.65x. A usual D quest gives about 21 renown, C 64, B 116, A 185. For rival parties, a quest is as hard as a group of standardCount enemies whose strength matches its total threat: that level - 1 is the average party level it calls for. Quest cards show it as skulls: half a skull at difficulty skulls.from up to ten at skulls.to, rising evenly in half steps (five white skulls, then red skulls over them).",
-    "strengthAtLevel1": 10,
-    "strengthGrowth": 1.165,
-    "goldPerThreat": 1.75,
-    "renown": { "a": 2, "b": 4, "c": 8 },
+  "strength": {
+    "_comment": "Quest strength comes from the strength model (src/game/power.ts): the enemies a quest can be expected to field, valued as sqrt(effective HP x damage per turn) each and summed, so it grows with their stats and their number. A quest's par level is the level at which the reference party (four Adventurers of average B talent with the gear expected at that level, played by the AI) would win parWinRate of its battles against it; winCurve is the fitted AI win chance, 1 / (1 + e^-(a + b ln ratio)) for a party with power ratio `ratio` against the quest (tools/balance fits it). The usual gold for a quest is its strength x goldPerStrength (then x the board's pay roll); its renown is strength x renownPerStrength, then x (1 + renownPayFactor x (1 - pay roll)), so a quest paying 0.75 of the usual gold earns 1.25x the renown and one paying 1.35 earns 0.65x. Quest cards show the par level as skulls: half a skull at par level skulls.from up to ten at skulls.to, rising evenly in half steps (five white skulls, then red skulls over them).",
+    "parWinRate": 0.33,
+    "winCurve": { "a": 2.734, "b": 7.248 },
+    "goldPerStrength": 0.16,
+    "renownPerStrength": 0.04,
     "renownPayFactor": 1,
-    "standardCount": 4,
-    "skulls": { "from": -4, "to": 24 }
+    "skulls": { "from": 1, "to": 25 }
   },
   "food": {
     "_comment": "Food for every member the party feeds (the main character, slaves, and companions with food & lodging in their contract), set per member in Manage Party. Each day, a fed member costs that tier's pricePerPerson. Quality: poor 0, common 1, fine 2, luxury 3, compared with what they expect (lodging.expectedQuality, or lodging.slaveExpectedQuality for slaves) like a night's lodging: every fed member gains moraleAbovePerStep Morale for each step better than they expect and loses moraleBelowPerStep for each step worse. default is the tier for members nobody has set.",
@@ -174,7 +173,8 @@
     "poolTarget": 15,
     "partySize": [3, 6],
     "questChancePerDay": 0.25,
-    "successPerLevel": 0.18,
+    "minSuccess": 0.05,
+    "maxSuccess": 0.95,
     "lossChanceOnSuccess": 0.004,
     "lossChanceOnFailure": 0.06,
     "wipeChanceOnFailure": 0.04,

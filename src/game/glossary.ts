@@ -30,7 +30,7 @@ export function glossaryEntries(): GlossaryEntry[] {
   const S = G.slave;
   const K = G.companion;
   const L = G.lodging;
-  const T = G.threat;
+  const T = G.strength;
   const food = (q: number) => G.food[FOOD_TIERS[q]].pricePerPerson;
   const night = (q: number) => (q === 0 ? L.stablesPerPerson : G.inns[INN_TIERS[q - 1]].pricePerPerson);
   const adventurerQ = L.expectedQuality;
@@ -93,17 +93,17 @@ export function glossaryEntries(): GlossaryEntry[] {
   // ---- Quests & ranks ---------------------------------------------------------------------------
   add('Quests & Ranks', 'Skulls (danger)',
     `A quest's skulls (½ to 10, in halves) rate how hard it is on one fixed scale for the whole game. ½–5 fill white skulls; 5½–10 lay red skulls over them.\n\n`
-    + `Skulls follow the quest's difficulty: the average party level it calls for. Half a skull is difficulty ${T.skulls.from}, ten is ${T.skulls.to}. A bigger group or higher-level enemies both raise it.\n\n`
-    + `Skulls also set the quest's XP and renown (see those entries).`);
-  add('Quests & Ranks', 'Total Threat',
-    `Total threat = group size × the strength of one enemy at the quest's level. Strength is ${T.strengthAtLevel1} at level 1 and grows ${pct(T.strengthGrowth - 1)} a level.\n\n`
-    + `Group size is in threat points: each enemy type has its own (a bandit is 1, a rat 0.5), so weak types come in bigger packs.\n\n`
-    + `Encounter size comes from the quest, never from your party: a lone adventurer meets as many enemies as a full lineup.`);
+    + `Skulls follow the quest's par level: the party level it calls for (see Quest Strength). Half a skull is par for level ${T.skulls.from}, ten for level ${T.skulls.to}, evenly in between, so each skull is about ${Math.round((T.skulls.to - T.skulls.from) / 9.5 * 10) / 10} levels. A bigger group or higher-level enemies both raise it.\n\n`
+    + `Skulls also set the quest's XP (see Quest XP).`);
+  add('Quests & Ranks', 'Quest Strength',
+    `A quest's strength is how hard its enemies hit and how much it takes to bring them down, added up over the whole group: twice the enemies is twice the strength.\n\n`
+    + `Its par level is the level at which a typical party of 4 (average B talent, the gear you'd expect at that level) wins about ${pct(T.parWinRate)} of the time when fighting on autopilot. A party that plays well wins far more often; one below par, or short of gear or members, less.\n\n`
+    + `Your own party's strength works the same way: levels, talent, gear and numbers all count, and injuries and low Morale take away from it. Group size comes from the quest, never from your party: a lone adventurer meets as many enemies as a full lineup.`);
   add('Quests & Ranks', 'Pay Roll',
-    `On top of its threat, each quest rolls its pay: ${payLo}–${payHi}× the usual gold (total threat × ${T.goldPerThreat}). Cards flag Generous pay and Poor pay.\n\n`
+    `Gold is proportional to a quest's strength (strength × ${T.goldPerStrength}), and then each quest rolls its pay: ${payLo}–${payHi}× the usual gold. Cards flag Generous pay and Poor pay.\n\n`
     + `Pay works against renown: a poorly paid quest earns more renown, a generous one less (see Renown). Promotion quests always pay the usual rate.`);
   add('Quests & Ranks', 'Renown',
-    `Renown is what moves your party up the ranks. A quest's renown comes from its skulls (D): ${quad(T.renown, 'D')}, then × (1 + ${T.renownPayFactor} × (1 − pay)).\n\n`
+    `Renown is what moves your party up the ranks. It's proportional to a quest's strength (strength × ${T.renownPerStrength}), then × (1 + ${T.renownPayFactor} × (1 − pay)).\n\n`
     + `So a quest paying ${payLo}× gives ${n((1 + T.renownPayFactor * (1 - payLo)) * 100)}% of the usual renown, and one paying ${payHi}× gives ${n((1 + T.renownPayFactor * (1 - payHi)) * 100)}%. Low-paying jobs are how a party makes its name.\n\n`
     + `Renown doesn't fade over time, but failing and losing members cost it (see Failure).`);
   add('Quests & Ranks', 'Party Rank and Promotion',

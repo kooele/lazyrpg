@@ -23,9 +23,10 @@ export const MOB_MULTIPLIER = { min: 1, max: 5, step: 0.5 } as const;
 
 /**
  * What 1x on the Enemies slider is worth: this share of the usual group of the level's rank (which is sized for a
- * whole party). With 1x per Adventurer, a full party of 4 meets 2 usual groups.
+ * whole party, and is par for a party of 4 at that level: see src/game/power.ts). With 1x per Adventurer, a full party
+ * of 4 meets 1 usual group.
  */
-export const DEMO_GROUP_SHARE = 0.5;
+export const DEMO_GROUP_SHARE = 0.25;
 
 /** Threat budget and enemy cap for a Quick Battle: the usual group (`usual`) x the slider x DEMO_GROUP_SHARE. */
 export function demoEncounter(d: DemoState, usual: number, maxEnemies: number): { budget: number; cap: number } {

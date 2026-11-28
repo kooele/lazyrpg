@@ -23,7 +23,8 @@ export function enemyLevelStats(type: string, level: number): Stats {
   const def = ENEMIES[type];
   const out = { ...def.stats };
   const steps = Math.max(0, level - def.levels[0]);
-  for (const k of STAT_KEYS) out[k] += (def.growthPerLevel[k] ?? 0) * steps;
+  // Growth can be fractional (balance tuning): stats are whole numbers.
+  for (const k of STAT_KEYS) out[k] = Math.round(out[k] + (def.growthPerLevel[k] ?? 0) * steps);
   return out;
 }
 

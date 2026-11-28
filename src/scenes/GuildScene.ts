@@ -5,7 +5,7 @@ import { ENEMIES } from '../data/enemies';
 import type { FreeAdventurer, Quest } from '../data/types';
 import { acceptQuest, canTakeQuest, lineupMembers, toggleLineup } from '../game/city';
 import { joinParty, mercenaryRates, rosterFull, talentPriceFactor } from '../game/contracts';
-import { dangerRating, expectedEnemies, payRating } from '../game/board';
+import { dangerRating, expectedEnemies, payRating, questDifficulty } from '../game/board';
 import { adventurerCount, adventurerRank, leaderboard, nextRank, rankThreshold } from '../game/guild';
 import { markDirty, requireState, session } from '../game/session';
 import { PEOPLE_SORTS, QUEST_SORTS, nextSort, sortPeople, sortQuests, type PeopleSort, type QuestSort, type SortDir } from '../game/sorting';
@@ -222,6 +222,8 @@ export class GuildScene extends Phaser.Scene {
     const days = ['', "A day's", 'A two-day', 'A three-day', 'A four-day', 'A five-day'][q.days] ?? `A ${q.days}-day`;
     const when = q.promotion ? 'The guild holds this trial open' : `The notice comes down after day ${q.expires}`;
     c.add(text(this, 10, 86, `${days} journey · ${when}.`, { fontSize: '11px', color: COLORS.dim, fontStyle: 'italic', wordWrap: { width: W - 140 } }));
+    // Left of the skulls: the party level the quest is par for (see power.ts).
+    c.add(text(this, W - 108, 40, `Par Lv ${Math.max(1, Math.round(questDifficulty(q)))}`, { fontSize: '11px', color: COLORS.dim }).setOrigin(1, 0.5));
     c.add(text(this, 10, 100, `${q.reward} Gold`, { fontSize: '17px', color: COLORS.gold }));
     const pay = payRating(q);
     if (pay !== 'fair') c.add(text(this, 100, 104, pay === 'generous' ? 'Generous Pay' : 'Poor Pay', { fontSize: '12px', color: pay === 'generous' ? '#6fdc8c' : COLORS.bad }));
