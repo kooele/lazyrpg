@@ -61,16 +61,19 @@ reference Adventurer's Health), `rivals` (the rival parties over a year).
 ## Last calibration
 
 Group sizes doubled from the original game (D 1–8, C 6–12, B 8–14, A 10–16, S 12–18 threat points; up to 24 enemies),
-enemies rebalanced from their original stats (`enemies.orig.json`), 7 iterations of `iterate.sh` (24 seeds a cell).
-Check on 80 real board quests (16 per rank, 24 battles each), reference party at the quest's enemy level:
+humans fewer but tougher (threat: Bandit 1.3, Sellsword 1.4, Renegade 1.8), enemies rebalanced from their original
+stats (`enemies.orig.json`), 11 iterations of `iterate.sh` (24 seeds a cell). Fight length targets (`fitfac.py`): 10
+rounds up to level 8, rising to 13 by level 20; Trolls 16. Check on 80 real board quests (16 per rank, 24 battles
+each), reference party at the quest's enemy level:
 
 | Rank | AI wins | Model | Target | Rounds (mean, p90) | Over 20 rounds |
 |---|---|---|---|---|---|
-| D | 56% | 59% | 50% | 8.4, 12 | 0% |
-| C | 38% | 37% | 40% | 9.6, 12 | 0% |
-| B | 38% | 41% | 33% | 9.8, 13 | 0% |
-| A | 27% | 28% | 33% | 10.8, 15 | 1% |
-| S | 26% | 31% | 33% | 10.4, 14 | 1% |
+| D | 57% | 60% | 50% | 8.3, 12 | 0% |
+| C | 34% | 34% | 40% | 9.7, 13 | 0% |
+| B | 36% | 43% | 33% | 11.0, 15 | 0% |
+| A | 29% | 28% | 33% | 14.0, 19 | 5% |
+| S | 24% | 30% | 33% | 12.8, 17 | 2% |
 
-Solo, level 1, Crude gear, against 2 giant rats (the half-skull quest): Archer 100%, Sword and Shield with Kick 75%;
-against 3 rats 22% and 0%. Win curve: a 3.508, b 6.684. Each type alone: 9.6–11.6 rounds on average.
+Each type alone: 10–12 rounds early, 12–13 late, Trolls 16.5 (11% over 20). Solo, level 1, Crude gear, against 2
+giant rats (the half-skull quest): Archer 100%, Sword and Shield with Kick 75%; against 3 rats 22% and 0%. Win curve:
+a 3.18, b 6.957.

@@ -50,7 +50,12 @@ for t in types:
 
 # Battle length: the rounds after the walk in (APPROACH) scale about 1 / k when Health is divided by k and attack
 # multiplied by k (same value). k per type and level, aiming at TARGET_ROUNDS on average.
-APPROACH, TARGET_ROUNDS = 3, 10
+APPROACH = 3
+# Target rounds: about 10 up to enemy level 8, rising to 13 by level 20 (late fights may run 8-16 rounds); Trolls are
+# the grindy enemy, at 16.
+def target_rounds(t, stage):
+    if t == 'troll': return 16
+    return 10 + 3 * max(0, min(1, (stage - 8) / 12))
 tempo={}
 for n in names:
     d=load(n)
@@ -59,7 +64,7 @@ for n in names:
         if not foes or len(foes)!=1: continue
         st=str(s_['quest']['stage'])
         tempo.setdefault(foes[0],{}).setdefault(st,[]).extend(r['rounds'] for r in runs)
-tempoK={t:{st:max(0.5,min(2.5,(sum(v)/len(v)-APPROACH)/(TARGET_ROUNDS-APPROACH))) for st,v in sv.items()} for t,sv in tempo.items()}
+tempoK={t:{st:max(0.5,min(2.5,(sum(v)/len(v)-APPROACH)/(target_rounds(t,int(st))-APPROACH))) for st,v in sv.items()} for t,sv in tempo.items()}
 for t,sv in tempoK.items(): print(f'{t:10} tempo k', ' '.join(f'St{st} {k:.2f}' for st,k in sv.items()))
 # Per level: how far each (type, enemy level) is from its type's factor, with the curve fixed.
 resid={}

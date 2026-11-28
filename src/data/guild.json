@@ -27,7 +27,7 @@
     "pay": [0.75, 1.35]
   },
   "quests": {
-    "_comment": "Per quest rank: stages (the enemy level range), count (the enemy group's size in threat points: enemies.json threat per unit, so a bandit is 1 and a rat 0.5, and weak types come in bigger packs), and days. Each quest rolls its level and its count independently; together with its enemy types they make its strength (see strength), and its gold and renown follow from that. D starts at a single threat point (a lone bandit, two rats), the quests one level-1 adventurer can take on alone. Encounter size comes from the quest alone, never from the party that takes it. Quick Battle stages use the middle count of the rank their stage falls in.",
+    "_comment": "Per quest rank: stages (the enemy level range), count (the enemy group's size in threat points: enemies.json threat per unit, so a bandit is 1.3 and a rat 0.5, and weak types come in bigger packs), and days. Each quest rolls its level and its count independently; together with its enemy types they make its strength (see strength), and its gold and renown follow from that. D starts at a single threat point (a lone bandit, two rats), the quests one level-1 adventurer can take on alone. Encounter size comes from the quest alone, never from the party that takes it. Quick Battle stages use the middle count of the rank their stage falls in.",
     "D": { "stages": [1, 5], "count": [1, 8], "days": [1, 2] },
     "C": { "stages": [6, 10], "count": [6, 12], "days": [1, 3] },
     "B": { "stages": [11, 15], "count": [8, 14], "days": [2, 3] },
@@ -37,7 +37,7 @@
   "strength": {
     "_comment": "Quest strength comes from the strength model (src/game/power.ts): the enemies a quest can be expected to field, valued as sqrt(effective HP x damage per turn) each and summed, so it grows with their stats and their number. A quest's par level is the level at which the reference party (four Adventurers of average B talent with the gear expected at that level, played by the AI) would win parWinRate of its battles against it; winCurve is the fitted AI win chance, 1 / (1 + e^-(a + b ln ratio)) for a party with power ratio `ratio` against the quest (tools/balance fits it). The usual gold for a quest is its strength x goldPerStrength (then x the board's pay roll); its renown is strength x renownPerStrength, then x (1 + renownPayFactor x (1 - pay roll)), so a quest paying 0.75 of the usual gold earns 1.25x the renown and one paying 1.35 earns 0.65x. Quest cards show the par level as skulls: half a skull at par level skulls.from up to ten at skulls.to, rising evenly in half steps (five white skulls, then red skulls over them).",
     "parWinRate": 0.33,
-    "winCurve": { "a": 3.508, "b": 6.684 },
+    "winCurve": { "a": 3.18, "b": 6.957 },
     "goldPerStrength": 0.16,
     "renownPerStrength": 0.04,
     "renownPayFactor": 1,

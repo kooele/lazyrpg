@@ -283,7 +283,7 @@ describe('ranks and the leaderboard', () => {
   });
 
   it('quest cards: about how many foes to expect, and skulls (0.5-10 in halves) on one scale for the whole game', () => {
-    // A group of 4 threat points: 4 bandits (threat 1), 8 rats (0.5), 7 goblins (0.6).
+    // A group of 4 threat points: 4 bandits (threat 1.3: three cover 3.9, so a fourth), 8 rats (0.5), 7 goblins (0.6).
     expect(expectedEnemies({ count: 4, foes: ['bandit'] })).toBe(4);
     expect(expectedEnemies({ count: 4, foes: ['rat'] })).toBe(8);
     expect(expectedEnemies({ count: 4, foes: ['goblin'] })).toBe(7);
