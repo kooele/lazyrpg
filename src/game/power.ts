@@ -8,19 +8,21 @@
 //
 // Strength is measured in levels: a group's strength is the level at which the reference party (four Adventurers of
 // the reference builds, src/game/reference.ts, with the gear expected at that level) would be its even match.
-import { ENEMY_GEAR, QUALITIES } from '../data/content';
+import { ENEMY_GEAR, QUALITIES, SKILLS } from '../data/content';
 import { ENCOUNTER, ENEMIES } from '../data/enemies';
 import { GUILD } from '../data/guild';
 import { RANKS } from '../data/types';
 import type { Character, Stats } from '../data/types';
 import { defenseMultiplier, enemyTypesForStage, makeEnemy, makeUnit, penetrate } from './battle';
 import { deriveStats } from './character';
-import { buildCharacter } from './reference';
+import { BUILDS, buildCharacter } from './reference';
 
 /** Model settings (calibrated by tools/balance). */
 export const POWER = {
-  /** The reference party: build ids (reference.ts). */
-  referenceParty: ['guardian', 'caster', 'archer', 'cleric'],
+  /** The reference party: build ids (reference.ts), the first referenceSize(level) of them. */
+  referenceParty: ['guardian', 'caster', 'archer', 'cleric', 'bruiser'],
+  /** How many the reference party has, by level: [from level, members]. 3 at D rank, 4 at C, 5 from B. */
+  referenceSizes: [[-99, 3], [6, 4], [11, 5]] as [number, number][],
   /**
    * Gear quality the reference party has by level, as the base-stat multiplier (Crude 1, Common 2, Fine 4,
    * Masterwork 7); linear in between. Crude through D rank: a new party can't afford better.
@@ -37,6 +39,18 @@ export interface Fighter {
   factor?: number;
   /** How likely this fighter is to be in the group (expected encounters); 1 = always. */
   weight?: number;
+  /** Fights at range (bows, casters, monsters whose basic attack reaches 3+ tiles) rather than in melee. */
+  ranged?: boolean;
+}
+
+/** Weapons whose users fight at range: bows and spellcasting focuses. */
+const RANGED_WEAPONS = new Set(['shortbow', 'longbow', 'staff', 'crystal']);
+
+/** Does this character fight at range? Its weapon (bows, staves, crystals), or for monsters, its basic attack's reach. */
+export function isRanged(c: Character): boolean {
+  if (c.weapon && RANGED_WEAPONS.has(c.weapon.type)) return true;
+  if (c.enemyType && !ENEMIES[c.enemyType].loadouts.length) return (SKILLS[ENEMIES[c.enemyType].skills[0]]?.range ?? 0) >= 3;
+  return false;
 }
 
 /** A fighter's effective HP: Health stretched by its Defense. */
@@ -75,11 +89,26 @@ export function groupValue(g: Fighter[], oppDefense: number): number {
   return g.reduce((s, f) => s + fighterValue(f, oppDefense) * (f.weight ?? 1), 0);
 }
 
-/** How much stronger `a` is than `b` (Lanchester): (value of a / value of b)^2, each against the other's Defense. 1 = even. */
+/** How many fighters a group counts as (expected numbers for quests). */
+export const groupSize = (g: Fighter[]) => g.reduce((t, f) => t + (f.weight ?? 1), 0);
+
+/**
+ * A group's fighting power against a side with `oppDefense`: N^k x (average value)^2, N its fighters and k
+ * strength.numbersExponent. With k = 2 this is Lanchester's square law ((sum of values)^2: numbers count as much as
+ * quality), with k = 1 the linear law; battles fit k = 1.75 best (tools/balance/fitlaws.py).
+ */
+export function groupPower(g: Fighter[], oppDefense: number): number {
+  const n = groupSize(g);
+  if (n <= 0) return 0;
+  const v = groupValue(g, oppDefense);
+  return n ** GUILD.strength.numbersExponent * (v / n) ** 2;
+}
+
+/** How much stronger `a` is than `b`: the ratio of their powers, each against the other's Defense. 1 = even. */
 export function powerRatio(a: Fighter[], b: Fighter[]): number {
-  const va = groupValue(a, groupDefense(b));
-  const vb = groupValue(b, groupDefense(a));
-  return vb > 0 ? (va / vb) ** 2 : Infinity;
+  const pa = groupPower(a, groupDefense(b));
+  const pb = groupPower(b, groupDefense(a));
+  return pb > 0 ? pa / pb : Infinity;
 }
 
 // ---- the reference party -------------------------------------------------------------------------------------
@@ -111,6 +140,11 @@ function buildStats(build: string, level: number, mult: number): Stats {
   return lerpStats(at(lo.id), at(hi.id), (mult - lo.baseMultiplier) / (hi.baseMultiplier - lo.baseMultiplier));
 }
 
+/** How many members the reference party has at a level (POWER.referenceSizes). */
+export function referenceSize(level: number): number {
+  return [...POWER.referenceSizes].reverse().find(([from]) => level >= from)?.[1] ?? 4;
+}
+
 const refCache = new Map<number, Fighter[]>();
 
 /** The reference party at a level (fractional levels blend the whole levels around them). */
@@ -123,13 +157,13 @@ export function referenceParty(level: number): Fighter[] {
   const mult = referenceGearMultiplier(L);
   // Below level 1 the stats keep falling at the level-1 to level-2 rate.
   const whole = (l: number, b: string) => buildStats(b, Math.max(1, l), mult);
-  const out = POWER.referenceParty.map((b) => {
+  const out = POWER.referenceParty.slice(0, referenceSize(L)).map((b) => {
     if (lo < 1) {
       const s1 = whole(1, b);
       const s2 = whole(2, b);
-      return { stats: lerpStats(s1, s2, L - 1) };
+      return { stats: lerpStats(s1, s2, L - 1), ranged: RANGED_WEAPONS.has(BUILDS[b].weapon) };
     }
-    return { stats: t ? lerpStats(whole(lo, b), whole(lo + 1, b), t) : whole(lo, b) };
+    return { stats: t ? lerpStats(whole(lo, b), whole(lo + 1, b), t) : whole(lo, b), ranged: RANGED_WEAPONS.has(BUILDS[b].weapon) };
   });
   if (refCache.size > 5000) refCache.clear();
   refCache.set(L, out);
@@ -157,7 +191,7 @@ export function strengthAt(g: Fighter[], ratio = 1): number {
 
 /** Party members as fighters, as they would fight (injuries, Morale and a blessing included). */
 export function partyFighters(members: Character[], blessing = 0): Fighter[] {
-  return members.map((c) => ({ stats: makeUnit(c, 'player', { x: 0, y: 0 }, blessing).stats }));
+  return members.map((c) => ({ stats: makeUnit(c, 'player', { x: 0, y: 0 }, blessing).stats, ranged: isRanged(c) }));
 }
 
 /** A party's strength in levels: the level of the reference party that would be its even match. */
@@ -183,14 +217,22 @@ export function expectedEnemy(type: string, level: number): Fighter[] {
   const factor = enemyFactor(type);
   const out: Fighter[] = [];
   const loadouts = def.loadouts.length || 1;
+  const total = def.loadouts.reduce((t, l) => t + l.weight, 0) || 1;
+  // The middle of each loadout's band of the roll (pickLoadout), and its share.
+  const band = (i: number) => {
+    if (!def.loadouts.length) return { mid: 0.5, share: 1 };
+    const before = def.loadouts.slice(0, i).reduce((t, l) => t + l.weight, 0);
+    return { mid: (before + def.loadouts[i].weight / 2) / total, share: def.loadouts[i].weight / total };
+  };
   const common = def.gearQuality === 'crude' && def.loadouts.length ? Math.min(1, ENEMY_GEAR.commonChancePerLevel * level) : 0;
   for (let i = 0; i < loadouts; i++) {
     // makeEnemy picks the loadout from the rng: a stub rng that returns the loadout's slot, then "no upgrade" (0.999).
     for (const upgraded of common > 0 ? [false, true] : [false]) {
       let calls = 0;
-      const rng = () => (calls++ === 0 ? (i + 0.5) / loadouts : upgraded ? 0 : 0.999999);
+      const { mid, share } = band(i);
+      const rng = () => (calls++ === 0 ? mid : upgraded ? 0 : 0.999999);
       const c = makeEnemy(type, level, rng);
-      out.push({ stats: deriveStats(c), factor, weight: (1 / loadouts) * (common > 0 ? (upgraded ? common : 1 - common) : 1) });
+      out.push({ stats: deriveStats(c), factor, weight: share * (common > 0 ? (upgraded ? common : 1 - common) : 1), ranged: isRanged(c) });
     }
   }
   enemyCache.set(k, out);
@@ -267,7 +309,7 @@ export function parRatio(): number {
 }
 
 /** A quest's par level: the level at which the reference party would win strength.parWinRate of its battles. */
-export const questParLevel = (q: QuestLike) => strengthAt(questFighters(q), parRatio());
+export const questParLevel = (q: QuestLike, opts: { smooth?: boolean } = {}) => strengthAt(questFighters(q, opts), parRatio());
 
 /**
  * A quest's strength as a value: the sum of its expected enemies' values (sqrt(effective HP x damage per turn)),
@@ -278,13 +320,18 @@ export function questValue(q: QuestLike): number {
   return groupValue(foes, groupDefense(referenceParty(strengthAt(foes, parRatio()))));
 }
 
+/** A quest's fighting power (groupPower) against the reference party at its par level. */
+export function questPowerOf(q: QuestLike): number {
+  const foes = questFighters(q);
+  return groupPower(foes, groupDefense(referenceParty(strengthAt(foes, parRatio()))));
+}
+
 /**
- * Strength in the game's own units: a group's power (Lanchester: the square of its value), scaled down by
- * STRENGTH_UNIT so the numbers stay readable. Twice the enemies is four times the strength, and the reference party
- * of a level is a fixed share stronger than the one a level below.
+ * Strength in the game's own units: a group's power (groupPower), scaled down by STRENGTH_UNIT^2 so the numbers stay
+ * readable. Twice the enemies is 2^1.75 (about 3.4) times the strength.
  */
 export const STRENGTH_UNIT = 100;
-export const strengthOfValue = (value: number) => (value / STRENGTH_UNIT) ** 2;
+export const strengthOfPower = (power: number) => power / STRENGTH_UNIT ** 2;
 
 /** A rival party member as a fighter: the reference build for their place in the party, at their level. */
 export function rivalFighter(level: number, index: number): Fighter {

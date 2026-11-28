@@ -7,7 +7,7 @@ import { RANKS } from '../../src/data/types';
 import { GUILD } from '../../src/data/guild';
 import { makeQuest, usualCount } from '../../src/game/board';
 import { makeRng } from '../../src/game/character';
-import { partyFighters, powerRatio, questFighters, winChance } from '../../src/game/power';
+import { partyFighters, powerRatio, questFighters, referenceSize, winChance } from '../../src/game/power';
 import { referenceQuality } from './jobs';
 import { buildParty } from './sim';
 
@@ -18,14 +18,14 @@ test('board average', () => {
     const n = 300;
     for (let i = 0; i < n; i++) {
       const q = makeQuest(rank, 1, makeRng(5000 + i * 31 + RANKS.indexOf(rank)));
-      const party = partyFighters(buildParty({ level: q.stage, quality: referenceQuality(q.stage) }));
+      const party = partyFighters(buildParty({ level: q.stage, quality: referenceQuality(q.stage), size: referenceSize(q.stage) }));
       sum += winChance(powerRatio(party, questFighters(q)));
     }
     out[rank] = sum / n;
     // The usual quest: the middle of the rank's levels and group sizes, all its fitting enemy types.
     const t = GUILD.quests[rank];
     const stage = Math.round((t.stages[0] + t.stages[1]) / 2);
-    const party = partyFighters(buildParty({ level: stage, quality: referenceQuality(stage) }));
+    const party = partyFighters(buildParty({ level: stage, quality: referenceQuality(stage), size: referenceSize(stage) }));
     out[`${rank} usual`] = winChance(powerRatio(party, questFighters({ stage, count: usualCount(rank) })));
   }
   writeFileSync('tools/balance/out/boardavg.json', JSON.stringify(out));

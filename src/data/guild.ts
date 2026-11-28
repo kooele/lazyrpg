@@ -14,14 +14,16 @@ export interface QuestTier {
 export interface StrengthConfig {
   /** The AI party's win rate at a quest's par level. */
   parWinRate: number;
+  /** How numbers count in a group's power: N^k x (average value)^2 (2: Lanchester's square law; 1: the linear law). */
+  numbersExponent: number;
   /** AI win chance: 1 / (1 + e^-(a + b ln ratio)), ratio being the party's power ratio against the quest. */
   winCurve: { a: number; b: number };
   goldPerStrength: number;
   renownPerStrength: number;
   /** Renown x (1 + renownPayFactor x (1 - pay roll)): low-paying quests earn more renown, high-paying ones less. */
   renownPayFactor: number;
-  /** Par level shown as half a skull (from) and ten skulls (to); evenly in between. */
-  skulls: { from: number; to: number };
+  /** Skulls by par level: [par level, skulls] points, rising; linear between them (rounded to halves). */
+  skulls: [number, number][];
 }
 
 export type InnTier = 'standard' | 'highEnd' | 'luxury';
@@ -338,16 +340,19 @@ export function parseGuildConfig(data: unknown): GuildConfig {
       const curve = obj(t.winCurve, 'strength.winCurve');
       return {
         parWinRate: num(t.parWinRate, 'strength.parWinRate', 0.01, 0.99),
+        numbersExponent: num(t.numbersExponent ?? 2, 'strength.numbersExponent', 0.5, 3),
         winCurve: { a: num(curve.a, 'strength.winCurve.a', -100, 100), b: num(curve.b, 'strength.winCurve.b', 0.01, 100) },
         goldPerStrength: num(t.goldPerStrength, 'strength.goldPerStrength', 0),
         renownPerStrength: num(t.renownPerStrength, 'strength.renownPerStrength', 0),
         renownPayFactor: num(t.renownPayFactor, 'strength.renownPayFactor', 0, 10),
         skulls: (() => {
-          const k = obj(t.skulls, 'strength.skulls');
-          const from = num(k.from, 'strength.skulls.from', -100);
-          const to = num(k.to, 'strength.skulls.to', -100);
-          if (!(to > from)) fail('strength.skulls.to', 'must be above strength.skulls.from');
-          return { from, to };
+          if (!Array.isArray(t.skulls) || t.skulls.length < 2) fail('strength.skulls', 'must be a list of at least 2 [par level, skulls] points');
+          const pts = (t.skulls as unknown[]).map((p, i): [number, number] => {
+            if (!Array.isArray(p) || p.length !== 2) fail(`strength.skulls[${i}]`, 'must be [par level, skulls]');
+            return [num(p[0], `strength.skulls[${i}][0]`, -100), num(p[1], `strength.skulls[${i}][1]`, 0.5, 10)];
+          });
+          for (let i = 1; i < pts.length; i++) if (!(pts[i][0] > pts[i - 1][0] && pts[i][1] > pts[i - 1][1])) fail(`strength.skulls[${i}]`, 'must rise in both par level and skulls');
+          return pts;
         })(),
       };
     })(),

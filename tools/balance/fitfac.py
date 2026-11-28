@@ -51,11 +51,11 @@ for t in types:
 # Battle length: the rounds after the walk in (APPROACH) scale about 1 / k when Health is divided by k and attack
 # multiplied by k (same value). k per type and level, aiming at TARGET_ROUNDS on average.
 APPROACH = 3
-# Target rounds: about 10 up to enemy level 8, rising to 13 by level 20 (late fights may run 8-16 rounds); Trolls are
-# the grindy enemy, at 16.
+# Target rounds: about 10 up to enemy level 8, rising to 12 by level 20 (late fights may run 8-16 rounds); Trolls are
+# the grindy enemy, at 15.
 def target_rounds(t, stage):
-    if t == 'troll': return 16
-    return 10 + 3 * max(0, min(1, (stage - 8) / 12))
+    if t == 'troll': return 15
+    return 10 + 2 * max(0, min(1, (stage - 8) / 12))
 tempo={}
 for n in names:
     d=load(n)

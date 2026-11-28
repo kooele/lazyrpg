@@ -36,12 +36,13 @@
   },
   "strength": {
     "_comment": "Quest strength comes from the strength model (src/game/power.ts): the enemies a quest can be expected to field, valued as sqrt(effective HP x damage per turn) each and summed, so it grows with their stats and their number. A quest's par level is the level at which the reference party (four Adventurers of average B talent with the gear expected at that level, played by the AI) would win parWinRate of its battles against it; winCurve is the fitted AI win chance, 1 / (1 + e^-(a + b ln ratio)) for a party with power ratio `ratio` against the quest (tools/balance fits it). The usual gold for a quest is its strength x goldPerStrength (then x the board's pay roll); its renown is strength x renownPerStrength, then x (1 + renownPayFactor x (1 - pay roll)), so a quest paying 0.75 of the usual gold earns 1.25x the renown and one paying 1.35 earns 0.65x. Quest cards show the par level as skulls: half a skull at par level skulls.from up to ten at skulls.to, rising evenly in half steps (five white skulls, then red skulls over them).",
-    "parWinRate": 0.33,
-    "winCurve": { "a": 3.18, "b": 6.957 },
+    "parWinRate": 0.5,
+    "numbersExponent": 1.75,
+    "winCurve": { "a": 2.547, "b": 10.317 },
     "goldPerStrength": 0.16,
     "renownPerStrength": 0.04,
     "renownPayFactor": 1,
-    "skulls": { "from": -4.1, "to": 28 }
+    "skulls": [[-0.52, 0.5], [-0.1, 1], [28.47, 10]]
   },
   "food": {
     "_comment": "Food for every member the party feeds (the main character, slaves, and companions with food & lodging in their contract), set per member in Manage Party. Each day, a fed member costs that tier's pricePerPerson. Quality: poor 0, common 1, fine 2, luxury 3, compared with what they expect (lodging.expectedQuality, or lodging.slaveExpectedQuality for slaves) like a night's lodging: every fed member gains moraleAbovePerStep Morale for each step better than they expect and loses moraleBelowPerStep for each step worse. default is the tier for members nobody has set.",

@@ -1119,7 +1119,7 @@ describe('progression and enemy behaviour', () => {
 
   it('human: a badly hurt enemy that can\'t escape death surrenders', () => {
     const map = openMap(30, 21);
-    const archer = makeUnit(makeEnemy('bandit', 4, makeRng(5)), 'enemy', { x: 15, y: 10 });
+    const archer = classic(makeUnit(makeEnemy('bandit', 4, makeRng(5)), 'enemy', { x: 15, y: 10 }));
     archer.character.weapon = gear(W('bow'));
     const knights = [9, 10, 11].map((y) => makeUnit(hero('sword_shield', ['charge'], `K${y}`), 'player', { x: 12, y }));
     const battle = new Battle(map, [archer, ...knights], makeRng(1));
@@ -1227,8 +1227,10 @@ describe('progression and enemy behaviour', () => {
     expect(near.hp).toBeLessThan(near.stats.health);
     expect(weak.hp).toBe(40);
     // A bandit in the same spot takes the kill.
-    const bandit = makeUnit(makeEnemy('bandit', 5, makeRng(3)), 'enemy', { x: 5, y: 3 });
+    // Level 4: before Kick (whose push could carry the target out of reach first).
+    const bandit = makeUnit(makeEnemy('bandit', 4, makeRng(3)), 'enemy', { x: 5, y: 3 });
     bandit.character.weapon = gear(W('sword_shield'));
+    bandit.character.skillIds = []; // a plain swordsman, whatever loadout it rolled
     const n2 = makeUnit(hero('sword_shield', [], 'Near'), 'player', { x: 6, y: 3 });
     const w2 = makeUnit(hero('staff', [], 'Weak'), 'player', { x: 4, y: 4 });
     const b2 = new Battle(openMap(), [bandit, n2, w2], makeRng(1));

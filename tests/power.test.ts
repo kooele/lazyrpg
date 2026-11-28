@@ -1,3 +1,4 @@
+import { GUILD } from '../src/data/guild';
 import { describe, expect, it } from 'vitest';
 import { buildCharacter, BUILDS } from '../src/game/reference';
 import { expectedEnemy, fighterValue, partyFighters, partyStrength, powerRatio, questStrength, referenceGearMultiplier, referenceParty, strengthAt } from '../src/game/power';
@@ -36,9 +37,9 @@ describe('strength model', () => {
     expect(s(10, 'crude', 'profile', 3)).toBeLessThan(s(10, 'crude', 'profile', 4));
   });
 
-  it('numbers count twice (Lanchester): twice the fighters is four times the power', () => {
+  it('numbers count almost twice: twice the fighters is 2^numbersExponent (about 3.4) times the power', () => {
     const one = partyFighters(party(8).slice(0, 2));
-    expect(powerRatio([...one, ...one], one)).toBeCloseTo(4, 1);
+    expect(powerRatio([...one, ...one], one)).toBeCloseTo(2 ** GUILD.strength.numbersExponent, 1);
   });
 
   it('bigger and higher-level quests are stronger', () => {

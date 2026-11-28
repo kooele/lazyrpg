@@ -94,7 +94,9 @@ export function parseEnemies(data: unknown): { enemies: Record<string, EnemyDef>
       if (!WEAPONS[weapon] || WEAPONS[weapon].builtIn) fail(`${lp}.weapon`, `"${weapon}" is not a weapon in equipment.json`);
       const armor = o.armor === undefined ? undefined : str(o.armor, `${lp}.armor`);
       if (armor !== undefined && (!ARMORS[armor] || ARMORS[armor].builtIn)) fail(`${lp}.armor`, `"${armor}" is not an armor in equipment.json (leave it out for no armor)`);
-      return { name: str(o.name, `${lp}.name`), weapon, ...(armor ? { armor } : {}), skills: skillList(o.skills, `${lp}.skills`) };
+      const weight = o.weight === undefined ? 1 : num(o.weight, `${lp}.weight`);
+      if (weight <= 0) fail(`${lp}.weight`, 'must be positive');
+      return { name: str(o.name, `${lp}.name`), weapon, ...(armor ? { armor } : {}), skills: skillList(o.skills, `${lp}.skills`), weight };
     });
     const gearQuality = d.gearQuality === undefined ? 'crude' : str(d.gearQuality, `${p}.gearQuality`);
     if (!QUALITIES[gearQuality]) fail(`${p}.gearQuality`, `"${gearQuality}" is not a quality in equipment.json`);

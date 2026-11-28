@@ -93,12 +93,12 @@ export function glossaryEntries(): GlossaryEntry[] {
   // ---- Quests & ranks ---------------------------------------------------------------------------
   add('Quests & Ranks', 'Skulls (danger)',
     `A quest's skulls (½ to 10, in halves) rate how hard it is on one fixed scale for the whole game. ½–5 fill white skulls; 5½–10 lay red skulls over them.\n\n`
-    + `Skulls follow the quest's par level: the party level it calls for (see Quest Strength). Half a skull is par for level ${T.skulls.from}, ten for level ${T.skulls.to}, evenly in between, so each skull is about ${Math.round((T.skulls.to - T.skulls.from) / 9.5 * 10) / 10} levels. A bigger group or higher-level enemies both raise it.\n\n`
+    + `Skulls follow the quest's par level: the party level it calls for (see Quest Strength). A bigger group or higher-level enemies both raise it. Half a skull is a job three level-1 recruits nearly always win; one skull, one they win about three times in four; ten skulls, the hardest S-rank quests.\n\n`
     + `Skulls also set the quest's XP (see Quest XP).`);
   add('Quests & Ranks', 'Quest Strength',
     `A quest's strength is how hard its enemies hit and how much it takes to bring them down, added up over the whole group: twice the enemies is twice the strength.\n\n`
-    + `Its par level is the level at which a typical party of 4 (average B talent, the gear you'd expect at that level) wins about ${pct(T.parWinRate)} of the time when fighting on autopilot. A party that plays well wins far more often; one below par, or short of gear or members, less.\n\n`
-    + `Quests get harder with rank: on autopilot, such a party wins a usual D quest about half the time, a usual C quest 40%, and from B on about a third. The smallest D quests (half a skull) are for a lone adventurer: a level-1 recruit wins about half of them.\n\n`
+    + `Its par level is the level at which a typical party (3 adventurers at D rank, 4 at C, 5 from B, of average B talent with the gear you'd expect) wins ${pct(T.parWinRate)} of the time when fighting on autopilot. A party that plays well wins more often; one below par, or short of gear or members, less.\n\n`
+    + `Quests get harder as they climb: on autopilot, a party of the quest's level wins nearly every half-skull quest, about three in four one-skull quests, half of five-skull quests and a quarter of ten-skull ones.\n\n`
     + `Your own party's strength works the same way: levels, talent, gear and numbers all count, and injuries and low Morale take away from it. Group size comes from the quest, never from your party: a lone adventurer meets as many enemies as a full lineup.`);
   add('Quests & Ranks', 'Pay Roll',
     `Gold is proportional to a quest's strength (strength × ${T.goldPerStrength}), and then each quest rolls its pay: ${payLo}–${payHi}× the usual gold. Cards flag Generous pay and Poor pay.\n\n`

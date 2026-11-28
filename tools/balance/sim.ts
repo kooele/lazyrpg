@@ -4,6 +4,7 @@ import { runAiTurn } from '../../src/game/ai';
 import { Battle, deploymentTiles, generateEnemies, makeUnit } from '../../src/game/battle';
 import { makeRng } from '../../src/game/character';
 import { generateMap } from '../../src/game/grid';
+import { randomAdventurer } from '../../src/game/people';
 import { PARTY_ORDER, buildCharacter } from '../../src/game/reference';
 
 export interface PartySpec {
@@ -14,6 +15,8 @@ export interface PartySpec {
   size?: number;
   /** Build ids, in place of the default order (PARTY_ORDER). */
   builds?: string[];
+  /** Random recruits instead (randomAdventurer, as the guild hall makes them), from this seed. */
+  random?: number;
 }
 
 export interface QuestSpec {
@@ -41,6 +44,10 @@ export const ROUND_CAP = 40;
 export function buildParty(p: PartySpec): Character[] {
   const builds = p.builds ?? PARTY_ORDER;
   const size = p.size ?? 4;
+  if (p.random !== undefined) {
+    const rng = makeRng(p.random * 7919 + 13);
+    return Array.from({ length: size }, () => randomAdventurer(p.level, rng));
+  }
   return Array.from({ length: size }, (_, i) => buildCharacter(builds[i % builds.length], p.level, p.talent ?? 'profile', p.quality ?? 'crude'));
 }
 

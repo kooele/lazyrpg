@@ -6,7 +6,7 @@ import { RANKS, type GameState, type Quest, type Rank } from '../data/types';
 import { enemyTypesForStage, pickFoes } from './battle';
 import { newId, type Rng } from './character';
 import { randInt } from './people';
-import { questParLevel, questValue, strengthOfValue } from './power';
+import { questParLevel, questPowerOf, strengthOfPower } from './power';
 
 const PLACES = ['the Old Sewers', 'Mill Road', 'Briar Farm', 'the Eastern Woods', "Gallow's Pass", 'the Salt Marsh', 'Kestrel Ford',
   'the Ruined Chapel', 'Hollow Creek', 'the Quarry', 'Thornfield', 'the North Gate', 'Lantern Hill', 'the Old Watchtower',
@@ -31,12 +31,12 @@ export function usualCount(rank: Rank): number {
  * strength of its enemies, which grows with their number and their stats) and its par level (the level at which the
  * reference party, AI-played, would win strength.parWinRate of the time). Cached per enemy level, size and types.
  */
-const cache = new Map<string, { value: number; par: number }>();
-function questPower(q: Pick<Quest, 'stage' | 'count' | 'foes'>): { value: number; par: number } {
+const cache = new Map<string, { power: number; par: number }>();
+function questPower(q: Pick<Quest, 'stage' | 'count' | 'foes'>): { power: number; par: number } {
   const k = `${q.stage}|${q.count}|${(q.foes ?? []).join(',')}`;
   let hit = cache.get(k);
   if (!hit) {
-    hit = { value: questValue(q), par: questParLevel(q) };
+    hit = { power: questPowerOf(q), par: questParLevel(q) };
     if (cache.size > 2000) cache.clear();
     cache.set(k, hit);
   }
@@ -44,10 +44,10 @@ function questPower(q: Pick<Quest, 'stage' | 'count' | 'foes'>): { value: number
 }
 
 /**
- * A quest's strength: the fighting power of its expected enemies (the square of their summed values, see
- * strengthOfValue), so a group twice the size is four times as strong. Its gold and renown are proportional to it.
+ * A quest's strength: the fighting power of its expected enemies (groupPower, in strengthOfPower's units), so a group
+ * twice the size is about 3.4 times as strong. Its gold and renown are proportional to it.
  */
-export const questStrength = (q: Pick<Quest, 'stage' | 'count' | 'foes'>) => strengthOfValue(questPower(q).value);
+export const questStrength = (q: Pick<Quest, 'stage' | 'count' | 'foes'>) => strengthOfPower(questPower(q).power);
 
 /** The usual gold for a quest: its strength x goldPerStrength (before the board's pay roll). */
 export const fairReward = (q: Pick<Quest, 'stage' | 'count' | 'foes'>) => questStrength(q) * S.goldPerStrength;
@@ -72,9 +72,9 @@ export function expectedEnemies(q: Pick<Quest, 'count' | 'foes'>): number {
 }
 
 /**
- * How hard a quest is, as the party level it calls for: its par level, the level at which the reference party (four
- * Adventurers of average B talent with the gear expected at their level, played by the AI) would win
- * strength.parWinRate of its battles against it.
+ * How hard a quest is, as the party level it calls for: its par level, the level at which the reference party (3
+ * Adventurers at D rank, 4 at C, 5 from B, of average B talent with the gear expected at their level, played by the
+ * AI) would win strength.parWinRate (half) of its battles against it.
  */
 export const questDifficulty = (q: Pick<Quest, 'stage' | 'count' | 'foes'>) => questPower(q).par;
 
@@ -82,26 +82,32 @@ export const questDifficulty = (q: Pick<Quest, 'stage' | 'count' | 'foes'>) => q
 export const MAX_SKULLS = 10;
 
 /**
- * Danger, shown as skulls: 0.5 to 10 in half steps, rising evenly with the quest's par level (questDifficulty) on one
- * fixed scale for the whole game, from strength.skulls.from (half a skull) to strength.skulls.to (ten). A level's
- * worth of party strength is a fixed share more power, so skulls grow with the log of a quest's strength.
+ * Danger, shown as skulls: 0.5 to 10 in half steps, rising with the quest's par level (questDifficulty) on one fixed
+ * scale for the whole game (strength.skulls: half a skull is a quest three level-1 recruits nearly always win, one
+ * skull one they win three times in four, ten the hardest S-rank quests).
  * Cards show 0.5-5 as white skulls and 5.5-10 as red skulls laid over them.
  */
 export function dangerRating(q: Pick<Quest, 'stage' | 'count' | 'foes'>): number {
   return skullsForLevel(questDifficulty(q));
 }
 
-/** The skulls a quest with this par level shows. */
-export function skullsForLevel(par: number): number {
-  const { from, to } = S.skulls;
-  const f = (par - from) / (to - from);
-  return Math.max(0.5, Math.min(MAX_SKULLS, Math.round((0.5 + (MAX_SKULLS - 0.5) * f) * 2) / 2));
+/** Linear through [x, y] points (extended past the ends along the first and last segments). */
+function through(pts: [number, number][], x: number): number {
+  let i = 1;
+  while (i < pts.length - 1 && x > pts[i][0]) i++;
+  const [x0, y0] = pts[i - 1];
+  const [x1, y1] = pts[i];
+  return y0 + ((y1 - y0) * (x - x0)) / (x1 - x0);
 }
 
-/** The par level a number of skulls stands for (the middle of its half step). */
+/** The skulls a quest with this par level shows: through strength.skulls, in half steps, 0.5 to 10. */
+export function skullsForLevel(par: number): number {
+  return Math.max(0.5, Math.min(MAX_SKULLS, Math.round(through(S.skulls, par) * 2) / 2));
+}
+
+/** The par level a number of skulls stands for. */
 export function levelForSkulls(skulls: number): number {
-  const { from, to } = S.skulls;
-  return from + ((skulls - 0.5) / (MAX_SKULLS - 0.5)) * (to - from);
+  return through(S.skulls.map(([l, s]) => [s, l] as [number, number]), skulls);
 }
 
 const roll = ([lo, hi]: [number, number], rng: Rng) => lo + rng() * (hi - lo);

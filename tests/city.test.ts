@@ -288,14 +288,11 @@ describe('ranks and the leaderboard', () => {
     expect(expectedEnemies({ count: 4, foes: ['rat'] })).toBe(8);
     expect(expectedEnemies({ count: 4, foes: ['goblin'] })).toBe(7);
     expect(expectedEnemies({ count: 20, foes: ['rat'] })).toBe(ENCOUNTER.maxEnemies); // at most the field's cap
-    // Skulls follow the par level, not rank: half a skull at skulls.from, ten at skulls.to, evenly between.
-    const { from, to } = GUILD.strength.skulls;
-    expect(skullsForLevel(from)).toBe(0.5);
-    expect(skullsForLevel(from - 5)).toBe(0.5);
-    expect(skullsForLevel(to)).toBe(10);
-    expect(skullsForLevel(to + 5)).toBe(10);
-    expect(skullsForLevel((from + to) / 2 + 1e-6)).toBe(5.5); // 0.5 + 9.5 / 2 = 5.25, rounded to the nearest half
-    expect(skullsForLevel(from + (to - from) / 19)).toBe(1); // each nineteenth of the scale is another half skull
+    // Skulls follow the par level, not rank: through strength.skulls' points, in half steps, 0.5 to 10.
+    const pts = GUILD.strength.skulls;
+    for (const [level, skulls] of pts) expect(skullsForLevel(level)).toBe(skulls);
+    expect(skullsForLevel(pts[0][0] - 5)).toBe(0.5);
+    expect(skullsForLevel(pts[pts.length - 1][0] + 5)).toBe(10);
     for (const s of [0.5, 1, 3.5, 7, 10]) expect(skullsForLevel(levelForSkulls(s))).toBe(s);
     for (const q of Array.from({ length: 200 }, (_, i) => makeQuest((['D', 'C', 'B', 'A'] as const)[i % 4], 1, makeRng(i)))) {
       expect((dangerRating(q) * 2) % 1).toBe(0); // whole or half skulls
@@ -315,9 +312,11 @@ describe('ranks and the leaderboard', () => {
     for (const q of s.guild.board) {
       expect(q.count).toBeGreaterThanOrEqual(GUILD.quests[q.rank].count[0]);
       expect(q.count).toBeLessThanOrEqual(GUILD.quests[q.rank].count[1]);
+      // Rewards are rounded to 5 gold (at least 5), which moves a small quest's pay ratio a little.
       const r = payRatio(q);
-      expect(r).toBeGreaterThan(GUILD.board.pay[0] - 0.05);
-      expect(r).toBeLessThan(GUILD.board.pay[1] + 0.05);
+      const slack = 2.5 / fairReward(q) + 0.05;
+      if (q.reward > 5) expect(r).toBeGreaterThan(GUILD.board.pay[0] - slack);
+      expect(r).toBeLessThan(Math.max(GUILD.board.pay[1] + slack, 5 / fairReward(q) + 0.05));
     }
     // Rival parties take quests off the board (not just expiry).
     const rng = makeRng(2);

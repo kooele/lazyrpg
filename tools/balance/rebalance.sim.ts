@@ -25,10 +25,17 @@ const SCALED = ['health', 'pAtk', 'mAtk'] as const;
 const attackShare = (L: number) => 0.5 + 0.25 * Math.max(0, Math.min(1, (L - 5) / 15));
 /**
  * The AI party's win rate against a usual group, by level: [level, win rate] knots, linear between them and flat
- * outside. Default D 50%, C 40%, then 33% (par) at the middles of the ranks' levels (3, 8, 13); BALANCE_TARGETS
- * overrides it (tune.py sets it so each rank's average board quest hits its target).
+ * outside: BALANCE_TARGETS, else tools/balance/targets.json (written by tune2.py from the win rate wanted by skulls).
  */
-const TARGET_WIN: [number, number][] = process.env.BALANCE_TARGETS ? JSON.parse(process.env.BALANCE_TARGETS) : [[3, 0.5], [8, 0.4], [13, 0.33]];
+const TARGET_WIN: [number, number][] = process.env.BALANCE_TARGETS
+  ? JSON.parse(process.env.BALANCE_TARGETS)
+  : (() => {
+      try {
+        return JSON.parse(readFileSync('tools/balance/targets.json', 'utf8')).targets;
+      } catch {
+        return [[3, 0.5], [8, 0.4], [13, 0.33]];
+      }
+    })();
 const targetWin = (L: number) => {
   const t = TARGET_WIN;
   if (L <= t[0][0]) return t[0][1];
