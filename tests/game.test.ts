@@ -1307,6 +1307,8 @@ describe('progression and enemy behaviour', () => {
       ], { ...STAT_CONFIG, vision: { enabled: false } }); // they see the archer's watch
       const archer = units[0];
       const group = units.slice(1);
+      // The odds a lone unit weighs: humans at their pre-balance strength (see classic.ts), as the test was set up.
+      if (ENEMIES[type].ai === 'human') group.forEach(classic);
       // A shot worth about a third of a member's Health: enough to fear, not enough to stop one from taking it.
       battle.perform(archer, 'overwatch', { x: 5, y: 2 });
       const hit = archer.overwatch!.hits.reduce((sum, part) => sum + battle.hitDamage(archer, group[0], part, archer.overwatch!.projectile), 0);
