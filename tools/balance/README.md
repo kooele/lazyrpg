@@ -12,7 +12,7 @@ with the game. Reports go to `tools/balance/out/` (gitignored).
   the stats, and twice the fighters is four times the power.
 - The **reference party** (`src/game/reference.ts`) is four Adventurers (Guardian, Caster, Archer, Cleric) with a
   talent spread averaging B, Body points by build, and the gear expected at their level (`POWER.referenceGear`:
-  Crude at 1, Common at 6, Fine at 12, Masterwork at 20, blended in between).
+  Crude through 5, Common at 8, Fine at 13, Masterwork at 20, blended in between).
 - A quest's **par level** is the level at which the reference party, played by the AI, wins `strength.parWinRate`
   (33%) of its battles. The AI win curve `strength.winCurve` (in `guild.json`) maps a power ratio to a win chance;
   it's fitted here.
@@ -38,12 +38,21 @@ their enemy level). Each report records the model's prediction per cell (`meta.t
 
 `tools/balance/iterate.sh <first> <iterations> [seeds]` loops: simulate each type alone (`--plan types`), fit the
 curve, a power factor per type and per level, and a tempo per type and level (`fitfac.py`), then rescale the stats
-(`rebalance.sim.ts`). The rescale puts a usual-sized group of each type (`usualCountAt`) at par for the reference
-party of the same level, and trades Health against attack (same value) so fights average about 10 rounds. Limits:
-the tempo stays within ×0.4–×2.5 of each type's original Health-to-attack balance (`enemies.orig.json`, the
-stats before this pass), one basic hit takes at most 35% of the frailest reference Adventurer's effective Health, and
-corrections are damped (`BALANCE_GAIN`, 0.6). After the loop, copy the last fit's `a`, `b` into
-`strength.winCurve`.
+(`rebalance.sim.ts`). The rescale solves every level of each type's range so the AI-played reference party wins a
+usual-sized group (`usualCountAt`, counted smoothly) `TARGET_WIN` of the time (50% at level 3, 40% at 8, 33% from
+13), then fits base stats, `growthPerLevel` and a `growthBend` (× levels²) by least squares. It also trades Health
+against attack (same value) so fights average about 10 rounds. Limits and leanings:
+
+- extra strength goes half to Health and half to attack up to level 5, and three quarters to attack from level 20
+  (`attackShare`), since the party's skills outscale the enemies' late on;
+- M.Atk that only heals (Troll's Regenerate) stays at its original value;
+- the tempo stays within ×0.4–×2.5 of each type's original Health-to-attack balance (`enemies.orig.json`, the stats
+  before the balance pass);
+- one basic hit takes at most 35% of the frailest reference Adventurer's effective Health;
+- corrections are damped (`BALANCE_GAIN`, 0.6).
+
+After the loop, copy the last fit's `a`, `b` into `strength.winCurve`. `tune.py` tries per-rank targets on the model
+alone (fast); `solo.sim.ts` finds the half-skull anchor (the rat group a lone level-1 Adventurer beats half the time).
 
 Other probes (`npx vitest run --config tools/balance/vitest.config.ts tools/balance/<name>.sim.ts`): `economy`
 (strength, par, skulls, gold and renown per rank, against the old formulas), `burst` (one hit's share of each
@@ -51,17 +60,17 @@ reference Adventurer's Health), `rivals` (the rival parties over a year).
 
 ## Last calibration
 
-11 iterations of `iterate.sh` (24–32 seeds a cell), then a check on 60 real board quests (12 per rank, 24 battles
-each) fought by the reference party at the quest's enemy level:
+Group sizes doubled from the original game (D 1–8, C 6–12, B 8–14, A 10–16, S 12–18 threat points; up to 24 enemies),
+enemies rebalanced from their original stats (`enemies.orig.json`), 7 iterations of `iterate.sh` (24 seeds a cell).
+Check on 80 real board quests (16 per rank, 24 battles each), reference party at the quest's enemy level:
 
-| Rank | AI wins | Model | Rounds (mean, p90) | Over 20 rounds |
-|---|---|---|---|---|
-| D | 66% | 61% | 9.7, 13 | 0% |
-| C | 52% | 45% | 9.4, 13 | 0% |
-| B | 47% | 45% | 9.5, 12 | 0% |
-| A | 23% | 24% | 11.2, 15 | 1% |
-| S | 49% | 53% | 10.5, 14 | 1% |
+| Rank | AI wins | Model | Target | Rounds (mean, p90) | Over 20 rounds |
+|---|---|---|---|---|---|
+| D | 56% | 59% | 50% | 8.4, 12 | 0% |
+| C | 38% | 37% | 40% | 9.6, 12 | 0% |
+| B | 38% | 41% | 33% | 9.8, 13 | 0% |
+| A | 27% | 28% | 33% | 10.8, 15 | 1% |
+| S | 26% | 31% | 33% | 10.4, 14 | 1% |
 
-Win curve: a 2.734, b 7.248 (par, 33%, at a power ratio of 0.62). Each type alone at par: 9.8–11.4 rounds on
-average, at most 1% over 20. A quests run harder than their level (par about 1.7 levels above the enemy level), as
-their groups are the biggest; S quests a level easier.
+Solo, level 1, Crude gear, against 2 giant rats (the half-skull quest): Archer 100%, Sword and Shield with Kick 75%;
+against 3 rats 22% and 0%. Win curve: a 3.508, b 6.684. Each type alone: 9.6–11.6 rounds on average.

@@ -1,6 +1,6 @@
 // Balance jobs: the cross product of party and quest settings, each cell fought over the same seeds
 // (common random numbers, so neighbouring cells compare on the same maps).
-import { ENEMIES } from '../../src/data/enemies';
+import { ENCOUNTER, ENEMIES } from '../../src/data/enemies';
 import { QUALITIES } from '../../src/data/content';
 import { partyFighters, powerRatio, questFighters, referenceGearMultiplier } from '../../src/game/power';
 import { RANKS } from '../../src/data/types';
@@ -67,7 +67,7 @@ function typeCells(a: JobArgs): Cell[] {
     for (const stage of [...new Set([lo, Math.round((lo + hi) / 2), hi])]) {
       const party: PartySpec = { level: stage, talent: 'profile', quality: referenceQuality(stage), size: a.size?.[0] ?? 4 };
       for (const ratio of list(a.ratio, [0.35, 0.5, 0.7])) {
-        const count = countFor(party, stage, [type], ratio, 12 * ENEMIES[type].threat);
+        const count = countFor(party, stage, [type], ratio, ENCOUNTER.maxEnemies * ENEMIES[type].threat);
         out.push({ id: `${type} St${stage} ${party.quality} r${ratio} c${count}`, party, quest: { stage, count, foes: [type] } });
       }
     }

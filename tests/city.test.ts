@@ -16,6 +16,7 @@ import {
   companionContract, companionDemand, evaluateOffer, foodLodgingWeekly, joinParty, mercenaryRates, offerValue, openingTerms, punishSlave, slaveContract, bounty, registrationFee, slaveTax, slaveValue, leaveParty, isCompanion, releaseCost, proratedWages, wagesBetween,
 } from '../src/game/contracts';
 import { DEMO_LEVELS, autoMultiplier, demoEncounter, newDemo, partyChanged, resolveDemoBattle, setDemoLevel } from '../src/game/demo';
+import { ENCOUNTER } from '../src/data/enemies';
 import { dangerRating, expectedEnemies, fairReward, levelForSkulls, payRatio, questRenown, questStrength, skullsForLevel, usualCount } from '../src/game/board';
 import { adventurerCount, adventurerRank, deathFactor, leaderboard, promotionReady, questDifficulty, rankDifficulty, rivalPickQuest, rivalQuestChance, rankCounts, simulateGuildDay } from '../src/game/guild';
 
@@ -226,8 +227,10 @@ describe('ranks and the leaderboard', () => {
         const [lo, hi] = GUILD.board.pay;
         expect(quest.renown).toBeGreaterThanOrEqual(questRenown(quest, hi));
         expect(quest.renown).toBeLessThanOrEqual(questRenown(quest, lo));
-        expect(payRatio(quest)).toBeGreaterThan(GUILD.board.pay[0] - 0.05);
-        expect(payRatio(quest)).toBeLessThan(GUILD.board.pay[1] + 0.05);
+        // Rewards are rounded to 5 gold (at least 5), which moves a small quest's pay ratio a little.
+        const slack = 2.5 / fairReward(quest) + 0.01;
+        if (quest.reward > 5) expect(payRatio(quest)).toBeGreaterThan(GUILD.board.pay[0] - slack);
+        expect(payRatio(quest)).toBeLessThan(Math.max(GUILD.board.pay[1] + slack, 5 / fairReward(quest) + 0.01));
       }
       expect(new Set(quests.map((x) => x.count)).size).toBeGreaterThan(1);
       expect(new Set(quests.map((x) => x.stage)).size).toBeGreaterThan(1);
@@ -284,14 +287,14 @@ describe('ranks and the leaderboard', () => {
     expect(expectedEnemies({ count: 4, foes: ['bandit'] })).toBe(4);
     expect(expectedEnemies({ count: 4, foes: ['rat'] })).toBe(8);
     expect(expectedEnemies({ count: 4, foes: ['goblin'] })).toBe(7);
-    expect(expectedEnemies({ count: 20, foes: ['rat'] })).toBe(12); // at most the field's cap
+    expect(expectedEnemies({ count: 20, foes: ['rat'] })).toBe(ENCOUNTER.maxEnemies); // at most the field's cap
     // Skulls follow the par level, not rank: half a skull at skulls.from, ten at skulls.to, evenly between.
     const { from, to } = GUILD.strength.skulls;
     expect(skullsForLevel(from)).toBe(0.5);
     expect(skullsForLevel(from - 5)).toBe(0.5);
     expect(skullsForLevel(to)).toBe(10);
     expect(skullsForLevel(to + 5)).toBe(10);
-    expect(skullsForLevel((from + to) / 2)).toBe(5.5); // 0.5 + 9.5 / 2 = 5.25, rounded to the nearest half
+    expect(skullsForLevel((from + to) / 2 + 1e-6)).toBe(5.5); // 0.5 + 9.5 / 2 = 5.25, rounded to the nearest half
     expect(skullsForLevel(from + (to - from) / 19)).toBe(1); // each nineteenth of the scale is another half skull
     for (const s of [0.5, 1, 3.5, 7, 10]) expect(skullsForLevel(levelForSkulls(s))).toBe(s);
     for (const q of Array.from({ length: 200 }, (_, i) => makeQuest((['D', 'C', 'B', 'A'] as const)[i % 4], 1, makeRng(i)))) {
@@ -332,17 +335,17 @@ describe('ranks and the leaderboard', () => {
     const s = start();
     const p = s.guild.rivals.find((r) => r.rank === 'C')!;
     p.members.forEach((m) => (m.level = 10)); // a couple of levels above the quests' par
-    const q = (o: Partial<Quest>): Quest => ({ ...makeQuest('C', s.day, makeRng(1)), stage: 7, count: 4, ...o });
+    const q = (o: Partial<Quest>): Quest => ({ ...makeQuest('C', s.day, makeRng(1)), stage: 7, count: 8, ...o });
     const cheap = q({ reward: 150 });
     const rich = q({ reward: 300 });
-    const tooHard = q({ stage: 10, count: 6, reward: 900 });
+    const tooHard = q({ stage: 10, count: 12, reward: 900 });
     const aboveRank = { ...makeQuest('B', s.day, makeRng(1)), stage: 11, reward: 2000 };
     expect(rivalPickQuest(p, [cheap, rich, tooHard, aboveRank])).toBe(rich);
     expect(rivalQuestChance(p, tooHard)).toBeLessThan(0.55);
     expect(rivalPickQuest(p, [tooHard, aboveRank])).toBeNull();
     // A safer quest can beat a slightly richer risky one.
-    const safe = q({ stage: 6, count: 3, reward: 250 });
-    const risky = q({ stage: 9, count: 5, reward: 270 });
+    const safe = q({ stage: 6, count: 6, reward: 250 });
+    const risky = q({ stage: 9, count: 10, reward: 270 });
     expect(rivalPickQuest(p, [risky, safe])).toBe(safe);
   });
 

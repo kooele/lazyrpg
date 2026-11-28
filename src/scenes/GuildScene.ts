@@ -174,7 +174,11 @@ export class GuildScene extends Phaser.Scene {
     const box = this.add.container(0, 0);
     // Drawn off the display list, then baked into a texture once everything is drawn (see bakeGraphics).
     const g = this.make.graphics({}, false);
-    for (let i = 0; i < enemies; i++) this.foeIcon(box, g, x + 9 + i * 16, y, allowed, types[i % types.length]);
+    // Up to MAX_ICONS icons fit before the skulls; a bigger group shows the rest as "+N".
+    const MAX_ICONS = 14;
+    const shown = Math.min(enemies, enemies > MAX_ICONS ? MAX_ICONS - 1 : MAX_ICONS);
+    for (let i = 0; i < shown; i++) this.foeIcon(box, g, x + 9 + i * 16, y, allowed, types[i % types.length]);
+    if (shown < enemies) box.add(text(this, x + 3 + shown * 16, y, `+${enemies - shown}`, { fontSize: '12px', color: allowed ? COLORS.text : COLORS.dim }).setOrigin(0, 0.5));
     // Skulls: white up to `danger` (in halves) for 0.5-5, then red laid over them for 5.5-10; the rest dark.
     const fromX = cardW - 12 - 5 * 18;
     const white = !allowed ? 0x9aa3bd : 0xe8dcc0;

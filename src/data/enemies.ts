@@ -74,6 +74,11 @@ export function parseEnemies(data: unknown): { enemies: Record<string, EnemyDef>
       if (!(STAT_KEYS as readonly string[]).includes(k)) fail(`${p}.growthPerLevel.${k}`, 'is not a stat');
       growth[k as keyof Stats] = num(v, `${p}.growthPerLevel.${k}`);
     }
+    const bend: Partial<Stats> = {};
+    for (const [k, v] of Object.entries(obj(d.growthBend ?? {}, `${p}.growthBend`))) {
+      if (!(STAT_KEYS as readonly string[]).includes(k)) fail(`${p}.growthBend.${k}`, 'is not a stat');
+      bend[k as keyof Stats] = num(v, `${p}.growthBend.${k}`);
+    }
     const art = obj(d.art, `${p}.art`);
     const kind = str(art.kind, `${p}.art.kind`) as MonsterKind;
     if (!KINDS.includes(kind)) fail(`${p}.art.kind`, `must be one of: ${KINDS.join(', ')}`);
@@ -108,6 +113,7 @@ export function parseEnemies(data: unknown): { enemies: Record<string, EnemyDef>
       art: { kind, color: typeof art.color === 'string' ? art.color : undefined, models },
       stats,
       growthPerLevel: growth,
+      growthBend: bend,
       skills,
       skillsByLevel: byLevel,
       loadouts,

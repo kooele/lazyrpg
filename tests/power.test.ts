@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildCharacter, BUILDS } from '../src/game/reference';
-import { partyFighters, partyStrength, powerRatio, questStrength, referenceGearMultiplier, referenceParty, strengthAt } from '../src/game/power';
+import { expectedEnemy, fighterValue, partyFighters, partyStrength, powerRatio, questStrength, referenceGearMultiplier, referenceParty, strengthAt } from '../src/game/power';
 import { talentScore } from '../src/game/talent';
 
 const party = (level: number, quality = 'crude', talent: Parameters<typeof buildCharacter>[2] = 'profile', size = 4) =>
@@ -18,10 +18,11 @@ describe('strength model', () => {
     }
   });
 
-  it('reference gear follows its curve: Crude at 1, Common at 6, Fine at 12, Masterwork at 20', () => {
+  it('reference gear follows its curve: Crude through 5, Common at 8, Fine at 13, Masterwork at 20', () => {
     expect(referenceGearMultiplier(1)).toBe(1);
-    expect(referenceGearMultiplier(6)).toBe(2);
-    expect(referenceGearMultiplier(9)).toBe(3);
+    expect(referenceGearMultiplier(5)).toBe(1);
+    expect(referenceGearMultiplier(8)).toBe(2);
+    expect(referenceGearMultiplier(13)).toBe(4);
     expect(referenceGearMultiplier(25)).toBe(7);
   });
 
@@ -43,5 +44,13 @@ describe('strength model', () => {
   it('bigger and higher-level quests are stronger', () => {
     expect(questStrength({ stage: 8, count: 6 })).toBeGreaterThan(questStrength({ stage: 8, count: 4 }));
     expect(questStrength({ stage: 10, count: 4 })).toBeGreaterThan(questStrength({ stage: 8, count: 4 }));
+  });
+
+  it('a giant rat is weaker than any level-1 Adventurer: enemies come in numbers, not as giants', () => {
+    const rat = expectedEnemy('rat', 1)[0];
+    for (const a of referenceParty(1)) {
+      expect(rat.stats.health).toBeLessThan(a.stats.health);
+      expect(fighterValue(rat, a.stats.defense)).toBeLessThan(fighterValue(a, rat.stats.defense));
+    }
   });
 });

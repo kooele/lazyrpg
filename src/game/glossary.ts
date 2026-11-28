@@ -98,6 +98,7 @@ export function glossaryEntries(): GlossaryEntry[] {
   add('Quests & Ranks', 'Quest Strength',
     `A quest's strength is how hard its enemies hit and how much it takes to bring them down, added up over the whole group: twice the enemies is twice the strength.\n\n`
     + `Its par level is the level at which a typical party of 4 (average B talent, the gear you'd expect at that level) wins about ${pct(T.parWinRate)} of the time when fighting on autopilot. A party that plays well wins far more often; one below par, or short of gear or members, less.\n\n`
+    + `Quests get harder with rank: on autopilot, such a party wins a usual D quest about half the time, a usual C quest 40%, and from B on about a third. The smallest D quests (half a skull) are for a lone adventurer: a level-1 recruit wins about half of them.\n\n`
     + `Your own party's strength works the same way: levels, talent, gear and numbers all count, and injuries and low Morale take away from it. Group size comes from the quest, never from your party: a lone adventurer meets as many enemies as a full lineup.`);
   add('Quests & Ranks', 'Pay Roll',
     `Gold is proportional to a quest's strength (strength × ${T.goldPerStrength}), and then each quest rolls its pay: ${payLo}–${payHi}× the usual gold. Cards flag Generous pay and Poor pay.\n\n`

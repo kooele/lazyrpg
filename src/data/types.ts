@@ -506,6 +506,11 @@ export interface EnemyDef {
   /** Stats at the lowest level. */
   stats: Stats;
   growthPerLevel: Partial<Stats>;
+  /**
+   * A bend in the growth line: added x (levels above the lowest)^2 (balance tuning, tools/balance), so a type's
+   * stats can follow the party's strength across a wide level range. Missing = a straight line.
+   */
+  growthBend: Partial<Stats>;
   /** First skill = basic attack (for human types with a weapon, the weapon's basic attack comes first). */
   skills: string[];
   skillsByLevel: Record<number, string[]>;

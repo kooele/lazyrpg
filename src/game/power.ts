@@ -21,8 +21,11 @@ import { buildCharacter } from './reference';
 export const POWER = {
   /** The reference party: build ids (reference.ts). */
   referenceParty: ['guardian', 'caster', 'archer', 'cleric'],
-  /** Gear quality the reference party has by level, as the base-stat multiplier (Crude 1, Common 2, Fine 4, Masterwork 7); linear in between. */
-  referenceGear: [[1, 1], [6, 2], [12, 4], [20, 7]] as [number, number][],
+  /**
+   * Gear quality the reference party has by level, as the base-stat multiplier (Crude 1, Common 2, Fine 4,
+   * Masterwork 7); linear in between. Crude through D rank: a new party can't afford better.
+   */
+  referenceGear: [[5, 1], [8, 2], [13, 4], [20, 7]] as [number, number][],
   /** Lowest and highest strength the model reports. */
   range: [-5, 40] as [number, number],
 };
@@ -203,15 +206,19 @@ export interface QuestLike {
 
 /**
  * The enemies a quest can be expected to field, as weighted fighters: generateEnemies picks its types evenly until
- * the threat budget is spent, so each type comes count / (average threat) / types times on average, and the last
- * pick overshoots the budget by about half a pick. Past the top level range the budget grows 25% a level.
+ * the threat budget is spent, so each type comes count / (average threat) / types times on average (and the last
+ * pick overshoots the budget by about half a pick when the types differ in size). Past the top level range the budget grows 25% a level.
  */
-export function questFighters(q: QuestLike): Fighter[] {
+export function questFighters(q: QuestLike, opts: { smooth?: boolean } = {}): Fighter[] {
   const types = enemyTypesFor(q);
   const top = Math.max(...Object.values(ENEMIES).map((d) => d.levels[1]));
   const budget = q.count * (1 + Math.max(0, q.stage - top) * 0.25);
   const avgThreat = types.reduce((s, t) => s + ENEMIES[t.type].threat, 0) / types.length;
-  const picks = Math.min(ENCOUNTER.maxEnemies, budget / avgThreat + 0.5);
+  // One threat size: exactly enough picks to cover the budget (1 threat point of rats is 2 rats). Mixed sizes: the
+  // last pick overshoots by about half a pick.
+  const sizes = new Set(types.map((t) => ENEMIES[t.type].threat));
+  // `smooth` (balance tuning): the budget over the threat, unrounded, so the group grows evenly with its size.
+  const picks = Math.min(ENCOUNTER.maxEnemies, opts.smooth ? budget / avgThreat : sizes.size === 1 ? Math.ceil(budget / avgThreat - 1e-9) : budget / avgThreat + 0.5);
   return types.flatMap((t) => expectedEnemy(t.type, t.level).map((f) => ({ ...f, weight: (f.weight ?? 1) * picks / types.length })));
 }
 

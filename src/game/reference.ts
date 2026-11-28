@@ -46,6 +46,11 @@ export const BUILDS: Record<string, Build> = {
     skills: ['heal', 'cleanse', 'protection', 'barrier', 'smite', 'emergency_heal', 'arcane_bolt', 'ignite'],
     body: ['mAtk', 'mana', 'health'], talents: MAGICAL,
   },
+  warrior: {
+    id: 'warrior', weapon: 'sword_shield', armor: 'leather', talents: FRONT,
+    skills: ['kick', 'double_strike', 'engage', 'charge', 'tough_it_out', 'execute', 'power_strike', 'fighting_spirit'],
+    body: ['health', 'pAtk', 'defense'],
+  },
   bruiser: {
     id: 'bruiser', weapon: 'greatsword', armor: 'mail',
     skills: ['double_strike', 'kick', 'charge', 'execute', 'sucker_punch', 'power_strike', 'fighting_spirit', 'in_the_zone', 'brutal_strike'],
