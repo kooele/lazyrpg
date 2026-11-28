@@ -4,7 +4,10 @@ import { runAiTurn } from '../../src/game/ai';
 import { Battle, deploymentTiles, generateEnemies, makeUnit } from '../../src/game/battle';
 import { makeRng } from '../../src/game/character';
 import { generateMap } from '../../src/game/grid';
+import { randomAdventurer } from '../../src/game/people';
 import { PARTY_ORDER, buildCharacter } from '../../src/game/reference';
+import { referenceGearOdds, referenceSize } from '../../src/game/power';
+import type { Rng } from '../../src/game/character';
 
 export interface PartySpec {
   level: number;
@@ -14,6 +17,8 @@ export interface PartySpec {
   size?: number;
   /** Build ids, in place of the default order (PARTY_ORDER). */
   builds?: string[];
+  /** Random recruits instead (randomAdventurer, as the guild hall makes them), from this seed. */
+  random?: number;
 }
 
 export interface QuestSpec {
@@ -34,21 +39,54 @@ export interface RunResult {
   /** Share of the enemies killed, fled or surrendered. */
   defeated: number;
   timeout: boolean;
+  /**
+   * The party's Health lost (the Strategic Layer stat): each member's share of HP at its lowest point (all of it for
+   * falling), averaged over the party: 0 = untouched, 1 = everyone fell.
+   */
+  healthLoss: number;
+  /**
+   * The battle's score: rewards earned against Health spent. A win earns 1, a loss the share of enemies defeated;
+   * minus HEALTH_WEIGHT x healthLoss; 0 to 1.
+   */
+  score: number;
 }
+
+/** What losing all of the party's Health costs, as a share of a won quest's value. */
+export const HEALTH_WEIGHT = 0.5;
 
 export const ROUND_CAP = 40;
 
-export function buildParty(p: PartySpec): Character[] {
+/**
+ * The party of a spec. Quality 'expected': each piece of gear rolled from the reference odds at its level
+ * (referenceGearOdds; with `rng`, else the most likely tier).
+ */
+export function buildParty(p: PartySpec, rng?: Rng): Character[] {
   const builds = p.builds ?? PARTY_ORDER;
-  const size = p.size ?? 4;
-  return Array.from({ length: size }, (_, i) => buildCharacter(builds[i % builds.length], p.level, p.talent ?? 'profile', p.quality ?? 'crude'));
+  const size = p.size ?? referenceSize(p.level);
+  if (p.random !== undefined) {
+    const r = makeRng(p.random * 7919 + 13);
+    return Array.from({ length: size }, () => randomAdventurer(p.level, r));
+  }
+  const odds = referenceGearOdds(p.level);
+  const tiers = Object.keys(odds) as (keyof typeof odds)[];
+  const roll = () => {
+    if (!rng) return tiers.reduce((a, b) => (odds[b] > odds[a] ? b : a));
+    let x = rng();
+    for (const t of tiers) if ((x -= odds[t]) < 0) return t;
+    return tiers[tiers.length - 1];
+  };
+  return Array.from({ length: size }, (_, i) => {
+    const c = buildCharacter(builds[i % builds.length], p.level, p.talent ?? 'profile', p.quality === 'expected' ? roll() : (p.quality ?? 'crude'));
+    if (p.quality === 'expected' && c.armor) c.armor = { ...c.armor, quality: roll() };
+    return c;
+  });
 }
 
 /** One battle, AI on both sides. */
 export function runBattle(party: PartySpec, quest: QuestSpec, seed: number): RunResult {
   const rng = makeRng(seed);
   const map = generateMap(rng);
-  const members = buildParty(party);
+  const members = buildParty(party, rng);
   const generated = generateEnemies(quest.stage, rng, quest.count, quest.foes);
   const pSpots = deploymentTiles(map, 'player', members.length);
   const eSpots = deploymentTiles(map, 'enemy', generated.length);
@@ -69,13 +107,18 @@ export function runBattle(party: PartySpec, quest: QuestSpec, seed: number): Run
   const mine = b.units.filter((u) => u.team === 'player');
   const theirs = b.units.filter((u) => u.team === 'enemy');
   const total = mine.reduce((s, u) => s + u.stats.health, 0);
+  const win = b.outcome() === 'victory';
+  const defeated = theirs.filter((u) => !u.alive).length / Math.max(1, theirs.length);
+  const healthLoss = mine.reduce((s, u) => s + (u.alive ? 1 - Math.min(1, Math.max(0, u.lowestHp / u.stats.health)) : 1), 0) / Math.max(1, mine.length);
   return {
-    win: b.outcome() === 'victory',
+    healthLoss,
+    score: Math.max(0, Math.min(1, (win ? 1 : defeated) - HEALTH_WEIGHT * healthLoss)),
+    win,
     rounds: b.round,
     hpLeft: mine.reduce((s, u) => s + (u.alive ? u.hp : 0), 0) / total,
     survivors: mine.filter((u) => u.alive).length,
     enemies: theirs.length,
-    defeated: theirs.filter((u) => !u.alive).length / Math.max(1, theirs.length),
+    defeated,
     timeout: !b.outcome(),
   };
 }

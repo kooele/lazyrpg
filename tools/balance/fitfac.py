@@ -23,7 +23,7 @@ for n in names:
         foes=s['quest'].get('foes')
         t=foes[0] if foes and len(foes)==1 else None
         if t and s['quest']['count']>=12*thr[t]-1e-6: continue
-        cells.append((t,math.log(s['ratio']),[1 if r['win'] else 0 for r in runs],s['quest']['stage']))
+        cells.append((t,math.log(s['ratio']),[r.get('score', 1 if r['win'] else 0) for r in runs],s['quest']['stage']))
 # joint fit: global a,b plus per-type offset (log power ratio shift); alternate
 types=sorted({c[0] for c in cells if c[0]})
 off={t:0.0 for t in types}
@@ -51,11 +51,11 @@ for t in types:
 # Battle length: the rounds after the walk in (APPROACH) scale about 1 / k when Health is divided by k and attack
 # multiplied by k (same value). k per type and level, aiming at TARGET_ROUNDS on average.
 APPROACH = 3
-# Target rounds: about 10 up to enemy level 8, rising to 13 by level 20 (late fights may run 8-16 rounds); Trolls are
-# the grindy enemy, at 16.
+# Target rounds: about 10 up to enemy level 8, rising to 11 by level 20 (late fights may run 8-16 rounds); Trolls are
+# the grindy enemy, at 14.
 def target_rounds(t, stage):
-    if t == 'troll': return 16
-    return 10 + 3 * max(0, min(1, (stage - 8) / 12))
+    if t == 'troll': return 14
+    return 10 + 1 * max(0, min(1, (stage - 8) / 12))
 tempo={}
 for n in names:
     d=load(n)

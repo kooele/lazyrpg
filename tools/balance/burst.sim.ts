@@ -12,7 +12,7 @@ test('burst', () => {
       const foe = expectedEnemy(def.id, L)[0];
       const ref = referenceParty(L);
       const share = ref.map((r) => damagePerTurn(foe.stats, r.stats.defense) / r.stats.health);
-      out.push(`${def.id.padEnd(10)} L${String(L).padEnd(3)} hit / Health: ${POWER.referenceParty.map((b, i) => `${b} ${Math.round(share[i] * 100)}%`).join('  ')}`);
+      out.push(`${def.id.padEnd(10)} L${String(L).padEnd(3)} hit / Health: ${POWER.referenceParty.slice(0, ref.length).map((b, i) => `${b} ${Math.round(share[i] * 100)}%`).join('  ')}`);
     }
   }
   process.stdout.write(out.join('\n') + '\n');

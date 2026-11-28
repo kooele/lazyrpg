@@ -3,10 +3,10 @@
 import { ENCOUNTER, ENEMIES } from '../data/enemies';
 import { GUILD } from '../data/guild';
 import { RANKS, type GameState, type Quest, type Rank } from '../data/types';
-import { enemyTypesForStage, pickFoes } from './battle';
+import { enemyTypesForStage } from './battle';
 import { newId, type Rng } from './character';
 import { randInt } from './people';
-import { questParLevel, questValue, strengthOfValue } from './power';
+import { questThreat, skullsOfThreat, strengthOfPower, threatOfSkulls } from './power';
 
 const PLACES = ['the Old Sewers', 'Mill Road', 'Briar Farm', 'the Eastern Woods', "Gallow's Pass", 'the Salt Marsh', 'Kestrel Ford',
   'the Ruined Chapel', 'Hollow Creek', 'the Quarry', 'Thornfield', 'the North Gate', 'Lantern Hill', 'the Old Watchtower',
@@ -20,23 +20,18 @@ export function rankForStage(stage: number): Rank {
 
 const S = GUILD.strength;
 
-/** The middle of a rank's enemy count range (a usual group; promotion quests and Quick Battle use it). */
-export function usualCount(rank: Rank): number {
-  const [lo, hi] = GUILD.quests[rank].count;
-  return (lo + hi) / 2;
-}
 
 /**
  * A quest's strength, from the enemies it can be expected to field (src/game/power.ts): its value (the fighting
  * strength of its enemies, which grows with their number and their stats) and its par level (the level at which the
  * reference party, AI-played, would win strength.parWinRate of the time). Cached per enemy level, size and types.
  */
-const cache = new Map<string, { value: number; par: number }>();
-function questPower(q: Pick<Quest, 'stage' | 'count' | 'foes'>): { value: number; par: number } {
+const cache = new Map<string, { threat: number }>();
+function questPower(q: Pick<Quest, 'stage' | 'count' | 'foes'>): { threat: number } {
   const k = `${q.stage}|${q.count}|${(q.foes ?? []).join(',')}`;
   let hit = cache.get(k);
   if (!hit) {
-    hit = { value: questValue(q), par: questParLevel(q) };
+    hit = { threat: questThreat(q) };
     if (cache.size > 2000) cache.clear();
     cache.set(k, hit);
   }
@@ -44,10 +39,11 @@ function questPower(q: Pick<Quest, 'stage' | 'count' | 'foes'>): { value: number
 }
 
 /**
- * A quest's strength: the fighting power of its expected enemies (the square of their summed values, see
- * strengthOfValue), so a group twice the size is four times as strong. Its gold and renown are proportional to it.
+ * A quest's strength: the fighting power of its expected enemies (e^threat: groupPower against the four-member
+ * reference party of matching strength, in strengthOfPower's units), so a group twice the size is about 3.4 times as
+ * strong. Its gold and renown are proportional to it.
  */
-export const questStrength = (q: Pick<Quest, 'stage' | 'count' | 'foes'>) => strengthOfValue(questPower(q).value);
+export const questStrength = (q: Pick<Quest, 'stage' | 'count' | 'foes'>) => strengthOfPower(Math.exp(questPower(q).threat));
 
 /** The usual gold for a quest: its strength x goldPerStrength (before the board's pay roll). */
 export const fairReward = (q: Pick<Quest, 'stage' | 'count' | 'foes'>) => questStrength(q) * S.goldPerStrength;
@@ -71,38 +67,27 @@ export function expectedEnemies(q: Pick<Quest, 'count' | 'foes'>): number {
   return Math.max(1, Math.min(ENCOUNTER.maxEnemies, Math.ceil(q.count / each - 1e-9)));
 }
 
-/**
- * How hard a quest is, as the party level it calls for: its par level, the level at which the reference party (four
- * Adventurers of average B talent with the gear expected at their level, played by the AI) would win
- * strength.parWinRate of its battles against it.
- */
-export const questDifficulty = (q: Pick<Quest, 'stage' | 'count' | 'foes'>) => questPower(q).par;
+/** How hard a quest is: its skulls, unrounded (for sorting; see dangerRating). */
+export const questDifficulty = (q: Pick<Quest, 'stage' | 'count' | 'foes'>) => skullsOfThreat(questPower(q).threat);
 
 /** The top of the skull scale: five white skulls, then five red ones over them. */
 export const MAX_SKULLS = 10;
 
 /**
- * Danger, shown as skulls: 0.5 to 10 in half steps, rising evenly with the quest's par level (questDifficulty) on one
- * fixed scale for the whole game, from strength.skulls.from (half a skull) to strength.skulls.to (ten). A level's
- * worth of party strength is a fixed share more power, so skulls grow with the log of a quest's strength.
+ * Danger, shown as skulls: 0.5 to 10 in half steps, from the quest's threat (the power of its enemies, power.ts) on
+ * one fixed scale for the whole game: half a skull is a quest three level-1 recruits nearly always come out of well,
+ * ten one that five level-20 Adventurers come out of well half the time. Each skull is the same multiple of power.
  * Cards show 0.5-5 as white skulls and 5.5-10 as red skulls laid over them.
  */
 export function dangerRating(q: Pick<Quest, 'stage' | 'count' | 'foes'>): number {
-  return skullsForLevel(questDifficulty(q));
+  return roundSkulls(questDifficulty(q));
 }
 
-/** The skulls a quest with this par level shows. */
-export function skullsForLevel(par: number): number {
-  const { from, to } = S.skulls;
-  const f = (par - from) / (to - from);
-  return Math.max(0.5, Math.min(MAX_SKULLS, Math.round((0.5 + (MAX_SKULLS - 0.5) * f) * 2) / 2));
-}
+/** Skulls in half steps, 0.5 to 10. */
+export const roundSkulls = (skulls: number) => Math.max(0.5, Math.min(MAX_SKULLS, Math.round(skulls * 2) / 2));
 
-/** The par level a number of skulls stands for (the middle of its half step). */
-export function levelForSkulls(skulls: number): number {
-  const { from, to } = S.skulls;
-  return from + ((skulls - 0.5) / (MAX_SKULLS - 0.5)) * (to - from);
-}
+/** The threat a number of skulls stands for (power.ts). */
+export const skullThreat = threatOfSkulls;
 
 const roll = ([lo, hi]: [number, number], rng: Rng) => lo + rng() * (hi - lo);
 const round5 = (v: number) => Math.max(5, Math.round(v / 5) * 5);
@@ -118,26 +103,103 @@ export function payRating(q: Quest): 'generous' | 'fair' | 'poor' {
   return r >= 1.15 ? 'generous' : r <= 0.87 ? 'poor' : 'fair';
 }
 
-/** "Small group", "" (usual) or "Large band": the group size against its rank's range (bottom or top third). */
-export function groupLabel(q: Pick<Quest, 'rank' | 'count'>): string {
-  const [lo, hi] = GUILD.quests[q.rank].count;
-  const third = (hi - lo) / 3;
-  return q.count < lo + third - 1e-9 ? 'Small group' : q.count > hi - third + 1e-9 ? 'Large band' : '';
+/** "Small group", "" (usual) or "Large band": the group size against its main enemy type's usual group. */
+export function groupLabel(q: Pick<Quest, 'count' | 'foes'>): string {
+  const usual = ENEMIES[q.foes?.[0] ?? '']?.group;
+  if (!usual) return '';
+  const r = q.count / usual;
+  return r < 0.88 ? 'Small group' : r > 1.15 ? 'Large band' : '';
 }
+
+/** A quest's group is GROUP_RANGE of its main type's usual group (largest / smallest = 1.33 / 0.75 = 1.77). */
+export const GROUP_RANGE: [number, number] = [0.75, 4 / 3];
+
+/** The threat of a type's usual group at a level (alone), cached. */
+const typeThreats = new Map<string, number>();
+function typeThreat(type: string, level: number): number {
+  const k = `${type}@${level}`;
+  let t = typeThreats.get(k);
+  if (t === undefined) {
+    t = questThreat({ stage: level, count: ENEMIES[type].group, foes: [type] });
+    typeThreats.set(k, t);
+  }
+  return t;
+}
+
+/** The other fitting types that fight like `main` at `level`, after it (pickFoes for a chosen main type). */
+function companions(main: string, level: number): string[] {
+  const fit = enemyTypesForStage(level).map((t) => t.type);
+  return [main, ...fit.filter((t) => t !== main && ENEMIES[t].ai === ENEMIES[main].ai)];
+}
+
+/**
+ * The group size (threat points) that gives `foes` at `level` the threat `target`, within GROUP_RANGE of the main
+ * type's usual group. Power grows with size^numbersExponent, so a step or two of log-scaling lands it.
+ */
+function countForThreat(level: number, foes: string[], target: number): number {
+  const usual = ENEMIES[foes[0]].group;
+  const [lo, hi] = GROUP_RANGE.map((r) => r * usual);
+  const k = GUILD.strength.numbersExponent;
+  let c = usual;
+  for (let i = 0; i < 2; i++) {
+    const t = questThreat({ stage: level, count: c, foes });
+    c = Math.min(hi, Math.max(lo, c * Math.exp((target - t) / k)));
+  }
+  return Math.round(c * 20) / 20;
+}
+
+/**
+ * A quest's enemies for a target number of skulls: an enemy type (each type with a level whose usual group is
+ * within GROUP_RANGE of the threat is as likely), the level of it whose usual group comes closest, its same-style
+ * companions, and the group size that fits. With none in reach, the closest type and level.
+ */
+export function enemiesForSkulls(skulls: number, rng: Rng): { stage: number; count: number; foes: string[] } {
+  const target = skullThreat(skulls);
+  const k = GUILD.strength.numbersExponent;
+  const reach = [k * Math.log(GROUP_RANGE[0]), k * Math.log(GROUP_RANGE[1])];
+  const options: { type: string; level: number; gap: number }[] = [];
+  let closest: { type: string; level: number; gap: number } | null = null;
+  for (const def of Object.values(ENEMIES)) {
+    let best: { type: string; level: number; gap: number } | null = null;
+    for (let L = def.levels[0]; L <= def.levels[1]; L++) {
+      const gap = target - typeThreat(def.id, L);
+      const o = { type: def.id, level: L, gap };
+      if (!closest || Math.abs(gap) < Math.abs(closest.gap)) closest = o;
+      if (gap >= reach[0] && gap <= reach[1] && (!best || Math.abs(gap) < Math.abs(best.gap))) best = o;
+    }
+    if (best) options.push(best);
+  }
+  const pick = options.length ? options[Math.floor(rng() * options.length)] : closest!;
+  const foes = companions(pick.type, pick.level);
+  return { stage: pick.level, count: countForThreat(pick.level, foes, target), foes };
+}
+
+/** A usual quest of a rank: the middle of its skulls (rival parties' promotion trials, old saves, Quick Battle). */
+const usualQuests = new Map<Rank, { stage: number; count: number; foes: string[] }>();
+export function usualQuest(rank: Rank): { stage: number; count: number; foes: string[] } {
+  let q = usualQuests.get(rank);
+  if (!q) {
+    const [lo, hi] = GUILD.quests[rank].skulls;
+    q = enemiesForSkulls((lo + hi) / 2, () => 0.5);
+    usualQuests.set(rank, q);
+  }
+  return q;
+}
+
+/** The group size of a rank's usual quest (threat points). */
+export const usualCount = (rank: Rank) => usualQuest(rank).count;
 
 export function makeQuest(rank: Rank, day: number, rng: Rng, promotion = false): Quest {
   const tier = GUILD.quests[rank];
-  // A promotion quest is a fair test: the easier half of its rank's levels, a usual-sized group, usual pay.
-  const stage = promotion ? randInt(tier.stages[0], Math.ceil((tier.stages[0] + tier.stages[1]) / 2), rng) : randInt(tier.stages[0], tier.stages[1], rng);
-  // Group size and level are rolled independently; together (with the enemy types) they make the quest's strength.
-  const count = promotion ? Math.round(usualCount(rank)) : randInt(tier.count[0], tier.count[1], rng);
+  // Its danger first: anywhere in the rank's skulls; a promotion quest is a fair test, in the easier half, usual pay.
+  const [lo, hi] = tier.skulls;
+  const skulls = promotion ? lo + rng() * ((hi - lo) / 2) : lo + rng() * (hi - lo);
+  const { stage, count, foes } = enemiesForSkulls(skulls, rng);
   const pay = promotion ? 1 : roll(GUILD.board.pay, rng);
-  const foes = pickFoes(stage, rng);
-  const levels = new Map(enemyTypesForStage(stage).map((t) => [t.type, t.level]));
   const place = PLACES[Math.floor(rng() * PLACES.length)];
   const title = `${ENEMIES[foes[0]].questTitle} at ${place}`;
-  const names = foes.map((t) => `${ENEMIES[t].name}s (Lv ${levels.get(t)})`);
-  const group = groupLabel({ rank, count });
+  const names = foes.map((t) => `${ENEMIES[t].name}s (Lv ${stage})`);
+  const group = groupLabel({ count, foes });
   const size = group === 'Small group' ? ' A small group.' : group === 'Large band' ? ' A large band: expect many of them.' : '';
   return {
     id: newId('q'),

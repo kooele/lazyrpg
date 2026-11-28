@@ -2595,10 +2595,21 @@ export function enemyTypesForStage(stage: number): { type: string; level: number
   return fit.map((d) => ({ type: d.id, level: Math.max(d.levels[0], Math.min(d.levels[1], stage)) }));
 }
 
+/** A loadout by weight, from one roll `x` in [0, 1): each takes its weight's share of the range, in order. */
+export function pickLoadout<T extends { weight: number }>(loadouts: readonly T[], x: number): T {
+  const total = loadouts.reduce((t, l) => t + l.weight, 0);
+  let at = x * total;
+  for (const l of loadouts) {
+    at -= l.weight;
+    if (at < 0) return l;
+  }
+  return loadouts[loadouts.length - 1];
+}
+
 /** Build one enemy of a type at a level. Humanoid types pick a loadout (gear, name and extra skills). */
 export function makeEnemy(type: string, level: number, rng: Rng): Character {
   const def = ENEMIES[type];
-  const loadout = def.loadouts.length ? def.loadouts[Math.floor(rng() * def.loadouts.length)] : undefined;
+  const loadout = def.loadouts.length ? pickLoadout(def.loadouts, rng()) : undefined;
   const id = newId('e');
   return {
     id,

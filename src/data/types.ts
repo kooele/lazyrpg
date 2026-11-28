@@ -496,6 +496,11 @@ export interface EnemyDef {
    * speed, how it fights). Fitted by the balance simulations (tools/balance). 1 = its stats alone.
    */
   power: number;
+  /**
+   * Its usual group on a quest, in threat points (4 = 8 rats or 3 bandits). A quest's group is 75% to 133% of it,
+   * whatever its skulls (see board.ts makeQuest).
+   */
+  group: number;
   /** How it fights. */
   ai: EnemyAi;
   /** Name of quests where this type is the main foe ("Wolf Pack"). */
@@ -535,6 +540,8 @@ export interface EnemyLoadout {
   armor?: string;
   /** Extra skills this loadout fights with. */
   skills: string[];
+  /** How often it turns up, relative to the type's other loadouts (default 1). Ranged ones are rarer. */
+  weight: number;
 }
 
 /** Traits an adventurer can have (see traits.ts). */

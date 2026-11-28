@@ -84,7 +84,7 @@ describe('stats from gear', () => {
   });
 
   it("monsters have no gear and none of gear's penalties", () => {
-    const wolf = makeEnemy('wolf', 3, makeRng(1));
+    const wolf = makeEnemy('wolf', ENEMIES.wolf.levels[0], makeRng(1));
     expect(wolf.weapon).toBeUndefined();
     expect(deriveStats(wolf).pAtk).toBe(ENEMIES.wolf.stats.pAtk);
     expect(weaponName(wolf)).toBe('');

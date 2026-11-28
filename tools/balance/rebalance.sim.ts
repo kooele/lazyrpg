@@ -1,5 +1,5 @@
-// Rescale enemy stats so the AI-played reference party at a level wins a usual-sized group of each type
-// (usualCountAt) at that level TARGET_WIN of the time: 50% at D rank, 40% at C, 33% (par) from B on. Health, P.Atk and M.Atk scale
+// Rescale enemy stats so the AI-played reference party at a level scores TARGET_WIN against a usual group of each
+// type (its `group`) at that level (95% at level 1, 70% at 5, 60% at 10, 50% at 20: targets.json). Health, P.Atk and M.Atk scale
 // together (each enemy's value scales with them); Defense and the rest stay. Solved at the bottom and top of each
 // type's levels, so base stats and growth per level stay a straight line. Writes src/data/enemies.json.
 //
@@ -14,7 +14,7 @@ import { GUILD } from '../../src/data/guild';
 import type { EnemyDef } from '../../src/data/types';
 import type { Stats } from '../../src/data/types';
 import { defenseMultiplier } from '../../src/game/battle';
-import { clearEnemyCache, powerRatio, questFighters, referenceParty, usualCountAt } from '../../src/game/power';
+import { clearEnemyCache, powerRatio, questFighters, referenceParty } from '../../src/game/power';
 
 const SCALED = ['health', 'pAtk', 'mAtk'] as const;
 /**
@@ -25,10 +25,17 @@ const SCALED = ['health', 'pAtk', 'mAtk'] as const;
 const attackShare = (L: number) => 0.5 + 0.25 * Math.max(0, Math.min(1, (L - 5) / 15));
 /**
  * The AI party's win rate against a usual group, by level: [level, win rate] knots, linear between them and flat
- * outside. Default D 50%, C 40%, then 33% (par) at the middles of the ranks' levels (3, 8, 13); BALANCE_TARGETS
- * overrides it (tune.py sets it so each rank's average board quest hits its target).
+ * outside: BALANCE_TARGETS, else tools/balance/targets.json (written by tune2.py from the win rate wanted by skulls).
  */
-const TARGET_WIN: [number, number][] = process.env.BALANCE_TARGETS ? JSON.parse(process.env.BALANCE_TARGETS) : [[3, 0.5], [8, 0.4], [13, 0.33]];
+const TARGET_WIN: [number, number][] = process.env.BALANCE_TARGETS
+  ? JSON.parse(process.env.BALANCE_TARGETS)
+  : (() => {
+      try {
+        return JSON.parse(readFileSync('tools/balance/targets.json', 'utf8')).targets;
+      } catch {
+        return [[3, 0.5], [8, 0.4], [13, 0.33]];
+      }
+    })();
 const targetWin = (L: number) => {
   const t = TARGET_WIN;
   if (L <= t[0][0]) return t[0][1];
@@ -154,7 +161,7 @@ test('rebalance enemies', () => {
         def.growthBend = {};
         // stats are read at levels[0] + growth x steps: with no growth, put L's stats at every level
         clearEnemyCache();
-        return powerRatio(referenceParty(L), questFighters({ stage: L, count: usualCountAt(L), foes: [def.id] }, { smooth: true }));
+        return powerRatio(referenceParty(L), questFighters({ stage: L, count: def.group, foes: [def.id] }, { smooth: true }));
       };
       // Fix the other stats at L too (Defense etc. as they would be at L).
       for (const k of Object.keys(base) as (keyof Stats)[]) def.stats[k] = base[k];

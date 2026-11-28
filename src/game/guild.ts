@@ -4,7 +4,7 @@ import { WEAPONS, WEAPON_TYPES } from '../data/content';
 import { gear, weaponType } from './gear';
 import { GUILD } from '../data/guild';
 import { RANKS, type AdventurerRank, type FreeAdventurer, type GameState, type GuildState, type Quest, type Rank, type RivalMember, type RivalParty } from '../data/types';
-import { postQuests, questDifficulty, questRenown, usualCount } from './board';
+import { postQuests, questDifficulty, questRenown, usualQuest } from './board';
 import { powerRatio, questFighters, rivalFighter, winChance } from './power';
 
 export { questDifficulty };
@@ -193,11 +193,6 @@ export function rivalQuestChance(p: RivalParty, q: Pick<Quest, 'stage' | 'count'
   return Math.max(SIM.minSuccess, Math.min(SIM.maxSuccess, winChance(powerRatio(rivalFighters(p), questFighters(q)))));
 }
 
-/** A usual quest of `rank`: mid-rank enemy level and group size. */
-function usualQuest(rank: Rank): Pick<Quest, 'stage' | 'count'> {
-  const [lo, hi] = GUILD.quests[rank].stages;
-  return { stage: Math.round((lo + hi) / 2), count: usualCount(rank) };
-}
 
 /** How hard a usual quest of `rank` is (its par level): what rival parties weigh when picking a rank. */
 export function rankDifficulty(rank: Rank): number {
@@ -293,7 +288,6 @@ export function simulateGuildDay(state: GameState, rng: Rng): void {
         const chance = q ? rivalQuestChance(p, q) : rivalSuccessChance(p, rank);
         const renown = q ? q.renown : questRenown(usualQuest(rank));
         const what = q ? `"${q.title}"` : `${QUEST_WORDS[rank]} promotion quest`;
-        const difficulty = q ? questDifficulty(q) : rankDifficulty(rank);
         p.lastDay = day;
         if (rng() < chance) {
           p.renown += renown * (0.8 + rng() * 0.4);
@@ -314,7 +308,8 @@ export function simulateGuildDay(state: GameState, rng: Rng): void {
           }
         } else {
           p.losses += 1;
-          const outmatched = Math.max(0, difficulty - avg(p.members.map((m) => m.level)));
+          // How badly it was outmatched: 0 at an even chance, about a level's worth per 12% below it.
+          const outmatched = Math.max(0, (0.5 - chance) * 8);
           if (rng() < SIM.wipeChanceOnFailure * deathFactor(avg(p.members.map((m) => m.level))) * (1 + outmatched * 0.5)) {
             news(`${p.name} were wiped out on ${what}. (${p.members.map((m) => m.name).join(', ')})`);
             p.members = [];
