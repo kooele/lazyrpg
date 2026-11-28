@@ -545,7 +545,7 @@ export class PartyScene extends Phaser.Scene {
     lines.push(
       `Rises${traitNote(c, k)}:`,
       `• +${GUILD.schedule.dayOffMorale * k} for taking a Day Off`,
-      `• +${Math.min(...drinks)} to +${Math.max(...drinks)} for a round of drinks at an inn (once a day)`,
+      `• +${Math.min(...drinks)} to +${Math.max(...drinks)} for a round of drinks at an inn (after a quest, for those who went)`,
     );
     if (housed) {
       lines.push(

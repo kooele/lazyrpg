@@ -44,9 +44,21 @@ export function watchesForOverwatch(u: Unit): boolean {
   return kind === 'human' || kind === 'tribal';
 }
 
+/**
+ * Units that have chosen to walk into enemy overwatch this turn so their group isn't pinned down by it (see
+ * planTurn): they plan as if the watch weren't there (but still go around it when that costs nothing).
+ */
+const drawingFire = new WeakSet<Unit>();
+
+/** Does `u` weigh enemy overwatch right now: it watches for it, and isn't the one drawing the fire this turn. */
+const wary = (u: Unit) => watchesForOverwatch(u) && !drawingFire.has(u);
+
+/** A unit draws the overwatch for its group only if the shots would leave it with more than this share of its Health. */
+const DRAW_FIRE_HEALTH = 0.5;
+
 /** Hidden shots `u` would draw charging with `skill` from `from` at `aim` (0 if it doesn't care, or it's a teleport). */
 function chargeRisk(battle: Battle, u: Unit, skill: SkillDef, from: Point, aim: Point): number {
-  if (!skill.charge || skill.teleport || !watchesForOverwatch(u)) return 0;
+  if (!skill.charge || skill.teleport || !wary(u)) return 0;
   if (!battle.living().some((w) => w.team !== u.team && w.overwatch)) return 0;
   const path = battle.chargePath(u, aim, from, skill);
   return path ? battle.overwatchDanger(u, path) : 0;
@@ -577,6 +589,49 @@ function leavesOpponent(battle: Battle, u: Unit, opp: Unit, hit: number): boolea
  * others advance on the enemy.
  */
 export function planTurn(battle: Battle, u: Unit): AiPlan {
+  drawingFire.delete(u);
+  const held = holdTurns.get(u);
+  const plan = planMove(battle, u);
+  if (!pinnedDown(battle, u)) return plan;
+  // Overwatch is up and the unit has allies who also fear it. If every one of them waits for someone else to go
+  // first, one longbow holds the whole group back forever. So: what would it do if the watch weren't there? If that
+  // walk sets off the watch and the unit can take the shots, it goes, and the rest can follow once the watch is spent.
+  const afterFirst = holdTurns.get(u);
+  if (held === undefined) holdTurns.delete(u);
+  else holdTurns.set(u, held);
+  drawingFire.add(u);
+  const bold = planMove(battle, u);
+  const moved = bold.moveTo.x !== plan.moveTo.x || bold.moveTo.y !== plan.moveTo.y || bold.action?.id !== plan.action?.id
+    || bold.action?.target.x !== plan.action?.target.x || bold.action?.target.y !== plan.action?.target.y;
+  const shots = moved ? battle.overwatchDanger(u, battle.routeTo(u, bold.moveTo, true)) + boldChargeRisk(battle, u, bold) : 0;
+  if (moved && shots > 0 && u.hp - shots > u.stats.health * DRAW_FIRE_HEALTH) return bold;
+  drawingFire.delete(u);
+  if (afterFirst === undefined) holdTurns.delete(u);
+  else holdTurns.set(u, afterFirst);
+  return plan;
+}
+
+/**
+ * Could enemy overwatch be pinning `u` and its group down? It watches for overwatch, can move, can see an enemy
+ * watch that's up, and has at least one living ally that watches for it too. (A lone unit staying out of an arc is
+ * fine; a group that all wait for each other is not.)
+ */
+function pinnedDown(battle: Battle, u: Unit): boolean {
+  if (!watchesForOverwatch(u) || !battle.canMove(u) || battle.isStealthed(u)) return false;
+  if (!battle.living().some((w) => w.team !== u.team && w.overwatch && !battle.hiddenFrom(u, w))) return false;
+  return battle.living(u.team).some((a) => a !== u && watchesForOverwatch(a));
+}
+
+/** Overwatch shots a planned charge (from where the unit will stand) would draw. */
+function boldChargeRisk(battle: Battle, u: Unit, plan: AiPlan): number {
+  const skill = plan.action && SKILLS[plan.action.id];
+  if (!skill || !skill.charge || skill.teleport) return 0;
+  const path = battle.chargePath(u, plan.action!.target, plan.moveTo, skill);
+  return path ? battle.overwatchDanger(u, path) : 0;
+}
+
+/** planTurn's plan, weighing enemy overwatch unless the unit is drawing the fire (see drawingFire). */
+function planMove(battle: Battle, u: Unit): AiPlan {
   const reach = reachFor(battle, u);
   const tiles = [...reach.keys()].map((k) => {
     const [x, y] = k.split(',').map(Number);
@@ -759,7 +814,7 @@ function formation(battle: Battle, u: Unit, tile: Point): number {
  * watch for it (see watchesForOverwatch), enemy overwatch the walk would set off.
  */
 function zoneHazard(battle: Battle, u: Unit, reach: Map<string, ReachInfo>, tile: Point): number {
-  const watch = watchesForOverwatch(u) && battle.living().some((w) => w.team !== u.team && w.overwatch);
+  const watch = wary(u) && battle.living().some((w) => w.team !== u.team && w.overwatch);
   if (battle.zones.length === 0 && !watch) return 0;
   // The route the move will really take (around overwatch when the unit watches for it and can).
   const path = battle.routeTo(u, tile, watch, reach, watch ? safeReaches.get(reach) : undefined);

@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { GUILD, LODGING_QUALITY, isResidence, type InnTier, type Ring } from '../data/guild';
-import { buyDrinks, drinksCost, residents } from '../game/city';
+import { buyDrinks, drinkers, drinksCost, residents } from '../game/city';
 import { QUALITY_TEXT, moraleOf } from '../game/condition';
 import { titleCase } from '../game/titleCase';
 import { markDirty, requireState, session } from '../game/session';
@@ -55,20 +55,25 @@ export class InnScene extends Phaser.Scene {
     else this.inn(place);
   }
 
-  /** An inn: a round of drinks for the party. The rest of the room is kept free for what the inn will offer later. */
+  /** An inn: a round of drinks for the members back from today's quest. The rest of the room is kept free for what the inn will offer later. */
   private inn(tier: InnTier): void {
     const state = requireState();
     const inn = GUILD.inns[tier];
     panel(this, 16, 130, WIDTH - 32, 104);
     text(this, 30, 140, 'Drinks', { fontSize: '16px', color: COLORS.gold });
     const drinks = drinksCost(state, tier);
-    const hadRound = state.drinksDay === state.day;
-    button(this, 30, 166, 280, 44, hadRound ? 'Already Had a Round Today' : `Buy a Round of Drinks · ${drinks} Gold`, () => {
+    const who = drinkers(state);
+    const backToday = state.lastQuestDay === state.day;
+    const label = who.length ? `Buy a Round of Drinks · ${drinks} Gold`
+      : backToday ? 'Already Had a Round Today' : 'Drinks Only After a Quest';
+    button(this, 30, 166, 280, 44, label, () => {
       if (buyDrinks(state, tier)) return;
       markDirty();
       this.render();
-    }, { fontSize: 13, enabled: !hadRound && state.gold >= drinks });
-    text(this, 326, 166, `${inn.drinksPerPerson} gold a head. Morale +${inn.drinksMorale} for the whole party, once a day.\n${state.party.map((c) => `${c.name} ${moraleOf(c)}`).join(', ')}`, {
+    }, { fontSize: 13, enabled: who.length > 0 && state.gold >= drinks });
+    const detail = who.length ? `For the members back from today's quest: ${who.map((c) => `${c.name} ${moraleOf(c)}`).join(', ')}`
+      : 'A round celebrates a quest: come back the day the party returns from one.';
+    text(this, 326, 166, `${inn.drinksPerPerson} gold a head. Morale +${inn.drinksMorale} for each member who went on the quest, once, the day they come back.\n${detail}`, {
       fontSize: '12px', color: COLORS.dim, wordWrap: { width: WIDTH - 370 }, lineSpacing: 3,
     });
   }

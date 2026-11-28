@@ -32,7 +32,7 @@ export const RINGS: readonly Ring[] = ['outer', 'middle', 'inner'];
 export interface InnConfig {
   name: string;
   pricePerPerson: number;
-  /** A round of drinks for the party: gold per member, and Morale for everyone. */
+  /** A round of drinks after a quest: gold per member who went, and Morale for each of them. */
   drinksPerPerson: number;
   drinksMorale: number;
 }

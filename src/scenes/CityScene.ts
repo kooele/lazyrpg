@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { GUILD } from '../data/guild';
 import { MAX_PARTY_SIZE } from '../data/content';
 import type { Character } from '../data/types';
-import { departBlock, endDay, foodCost, forecastNight, lineupMembers, lodgingCost, prisonersAtGate, registerPrisoner, turnInPrisoner, tabLabel, tabParts, TAB_NAMES, type NightForecast } from '../game/city';
+import { departBlock, drinkers, drinksSkipped, endDay, foodCost, forecastNight, lineupMembers, lodgingCost, prisonersAtGate, registerPrisoner, turnInPrisoner, tabLabel, tabParts, TAB_NAMES, type NightForecast } from '../game/city';
 import { adventurerRank } from '../game/guild';
 import { isInjured, moraleOf } from '../game/condition';
 import { bondOf, registrationFee, slaveTax } from '../game/contracts';
@@ -44,7 +44,7 @@ const PLACES: Record<District, Place[]> = {
     { name: 'Smithy', blurb: 'Common weapons and armor on the spot; Fine and Masterwork made to order.', at: [690, 120], scene: 'Smithy' },
     { name: 'Auction House', blurb: 'Rare goods to the highest bidder.', at: [1010, 173] },
     { name: 'Church', blurb: `Donate for a blessing on the next quest (up to +${maxBlessing('church')}% all stats), or pay for healing (+${GUILD.churches.church.heal.health} Health).`, at: [438, 287], scene: 'Church', data: { church: 'church' } },
-    { name: GUILD.inns.standard.name, blurb: `Inn: drinks for the party. Members can lodge here for ${GUILD.inns.standard.pricePerPerson} gold a night (Manage Party); what adventurers expect.`, at: [255, 480], scene: 'Inn', data: { tier: 'standard' } },
+    { name: GUILD.inns.standard.name, blurb: `Inn: drinks after a quest. Members can lodge here for ${GUILD.inns.standard.pricePerPerson} gold a night (Manage Party); what adventurers expect.`, at: [255, 480], scene: 'Inn', data: { tier: 'standard' } },
     { name: GUILD.residences.outer.name, blurb: `A home of your own (${GUILD.residences.outer.price} gold at the Estate Office): free nights for up to ${GUILD.residences.capacity}, as good as an inn.`, at: [900, 805], scene: 'Inn', data: { ring: 'outer' } },
   ],
   inner: [
@@ -53,8 +53,8 @@ const PLACES: Record<District, Place[]> = {
     { name: 'Central Government Office', blurb: 'Permits, taxes and the city\'s business, in the long hall beside the Lord\'s Manor.', at: [890, 425] },
     { name: 'Library', blurb: 'Books, maps and old records.', at: [530, 300] },
     { name: 'Estate Office', blurb: 'Buy and sell residences across the city.', at: [990, 330], scene: 'Estate' },
-    { name: GUILD.inns.highEnd.name, blurb: `High-end inn: drinks for the party. Lodging ${GUILD.inns.highEnd.pricePerPerson} gold a night (Manage Party); better than adventurers expect.`, at: [995, 570], scene: 'Inn', data: { tier: 'highEnd' } },
-    { name: GUILD.inns.luxury.name, blurb: `Luxury inn: drinks for the party. Lodging ${GUILD.inns.luxury.pricePerPerson} gold a night (Manage Party); far better than adventurers expect.`, at: [880, 500], scene: 'Inn', data: { tier: 'luxury' } },
+    { name: GUILD.inns.highEnd.name, blurb: `High-end inn: drinks after a quest. Lodging ${GUILD.inns.highEnd.pricePerPerson} gold a night (Manage Party); better than adventurers expect.`, at: [995, 570], scene: 'Inn', data: { tier: 'highEnd' } },
+    { name: GUILD.inns.luxury.name, blurb: `Luxury inn: drinks after a quest. Lodging ${GUILD.inns.luxury.pricePerPerson} gold a night (Manage Party); far better than adventurers expect.`, at: [880, 500], scene: 'Inn', data: { tier: 'luxury' } },
     { name: GUILD.residences.middle.name, blurb: `A townhouse inside the inner wall (${GUILD.residences.middle.price} gold at the Estate Office): free nights for up to ${GUILD.residences.capacity}, as good as a high-end inn.`, at: [520, 585], scene: 'Inn', data: { ring: 'middle' } },
     { name: GUILD.residences.inner.name, blurb: `A mansion by the cathedral (${GUILD.residences.inner.price} gold at the Estate Office): free nights for up to ${GUILD.residences.capacity}, as good as a luxury inn.`, at: [640, 505], scene: 'Inn', data: { ring: 'inner' } },
   ],
@@ -305,6 +305,11 @@ export class CityScene extends Phaser.Scene {
     for (const s of f.seized) effects.push(`• The city seizes ${s.name} for the slave market (tax ${s.tax} gold).`);
     for (const u of f.unpaidFinal) effects.push(`• ${u.name} leaves without their final wages (${u.owed} gold)${u.renown >= 1 ? `: renown -${Math.round(u.renown)}` : ''}.`);
     const wrap = { wordWrap: { width: W - 48 } };
+    // Back from a quest and no round of drinks yet: the chance passes at End Day.
+    if (drinksSkipped(state)) {
+      const who = drinkers(state).map((c) => c.name).join(', ');
+      lines.push(`No round of drinks yet after today's quest: ${who} will miss the Morale boost (visit an inn first).`);
+    }
     const body = text(this, X + 24, 0, lines.join('\n'), { fontSize: '14px', lineSpacing: 3, ...wrap });
     const warn = short ? text(this, X + 24, 0, `If you end the day now:\n${effects.join('\n')}`, { fontSize: '14px', color: COLORS.bad, lineSpacing: 3, ...wrap }) : null;
     const hint = text(this, X + 24, 0, short

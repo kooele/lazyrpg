@@ -157,6 +157,21 @@ export interface MoveResult {
   interrupted: boolean;
 }
 
+/** Diagonal steps cost this many times the tile's Movement cost. */
+export const DIAGONAL_COST = STAT_CONFIG.diagonalMoveCost;
+
+/** Movement points a step onto a tile of `tileCost` takes (diagonal or not). */
+export const stepCost = (tileCost: number, diagonal: boolean) => (diagonal ? tileCost * DIAGONAL_COST : tileCost);
+
+/**
+ * Movement left to spend, rounded up to a whole point: a unit with 3.5 left can still make a 4-cost step. 0 once the
+ * budget is used up.
+ */
+export const moveLeft = (budget: number, spent: number) => Math.max(0, Math.ceil(budget - spent - EPS));
+
+/** A Movement amount for display: up to one decimal ("16", "5.7"). */
+export const moveText = (n: number) => String(Math.round(n * 10) / 10);
+
 export interface ReachInfo {
   cost: number;
   prev: string | null;
@@ -363,7 +378,8 @@ export class Battle {
     if (stat === 'vision' && this.isStealthed(u)) {
       for (const id of this.skillIds(u)) if (SKILLS[id]?.stealthVision && this.hasPassive(u, id)) value += SKILLS[id].stealthVision!;
     }
-    return Math.round(value);
+    // Movement is fractional (diagonal steps cost 1.414x), kept to one decimal; everything else is whole.
+    return stat === 'movement' ? Math.round(value * 10) / 10 : Math.round(value);
   }
 
   // ---- skill properties that depend on the user (tags) ----------------------------
@@ -789,32 +805,45 @@ export class Battle {
   // ---- movement -----------------------------------------------------------------
 
   /**
-   * Tiles the unit can end its move on (including where it stands). Orthogonal steps only. `avoid`: tiles it won't
-   * step onto (it may still pass through an ally standing on one), e.g. enemy overwatch arcs (see watchedTiles).
+   * Tiles the unit can end its move on (including where it stands). Diagonal steps are allowed and cost
+   * DIAGONAL_COST x the tile's cost; they can't cut the corner of impassable terrain or an enemy. Costs are
+   * fractional: a step can be taken while the Movement left, rounded up, covers it (3.5 left allows a 4-cost step).
+   * `avoid`: tiles it won't step onto (it may still pass through an ally standing on one), e.g. enemy overwatch arcs
+   * (see watchedTiles).
    */
   reachable(u: Unit, avoid?: Set<string>): Map<string, ReachInfo> {
     const budget = this.stat(u, 'movement');
     const result = new Map<string, ReachInfo>([[key(u.x, u.y), { cost: 0, prev: null, hazards: 0 }]]);
     const frontier: { x: number; y: number; cost: number; hazards: number }[] = [{ x: u.x, y: u.y, cost: 0, hazards: 0 }];
+    // Enemies block, unless the unit doesn't know they're there (Stealthed, or in fog of war): it plans as if the
+    // tile were empty and bumps into them on the way (see walk).
+    const knownEnemy = (x: number, y: number) => {
+      const seen = this.unitAt(x, y);
+      return !!seen && seen.team !== u.team && !this.hiddenFrom(u, seen);
+    };
     while (frontier.length) {
       frontier.sort((a, b) => a.cost - b.cost || a.hazards - b.hazards);
       const cur = frontier.shift()!;
-      for (const d of DIRS) {
+      const done = result.get(key(cur.x, cur.y));
+      if (done && (done.cost < cur.cost - EPS || (Math.abs(done.cost - cur.cost) < EPS && (done.hazards ?? 0) < cur.hazards))) continue;
+      const left = moveLeft(budget, cur.cost);
+      for (const d of DIRS8) {
         const nx = cur.x + d.x;
         const ny = cur.y + d.y;
         if (!passable(this.map, nx, ny)) continue;
-        // Enemies block, unless the unit doesn't know they're there (Stealthed, or in fog of war): it plans as if the
-        // tile were empty and bumps into them on the way (see walk).
-        const seen = this.unitAt(nx, ny);
-        const occupant = seen && seen.team !== u.team && this.hiddenFrom(u, seen) ? undefined : seen;
-        if (occupant && occupant.team !== u.team) continue; // can't pass through enemies
+        if (knownEnemy(nx, ny)) continue; // can't pass through enemies
+        const diagonal = d.x !== 0 && d.y !== 0;
+        // No cutting corners: both tiles beside a diagonal step must be passable and free of enemies.
+        if (diagonal && [{ x: cur.x + d.x, y: cur.y }, { x: cur.x, y: cur.y + d.y }].some((p) => !passable(this.map, p.x, p.y) || knownEnemy(p.x, p.y))) continue;
+        const occupant = this.unitAt(nx, ny);
         if (!occupant && avoid?.has(key(nx, ny))) continue; // overwatch doesn't fire while passing through an ally
-        const cost = cur.cost + (TERRAIN[this.map.tiles[ny][nx]].moveCost ?? 99);
-        if (cost > budget) continue;
+        const step = stepCost(TERRAIN[this.map.tiles[ny][nx]].moveCost ?? 99, diagonal);
+        if (step > left + EPS) continue;
+        const cost = cur.cost + step;
         const k = key(nx, ny);
         const hazards = cur.hazards + this.hazardsAt(u, { x: nx, y: ny });
         const known = result.get(k);
-        if (known && (known.cost < cost || (known.cost === cost && (known.hazards ?? 0) <= hazards))) continue;
+        if (known && (known.cost < cost - EPS || (Math.abs(known.cost - cost) < EPS && (known.hazards ?? 0) <= hazards))) continue;
         result.set(k, { cost, prev: key(cur.x, cur.y), hazards });
         frontier.push({ x: nx, y: ny, cost, hazards });
       }

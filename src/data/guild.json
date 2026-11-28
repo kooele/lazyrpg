@@ -58,7 +58,7 @@
     "highEnd": { "name": "Silver Lantern Inn", "pricePerPerson": 24, "drinksPerPerson": 8, "drinksMorale": 6 },
     "luxury": { "name": "Gilded Crown Inn", "pricePerPerson": 48, "drinksPerPerson": 16, "drinksMorale": 8 }
   },
-  "_inns": "pricePerPerson: a night's lodging for one member assigned to the inn (Manage Party). drinksPerPerson / drinksMorale: a round of drinks for the whole party (once a day) costs drinksPerPerson per member and raises everyone's Morale by drinksMorale.",
+  "_inns": "pricePerPerson: a night's lodging for one member assigned to the inn (Manage Party). drinksPerPerson / drinksMorale: a round of drinks (only the day the party is back from a quest, once, for the members who went) costs drinksPerPerson per member who went and raises their Morale by drinksMorale.",
   "lodging": {
     "_comment": "Every day ends (End Day on the city screen) with a night for each housed member where they lodge, set per member in Manage Party: an inn, a residence the party owns (free; at most residences.capacity residents each), or the stables (stablesPerPerson). Members nobody has placed lodge at adventurerDefault (slaves: slaveDefault): 'outside' (the stables) or an inn (standard, highEnd, luxury); so do the residents of a residence that is sold. Night quality: the stables 0; the Sleeping Griffin or the Outer City House 1; the Silver Lantern or the Inner City Townhouse 2; the Gilded Crown or the Inner City Mansion 3. expectedQuality is the food and night quality adventurers expect (1: common food and an inn); slaves expect slaveExpectedQuality instead (0: poor food, the stables). Each night, every housed member (the main character, slaves, and companions with food & lodging in their contract) gains moraleAbovePerStep Morale for each step better than they expect, and loses moraleBelowPerStep for each step worse. Nights on the road during multi-day quests are free (food is still paid) and don't count.",
     "expectedQuality": 1,
@@ -114,7 +114,7 @@
     "recoverMultiplier": 3,
     "trainingXp": { "perLevel": 2, "flat": 20 },
     "oddJobsGold": 10,
-    "dayOffMorale": 10,
+    "dayOffMorale": 15,
     "marketplaceItemsPerDay": 2
   },
   "mercenary": { "feePerLevel": 30, "cutBase": 8, "cutPerLevel": 2 },
