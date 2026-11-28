@@ -1,0 +1,4 @@
+{
+  "_comment": "The game's version, major.minor.patch.build. Set it by hand; each build adds the number of commits since this file last changed to the build digit (see vite.config.ts), so 0.2.1.0 builds as 0.2.1.0, 0.2.1.1, 0.2.1.2... Resetting the version restarts the count.",
+  "version": "0.2.1.0"
+}

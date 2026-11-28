@@ -1,8 +1,8 @@
 import Phaser from 'phaser';
 import { session } from '../game/session';
 
-/** Shown on the main menu. */
-const GAME_VERSION = '0.2.0';
+/** Shown on the main menu: version.json, with the build digit counted up at build time (vite.config.ts). */
+const GAME_VERSION = __GAME_VERSION__;
 import { COLORS, HEIGHT, WIDTH, button, confirmDialog, figure, text, setupCamera } from '../ui/widgets';
 
 export class MainMenuScene extends Phaser.Scene {

@@ -395,6 +395,8 @@ npm test         # rules, save-file and AI tests (Vitest)
 npm run build    # type-check + production build into dist/
 ```
 
+**Version** (shown on the main menu): `version.json` holds `major.minor.patch.build` (now 0.2.1.0). Each build adds the number of commits since `version.json` last changed to the build digit, so the next commits build as 0.2.1.1, 0.2.1.2 and so on; rebuilding the same commit gives the same version (`vite.config.ts`). Change `version.json` by hand for a new release (e.g. 0.2.2.0) and the count starts again. `package.json` keeps the first three parts, since npm only accepts three.
+
 ## Project layout
 
 ```
